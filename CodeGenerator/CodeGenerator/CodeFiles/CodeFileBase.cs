@@ -1,10 +1,7 @@
 ﻿using CodeGenerator.Core.OutputStrategy;
-using CodeGenerator.Core.Templates;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.CodeFiles
 {
@@ -25,12 +22,8 @@ namespace CodeGenerator.Core.CodeFiles
             Lines = new List<string>();
         }
 
-        public string FullFilename
-        {
-            get
-            {
-                return RootPath + System.IO.Path.DirectorySeparatorChar + Path + System.IO.Path.DirectorySeparatorChar + Filename + "." + Extension;
-            }
+        public string FullFilename {
+            get { return RootPath + System.IO.Path.DirectorySeparatorChar + Path + System.IO.Path.DirectorySeparatorChar + Filename + "." + Extension; }
         }
 
         public List<string> GetLines()

@@ -2,12 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.OutputStrategy
 {
-    public abstract class NoInputStrategyBase:OutputStrategyBase
+    public abstract class NoInputStrategyBase : OutputStrategyBase
     {
         public override string Contents(CodeFileBase codeFile)
         {

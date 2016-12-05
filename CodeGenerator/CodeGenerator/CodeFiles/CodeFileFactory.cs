@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.CodeFiles
 {
@@ -16,13 +14,9 @@ namespace CodeGenerator.Core.CodeFiles
             FactoryTypes.Add("SQL", new SQLCodeFile());
             FactoryTypes.Add("CSharp", new CSharpCodeFile());
         }
-        
-        public static List<string> CodeFileTypes
-        {
-            get
-            {
-                return FactoryTypes.Keys.ToList();
-            }
+
+        public static List<string> CodeFileTypes {
+            get { return FactoryTypes.Keys.ToList(); }
         }
 
         public static CodeFileBase Create(string type)

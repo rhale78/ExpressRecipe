@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.Templates.Interpreter
 {
@@ -14,7 +12,7 @@ namespace CodeGenerator.Core.Templates.Interpreter
         {
             Variables = new Dictionary<string, VariableBase>();
         }
-        
+
         public void SetVariable(string name, string type, dynamic value)
         {
             if (!Variables.ContainsKey(name))

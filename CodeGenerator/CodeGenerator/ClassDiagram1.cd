@@ -1,0 +1,581 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.EqualsStringComparisonRule" Collapsed="true">
+    <Position X="0.5" Y="18.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAgAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\EqualsStringComparisonRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.IndentRule" Collapsed="true">
+    <Position X="6.25" Y="3.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>EAgAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\IndentRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.InfixStringComparisonRule" Collapsed="true">
+    <Position X="2.75" Y="18.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAgAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\InfixStringComparisonRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.PostDeIndentRule" Collapsed="true">
+    <Position X="5.25" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\PostDeIndentRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.PostfixStringComparisonRule" Collapsed="true">
+    <Position X="5" Y="18.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAgAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\PostfixStringComparisonRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.PostIndentRule" Collapsed="true">
+    <Position X="7.5" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\PostIndentRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.PreDeIndentRule" Collapsed="true">
+    <Position X="9.75" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\PreDeIndentRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.PrefixStringComparisonRule" Collapsed="true">
+    <Position X="7.25" Y="18.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAgAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\PrefixStringComparisonRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.PreIndentRule" Collapsed="true">
+    <Position X="12" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\PreIndentRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.StringComparisonRuleBase" Collapsed="true">
+    <Position X="3.75" Y="17.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAIAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\StringComparisonRuleBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.TemporaryDeIndentRule" Collapsed="true">
+    <Position X="0.75" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\TemporaryDeIndentRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableFileRules.TemporaryIndentRule" Collapsed="true">
+    <Position X="3" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\IndentableFileRules\TemporaryIndentRule.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.CodeFileBase" Collapsed="true">
+    <Position X="11.5" Y="18.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgABAABAAAAwAIAAAAAAAAAAACAIQACAAAAACFAAgA=</HashCode>
+      <FileName>CodeFiles\CodeFileBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.CodeFileFactory" Collapsed="true">
+    <Position X="27" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAABAAAAAAAAAABAEAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\CodeFileFactory.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.CSharpCodeFile" Collapsed="true">
+    <Position X="10.25" Y="22.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAEAAAAAAAEAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\CSharpCodeFile.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.IndentableCodeFile" Collapsed="true">
+    <Position X="10.25" Y="19.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAAEgAEAAAAEEAAAAAAEAAgAAAAACAAAgAA=</HashCode>
+      <FileName>CodeFiles\IndentableCodeFile.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.SQLCodeFile" Collapsed="true">
+    <Position X="12.5" Y="21.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\SQLCodeFile.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.StructuredFileBase" Collapsed="true">
+    <Position X="10.25" Y="21.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\StructuredFileBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.CodeFiles.TextualFileBase" Collapsed="true">
+    <Position X="12.5" Y="19.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>CodeFiles\TextualFileBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.ConsoleOutputStrategy" Collapsed="true">
+    <Position X="20" Y="6.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAA=</HashCode>
+      <FileName>OutputStrategy\ConsoleOutputStrategy.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.DebugOutputStrategy" Collapsed="true">
+    <Position X="22.25" Y="6.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAA=</HashCode>
+      <FileName>OutputStrategy\DebugOutputStrategy.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.FileDefaultStrategy" Collapsed="true">
+    <Position X="15.5" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFAAAA=</HashCode>
+      <FileName>OutputStrategy\FileDefaultStrategy.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.FileOutputStrategy" Collapsed="true">
+    <Position X="17.75" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFAAAA=</HashCode>
+      <FileName>OutputStrategy\FileOutputStrategy.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.NoInputStrategyBase" Collapsed="true">
+    <Position X="22.25" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFAAAA=</HashCode>
+      <FileName>OutputStrategy\NoInputStrategyBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.OutputStrategyBase" Collapsed="true">
+    <Position X="20" Y="3.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFAAAA=</HashCode>
+      <FileName>OutputStrategy\OutputStrategyBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.OutputStrategyFactory" Collapsed="true">
+    <Position X="27" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAQAABAAAAAAAAABAAAAA=</HashCode>
+      <FileName>OutputStrategy\OutputStrategyFactory.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.OutputStrategy.StringOutputStrategy" Collapsed="true">
+    <Position X="24.5" Y="6.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAEAAAA=</HashCode>
+      <FileName>OutputStrategy\StringOutputStrategy.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.BoolLiteralCommandParameter" Collapsed="true">
+    <Position X="17.5" Y="16.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\BoolLiteralCommandParameter.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.CommandParameterBase" Collapsed="true">
+    <Position X="13" Y="12.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\CommandParameterBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.CommandParameterBase&lt;T, W&gt;" Collapsed="true">
+    <Position X="8.5" Y="13.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAABAAAAAAAAAAAAEAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\CommandParameterBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.DoubleLiteralCommandParameter" Collapsed="true">
+    <Position X="10.75" Y="16.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\DoubleLiteralCommandParameter.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.IntLiteralCommandParameter" Collapsed="true">
+    <Position X="13" Y="16.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\IntLiteralCommandParameter.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.LiteralCommandParameterBase" Collapsed="true">
+    <Position X="14.25" Y="13.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\LiteralCommandParameterBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.LiteralCommandParameterBase&lt;T&gt;" Collapsed="true">
+    <Position X="14.25" Y="15.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAgAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\LiteralCommandParameterBase1.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.LiteralCommandParameterFactory" Collapsed="true">
+    <Position X="32.25" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgA=</HashCode>
+      <FileName>Templates\Commands\Parameters\LiteralCommandParameterFactory.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.StringLiteralCommandParameter" Collapsed="true">
+    <Position X="15.25" Y="16.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\StringLiteralCommandParameter.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.Parameters.VariableNameCommandParameter" Collapsed="true">
+    <Position X="15.25" Y="18.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\Parameters\VariableNameCommandParameter.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.DoubleVariableDeclarationCommand" Collapsed="true">
+    <Position X="12.25" Y="10.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\AssignmentCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.StringVariableDeclarationCommand" Collapsed="true">
+    <Position X="14.5" Y="10.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\AssignmentCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.AssignmentCommand" Collapsed="true">
+    <Position X="1" Y="9.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAIAQgAAQgAQAAAAAAAAAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\AssignmentCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.BoolVariableDeclarationCommand" Collapsed="true">
+    <Position X="7.75" Y="10.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\BoolVariableDeclarationCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.CommandBase" Collapsed="true">
+    <Position X="8.75" Y="6.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>EAAgCAAAgBAAIAQgAAAgAAAAAAAAAAAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\CommandBase.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.CommandBase&lt;T&gt;" Collapsed="true">
+    <Position X="8.75" Y="7.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\CommandBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.CommandFactory" Collapsed="true">
+    <Position X="28.75" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAgAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\CommandFactory.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.GlobalVariableCommand" Collapsed="true">
+    <Position X="5.5" Y="12.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAJABgAAAgAAAAAAAAAEAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\GlobalVariableCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.IntegerVariableDeclarationCommand" Collapsed="true">
+    <Position X="10" Y="10.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\IntegerVariableDeclarationCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.NullCommand" Collapsed="true">
+    <Position X="16.75" Y="9.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAIAQgAAAgAAAAAAAAAAAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\NullCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.ResultCommandBase&lt;T&gt;" Collapsed="true">
+    <Position X="4.25" Y="9.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAQAABAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\ResultCommandBase.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.VariableCommand" Collapsed="true">
+    <Position X="3.25" Y="12.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAJABgAAAgAAAAAAAAAEAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\VariableCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.VariableCommandBase&lt;T&gt;" Collapsed="true">
+    <Position X="4.25" Y="10.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAACBARAAAAAAAQAABAAAEAAAAAAAAEAAAA=</HashCode>
+      <FileName>Templates\Commands\VariableCommandBase.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Commands.VariableDeclarationCommand&lt;T&gt;" Collapsed="true">
+    <Position X="11" Y="9.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAEAAAAAAAAAIAAgAAEAAAAAAAAAAAAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\VariableDeclarationCommand.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.BooleanVariable" Collapsed="true">
+    <Position X="0.5" Y="16.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Interpreter\BooleanVariable.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.CommandInterpreter" Collapsed="true">
+    <Position X="30.5" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>EAAAAgCAABAAAAQQAAAAAAQAAAAIQQIAAAAAAAAAQEI=</HashCode>
+      <FileName>Templates\Interpreter\CommandInterpreter.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.IntVariable" Collapsed="true">
+    <Position X="2.75" Y="16.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Interpreter\IntVariable.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.StringVariable" Collapsed="true">
+    <Position X="5" Y="16.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Interpreter\StringVariable.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.VariableBase" Collapsed="true">
+    <Position X="2.75" Y="13.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAIAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Interpreter\VariableBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.VariableBase&lt;T&gt;" Collapsed="true">
+    <Position X="2.75" Y="14.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>QAAAAAAAIAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Interpreter\VariableBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.VariableFactory" Collapsed="true">
+    <Position X="32.25" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Interpreter\VariableFactory.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.VariableStack" Collapsed="true">
+    <Position X="27" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAQAAiAABAAAAAQAAAAAAQAAABIAQIAAAAAAAAAQEA=</HashCode>
+      <FileName>Templates\Interpreter\VariableStack.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Interpreter.VariableStackFrame" Collapsed="true">
+    <Position X="28.75" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAQAAAAIAAAAAAQAAAAAQEA=</HashCode>
+      <FileName>Templates\Interpreter\VariableStackFrame.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.BlockParser" Collapsed="true">
+    <Position X="5.75" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\BlockParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.BoolParser" Collapsed="true">
+    <Position X="10.25" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\BoolParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.CommandParserBase" Collapsed="true">
+    <Position X="12.5" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AABgCAAAAAAAAAAgAAAAAAAAAAAAAAAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\CommandParserBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.DoubleParser" Collapsed="true">
+    <Position X="17" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\DoubleParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.FallbackParser" Collapsed="true">
+    <Position X="21.5" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\FallbackParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.InfixParser" Collapsed="true">
+    <Position X="23.75" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAABAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\InfixParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.IntegerParser" Collapsed="true">
+    <Position X="1.25" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\IntegerParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.LineParserBase" Collapsed="true">
+    <Position X="3.5" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\LineParserBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.NullParser" Collapsed="true">
+    <Position X="8" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\NullParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.PrefixParser" Collapsed="true">
+    <Position X="12.5" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCQAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\PrefixParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.RegexParser" Collapsed="true">
+    <Position X="14.75" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\RegexParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.SurroundParser" Collapsed="true">
+    <Position X="19.25" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAgCAAACAAAAAAAAAAAAAACAAAAAAAAACAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\SurroundParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.Parser.TemplateParser" Collapsed="true">
+    <Position X="30.5" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAoAAAAAEAAAAAAAAAAAAAAAIACAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\TemplateParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.DynamicTemplate" Collapsed="true">
+    <Position X="17.25" Y="11.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAIAAAACAAAAAAAAAAAEAAAAA=</HashCode>
+      <FileName>Templates\DynamicTemplate.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.StaticTemplate" Collapsed="true">
+    <Position X="19.5" Y="11.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAIAAAACAAAAAAAAAAAEAAAAA=</HashCode>
+      <FileName>Templates\StaticTemplate.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.TemplateBase" Collapsed="true">
+    <Position X="18.5" Y="10.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAgAAAAAAQAAAAAAAIAAAACAAIAACAAAAAEAAAAA=</HashCode>
+      <FileName>Templates\TemplateBase.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CodeGenerator.Core.Templates.TemplateLine" Collapsed="true">
+    <Position X="28.75" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAABAAAAAAAAAAAAQAAAAAAAAAAAAAAAABAAA=</HashCode>
+      <FileName>Templates\TemplateLine.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Interface Name="CodeGenerator.Core.Interfaces.IConfigDriven" Collapsed="true">
+    <Position X="27" Y="3.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAgIAAAAAQAAAAAAAAACAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Interfaces\IConfigDriven.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="CodeGenerator.Core.Templates.Commands.IResultCommand" Collapsed="true">
+    <Position X="32.25" Y="3.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAQAABAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Commands\IResultCommand.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="CodeGenerator.Core.Templates.Commands.IVariableCommand" Collapsed="true">
+    <Position X="27" Y="4.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAABABAAAAAAAAAAAAAAEAAAAAAAAEAAAA=</HashCode>
+      <FileName>Templates\Commands\IVariableCommand.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="CodeGenerator.Core.Templates.Parser.IInternalParsable" Collapsed="true">
+    <Position X="28.75" Y="3.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAIAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\IInternalParsable.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Interface Name="CodeGenerator.Core.Templates.Parser.IParsable" Collapsed="true">
+    <Position X="30.5" Y="3.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Templates\Parser\IParsable.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Font Name="Segoe UI" Size="9" />
+</ClassDiagram>

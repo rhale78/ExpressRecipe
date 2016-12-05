@@ -5,8 +5,6 @@ using CodeGenerator.Core.Templates.Parser;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.Templates.Interpreter
 {
@@ -24,38 +22,40 @@ namespace CodeGenerator.Core.Templates.Interpreter
         {
             List<TableDefinition> tables = dataSource.GetAllTables();
 
-            foreach(TemplateBase template in templates)
+            foreach (TemplateBase template in templates)
             {
                 Run(tables, template);
             }
         }
 
-        private void Run(List<TableDefinition> tables,TemplateBase template)
+        private void Run(List<TableDefinition> tables, TemplateBase template)
         {
-            if(template is StaticTemplate)
+            if (template is StaticTemplate)
             {
                 Run(tables, (StaticTemplate)template);
             }
-            else if(template is DynamicTemplate)
+            else
             {
-                Run(tables, (DynamicTemplate)template);
+                if (template is DynamicTemplate)
+                {
+                    Run(tables, (DynamicTemplate)template);
+                }
             }
         }
 
         private void Run(List<TableDefinition> tables, StaticTemplate template)
         {
-
         }
         private void Run(List<TableDefinition> tables, DynamicTemplate template)
         {
-            Commands=TemplateParser.Parse(template);
-            foreach(TableDefinition table in tables)
+            Commands = TemplateParser.Parse(template);
+            foreach (TableDefinition table in tables)
             {
                 SetGlobalVariable("TableName", "string", table.TableName);
 
-                CodeFile = CodeFiles.CodeFileFactory.Create(template.FileType);
-                
-                foreach(CommandBase command in Commands)
+                CodeFile = CodeFileFactory.Create(template.FileType);
+
+                foreach (CommandBase command in Commands)
                 {
                     command.Execute();
                 }
@@ -65,7 +65,9 @@ namespace CodeGenerator.Core.Templates.Interpreter
         protected List<CommandBase> Commands { get; set; }
 
         public string Execute(string line)
-        { return null; }
+        {
+            return null;
+        }
 
         public void CreateStackFrame()
         {

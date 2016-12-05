@@ -2,8 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.Templates
 {
@@ -12,7 +10,7 @@ namespace CodeGenerator.Core.Templates
         public override CodeFileBase Generate()
         {
             CodeFileBase codeFile = CodeFileFactory.Create(CodeFileType);
-            foreach(string line in AsLiteral)
+            foreach (string line in AsLiteral)
             {
                 codeFile.AddLine(line);
             }
@@ -21,7 +19,7 @@ namespace CodeGenerator.Core.Templates
 
         public override void LoadTemplate(string filename)
         {
-             AsLiteral = System.IO.File.ReadAllLines(filename).ToList();
+            AsLiteral = System.IO.File.ReadAllLines(filename).ToList();
         }
 
         public override void SaveTemplate(string filename)

@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.Templates.Interpreter
 {
@@ -13,17 +11,13 @@ namespace CodeGenerator.Core.Templates.Interpreter
 
         public VariableStack()
         {
-            VariableStacks = new Stack<Interpreter.VariableStackFrame>();
+            VariableStacks = new Stack<VariableStackFrame>();
             VariableStacks.Push(new VariableStackFrame());
             GlobalVariables = VariableStacks.Peek();
         }
 
-        protected VariableStackFrame CurrentStack
-        {
-            get
-            {
-                return VariableStacks.Peek();
-            }
+        protected VariableStackFrame CurrentStack {
+            get { return VariableStacks.Peek(); }
         }
 
         public void CreateStackFrame()
@@ -72,7 +66,7 @@ namespace CodeGenerator.Core.Templates.Interpreter
         internal bool HasVariable(string name)
         {
             bool returnValue = GlobalVariables.HasVariable(name);
-            if(!returnValue)
+            if (!returnValue)
             {
                 returnValue = CurrentStack.HasVariable(name);
             }

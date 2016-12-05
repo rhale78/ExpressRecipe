@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using CodeGenerator.Core.CodeFiles;
 
 namespace CodeGenerator.Core.OverwriteStrategies
@@ -11,7 +9,7 @@ namespace CodeGenerator.Core.OverwriteStrategies
     {
         public override void Write(CodeFileBase codeFile)
         {
-            if(!codeFile.Exists())
+            if (!codeFile.Exists())
             {
                 codeFile.Write();
             }

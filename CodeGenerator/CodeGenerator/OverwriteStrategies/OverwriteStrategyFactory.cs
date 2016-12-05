@@ -1,14 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.OverwriteStrategies
 {
     public static class OverwriteStrategyFactory
     {
-        private static Dictionary<string,OverwriteStrategyBase> FactoryTypes { get; set; }
+        private static Dictionary<string, OverwriteStrategyBase> FactoryTypes { get; set; }
 
         static OverwriteStrategyFactory()
         {
@@ -20,21 +18,18 @@ namespace CodeGenerator.Core.OverwriteStrategies
         }
 
         public static List<string> StrategyTypes {
-            get
-            {
-                return FactoryTypes.Keys.ToList();
-            }
+            get { return FactoryTypes.Keys.ToList(); }
         }
 
         public static OverwriteStrategyBase Strategy(string type)
         {
-            if(FactoryTypes.ContainsKey(type))
+            if (FactoryTypes.ContainsKey(type))
             {
                 return FactoryTypes[type];
             }
             else
             {
-                throw new Exception("Overwrite strategy type "+type + " not found");
+                throw new Exception("Overwrite strategy type " + type + " not found");
             }
         }
     }

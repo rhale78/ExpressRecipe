@@ -2,8 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.Templates
 {
@@ -11,12 +9,11 @@ namespace CodeGenerator.Core.Templates
     {
         public string FileType { get; set; }
         public List<TemplateLine> Lines { get; set; }
-        protected List<String> AsLiteral
-        {
+        protected List<String> AsLiteral {
             get
             {
                 List<string> lines = new List<string>();
-                foreach(TemplateLine line in Lines)
+                foreach (TemplateLine line in Lines)
                 {
                     lines.Add(line.Line);
                 }
@@ -25,7 +22,7 @@ namespace CodeGenerator.Core.Templates
             set
             {
                 Lines = new List<TemplateLine>();
-                foreach(string line in value)
+                foreach (string line in value)
                 {
                     Lines.Add(new TemplateLine(line));
                 }

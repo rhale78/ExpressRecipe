@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CodeGenerator.Core.SourceDataStrategies
 {
@@ -15,7 +13,7 @@ namespace CodeGenerator.Core.SourceDataStrategies
         {
             TableNamesToIgnore = new List<string>();
         }
-        
+
         public override List<TableDefinition> GetAllTables()
         {
             List<TableDefinition> returnValues = new List<TableDefinition>();
