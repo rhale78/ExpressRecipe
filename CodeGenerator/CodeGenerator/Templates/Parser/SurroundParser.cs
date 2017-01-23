@@ -12,6 +12,13 @@ namespace CodeGenerator.Core.Templates.Parser
         {
         }
 
+		internal SurroundParser(string prefix,string suffix)
+			:base(null)
+		{
+			Prefix = prefix;
+			Suffix = suffix;
+		}
+
         public string Prefix { get; protected set; }
         public string Suffix { get; protected set; }
 

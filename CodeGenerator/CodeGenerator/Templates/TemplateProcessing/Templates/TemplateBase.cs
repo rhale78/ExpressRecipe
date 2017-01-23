@@ -8,12 +8,18 @@ namespace CodeGenerator.Core.Templates
     public abstract class TemplateBase
     {
         public string FileType { get; set; }
-        public List<TemplateLine> Lines { get; set; }
-        protected List<String> AsLiteral {
+        public List<TemplateLineBase> Lines { get; set; }
+
+		public TemplateBase()
+		{
+			Lines = new List<TemplateLineBase>();
+		}
+
+		protected List<String> AsLiteral {
             get
             {
                 List<string> lines = new List<string>();
-                foreach (TemplateLine line in Lines)
+                foreach (TemplateLineBase line in Lines)
                 {
                     lines.Add(line.Line);
                 }
@@ -21,10 +27,10 @@ namespace CodeGenerator.Core.Templates
             }
             set
             {
-                Lines = new List<TemplateLine>();
+                Lines = new List<TemplateLineBase>();
                 foreach (string line in value)
                 {
-                    Lines.Add(new TemplateLine(line));
+                    Lines.Add(new StaticTemplateLine(line));
                 }
             }
         }

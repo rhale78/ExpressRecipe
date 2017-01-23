@@ -102,7 +102,9 @@
     <Compile Include="Templates\Commands\VariableCommand.cs" />
     <Compile Include="Templates\Commands\VariableCommandBase.cs" />
     <Compile Include="Templates\Commands\VariableDeclarationCommand.cs" />
-    <Compile Include="Templates\DynamicTemplate.cs" />
+    <Compile Include="Templates\TemplateProcessing\LineParts\DynamicLinePart.cs" />
+    <Compile Include="Templates\TemplateProcessing\Templates\DynamicTemplate.cs" />
+    <Compile Include="Templates\TemplateProcessing\Lines\DynamicTemplateLine.cs" />
     <Compile Include="Templates\Interpreter\BooleanVariable.cs" />
     <Compile Include="Templates\Interpreter\CommandInterpreter.cs" />
     <Compile Include="Templates\Interpreter\IntVariable.cs" />
@@ -111,6 +113,7 @@
     <Compile Include="Templates\Interpreter\VariableFactory.cs" />
     <Compile Include="Templates\Interpreter\VariableStack.cs" />
     <Compile Include="Templates\Interpreter\VariableStackFrame.cs" />
+    <Compile Include="Templates\TemplateProcessing\LineParts\LinePartBase.cs" />
     <Compile Include="Templates\Parser\BlockParser.cs" />
     <Compile Include="Templates\Parser\BoolParser.cs" />
     <Compile Include="Templates\Parser\CommandParserBase.cs" />
@@ -126,12 +129,15 @@
     <Compile Include="Templates\Parser\RegexParser.cs" />
     <Compile Include="Templates\Parser\SurroundParser.cs" />
     <Compile Include="Templates\Parser\TemplateParser.cs" />
-    <Compile Include="Templates\StaticTemplate.cs" />
-    <Compile Include="Templates\TemplateBase.cs" />
-    <Compile Include="Templates\TemplateLine.cs" />
+    <Compile Include="Templates\TemplateProcessing\LineParts\StaticLinePart.cs" />
+    <Compile Include="Templates\TemplateProcessing\Templates\StaticTemplate.cs" />
+    <Compile Include="Templates\TemplateProcessing\Lines\StaticTemplateLine.cs" />
+    <Compile Include="Templates\TemplateProcessing\Templates\TemplateBase.cs" />
+    <Compile Include="Templates\TemplateProcessing\Lines\TemplateLineBase.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ClassDiagram1.cd" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

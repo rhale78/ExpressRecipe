@@ -7,7 +7,7 @@ namespace CodeGenerator.Core.Templates.Parser
 {
     public static class TemplateParser
     {
-        public static TemplateLine CurrentTemplateLine { get; private set; }
+        public static TemplateLineBase CurrentTemplateLine { get; private set; }
         private static int CurrentTemplateLineIndex { get; set; }
         private static TemplateBase Template { get; set; }
         public static List<CommandBase> Parse(TemplateBase template)
