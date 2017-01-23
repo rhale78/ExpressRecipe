@@ -1,0 +1,203 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <Name>Main.Database</Name>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectVersion>4.1</ProjectVersion>
+    <ProjectGuid>{55f22dc6-145f-455d-862e-ae15964e0058}</ProjectGuid>
+    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql130DatabaseSchemaProvider</DSP>
+    <OutputType>Database</OutputType>
+    <RootPath>
+    </RootPath>
+    <RootNamespace>Main.Database</RootNamespace>
+    <AssemblyName>Main.Database</AssemblyName>
+    <ModelCollation>1033,CI</ModelCollation>
+    <DefaultFileStructure>BySchemaAndSchemaType</DefaultFileStructure>
+    <DeployToDatabase>True</DeployToDatabase>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetLanguage>CS</TargetLanguage>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <SqlServerVerification>False</SqlServerVerification>
+    <IncludeCompositeObjects>True</IncludeCompositeObjects>
+    <TargetDatabaseSet>True</TargetDatabaseSet>
+    <DefaultCollation>SQL_Latin1_General_CP1_CI_AS</DefaultCollation>
+    <DefaultFilegroup>PRIMARY</DefaultFilegroup>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <OutputPath>bin\Release\</OutputPath>
+    <BuildScriptName>$(MSBuildProjectName).sql</BuildScriptName>
+    <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <DefineDebug>false</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <OutputPath>bin\Debug\</OutputPath>
+    <BuildScriptName>$(MSBuildProjectName).sql</BuildScriptName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <DefineDebug>true</DefineDebug>
+    <DefineTrace>true</DefineTrace>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">11.0</VisualStudioVersion>
+    <!-- Default to the v11.0 targets path if the targets file for the current VS version is not found -->
+    <SSDTExists Condition="Exists('$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets')">True</SSDTExists>
+    <VisualStudioVersion Condition="'$(SSDTExists)' == ''">11.0</VisualStudioVersion>
+  </PropertyGroup>
+  <Import Condition="'$(SQLDBExtensionsRefPath)' != ''" Project="$(SQLDBExtensionsRefPath)\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
+  <Import Condition="'$(SQLDBExtensionsRefPath)' == ''" Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
+  <ItemGroup>
+    <Folder Include="Properties" />
+    <Folder Include="Tables" />
+  </ItemGroup>
+  <ItemGroup>
+    <Build Include="Tables\AdditionalAddressInfo.sql" />
+    <Build Include="Tables\Address.sql" />
+    <Build Include="Tables\AddressType.sql" />
+    <Build Include="Tables\AddressUse.sql" />
+    <Build Include="Tables\AllergyProximityType.sql" />
+    <Build Include="Tables\AllergyReactionType.sql" />
+    <Build Include="Tables\AllergySeverity.sql" />
+    <Build Include="Tables\AllergySeverityProxReact.sql" />
+    <Build Include="Tables\AllergyTiming.sql" />
+    <Build Include="Tables\AllergyType.sql" />
+    <Build Include="Tables\AreaCode.sql" />
+    <Build Include="Tables\AreaCodeCityState.sql" />
+    <Build Include="Tables\Brand.sql" />
+    <Build Include="Tables\City.sql" />
+    <Build Include="Tables\CityState.sql" />
+    <Build Include="Tables\CityStateCounty.sql" />
+    <Build Include="Tables\ContactSourceType.sql" />
+    <Build Include="Tables\Country.sql" />
+    <Build Include="Tables\CountryPhonePrefix.sql" />
+    <Build Include="Tables\County.sql" />
+    <Build Include="Tables\CreatedUpdatedData.sql" />
+    <Build Include="Tables\CreatedUpdatedDate.sql" />
+    <Build Include="Tables\EmailAddress.sql" />
+    <Build Include="Tables\EmailAddressUseType.sql" />
+    <Build Include="Tables\FoodAllergyClassification.sql" />
+    <Build Include="Tables\FoodConsumeType.sql" />
+    <Build Include="Tables\FoodDiet.sql" />
+    <Build Include="Tables\FoodDietIngredient.sql" />
+    <Build Include="Tables\FoodDietProductInstance.sql" />
+    <Build Include="Tables\FoodDietType.sql" />
+    <Build Include="Tables\FoodPreference.sql" />
+    <Build Include="Tables\FoodPreferenceProductInstance.sql" />
+    <Build Include="Tables\FoodPrefereneceIngredients.sql" />
+    <Build Include="Tables\FoodRestriction.sql" />
+    <Build Include="Tables\FoodRestrictionIngredient.sql" />
+    <Build Include="Tables\FoodRestrictionProductInstance.sql" />
+    <Build Include="Tables\FoodRestrictionType.sql" />
+    <Build Include="Tables\Ingredient.sql" />
+    <Build Include="Tables\IngredientAlternateName.sql" />
+    <Build Include="Tables\IngredientClassification.sql" />
+    <Build Include="Tables\IngredientsRawData.sql" />
+    <Build Include="Tables\IngredientToFoodAllergyClassification.sql" />
+    <Build Include="Tables\IngredientToSubIngredient.sql" />
+    <Build Include="Tables\IngredientType.sql" />
+    <Build Include="Tables\LetterType.sql" />
+    <Build Include="Tables\LogoutType.sql" />
+    <Build Include="Tables\MedicalCondition.sql" />
+    <Build Include="Tables\MedicalConditionFoodRestriction.sql" />
+    <Build Include="Tables\MilitaryBranch.sql" />
+    <Build Include="Tables\MilitaryCountry.sql" />
+    <Build Include="Tables\MilitaryPaygrade.sql" />
+    <Build Include="Tables\MilitaryPaygradeType.sql" />
+    <Build Include="Tables\MilitaryRank.sql" />
+    <Build Include="Tables\MilitaryTitlePaygradeType.sql" />
+    <Build Include="Tables\PermissionItem.sql" />
+    <Build Include="Tables\PermissionItemToGroup.sql" />
+    <Build Include="Tables\PermissionType.sql" />
+    <Build Include="Tables\PermissionTypeGroup.sql" />
+    <Build Include="Tables\PermissionTypeToGroup.sql" />
+    <Build Include="Tables\Person.sql" />
+    <Build Include="Tables\PersonAddress.sql" />
+    <Build Include="Tables\PersonContact.sql" />
+    <Build Include="Tables\PersonEmailAddress.sql" />
+    <Build Include="Tables\PersonFoodAllergyClassification.sql" />
+    <Build Include="Tables\PersonFoodDiet.sql" />
+    <Build Include="Tables\PersonFoodPreference.sql" />
+    <Build Include="Tables\PersonFoodRestriction.sql" />
+    <Build Include="Tables\PersonGender.sql" />
+    <Build Include="Tables\PersonImportantDate.sql" />
+    <Build Include="Tables\PersonImportantDateType.sql" />
+    <Build Include="Tables\PersonIngredientAllergy.sql" />
+    <Build Include="Tables\PersonMaritalStatus.sql" />
+    <Build Include="Tables\PersonMarriage.sql" />
+    <Build Include="Tables\PersonMarriageEndType.sql" />
+    <Build Include="Tables\PersonMedicalCondition.sql" />
+    <Build Include="Tables\PersonName.sql" />
+    <Build Include="Tables\PersonNameDegree.sql" />
+    <Build Include="Tables\PersonNamePrefix.sql" />
+    <Build Include="Tables\PersonNameSuffix.sql" />
+    <Build Include="Tables\PersonPersonContact.sql" />
+    <Build Include="Tables\PersonPoliticalTitle.sql" />
+    <Build Include="Tables\PersonProductAllergy.sql" />
+    <Build Include="Tables\PersonProductInstanceAllergy.sql" />
+    <Build Include="Tables\PersonRelationship.sql" />
+    <Build Include="Tables\PersonRelationshipType.sql" />
+    <Build Include="Tables\PersonReligion.sql" />
+    <Build Include="Tables\PersonReligionToReligionTitle.sql" />
+    <Build Include="Tables\PersonReligiousTitle.sql" />
+    <Build Include="Tables\PersonReligiousTitleToPrefix.sql" />
+    <Build Include="Tables\PersonSalutation.sql" />
+    <Build Include="Tables\PersonTitle.sql" />
+    <Build Include="Tables\PersonTitleType.sql" />
+    <Build Include="Tables\PersonToImportantDate.sql" />
+    <Build Include="Tables\PhoneDeviceType.sql" />
+    <Build Include="Tables\PhoneNumber.sql" />
+    <Build Include="Tables\PhoneUseType.sql" />
+    <Build Include="Tables\Product.sql" />
+    <Build Include="Tables\ProductCategory.sql" />
+    <Build Include="Tables\ProductIngredient.sql" />
+    <Build Include="Tables\ProductInstance.sql" />
+    <Build Include="Tables\ProductInstanceRawData.sql" />
+    <Build Include="Tables\ProductPackageType.sql" />
+    <Build Include="Tables\ProductRawData.sql" />
+    <Build Include="Tables\ProductSize.sql" />
+    <Build Include="Tables\ProductWarning.sql" />
+    <Build Include="Tables\ProductWarningType.sql" />
+    <Build Include="Tables\ProductWarningTypeAllergyProximity.sql" />
+    <Build Include="Tables\ProductWarningTypeIngredients.sql" />
+    <Build Include="Tables\RatingInstance.sql" />
+    <Build Include="Tables\RelationshipGenderRestriction.sql" />
+    <Build Include="Tables\SalutationLetterTypeTitle.sql" />
+    <Build Include="Tables\SizeType.sql" />
+    <Build Include="Tables\StandardUnit.sql" />
+    <Build Include="Tables\StandardUnitConversion.sql" />
+    <Build Include="Tables\StateCountry.sql" />
+    <Build Include="Tables\StateCounty.sql" />
+    <Build Include="Tables\StateProvidence.sql" />
+    <Build Include="Tables\Street.sql" />
+    <Build Include="Tables\StreetAddress.sql" />
+    <Build Include="Tables\StreetToType.sql" />
+    <Build Include="Tables\StreetType.sql" />
+    <Build Include="Tables\Timespan.sql" />
+    <Build Include="Tables\TimespanType.sql" />
+    <Build Include="Tables\UnitType.sql" />
+    <Build Include="Tables\UnknownUserLogonSessions.sql" />
+    <Build Include="Tables\UseDates.sql" />
+    <Build Include="Tables\User.sql" />
+    <Build Include="Tables\UserAccessPermissionItem.sql" />
+    <Build Include="Tables\UserAccessType.sql" />
+    <Build Include="Tables\UserAccountStatus.sql" />
+    <Build Include="Tables\UserAccountStatusType.sql" />
+    <Build Include="Tables\UserLogon.sql" />
+    <Build Include="Tables\UserLogonSessions.sql" />
+    <Build Include="Tables\UserSocialMediaMembership.sql" />
+    <Build Include="Tables\UserSocialMembershipType.sql" />
+    <Build Include="Tables\UserType.sql" />
+    <Build Include="Tables\ZipCode.sql" />
+  </ItemGroup>
+</Project>
