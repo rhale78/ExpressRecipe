@@ -17,14 +17,19 @@
                         <span class="nav-text">Dashboard</span>
                     </a>
 
+                    <a href="/search" class="nav-link @GetActiveClass("/search")">
+                        <span class="nav-icon">🔍</span>
+                        <span class="nav-text">Search</span>
+                    </a>
+
+                    <a href="/scanner" class="nav-link @GetActiveClass("/scanner")">
+                        <span class="nav-icon">📷</span>
+                        <span class="nav-text">Barcode Scanner</span>
+                    </a>
+
                     <a href="/products" class="nav-link @GetActiveClass("/products")">
                         <span class="nav-icon">📦</span>
                         <span class="nav-text">Products</span>
-                    </a>
-
-                    <a href="/products/scan" class="nav-link @GetActiveClass("/products/scan")">
-                        <span class="nav-icon">📷</span>
-                        <span class="nav-text">Scan Barcode</span>
                     </a>
 
                     <a href="/recipes" class="nav-link @GetActiveClass("/recipes")">
@@ -68,7 +73,17 @@
                         }
                     </a>
 
+                    <a href="/recalls" class="nav-link @GetActiveClass("/recalls")">
+                        <span class="nav-icon">⚠️</span>
+                        <span class="nav-text">Recall Alerts</span>
+                    </a>
+
                     <div class="nav-divider"></div>
+
+                    <a href="/sync" class="nav-link @GetActiveClass("/sync")">
+                        <span class="nav-icon">☁️</span>
+                        <span class="nav-text">Cloud Sync</span>
+                    </a>
 
                     <a href="/settings" class="nav-link @GetActiveClass("/settings")">
                         <span class="nav-icon">⚙️</span>

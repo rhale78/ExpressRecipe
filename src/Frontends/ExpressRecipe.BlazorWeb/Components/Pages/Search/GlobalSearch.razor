@@ -1,0 +1,393 @@
+@page "/search"
+@using ExpressRecipe.Client.Shared.Services
+@inject ISearchApiClient SearchClient
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+@rendermode InteractiveServer
+
+<PageTitle>Search - ExpressRecipe</PageTitle>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-10 mx-auto">
+            <h1 class="display-5 fw-bold mb-4">
+                <i class="bi bi-search me-2"></i>Global Search
+            </h1>
+
+            <!-- Search Box -->
+            <div class="card mb-4 shadow-sm">
+                <div class="card-body">
+                    <div class="input-group input-group-lg">
+                        <input
+                            type="text"
+                            class="form-control"
+                            placeholder="Search for products, recipes, ingredients..."
+                            @bind="searchQuery"
+                            @bind:event="oninput"
+                            @onkeypress="HandleKeyPress">
+                        <button class="btn btn-primary" type="button" @onclick="PerformSearch" disabled="@isSearching">
+                            @if (isSearching)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-search me-2"></i>
+                            }
+                            Search
+                        </button>
+                    </div>
+
+                    <!-- Search Suggestions -->
+                    @if (suggestions.Any() && !string.IsNullOrWhiteSpace(searchQuery))
+                    {
+                        <div class="list-group mt-2 position-absolute" style="z-index: 1000; width: calc(100% - 2rem);">
+                            @foreach (var suggestion in suggestions.Take(5))
+                            {
+                                <button class="list-group-item list-group-item-action" @onclick="() => SelectSuggestion(suggestion.Term)">
+                                    <i class="bi bi-search me-2"></i>@suggestion.Term
+                                    <span class="badge bg-secondary ms-2">@suggestion.Type</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Search Filters -->
+            @if (searchResult != null)
+            {
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-sm @(selectedTypes.Contains("Products") ? "btn-primary" : "btn-outline-primary")"
+                                    @onclick="() => ToggleFilter(\"Products\")">
+                                Products
+                                @if (searchResult.ResultCounts.ContainsKey("Products"))
+                                {
+                                    <span class="badge bg-light text-dark ms-1">@searchResult.ResultCounts["Products"]</span>
+                                }
+                            </button>
+                            <button class="btn btn-sm @(selectedTypes.Contains("Recipes") ? "btn-primary" : "btn-outline-primary")"
+                                    @onclick="() => ToggleFilter(\"Recipes\")">
+                                Recipes
+                                @if (searchResult.ResultCounts.ContainsKey("Recipes"))
+                                {
+                                    <span class="badge bg-light text-dark ms-1">@searchResult.ResultCounts["Recipes"]</span>
+                                }
+                            </button>
+                            <button class="btn btn-sm @(selectedTypes.Contains("Ingredients") ? "btn-primary" : "btn-outline-primary")"
+                                    @onclick="() => ToggleFilter(\"Ingredients\")">
+                                Ingredients
+                                @if (searchResult.ResultCounts.ContainsKey("Ingredients"))
+                                {
+                                    <span class="badge bg-light text-dark ms-1">@searchResult.ResultCounts["Ingredients"]</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Search Results -->
+            @if (searchResult != null)
+            {
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Search Results (@searchResult.TotalResults)</h5>
+                    <small class="text-muted">Searched in @((DateTime.UtcNow - searchResult.SearchedAt).TotalMilliseconds.ToString("F0"))ms</small>
+                </div>
+
+                @if (filteredResults.Any())
+                {
+                    <div class="row g-3">
+                        @foreach (var result in filteredResults)
+                        {
+                            <div class="col-12">
+                                <div class="card h-100 @(result.HasAllergenMatch ? "border-warning" : "")">
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-start">
+                                            @if (!string.IsNullOrEmpty(result.ImageUrl))
+                                            {
+                                                <img src="@result.ImageUrl" alt="@result.Title" class="rounded me-3" style="width: 80px; height: 80px; object-fit: cover;">
+                                            }
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                                    <div>
+                                                        <span class="badge bg-primary mb-2">@result.Type</span>
+                                                        @if (result.HasAllergenMatch)
+                                                        {
+                                                            <span class="badge bg-warning text-dark mb-2 ms-1">
+                                                                <i class="bi bi-exclamation-triangle-fill"></i> Allergen Match
+                                                            </span>
+                                                        }
+                                                        <h5 class="card-title mb-1">@result.Title</h5>
+                                                        @if (!string.IsNullOrEmpty(result.Subtitle))
+                                                        {
+                                                            <p class="text-muted small mb-1">@result.Subtitle</p>
+                                                        }
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <small class="text-muted">Relevance: @((result.Relevance * 100).ToString("F0"))%</small>
+                                                    </div>
+                                                </div>
+
+                                                @if (!string.IsNullOrEmpty(result.Description))
+                                                {
+                                                    <p class="card-text text-muted small mb-2">@result.Description</p>
+                                                }
+
+                                                @if (result.MatchedTerms.Any())
+                                                {
+                                                    <div class="mb-2">
+                                                        <small class="text-muted">Matched: </small>
+                                                        @foreach (var term in result.MatchedTerms.Take(5))
+                                                        {
+                                                            <span class="badge bg-light text-dark me-1">@term</span>
+                                                        }
+                                                    </div>
+                                                }
+
+                                                @if (result.Metadata.Any())
+                                                {
+                                                    <div class="d-flex gap-2 flex-wrap">
+                                                        @foreach (var meta in result.Metadata.Take(3))
+                                                        {
+                                                            <small class="text-muted">
+                                                                <strong>@meta.Key:</strong> @meta.Value
+                                                            </small>
+                                                        }
+                                                    </div>
+                                                }
+
+                                                <div class="mt-3">
+                                                    <button class="btn btn-sm btn-primary" @onclick="() => ViewDetails(result)">
+                                                        <i class="bi bi-eye me-1"></i>View Details
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-5">
+                        <i class="bi bi-search text-muted" style="font-size: 3rem;"></i>
+                        <h4 class="mt-3">No Results Found</h4>
+                        <p class="text-muted">Try adjusting your search or filters</p>
+                    </div>
+                }
+            }
+            else if (!string.IsNullOrEmpty(initialQuery))
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-search text-muted" style="font-size: 3rem;"></i>
+                    <h4 class="mt-3">Start Searching</h4>
+                    <p class="text-muted">Enter a search term to find products, recipes, and ingredients</p>
+                </div>
+            }
+
+            <!-- Recent Searches -->
+            @if (recentSearches.Any() && searchResult == null)
+            {
+                <div class="card mt-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Recent Searches</h6>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="ClearRecentSearches">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        @foreach (var recent in recentSearches.Take(5))
+                        {
+                            <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                    @onclick="() => SelectSuggestion(recent.Query)">
+                                <div>
+                                    <i class="bi bi-clock-history me-2"></i>@recent.Query
+                                </div>
+                                <span class="badge bg-secondary">@recent.ResultCount results</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? initialQuery { get; set; }
+
+    private string searchQuery = "";
+    private bool isSearching = false;
+
+    private GlobalSearchResult? searchResult = null;
+    private List<SearchSuggestion> suggestions = new();
+    private List<RecentSearch> recentSearches = new();
+    private List<string> selectedTypes = new() { "Products", "Recipes", "Ingredients" };
+
+    private List<SearchResultItem> filteredResults => searchResult?.Results
+        .Where(r => selectedTypes.Contains(r.Type))
+        .ToList() ?? new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(initialQuery))
+        {
+            searchQuery = initialQuery;
+            await PerformSearch();
+        }
+        else
+        {
+            await LoadRecentSearches();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadSuggestions();
+    }
+
+    private async Task LoadSuggestions()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery) || searchQuery.Length < 2)
+        {
+            suggestions.Clear();
+            return;
+        }
+
+        try
+        {
+            suggestions = await SearchClient.GetSearchSuggestionsAsync(searchQuery);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load suggestions: {ex.Message}");
+        }
+    }
+
+    private async Task LoadRecentSearches()
+    {
+        try
+        {
+            recentSearches = await SearchClient.GetRecentSearchesAsync(10);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load recent searches: {ex.Message}");
+        }
+    }
+
+    private async Task PerformSearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+            return;
+
+        isSearching = true;
+        suggestions.Clear();
+
+        try
+        {
+            searchResult = await SearchClient.SearchAsync(searchQuery, selectedTypes);
+
+            if (searchResult != null)
+            {
+                await SearchClient.SaveSearchAsync(searchQuery);
+
+                if (searchResult.TotalResults == 0)
+                {
+                    ToastService.ShowInfo("No Results", $"No results found for '{searchQuery}'");
+                }
+            }
+            else
+            {
+                ToastService.ShowError("Search Failed", "Unable to perform search");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task SelectSuggestion(string term)
+    {
+        searchQuery = term;
+        suggestions.Clear();
+        await PerformSearch();
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await PerformSearch();
+        }
+        else
+        {
+            await LoadSuggestions();
+        }
+    }
+
+    private void ToggleFilter(string type)
+    {
+        if (selectedTypes.Contains(type))
+        {
+            if (selectedTypes.Count > 1)
+            {
+                selectedTypes.Remove(type);
+            }
+        }
+        else
+        {
+            selectedTypes.Add(type);
+        }
+        StateHasChanged();
+    }
+
+    private async Task ClearRecentSearches()
+    {
+        try
+        {
+            var success = await SearchClient.ClearRecentSearchesAsync();
+            if (success)
+            {
+                recentSearches.Clear();
+                ToastService.ShowSuccess("Cleared", "Recent searches cleared");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private void ViewDetails(SearchResultItem result)
+    {
+        // Navigate based on type
+        var url = result.Type switch
+        {
+            "Products" => $"/products/{result.Id}",
+            "Recipes" => $"/recipes/{result.Id}",
+            "Ingredients" => $"/ingredients/{result.Id}",
+            _ => "#"
+        };
+
+        if (url != "#")
+        {
+            Navigation.NavigateTo(url);
+        }
+        else
+        {
+            ToastService.ShowInfo("Coming Soon", $"{result.Type} details page");
+        }
+    }
+}

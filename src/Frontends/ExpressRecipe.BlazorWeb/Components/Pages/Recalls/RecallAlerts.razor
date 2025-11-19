@@ -1,0 +1,501 @@
+@page "/recalls"
+@using ExpressRecipe.Client.Shared.Services
+@inject IRecallApiClient RecallClient
+@inject IToastService ToastService
+@rendermode InteractiveServer
+
+<PageTitle>Recall Alerts - ExpressRecipe</PageTitle>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-10 mx-auto">
+            <h1 class="display-5 fw-bold mb-2">
+                <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Recall Alerts
+            </h1>
+            <p class="lead text-muted mb-4">
+                Stay informed about FDA and USDA food recalls that may affect your inventory
+            </p>
+
+            <!-- Alert Banner -->
+            @if (unreadCount > 0)
+            {
+                <div class="alert alert-warning d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <i class="bi bi-bell-fill me-2"></i>
+                        <strong>You have @unreadCount unread recall alert@(unreadCount > 1 ? "s" : "")</strong>
+                    </div>
+                    <button class="btn btn-sm btn-warning" @onclick="CheckInventoryForRecalls">
+                        <i class="bi bi-search me-2"></i>Check My Inventory
+                    </button>
+                </div>
+            }
+
+            <!-- Tabs -->
+            <ul class="nav nav-tabs mb-4">
+                <li class="nav-item">
+                    <button class="nav-link @(activeTab == "active" ? "active" : "")" @onclick="() => SwitchTab(\"active\")">
+                        Active Recalls
+                        @if (activeRecalls.Any())
+                        {
+                            <span class="badge bg-danger ms-2">@activeRecalls.Count</span>
+                        }
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(activeTab == "notifications" ? "active" : "")" @onclick="() => SwitchTab(\"notifications\")">
+                        My Notifications
+                        @if (unreadCount > 0)
+                        {
+                            <span class="badge bg-warning text-dark ms-2">@unreadCount</span>
+                        }
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(activeTab == "subscriptions" ? "active" : "")" @onclick="() => SwitchTab(\"subscriptions\")">
+                        Subscriptions
+                    </button>
+                </li>
+            </ul>
+
+            @if (isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Active Recalls Tab -->
+                @if (activeTab == "active")
+                {
+                    @if (activeRecalls.Any())
+                    {
+                        <div class="row g-4">
+                            @foreach (var recall in activeRecalls)
+                            {
+                                <div class="col-12">
+                                    <div class="card border-start border-@GetClassificationColor(recall.Classification) border-4">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <div>
+                                                    <span class="badge bg-@GetClassificationColor(recall.Classification) mb-2">
+                                                        @recall.Classification
+                                                    </span>
+                                                    <span class="badge bg-secondary mb-2 ms-2">@recall.Source</span>
+                                                    <h5 class="card-title mb-1">@recall.ProductName</h5>
+                                                    <p class="text-muted small mb-0">@recall.Brand • @recall.Company</p>
+                                                </div>
+                                                @if (recall.AffectsUserInventory)
+                                                {
+                                                    <span class="badge bg-danger">
+                                                        <i class="bi bi-exclamation-circle me-1"></i>In Your Inventory
+                                                    </span>
+                                                }
+                                            </div>
+
+                                            <p class="card-text mb-2"><strong>Reason:</strong> @recall.Reason</p>
+
+                                            @if (recall.AffectedProducts.Any())
+                                            {
+                                                <p class="card-text mb-2">
+                                                    <strong>Affected Products:</strong>
+                                                    @string.Join(", ", recall.AffectedProducts.Take(3))
+                                                    @if (recall.AffectedProducts.Count > 3)
+                                                    {
+                                                        <span class="text-muted">... and @(recall.AffectedProducts.Count - 3) more</span>
+                                                    }
+                                                </p>
+                                            }
+
+                                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                                <small class="text-muted">
+                                                    Recalled: @recall.RecallDate.ToShortDateString()
+                                                </small>
+                                                <div>
+                                                    @if (!string.IsNullOrEmpty(recall.DetailsUrl))
+                                                    {
+                                                        <a href="@recall.DetailsUrl" target="_blank" class="btn btn-sm btn-outline-primary me-2">
+                                                            <i class="bi bi-box-arrow-up-right me-1"></i>View Details
+                                                        </a>
+                                                    }
+                                                    <button class="btn btn-sm btn-primary" @onclick="() => ViewRecallDetails(recall.Id)">
+                                                        <i class="bi bi-info-circle me-1"></i>More Info
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
+                            <h4 class="mt-3">No Active Recalls</h4>
+                            <p class="text-muted">There are currently no active food recalls</p>
+                        </div>
+                    }
+                }
+
+                <!-- Notifications Tab -->
+                @if (activeTab == "notifications")
+                {
+                    @if (userNotifications.Any())
+                    {
+                        <div class="d-flex justify-content-end mb-3">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="MarkAllNotificationsRead">
+                                <i class="bi bi-check-all me-1"></i>Mark All Read
+                            </button>
+                        </div>
+
+                        <div class="list-group">
+                            @foreach (var notification in userNotifications)
+                            {
+                                <div class="list-group-item @(!notification.IsRead ? "list-group-item-warning" : "")">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            @if (!notification.IsRead)
+                                            {
+                                                <span class="badge bg-warning text-dark mb-2">New</span>
+                                            }
+                                            <h6 class="mb-1">@notification.Recall.ProductName</h6>
+                                            <p class="mb-1 small">@notification.Recall.Reason</p>
+                                            @if (notification.AffectedInventoryItems.Any())
+                                            {
+                                                <div class="alert alert-danger py-2 px-3 mb-2">
+                                                    <strong>Affected items in your inventory:</strong>
+                                                    @string.Join(", ", notification.AffectedInventoryItems)
+                                                </div>
+                                            }
+                                            <small class="text-muted">Notified: @notification.NotifiedAt.ToString("MMM d, yyyy")</small>
+                                        </div>
+                                        <div class="btn-group">
+                                            @if (!notification.IsRead)
+                                            {
+                                                <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkNotificationRead(notification.Id)">
+                                                    <i class="bi bi-check"></i>
+                                                </button>
+                                            }
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => DismissNotification(notification.Id)">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <h4 class="mt-3">No Notifications</h4>
+                            <p class="text-muted">You don't have any recall notifications</p>
+                        </div>
+                    }
+                }
+
+                <!-- Subscriptions Tab -->
+                @if (activeTab == "subscriptions")
+                {
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title">Create New Subscription</h5>
+                            <p class="text-muted small">Get notified about recalls for specific products or brands</p>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Product Name (Optional)</label>
+                                    <input type="text" class="form-control" @bind="newSubscription.ProductName" placeholder="e.g., Peanut Butter">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Brand (Optional)</label>
+                                    <input type="text" class="form-control" @bind="newSubscription.Brand" placeholder="e.g., Jif">
+                                </div>
+                                <div class="col-12">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="newSubscription.EmailNotifications" id="emailNotif">
+                                        <label class="form-check-label" for="emailNotif">Email Notifications</label>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="newSubscription.PushNotifications" id="pushNotif">
+                                        <label class="form-check-label" for="pushNotif">Push Notifications</label>
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <button class="btn btn-primary" @onclick="CreateSubscription">
+                                        <i class="bi bi-plus-circle me-2"></i>Create Subscription
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (subscriptions.Any())
+                    {
+                        <h5 class="mb-3">Active Subscriptions (@subscriptions.Count)</h5>
+                        <div class="list-group">
+                            @foreach (var subscription in subscriptions)
+                            {
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">
+                                            @if (!string.IsNullOrEmpty(subscription.ProductName))
+                                            {
+                                                <span>@subscription.ProductName</span>
+                                            }
+                                            @if (!string.IsNullOrEmpty(subscription.Brand))
+                                            {
+                                                <span class="text-muted">(@subscription.Brand)</span>
+                                            }
+                                            @if (string.IsNullOrEmpty(subscription.ProductName) && string.IsNullOrEmpty(subscription.Brand))
+                                            {
+                                                <span class="text-muted">All products</span>
+                                            }
+                                        </h6>
+                                        <small class="text-muted">
+                                            @if (subscription.EmailNotifications)
+                                            {
+                                                <i class="bi bi-envelope me-1"></i>
+                                            }
+                                            @if (subscription.PushNotifications)
+                                            {
+                                                <i class="bi bi-bell me-1"></i>
+                                            }
+                                            Created: @subscription.CreatedAt.ToShortDateString()
+                                        </small>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteSubscription(subscription.Id)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string activeTab = "active";
+    private bool isLoading = true;
+
+    private List<RecallAlert> activeRecalls = new();
+    private List<UserRecallNotification> userNotifications = new();
+    private List<RecallSubscription> subscriptions = new();
+    private int unreadCount = 0;
+
+    private RecallSubscription newSubscription = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            await Task.WhenAll(
+                LoadActiveRecalls(),
+                LoadUserNotifications(),
+                LoadSubscriptions(),
+                LoadUnreadCount()
+            );
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadActiveRecalls()
+    {
+        try
+        {
+            activeRecalls = await RecallClient.GetActiveRecallsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load active recalls: {ex.Message}");
+        }
+    }
+
+    private async Task LoadUserNotifications()
+    {
+        try
+        {
+            userNotifications = await RecallClient.GetUserRecallNotificationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load notifications: {ex.Message}");
+        }
+    }
+
+    private async Task LoadSubscriptions()
+    {
+        try
+        {
+            subscriptions = await RecallClient.GetSubscriptionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load subscriptions: {ex.Message}");
+        }
+    }
+
+    private async Task LoadUnreadCount()
+    {
+        try
+        {
+            unreadCount = await RecallClient.GetUnreadRecallCountAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load unread count: {ex.Message}");
+        }
+    }
+
+    private void SwitchTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    private string GetClassificationColor(string classification)
+    {
+        return classification switch
+        {
+            "Class I" => "danger",
+            "Class II" => "warning",
+            "Class III" => "info",
+            _ => "secondary"
+        };
+    }
+
+    private async Task CheckInventoryForRecalls()
+    {
+        try
+        {
+            var success = await RecallClient.CheckInventoryForRecallsAsync();
+            if (success)
+            {
+                ToastService.ShowSuccess("Inventory Checked", "Your inventory has been checked against active recalls");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Check Failed", "Unable to check inventory");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task MarkNotificationRead(Guid notificationId)
+    {
+        try
+        {
+            var success = await RecallClient.MarkRecallAsReadAsync(notificationId);
+            if (success)
+            {
+                await LoadData();
+                ToastService.ShowSuccess("Marked as Read", "Notification marked as read");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task MarkAllNotificationsRead()
+    {
+        try
+        {
+            foreach (var notification in userNotifications.Where(n => !n.IsRead))
+            {
+                await RecallClient.MarkRecallAsReadAsync(notification.Id);
+            }
+            await LoadData();
+            ToastService.ShowSuccess("Success", "All notifications marked as read");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task DismissNotification(Guid notificationId)
+    {
+        try
+        {
+            var success = await RecallClient.DismissRecallAsync(notificationId);
+            if (success)
+            {
+                await LoadData();
+                ToastService.ShowSuccess("Dismissed", "Notification dismissed");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private void ViewRecallDetails(Guid recallId)
+    {
+        // TODO: Navigate to recall details page
+        ToastService.ShowInfo("Coming Soon", "Recall details page");
+    }
+
+    private async Task CreateSubscription()
+    {
+        if (string.IsNullOrWhiteSpace(newSubscription.ProductName) && string.IsNullOrWhiteSpace(newSubscription.Brand))
+        {
+            ToastService.ShowWarning("Invalid", "Please specify a product name or brand");
+            return;
+        }
+
+        try
+        {
+            var id = await RecallClient.CreateSubscriptionAsync(newSubscription);
+            if (id != Guid.Empty)
+            {
+                ToastService.ShowSuccess("Subscribed", "You'll be notified about matching recalls");
+                newSubscription = new RecallSubscription();
+                await LoadSubscriptions();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task DeleteSubscription(Guid subscriptionId)
+    {
+        try
+        {
+            var success = await RecallClient.DeleteSubscriptionAsync(subscriptionId);
+            if (success)
+            {
+                ToastService.ShowSuccess("Unsubscribed", "Subscription removed");
+                await LoadSubscriptions();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+}
