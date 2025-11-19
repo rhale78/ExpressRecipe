@@ -1,4 +1,5 @@
 using ExpressRecipe.RecallService.Data;
+using ExpressRecipe.RecallService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,11 +23,17 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("recalldb")
+    ?? throw new InvalidOperationException("Database connection string 'recalldb' not found");
 
 // Register repositories
 builder.Services.AddScoped<IRecallRepository>(sp =>
     new RecallRepository(connectionString, sp.GetRequiredService<ILogger<RecallRepository>>()));
-    ?? throw new InvalidOperationException("Database connection string 'recalldb' not found");
+
+// Register import services
+builder.Services.AddScoped<FDARecallImportService>();
+
+// Register background workers
+builder.Services.AddHostedService<RecallMonitorWorker>();
 
 // Add controllers
 builder.Services.AddControllers();

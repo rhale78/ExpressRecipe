@@ -1,4 +1,5 @@
 using ExpressRecipe.PriceService.Data;
+using ExpressRecipe.PriceService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,9 @@ var connectionString = builder.Configuration.GetConnectionString("pricedb")
 
 // Register repositories
 builder.Services.AddScoped<IPriceRepository>(sp =>
+
+// Register background workers
+builder.Services.AddHostedService<PriceAnalysisWorker>();
     new PriceRepository(connectionString, sp.GetRequiredService<ILogger<PriceRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'pricedb' not found");
 
