@@ -1,5 +1,6 @@
+using ExpressRecipe.AuthService.Data;
+using ExpressRecipe.AuthService.Models;
 using ExpressRecipe.AuthService.Services;
-using ExpressRecipe.Shared.DTOs.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,107 +10,172 @@ namespace ExpressRecipe.AuthService.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly IAuthService _authService;
+    private readonly IAuthRepository _repository;
+    private readonly TokenService _tokenService;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(
+        IAuthRepository repository,
+        TokenService tokenService,
+        ILogger<AuthController> logger)
     {
-        _authService = authService;
+        _repository = repository;
+        _tokenService = tokenService;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Register a new user account.
-    /// </summary>
     [HttpPost("register")]
-    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        try
+        // Check if user already exists
+        var existingUser = await _repository.GetUserByEmailAsync(request.Email);
+        if (existingUser != null)
         {
-            var response = await _authService.RegisterAsync(request);
-            return Ok(response);
+            return BadRequest(new { message = "User with this email already exists" });
         }
-        catch (InvalidOperationException ex)
+
+        // Hash password
+        var passwordHash = _tokenService.HashPassword(request.Password);
+
+        // Create user
+        var userId = await _repository.CreateUserAsync(
+            request.Email,
+            passwordHash,
+            request.FirstName,
+            request.LastName
+        );
+
+        // Get created user
+        var user = await _repository.GetUserByIdAsync(userId);
+        if (user == null)
         {
-            _logger.LogWarning(ex, "Registration failed");
-            return BadRequest(new { message = ex.Message });
+            return StatusCode(500, new { message = "Failed to create user" });
         }
+
+        // Generate tokens
+        var accessToken = _tokenService.GenerateAccessToken(user);
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        var refreshTokenExpiration = _tokenService.GetRefreshTokenExpiration();
+
+        await _repository.CreateRefreshTokenAsync(userId, refreshToken, refreshTokenExpiration);
+
+        _logger.LogInformation("User {UserId} registered successfully", userId);
+
+        return Ok(new TokenResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(60),
+            UserId = user.Id,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName
+        });
     }
 
-    /// <summary>
-    /// Login with email and password.
-    /// </summary>
     [HttpPost("login")]
-    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        try
+        // Get user by email
+        var user = await _repository.GetUserByEmailAsync(request.Email);
+        if (user == null)
         {
-            var response = await _authService.LoginAsync(request);
-            return Ok(response);
+            return Unauthorized(new { message = "Invalid email or password" });
         }
-        catch (UnauthorizedAccessException ex)
+
+        // Check if user is active
+        if (!user.IsActive)
         {
-            _logger.LogWarning(ex, "Login failed");
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(new { message = "Account is inactive" });
         }
+
+        // Verify password
+        if (!_tokenService.VerifyPassword(request.Password, user.PasswordHash))
+        {
+            return Unauthorized(new { message = "Invalid email or password" });
+        }
+
+        // Update last login
+        await _repository.UpdateLastLoginAsync(user.Id);
+
+        // Generate tokens
+        var accessToken = _tokenService.GenerateAccessToken(user);
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        var refreshTokenExpiration = _tokenService.GetRefreshTokenExpiration();
+
+        await _repository.CreateRefreshTokenAsync(user.Id, refreshToken, refreshTokenExpiration);
+
+        _logger.LogInformation("User {UserId} logged in successfully", user.Id);
+
+        return Ok(new TokenResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(60),
+            UserId = user.Id,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName
+        });
     }
 
-    /// <summary>
-    /// Refresh access token using refresh token.
-    /// </summary>
     [HttpPost("refresh")]
-    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<AuthResponse>> RefreshToken([FromBody] RefreshTokenRequest request)
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
     {
-        try
+        // Validate refresh token
+        var (userId, isValid) = await _repository.ValidateRefreshTokenAsync(request.RefreshToken);
+        
+        if (!isValid)
         {
-            var response = await _authService.RefreshTokenAsync(request.RefreshToken);
-            return Ok(response);
+            return Unauthorized(new { message = "Invalid or expired refresh token" });
         }
-        catch (UnauthorizedAccessException ex)
+
+        // Get user
+        var user = await _repository.GetUserByIdAsync(userId);
+        if (user == null || !user.IsActive)
         {
-            _logger.LogWarning(ex, "Token refresh failed");
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(new { message = "User not found or inactive" });
         }
+
+        // Revoke old refresh token
+        await _repository.RevokeRefreshTokenAsync(request.RefreshToken);
+
+        // Generate new tokens
+        var accessToken = _tokenService.GenerateAccessToken(user);
+        var newRefreshToken = _tokenService.GenerateRefreshToken();
+        var refreshTokenExpiration = _tokenService.GetRefreshTokenExpiration();
+
+        await _repository.CreateRefreshTokenAsync(userId, newRefreshToken, refreshTokenExpiration);
+
+        _logger.LogInformation("User {UserId} refreshed token successfully", userId);
+
+        return Ok(new TokenResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = newRefreshToken,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(60),
+            UserId = user.Id,
+            Email = user.Email,
+            FirstName = user.FirstName,
+            LastName = user.LastName
+        });
     }
 
-    /// <summary>
-    /// Get current user information (requires authentication).
-    /// </summary>
-    [HttpGet("me")]
+    [HttpPost("logout")]
     [Authorize]
-    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public ActionResult<UserDto> GetCurrentUser()
+    public async Task<IActionResult> Logout()
     {
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        var email = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-
-        if (userId == null || email == null)
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
         {
             return Unauthorized();
         }
 
-        return Ok(new UserDto
-        {
-            Id = Guid.Parse(userId),
-            Email = email,
-            EmailConfirmed = bool.Parse(User.FindFirst("email_confirmed")?.Value ?? "false")
-        });
-    }
+        // Revoke all refresh tokens for this user
+        await _repository.RevokeAllUserTokensAsync(userId);
 
-    /// <summary>
-    /// Health check endpoint.
-    /// </summary>
-    [HttpGet("health")]
-    [AllowAnonymous]
-    public IActionResult Health()
-    {
-        return Ok(new { status = "healthy", service = "AuthService", timestamp = DateTime.UtcNow });
+        _logger.LogInformation("User {UserId} logged out successfully", userId);
+
+        return Ok(new { message = "Logged out successfully" });
     }
 }

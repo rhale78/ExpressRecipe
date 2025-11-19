@@ -1,8 +1,11 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Services;
+using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using RabbitMQ.Client;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -53,6 +56,21 @@ builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connect
 // Register ingredient parser service
 builder.Services.AddScoped<IIngredientParser, IngredientParser>();
 
+// Register RabbitMQ for event publishing
+builder.Services.AddSingleton<IConnectionFactory>(sp =>
+{
+    return new ConnectionFactory
+    {
+        HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
+        Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+        UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+        Password = builder.Configuration["RabbitMQ:Password"] ?? "guest"
+    };
+});
+
+// Register event publisher
+builder.Services.AddSingleton<EventPublisher>();
+
 // Add controllers
 builder.Services.AddControllers();
 
@@ -95,7 +113,8 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
     });
 });
 
@@ -120,6 +139,15 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+
+// Add rate limiting middleware
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

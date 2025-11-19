@@ -1,4 +1,4 @@
-using ExpressRecipe.Shared.Models;
+using ExpressRecipe.AuthService.Models;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -7,14 +7,7 @@ using System.Text;
 
 namespace ExpressRecipe.AuthService.Services;
 
-public interface ITokenService
-{
-    string GenerateAccessToken(User user);
-    string GenerateRefreshToken();
-    Guid? ValidateRefreshToken(string refreshToken);
-}
-
-public class TokenService : ITokenService
+public class TokenService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<TokenService> _logger;
@@ -25,12 +18,12 @@ public class TokenService : ITokenService
         _logger = logger;
     }
 
-    public string GenerateAccessToken(User user)
+    public string GenerateAccessToken(AuthUser user)
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");
         var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
-        var issuer = jwtSettings["Issuer"];
-        var audience = jwtSettings["Audience"];
+        var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe";
+        var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
         var expirationMinutes = int.Parse(jwtSettings["ExpirationMinutes"] ?? "60");
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
@@ -40,8 +33,10 @@ public class TokenService : ITokenService
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(JwtRegisteredClaimNames.GivenName, user.FirstName),
+            new Claim(JwtRegisteredClaimNames.FamilyName, user.LastName),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("email_confirmed", user.EmailConfirmed.ToString().ToLower())
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
         };
 
         var token = new JwtSecurityToken(
@@ -52,36 +47,34 @@ public class TokenService : ITokenService
             signingCredentials: credentials
         );
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+        _logger.LogInformation("Generated access token for user {UserId}", user.Id);
+        return tokenString;
     }
 
     public string GenerateRefreshToken()
     {
-        var randomNumber = new byte[32];
+        var randomBytes = new byte[64];
         using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(randomNumber);
-        return Convert.ToBase64String(randomNumber);
+        rng.GetBytes(randomBytes);
+        return Convert.ToBase64String(randomBytes);
     }
 
-    public Guid? ValidateRefreshToken(string refreshToken)
+    public DateTime GetRefreshTokenExpiration()
     {
-        // In a real implementation, you would:
-        // 1. Check if the refresh token exists in the database
-        // 2. Check if it hasn't expired
-        // 3. Check if it hasn't been revoked
-        // 4. Return the associated user ID
+        var jwtSettings = _configuration.GetSection("JwtSettings");
+        var refreshTokenDays = int.Parse(jwtSettings["RefreshTokenDays"] ?? "7");
+        return DateTime.UtcNow.AddDays(refreshTokenDays);
+    }
 
-        // For now, this is a simplified implementation
-        // You should implement proper refresh token storage in the database
+    public string HashPassword(string password)
+    {
+        // Use BCrypt for password hashing
+        return BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12);
+    }
 
-        if (string.IsNullOrWhiteSpace(refreshToken))
-        {
-            return null;
-        }
-
-        // TODO: Implement proper refresh token validation with database storage
-        _logger.LogWarning("Refresh token validation not fully implemented");
-
-        return null;
+    public bool VerifyPassword(string password, string passwordHash)
+    {
+        return BCrypt.Net.BCrypt.Verify(password, passwordHash);
     }
 }

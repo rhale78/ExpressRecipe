@@ -38,10 +38,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// Add services
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
+// Register repositories
+var connectionString = builder.Configuration.GetConnectionString("authdb")
+    ?? throw new InvalidOperationException("Database connection string 'authdb' not found");
+
+builder.Services.AddScoped<IAuthRepository>(sp =>
+    new AuthRepository(connectionString, sp.GetRequiredService<ILogger<AuthRepository>>()));
+
+// Register services
+builder.Services.AddScoped<TokenService>();
 
 // Add controllers
 builder.Services.AddControllers();
@@ -98,8 +103,6 @@ if (!Directory.Exists(migrationsPath))
     migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
 }
 var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
-var connectionString = builder.Configuration.GetConnectionString("authdb")
-    ?? throw new InvalidOperationException("Database connection string 'authdb' not found");
 await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure the HTTP request pipeline
