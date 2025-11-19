@@ -1,108 +1,95 @@
 @page "/register"
-@using ExpressRecipe.Shared.DTOs.Auth
-@using ExpressRecipe.BlazorWeb.Services
-@inject IAuthenticationService AuthService
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Auth
+@using System.ComponentModel.DataAnnotations
+@inject IAuthService AuthService
+@inject CustomAuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Navigation
-@rendermode InteractiveServer
 
 <PageTitle>Register - ExpressRecipe</PageTitle>
 
-<div class="container">
-    <div class="row justify-content-center mt-5">
-        <div class="col-md-6 col-lg-5">
-            <div class="card shadow">
-                <div class="card-body">
-                    <h2 class="card-title text-center mb-4">Create Your Account</h2>
+<div class="login-container">
+    <div class="login-card">
+        <h2>Create Account</h2>
+        <p class="subtitle">Join ExpressRecipe and start managing your dietary needs</p>
 
-                    <p class="text-muted text-center mb-4">
-                        Join ExpressRecipe to manage your dietary needs and discover recipes tailored to you.
-                    </p>
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-error">
+                @_errorMessage
+            </div>
+        }
 
-                    @if (!string.IsNullOrEmpty(_errorMessage))
-                    {
-                        <div class="alert alert-danger" role="alert">
-                            @_errorMessage
-                        </div>
-                    }
+        <EditForm Model="@_registerRequest" OnValidSubmit="@HandleRegister" FormName="registerForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
 
-                    @if (_registrationSuccess)
-                    {
-                        <div class="alert alert-success" role="alert">
-                            <h5 class="alert-heading">Registration Successful!</h5>
-                            <p>Your account has been created. Redirecting you to the home page...</p>
-                        </div>
-                    }
-                    else
-                    {
-                        <EditForm Model="@_registerRequest" OnValidSubmit="HandleRegisterAsync">
-                            <DataAnnotationsValidator />
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="firstName">First Name</label>
+                    <InputText id="firstName" @bind-Value="_registerRequest.FirstName" class="form-control" placeholder="John" />
+                    <ValidationMessage For="@(() => _registerRequest.FirstName)" />
+                </div>
 
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Email Address</label>
-                                <InputText id="email" class="form-control" @bind-Value="_registerRequest.Email" placeholder="your@email.com" />
-                                <ValidationMessage For="@(() => _registerRequest.Email)" />
-                                <div class="form-text">We'll never share your email with anyone else.</div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="password" class="form-label">Password</label>
-                                <InputText id="password" type="password" class="form-control" @bind-Value="_registerRequest.Password" placeholder="Choose a strong password" />
-                                <ValidationMessage For="@(() => _registerRequest.Password)" />
-                                <div class="form-text">Minimum 8 characters</div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="confirmPassword" class="form-label">Confirm Password</label>
-                                <InputText id="confirmPassword" type="password" class="form-control" @bind-Value="_registerRequest.ConfirmPassword" placeholder="Re-enter your password" />
-                                <ValidationMessage For="@(() => _registerRequest.ConfirmPassword)" />
-                            </div>
-
-                            <div class="mb-3 form-check">
-                                <input type="checkbox" class="form-check-input" id="terms" @bind="_acceptTerms" />
-                                <label class="form-check-label" for="terms">
-                                    I agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>
-                                </label>
-                            </div>
-
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-primary" disabled="@(_isLoading || !_acceptTerms)">
-                                    @if (_isLoading)
-                                    {
-                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                                        <span>Creating account...</span>
-                                    }
-                                    else
-                                    {
-                                        <span>Create Account</span>
-                                    }
-                                </button>
-                            </div>
-                        </EditForm>
-
-                        <hr class="my-4" />
-
-                        <div class="text-center">
-                            <p class="mb-0">Already have an account? <a href="/login">Login here</a></p>
-                        </div>
-                    }
+                <div class="form-group">
+                    <label for="lastName">Last Name</label>
+                    <InputText id="lastName" @bind-Value="_registerRequest.LastName" class="form-control" placeholder="Doe" />
+                    <ValidationMessage For="@(() => _registerRequest.LastName)" />
                 </div>
             </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <InputText id="email" @bind-Value="_registerRequest.Email" class="form-control" placeholder="you@example.com" />
+                <ValidationMessage For="@(() => _registerRequest.Email)" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <InputText id="password" type="password" @bind-Value="_registerRequest.Password" class="form-control" placeholder="At least 8 characters" />
+                <ValidationMessage For="@(() => _registerRequest.Password)" />
+                <small class="form-text">Must be at least 8 characters long</small>
+            </div>
+
+            <div class="form-group">
+                <label for="confirmPassword">Confirm Password</label>
+                <InputText id="confirmPassword" type="password" @bind-Value="_confirmPassword" class="form-control" placeholder="Re-enter your password" />
+                @if (!string.IsNullOrEmpty(_confirmPassword) && _registerRequest.Password != _confirmPassword)
+                {
+                    <small class="text-danger">Passwords do not match</small>
+                }
+            </div>
+
+            <button type="submit" class="btn btn-primary" disabled="@(_isLoading || _registerRequest.Password != _confirmPassword)">
+                @if (_isLoading)
+                {
+                    <span class="spinner"></span>
+                    <span>Creating account...</span>
+                }
+                else
+                {
+                    <span>Create Account</span>
+                }
+            </button>
+        </EditForm>
+
+        <div class="login-footer">
+            <p>Already have an account? <a href="/login">Sign in</a></p>
         </div>
     </div>
 </div>
 
 @code {
     private RegisterRequest _registerRequest = new();
-    private bool _isLoading;
-    private bool _acceptTerms;
-    private bool _registrationSuccess;
+    private string _confirmPassword = string.Empty;
     private string? _errorMessage;
+    private bool _isLoading;
 
-    private async Task HandleRegisterAsync()
+    private async Task HandleRegister()
     {
-        if (!_acceptTerms)
+        if (_registerRequest.Password != _confirmPassword)
         {
-            _errorMessage = "You must accept the Terms of Service and Privacy Policy to continue.";
+            _errorMessage = "Passwords do not match";
             return;
         }
 
@@ -115,21 +102,25 @@
 
             if (result != null)
             {
-                _registrationSuccess = true;
+                // Update authentication state
+                await AuthStateProvider.MarkUserAsAuthenticated(
+                    result.Email,
+                    result.FirstName,
+                    result.LastName,
+                    result.UserId
+                );
 
-                // Wait a moment to show success message, then redirect
-                await Task.Delay(2000);
-                Navigation.NavigateTo("/");
+                // Navigate to dashboard
+                Navigation.NavigateTo("/dashboard");
             }
             else
             {
-                _errorMessage = "Registration failed. The email may already be in use or the password doesn't meet requirements.";
+                _errorMessage = "Registration failed. Email may already be in use.";
             }
         }
         catch (Exception ex)
         {
-            _errorMessage = "An error occurred during registration. Please try again later.";
-            Console.Error.WriteLine($"Registration error: {ex}");
+            _errorMessage = $"An error occurred: {ex.Message}";
         }
         finally
         {

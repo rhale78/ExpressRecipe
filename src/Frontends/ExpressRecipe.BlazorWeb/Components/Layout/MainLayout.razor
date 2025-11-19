@@ -1,72 +1,119 @@
 @inherits LayoutComponentBase
-@using ExpressRecipe.BlazorWeb.Services
-@inject IAuthenticationService AuthService
+@using Microsoft.AspNetCore.Components.Authorization
 @inject NavigationManager Navigation
-@rendermode InteractiveServer
+@inject IAuthService AuthService
 
-<div class="page">
-    <header>
-        <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-            <div class="container-fluid">
-                <a class="navbar-brand" href="/">🍽️ ExpressRecipe</a>
-                <button class="navbar-toggler" type="button">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse">
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item">
-                            <a class="nav-link" href="/">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/recipes">Recipes</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/inventory">Inventory</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/shopping">Shopping</a>
-                        </li>
-                    </ul>
-                    <ul class="navbar-nav ms-auto">
-                        @if (AuthService.IsAuthenticated)
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" href="/profile">👤 Profile</a>
-                            </li>
-                            <li class="nav-item">
-                                <button class="btn btn-outline-light btn-sm" @onclick="HandleLogoutAsync">Logout</button>
-                            </li>
-                        }
-                        else
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" href="/login">Login</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="btn btn-outline-light btn-sm ms-2" href="/register">Sign Up</a>
-                            </li>
-                        }
-                    </ul>
-                </div>
-            </div>
-        </nav>
-    </header>
-
-    <main class="container mt-4">
-        @Body
-    </main>
-
-    <footer class="mt-5 py-3 bg-light">
-        <div class="container text-center">
-            <p class="text-muted">ExpressRecipe &copy; 2025 - Your Dietary Management Solution</p>
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1 class="logo">🍽️ ExpressRecipe</h1>
         </div>
-    </footer>
+
+        <nav class="sidebar-nav">
+            <AuthorizeView>
+                <Authorized>
+                    <a href="/dashboard" class="nav-link @GetActiveClass("/dashboard")">
+                        <span class="nav-icon">🏠</span>
+                        <span class="nav-text">Dashboard</span>
+                    </a>
+
+                    <a href="/products" class="nav-link @GetActiveClass("/products")">
+                        <span class="nav-icon">📦</span>
+                        <span class="nav-text">Products</span>
+                    </a>
+
+                    <a href="/products/scan" class="nav-link @GetActiveClass("/products/scan")">
+                        <span class="nav-icon">📷</span>
+                        <span class="nav-text">Scan Barcode</span>
+                    </a>
+
+                    <a href="/recipes" class="nav-link @GetActiveClass("/recipes")">
+                        <span class="nav-icon">🍳</span>
+                        <span class="nav-text">Recipes</span>
+                    </a>
+
+                    <a href="/inventory" class="nav-link @GetActiveClass("/inventory")">
+                        <span class="nav-icon">📋</span>
+                        <span class="nav-text">Inventory</span>
+                    </a>
+
+                    <a href="/shopping" class="nav-link @GetActiveClass("/shopping")">
+                        <span class="nav-icon">🛒</span>
+                        <span class="nav-text">Shopping List</span>
+                    </a>
+
+                    <a href="/meal-planning" class="nav-link @GetActiveClass("/meal-planning")">
+                        <span class="nav-icon">📅</span>
+                        <span class="nav-text">Meal Planning</span>
+                    </a>
+
+                    <div class="nav-divider"></div>
+
+                    <a href="/settings" class="nav-link @GetActiveClass("/settings")">
+                        <span class="nav-icon">⚙️</span>
+                        <span class="nav-text">Settings</span>
+                    </a>
+
+                    <button @onclick="HandleLogout" class="nav-link logout-btn">
+                        <span class="nav-icon">🚪</span>
+                        <span class="nav-text">Logout</span>
+                    </button>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/login" class="nav-link">
+                        <span class="nav-icon">🔐</span>
+                        <span class="nav-text">Login</span>
+                    </a>
+                    <a href="/register" class="nav-link">
+                        <span class="nav-icon">✨</span>
+                        <span class="nav-text">Register</span>
+                    </a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header class="top-bar">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="user-info">
+                        <span class="user-avatar">@GetUserInitials(context)</span>
+                        <span class="user-name">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value</span>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="user-info">
+                        <a href="/login" class="btn btn-outline">Login</a>
+                        <a href="/register" class="btn btn-primary">Sign Up</a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </header>
+
+        <main class="page-content">
+            @Body
+        </main>
+    </div>
 </div>
 
 @code {
-    private async Task HandleLogoutAsync()
+    private string GetActiveClass(string path)
+    {
+        return Navigation.Uri.Contains(path, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+    }
+
+    private string GetUserInitials(AuthenticationState context)
+    {
+        var firstName = context.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? "";
+        var lastName = context.User.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value ?? "";
+
+        return $"{(firstName.Length > 0 ? firstName[0] : "")}{(lastName.Length > 0 ? lastName[0] : "")}".ToUpper();
+    }
+
+    private async Task HandleLogout()
     {
         await AuthService.LogoutAsync();
-        Navigation.NavigateTo("/", forceLoad: true);
+        Navigation.NavigateTo("/login");
     }
 }

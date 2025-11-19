@@ -37,10 +37,10 @@ builder.Services.AddHttpClient<IProductApiClient, ProductApiClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ProductService"] ?? "http://productservice");
 });
 
-// Additional service registrations can follow the same pattern:
-// builder.Services.AddHttpClient<IRecipeApiClient, RecipeApiClient>(...)
-// builder.Services.AddHttpClient<IInventoryApiClient, InventoryApiClient>(...)
-// etc.
+// Register custom authentication state provider
+builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
+builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 
+    (CustomAuthenticationStateProvider)sp.GetRequiredService<AuthenticationStateProvider>());
 
 var app = builder.Build();
 
