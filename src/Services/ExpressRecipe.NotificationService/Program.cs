@@ -1,4 +1,9 @@
 using ExpressRecipe.NotificationService.Data;
+using ExpressRecipe.NotificationService.Hubs;
+using ExpressRecipe.NotificationService.Services;
+using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
+using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,11 +27,40 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("notificationdb")
+    ?? throw new InvalidOperationException("Database connection string 'notificationdb' not found");
+
+// Register SignalR for real-time notifications
+builder.Services.AddSignalR();
+
+// Register broadcast service
+builder.Services.AddScoped<NotificationBroadcastService>();
 
 // Register repositories
 builder.Services.AddScoped<INotificationRepository>(sp =>
-    new NotificationRepository(connectionString, sp.GetRequiredService<ILogger<NotificationRepository>>()));
-    ?? throw new InvalidOperationException("Database connection string 'notificationdb' not found");
+{
+    var logger = sp.GetRequiredService<ILogger<NotificationRepository>>();
+    var broadcastService = sp.GetRequiredService<NotificationBroadcastService>();
+    return new NotificationRepository(connectionString, logger, broadcastService);
+});
+
+// Register RabbitMQ for event subscription
+builder.Services.AddSingleton<IConnectionFactory>(sp =>
+{
+    return new ConnectionFactory
+    {
+        HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
+        Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+        UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+        Password = builder.Configuration["RabbitMQ:Password"] ?? "guest",
+        DispatchConsumersAsync = true
+    };
+});
+
+// Register event publisher
+builder.Services.AddSingleton<EventPublisher>();
+
+// Register event subscriber as background service
+builder.Services.AddHostedService<NotificationEventSubscriber>();
 
 // Add controllers
 builder.Services.AddControllers();
@@ -38,14 +72,15 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.NotificationService API", Version = "v1" });
 });
 
-// CORS
+// CORS with SignalR support
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
     });
 });
 
@@ -78,8 +113,21 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
+
+// Add rate limiting middleware
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Map SignalR hubs
+app.MapHub<NotificationHub>("/hubs/notifications");
+
 app.MapControllers();
 
 app.Run();

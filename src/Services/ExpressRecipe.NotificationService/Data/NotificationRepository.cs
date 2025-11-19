@@ -1,3 +1,5 @@
+using ExpressRecipe.NotificationService.Hubs;
+using ExpressRecipe.NotificationService.Services;
 using Microsoft.Data.SqlClient;
 using System.Text.Json;
 
@@ -7,11 +9,16 @@ public class NotificationRepository : INotificationRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<NotificationRepository> _logger;
+    private readonly NotificationBroadcastService? _broadcastService;
 
-    public NotificationRepository(string connectionString, ILogger<NotificationRepository> logger)
+    public NotificationRepository(
+        string connectionString,
+        ILogger<NotificationRepository> logger,
+        NotificationBroadcastService? broadcastService = null)
     {
         _connectionString = connectionString;
         _logger = logger;
+        _broadcastService = broadcastService;
     }
 
     public async Task<Guid> CreateNotificationAsync(Guid userId, string type, string title, string message, string? actionUrl, Dictionary<string, string>? metadata)
@@ -32,7 +39,28 @@ public class NotificationRepository : INotificationRepository
         command.Parameters.AddWithValue("@ActionUrl", actionUrl ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Metadata", metadata != null ? JsonSerializer.Serialize(metadata) : DBNull.Value);
 
-        return (Guid)await command.ExecuteScalarAsync()!;
+        var notificationId = (Guid)await command.ExecuteScalarAsync()!;
+
+        // Broadcast notification in real-time via SignalR
+        if (_broadcastService != null)
+        {
+            var notificationDto = new NotificationDto
+            {
+                Id = notificationId,
+                UserId = userId,
+                Type = type,
+                Title = title,
+                Message = message,
+                ActionUrl = actionUrl,
+                Metadata = metadata ?? new(),
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _broadcastService.BroadcastToUserAsync(userId, notificationDto);
+        }
+
+        return notificationId;
     }
 
     public async Task<List<NotificationDto>> GetUserNotificationsAsync(Guid userId, bool unreadOnly = false, int limit = 50)
@@ -108,15 +136,36 @@ public class NotificationRepository : INotificationRepository
 
     public async Task MarkAsReadAsync(Guid notificationId)
     {
+        // First get the userId
+        const string getUserSql = "SELECT UserId FROM Notification WHERE Id = @NotificationId";
+        Guid? userId = null;
+
+        await using (var connection = new SqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(getUserSql, connection);
+            command.Parameters.AddWithValue("@NotificationId", notificationId);
+            var result = await command.ExecuteScalarAsync();
+            if (result != null) userId = (Guid)result;
+        }
+
+        // Update notification
         const string sql = "UPDATE Notification SET IsRead = 1, ReadAt = GETUTCDATE() WHERE Id = @NotificationId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        await using (var connection = new SqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@NotificationId", notificationId);
+            await command.ExecuteNonQueryAsync();
+        }
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@NotificationId", notificationId);
-
-        await command.ExecuteNonQueryAsync();
+        // Broadcast updated unread count
+        if (userId.HasValue && _broadcastService != null)
+        {
+            var unreadCount = await GetUnreadCountAsync(userId.Value);
+            await _broadcastService.BroadcastUnreadCountAsync(userId.Value, unreadCount);
+        }
     }
 
     public async Task MarkAllAsReadAsync(Guid userId)
@@ -130,6 +179,12 @@ public class NotificationRepository : INotificationRepository
         command.Parameters.AddWithValue("@UserId", userId);
 
         await command.ExecuteNonQueryAsync();
+
+        // Broadcast updated unread count (should be 0)
+        if (_broadcastService != null)
+        {
+            await _broadcastService.BroadcastUnreadCountAsync(userId, 0);
+        }
     }
 
     public async Task DeleteNotificationAsync(Guid notificationId)

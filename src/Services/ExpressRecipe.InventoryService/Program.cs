@@ -1,5 +1,8 @@
 using ExpressRecipe.InventoryService.Data;
 using ExpressRecipe.InventoryService.Services;
+using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
+using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +32,21 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 builder.Services.AddScoped<IInventoryRepository>(sp =>
     new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
 
+// Register RabbitMQ for event publishing
+builder.Services.AddSingleton<IConnectionFactory>(sp =>
+{
+    return new ConnectionFactory
+    {
+        HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
+        Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+        UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+        Password = builder.Configuration["RabbitMQ:Password"] ?? "guest"
+    };
+});
+
+// Register event publisher
+builder.Services.AddSingleton<EventPublisher>();
+
 // Register background workers
 builder.Services.AddHostedService<ExpirationAlertWorker>();
 
@@ -49,7 +67,8 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
     });
 });
 
@@ -82,6 +101,15 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
+
+// Add rate limiting middleware
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -1,7 +1,14 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.RecipeService.Data;
+using ExpressRecipe.RecipeService.CQRS.Commands;
+using ExpressRecipe.RecipeService.CQRS.Queries;
+using ExpressRecipe.Shared.CQRS;
+using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using RabbitMQ.Client;
+using StackExchange.Redis;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,7 +20,10 @@ builder.AddServiceDefaults();
 builder.AddSqlServerClient("recipedb");
 
 // Add Redis for caching
-builder.AddRedisClient("redis");
+var redisConnectionString = builder.Configuration.GetConnectionString("redis") ?? "localhost:6379";
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+    ConnectionMultiplexer.Connect(redisConnectionString));
+builder.Services.AddSingleton<CacheService>();
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -44,6 +54,31 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
 builder.Services.AddScoped<IRecipeRepository>(sp => new RecipeRepository(connectionString));
+
+// Register RabbitMQ for event publishing
+builder.Services.AddSingleton<IConnectionFactory>(sp =>
+{
+    return new ConnectionFactory
+    {
+        HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
+        Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+        UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+        Password = builder.Configuration["RabbitMQ:Password"] ?? "guest"
+    };
+});
+
+// Register event publisher
+builder.Services.AddSingleton<EventPublisher>();
+
+// Register CQRS infrastructure
+builder.Services.AddCqrsDispatcher();
+
+// Register command handlers
+builder.Services.AddCommandHandler<CreateRecipeCommand, Guid, CreateRecipeCommandHandler>();
+
+// Register query handlers
+builder.Services.AddQueryHandler<GetRecipeDetailsQuery, RecipeDetailsDto?, GetRecipeDetailsQueryHandler>();
+builder.Services.AddQueryHandler<SearchRecipesQuery, SearchRecipesResult, SearchRecipesQueryHandler>();
 
 // Register services
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.RecipeImportService>();
@@ -96,7 +131,8 @@ builder.Services.AddCors(options =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
     });
 });
 
@@ -121,6 +157,15 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+
+// Add rate limiting middleware
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
