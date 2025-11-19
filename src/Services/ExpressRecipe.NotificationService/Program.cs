@@ -32,6 +32,9 @@ var connectionString = builder.Configuration.GetConnectionString("notificationdb
 // Register SignalR for real-time notifications
 builder.Services.AddSignalR();
 
+// Register push service for SignalR notifications
+builder.Services.AddScoped<NotificationPushService>();
+
 // Register broadcast service
 builder.Services.AddScoped<NotificationBroadcastService>();
 

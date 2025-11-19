@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using System.Security.Claims;
 
 namespace ExpressRecipe.NotificationService.Hubs;
 
 /// <summary>
-/// SignalR hub for real-time notification delivery
+/// SignalR hub for real-time notifications
+/// Allows clients to receive instant notifications without polling
 /// </summary>
 [Authorize]
 public class NotificationHub : Hub
@@ -17,95 +17,234 @@ public class NotificationHub : Hub
         _logger = logger;
     }
 
+    /// <summary>
+    /// Called when client connects
+    /// </summary>
     public override async Task OnConnectedAsync()
     {
-        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = Context.UserIdentifier;
+        _logger.LogInformation("User {UserId} connected to notification hub with connection {ConnectionId}",
+            userId, Context.ConnectionId);
 
+        // Join user to their personal group for targeted notifications
         if (!string.IsNullOrEmpty(userId))
         {
-            // Add user to their personal notification group
-            await Groups.AddToGroupAsync(Context.ConnectionId, $"user:{userId}");
-            _logger.LogInformation("User {UserId} connected to NotificationHub with connection {ConnectionId}",
-                userId, Context.ConnectionId);
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"user_{userId}");
+            _logger.LogInformation("Added connection {ConnectionId} to group user_{UserId}",
+                Context.ConnectionId, userId);
         }
 
         await base.OnConnectedAsync();
     }
 
+    /// <summary>
+    /// Called when client disconnects
+    /// </summary>
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = Context.UserIdentifier;
+        _logger.LogInformation("User {UserId} disconnected from notification hub. Exception: {Exception}",
+            userId, exception?.Message);
 
         if (!string.IsNullOrEmpty(userId))
         {
-            _logger.LogInformation("User {UserId} disconnected from NotificationHub", userId);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"user_{userId}");
         }
 
         await base.OnDisconnectedAsync(exception);
     }
 
     /// <summary>
-    /// Client can mark a notification as read
+    /// Client requests to join a notification channel
     /// </summary>
-    public async Task MarkAsRead(Guid notificationId)
+    public async Task JoinChannel(string channelName)
     {
-        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        _logger.LogInformation("User {UserId} marked notification {NotificationId} as read",
-            userId, notificationId);
-
-        // Broadcast to all client connections for this user
-        if (!string.IsNullOrEmpty(userId))
-        {
-            await Clients.Group($"user:{userId}").SendAsync("NotificationRead", notificationId);
-        }
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"channel_{channelName}");
+        _logger.LogInformation("Connection {ConnectionId} joined channel {Channel}",
+            Context.ConnectionId, channelName);
     }
 
     /// <summary>
-    /// Client can request unread count
+    /// Client requests to leave a notification channel
     /// </summary>
-    public async Task RequestUnreadCount()
+    public async Task LeaveChannel(string channelName)
     {
-        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        _logger.LogDebug("User {UserId} requested unread count", userId);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"channel_{channelName}");
+        _logger.LogInformation("Connection {ConnectionId} left channel {Channel}",
+            Context.ConnectionId, channelName);
+    }
 
-        // The caller would need to inject INotificationRepository to get actual count
-        // For now, acknowledge the request
-        await Clients.Caller.SendAsync("UnreadCountRequested");
+    /// <summary>
+    /// Client marks notification as read
+    /// </summary>
+    public async Task MarkAsRead(Guid notificationId)
+    {
+        var userId = Context.UserIdentifier;
+        _logger.LogInformation("User {UserId} marked notification {NotificationId} as read",
+            userId, notificationId);
+
+        // Notify other connected clients of same user
+        await Clients.User(userId!).SendAsync("NotificationRead", notificationId);
+    }
+
+    /// <summary>
+    /// Client marks all notifications as read
+    /// </summary>
+    public async Task MarkAllAsRead()
+    {
+        var userId = Context.UserIdentifier;
+        _logger.LogInformation("User {UserId} marked all notifications as read", userId);
+
+        // Notify other connected clients of same user
+        await Clients.User(userId!).SendAsync("AllNotificationsRead");
+    }
+
+    /// <summary>
+    /// Get connection status
+    /// </summary>
+    public async Task Ping()
+    {
+        await Clients.Caller.SendAsync("Pong", DateTime.UtcNow);
     }
 }
 
 /// <summary>
-/// Strongly-typed hub client interface
+/// Typed client interface for NotificationHub
+/// Use this for sending notifications from server side
 /// </summary>
 public interface INotificationClient
 {
     /// <summary>
-    /// Receive a new notification
+    /// Send new notification to client
     /// </summary>
-    Task ReceiveNotification(NotificationDto notification);
+    Task ReceiveNotification(NotificationMessage notification);
 
     /// <summary>
-    /// Notification was marked as read
+    /// Notify client that a notification was read
     /// </summary>
     Task NotificationRead(Guid notificationId);
 
     /// <summary>
-    /// Update unread notification count
+    /// Notify client that all notifications were read
+    /// </summary>
+    Task AllNotificationsRead();
+
+    /// <summary>
+    /// Send unread count update
     /// </summary>
     Task UnreadCountUpdated(int count);
+
+    /// <summary>
+    /// Respond to ping
+    /// </summary>
+    Task Pong(DateTime serverTime);
 }
 
 /// <summary>
-/// DTO for real-time notification delivery
+/// Notification message structure for real-time push
 /// </summary>
-public class NotificationDto
+public class NotificationMessage
 {
     public Guid Id { get; set; }
     public string Type { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
-    public string? ActionUrl { get; set; }
+    public string Severity { get; set; } = "Info"; // Info, Warning, Error, Success
+    public Dictionary<string, string> Data { get; set; } = new();
     public DateTime CreatedAt { get; set; }
-    public bool IsRead { get; set; }
-    public Dictionary<string, string> Metadata { get; set; } = new();
+    public string? ActionUrl { get; set; }
+    public string? ActionText { get; set; }
+    public string? ImageUrl { get; set; }
+}
+
+/// <summary>
+/// Service for sending notifications via SignalR
+/// </summary>
+public class NotificationPushService
+{
+    private readonly IHubContext<NotificationHub, INotificationClient> _hubContext;
+    private readonly ILogger<NotificationPushService> _logger;
+
+    public NotificationPushService(
+        IHubContext<NotificationHub, INotificationClient> hubContext,
+        ILogger<NotificationPushService> logger)
+    {
+        _hubContext = hubContext;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Send notification to specific user
+    /// </summary>
+    public async Task SendToUserAsync(Guid userId, NotificationMessage notification)
+    {
+        try
+        {
+            _logger.LogInformation("Sending notification {NotificationId} to user {UserId}",
+                notification.Id, userId);
+
+            await _hubContext.Clients
+                .Group($"user_{userId}")
+                .ReceiveNotification(notification);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send notification to user {UserId}", userId);
+        }
+    }
+
+    /// <summary>
+    /// Send notification to all users in a channel
+    /// </summary>
+    public async Task SendToChannelAsync(string channelName, NotificationMessage notification)
+    {
+        try
+        {
+            _logger.LogInformation("Sending notification {NotificationId} to channel {Channel}",
+                notification.Id, channelName);
+
+            await _hubContext.Clients
+                .Group($"channel_{channelName}")
+                .ReceiveNotification(notification);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send notification to channel {Channel}", channelName);
+        }
+    }
+
+    /// <summary>
+    /// Send notification to all connected users (broadcast)
+    /// </summary>
+    public async Task BroadcastAsync(NotificationMessage notification)
+    {
+        try
+        {
+            _logger.LogInformation("Broadcasting notification {NotificationId} to all users",
+                notification.Id);
+
+            await _hubContext.Clients.All.ReceiveNotification(notification);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to broadcast notification");
+        }
+    }
+
+    /// <summary>
+    /// Update unread count for user
+    /// </summary>
+    public async Task UpdateUnreadCountAsync(Guid userId, int count)
+    {
+        try
+        {
+            await _hubContext.Clients
+                .Group($"user_{userId}")
+                .UnreadCountUpdated(count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update unread count for user {UserId}", userId);
+        }
+    }
 }

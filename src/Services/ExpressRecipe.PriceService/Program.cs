@@ -23,14 +23,18 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("pricedb")
+    ?? throw new InvalidOperationException("Database connection string 'pricedb' not found");
 
 // Register repositories
 builder.Services.AddScoped<IPriceRepository>(sp =>
+    new PriceRepository(connectionString, sp.GetRequiredService<ILogger<PriceRepository>>()));
+
+// Register price scraping services
+builder.Services.AddHttpClient<PriceScraperService>();
+builder.Services.AddHttpClient<GoogleShoppingApiClient>();
 
 // Register background workers
 builder.Services.AddHostedService<PriceAnalysisWorker>();
-    new PriceRepository(connectionString, sp.GetRequiredService<ILogger<PriceRepository>>()));
-    ?? throw new InvalidOperationException("Database connection string 'pricedb' not found");
 
 // Add controllers
 builder.Services.AddControllers();

@@ -1,4 +1,5 @@
 using ExpressRecipe.SyncService.Data;
+using ExpressRecipe.SyncService.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,11 +23,17 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("syncdb")
+    ?? throw new InvalidOperationException("Database connection string 'syncdb' not found");
+
+// Register SignalR for real-time sync updates
+builder.Services.AddSignalR();
+
+// Register sync push service
+builder.Services.AddScoped<SyncPushService>();
 
 // Register repositories
 builder.Services.AddScoped<ISyncRepository>(sp =>
     new SyncRepository(connectionString, sp.GetRequiredService<ILogger<SyncRepository>>()));
-    ?? throw new InvalidOperationException("Database connection string 'syncdb' not found");
 
 // Add controllers
 builder.Services.AddControllers();
@@ -80,6 +87,10 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Map SignalR hubs
+app.MapHub<SyncHub>("/hubs/sync");
+
 app.MapControllers();
 
 app.Run();

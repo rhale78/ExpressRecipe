@@ -1,4 +1,5 @@
 using ExpressRecipe.ScannerService.Data;
+using ExpressRecipe.ScannerService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +28,13 @@ var connectionString = builder.Configuration.GetConnectionString("scandb")
 // Register repositories
 builder.Services.AddScoped<IScannerRepository>(sp =>
     new ScannerRepository(connectionString, sp.GetRequiredService<ILogger<ScannerRepository>>()));
+
+// Register external API clients
+builder.Services.AddHttpClient<OpenFoodFactsApiClient>();
+builder.Services.AddHttpClient<UPCDatabaseApiClient>();
+
+// Register barcode scanner service
+builder.Services.AddScoped<BarcodeScannerService>();
 
 // Add controllers
 builder.Services.AddControllers();
