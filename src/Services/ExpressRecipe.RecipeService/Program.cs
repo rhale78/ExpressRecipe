@@ -44,6 +44,9 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
 
+// Register services
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.RecipeImportService>();
+
 // Add controllers
 builder.Services.AddControllers();
 
