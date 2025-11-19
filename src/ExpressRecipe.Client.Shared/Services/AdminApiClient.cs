@@ -12,36 +12,114 @@ public interface IAdminApiClient
     Task<List<ImportHistoryDto>> GetImportHistoryAsync();
 }
 
-public class AdminApiClient : ApiClientBase, IAdminApiClient
+public class AdminApiClient : IAdminApiClient
 {
-    public AdminApiClient(HttpClient httpClient, ITokenProvider tokenProvider)
-        : base(httpClient, tokenProvider)
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITokenProvider _tokenProvider;
+
+    public AdminApiClient(IHttpClientFactory httpClientFactory, ITokenProvider tokenProvider)
     {
+        _httpClientFactory = httpClientFactory;
+        _tokenProvider = tokenProvider;
     }
 
     public async Task<ImportStatusDto?> ImportUSDADatabaseAsync()
     {
-        return await PostAsync<object, ImportStatusDto>("/api/admin/import/usda", new { });
+        var client = await CreateClientAsync("ProductService");
+        var response = await client.PostAsJsonAsync("/api/admin/import/usda", new { });
+        return await response.Content.ReadFromJsonAsync<ImportStatusDto>();
     }
 
     public async Task<ImportStatusDto?> ImportFDARecallsAsync()
     {
-        return await PostAsync<object, ImportStatusDto>("/api/admin/import/fda", new { });
+        var client = await CreateClientAsync("RecallService");
+        var response = await client.PostAsJsonAsync("/api/admin/import/fda", new { });
+        return await response.Content.ReadFromJsonAsync<ImportStatusDto>();
     }
 
     public async Task<ImportStatusDto?> ImportOpenFoodFactsAsync()
     {
-        return await PostAsync<object, ImportStatusDto>("/api/admin/import/openfoodfacts", new { });
+        var client = await CreateClientAsync("ProductService");
+        var response = await client.PostAsJsonAsync("/api/admin/import/openfoodfacts", new { });
+        return await response.Content.ReadFromJsonAsync<ImportStatusDto>();
     }
 
     public async Task<ImportStatusDto?> GetImportStatusAsync(Guid importId)
     {
-        return await GetAsync<ImportStatusDto>($"/api/admin/import/status/{importId}");
+        // Try ProductService first, then RecallService
+        try
+        {
+            var client = await CreateClientAsync("ProductService");
+            var response = await client.GetAsync($"/api/admin/import/status/{importId}");
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<ImportStatusDto>();
+            }
+        }
+        catch { }
+
+        // Try RecallService
+        try
+        {
+            var client = await CreateClientAsync("RecallService");
+            var response = await client.GetAsync($"/api/admin/import/status/{importId}");
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<ImportStatusDto>();
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     public async Task<List<ImportHistoryDto>> GetImportHistoryAsync()
     {
-        return await GetAsync<List<ImportHistoryDto>>("/api/admin/import/history") ?? new List<ImportHistoryDto>();
+        var history = new List<ImportHistoryDto>();
+
+        // Get history from ProductService
+        try
+        {
+            var client = await CreateClientAsync("ProductService");
+            var response = await client.GetAsync("/api/admin/import/history");
+            if (response.IsSuccessStatusCode)
+            {
+                var productHistory = await response.Content.ReadFromJsonAsync<List<ImportHistoryDto>>();
+                if (productHistory != null)
+                    history.AddRange(productHistory);
+            }
+        }
+        catch { }
+
+        // Get history from RecallService
+        try
+        {
+            var client = await CreateClientAsync("RecallService");
+            var response = await client.GetAsync("/api/admin/import/history");
+            if (response.IsSuccessStatusCode)
+            {
+                var recallHistory = await response.Content.ReadFromJsonAsync<List<ImportHistoryDto>>();
+                if (recallHistory != null)
+                    history.AddRange(recallHistory);
+            }
+        }
+        catch { }
+
+        return history.OrderByDescending(h => h.StartedAt).ToList();
+    }
+
+    private async Task<HttpClient> CreateClientAsync(string serviceName)
+    {
+        var client = _httpClientFactory.CreateClient(serviceName);
+        var token = await _tokenProvider.GetTokenAsync();
+
+        if (!string.IsNullOrEmpty(token))
+        {
+            client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        }
+
+        return client;
     }
 }
 

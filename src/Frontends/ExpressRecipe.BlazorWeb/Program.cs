@@ -42,9 +42,18 @@ builder.Services.AddHttpClient<IProductApiClient, ProductApiClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ProductService"] ?? "http://productservice");
 });
 
-builder.Services.AddHttpClient<IAdminApiClient, AdminApiClient>(client =>
+// Register AdminApiClient with IHttpClientFactory for multi-service communication
+builder.Services.AddScoped<IAdminApiClient, AdminApiClient>();
+
+// Register named HttpClients for AdminApiClient to use
+builder.Services.AddHttpClient("ProductService", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Services:ProductService"] ?? "http://productservice");
+});
+
+builder.Services.AddHttpClient("RecallService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:RecallService"] ?? "http://recallservice");
 });
 
 builder.Services.AddHttpClient<IRecipeApiClient, RecipeApiClient>(client =>
