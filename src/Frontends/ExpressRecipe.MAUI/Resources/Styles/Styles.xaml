@@ -8,5 +8,6 @@
     <!-- Converters -->
     <converters:IsNotNullConverter x:Key="IsNotNullConverter" />
     <converters:ByteArrayToImageConverter x:Key="ByteArrayToImageConverter" />
+    <converters:IsGreaterThanZeroConverter x:Key="IsGreaterThanZeroConverter" />
 
 </ResourceDictionary>
