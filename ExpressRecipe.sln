@@ -1,0 +1,123 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}"
+EndProject
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Services", "Services", "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}"
+EndProject
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frontends", "Frontends", "{1B4F7568-8E2C-4A7D-9A63-3E2C8B5F6A9D}"
+EndProject
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{3A5F7568-9F3D-4B8E-AA74-4F3D9C6G7B0E}"
+EndProject
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{4B6G8679-0G4E-5C9F-BB85-5G4E0D7H8C1F}"
+	ProjectSection(SolutionItems) = preProject
+		docs\00-PROJECT-OVERVIEW.md = docs\00-PROJECT-OVERVIEW.md
+		docs\01-ARCHITECTURE.md = docs\01-ARCHITECTURE.md
+		docs\02-MICROSERVICES.md = docs\02-MICROSERVICES.md
+		docs\03-DATA-MODELS.md = docs\03-DATA-MODELS.md
+		docs\04-LOCAL-FIRST-SYNC.md = docs\04-LOCAL-FIRST-SYNC.md
+		docs\05-FRONTEND-ARCHITECTURE.md = docs\05-FRONTEND-ARCHITECTURE.md
+		docs\06-IMPLEMENTATION-ROADMAP.md = docs\06-IMPLEMENTATION-ROADMAP.md
+		docs\ARCHITECTURE-NOTES.md = docs\ARCHITECTURE-NOTES.md
+	EndProjectSection
+EndProject
+
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{5C7H9780-1H5F-6D0G-CC96-6H5F1E8I9D2G}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+		CLAUDE.md = CLAUDE.md
+		.gitignore = .gitignore
+	EndProjectSection
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.AppHost", "src\ExpressRecipe.AppHost\ExpressRecipe.AppHost.csproj", "{A1B2C3D4-E5F6-4A5B-8C6D-7E8F9A0B1C2D}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.ServiceDefaults", "src\ExpressRecipe.ServiceDefaults\ExpressRecipe.ServiceDefaults.csproj", "{B2C3D4E5-F6A7-5B6C-9D7E-8F9A0B1C2D3E}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.Shared", "src\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj", "{C3D4E5F6-A7B8-6C7D-AE8F-9A0B1C2D3E4F}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.Data.Common", "src\ExpressRecipe.Data.Common\ExpressRecipe.Data.Common.csproj", "{D4E5F6A7-B8C9-7D8E-BF9A-0B1C2D3E4F5A}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.AuthService", "src\Services\ExpressRecipe.AuthService\ExpressRecipe.AuthService.csproj", "{E5F6A7B8-C9D0-8E9F-CA0B-1C2D3E4F5A6B}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.UserService", "src\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj", "{F6A7B8C9-D0E1-9FA0-DB1C-2D3E4F5A6B7C}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.ProductService", "src\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj", "{A7B8C9D0-E1F2-0AB1-EC2D-3E4F5A6B7C8D}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.RecipeService", "src\Services\ExpressRecipe.RecipeService\ExpressRecipe.RecipeService.csproj", "{B8C9D0E1-F2A3-1BC2-FD3E-4F5A6B7C8D9E}"
+EndProject
+
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.BlazorWeb", "src\Frontends\ExpressRecipe.BlazorWeb\ExpressRecipe.BlazorWeb.csproj", "{C9D0E1F2-A3B4-2CD3-AE4F-5A6B7C8D9E0F}"
+EndProject
+
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1B2C3D4-E5F6-4A5B-8C6D-7E8F9A0B1C2D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-4A5B-8C6D-7E8F9A0B1C2D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-4A5B-8C6D-7E8F9A0B1C2D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-4A5B-8C6D-7E8F9A0B1C2D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2C3D4E5-F6A7-5B6C-9D7E-8F9A0B1C2D3E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2C3D4E5-F6A7-5B6C-9D7E-8F9A0B1C2D3E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2C3D4E5-F6A7-5B6C-9D7E-8F9A0B1C2D3E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2C3D4E5-F6A7-5B6C-9D7E-8F9A0B1C2D3E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3D4E5F6-A7B8-6C7D-AE8F-9A0B1C2D3E4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3D4E5F6-A7B8-6C7D-AE8F-9A0B1C2D3E4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3D4E5F6-A7B8-6C7D-AE8F-9A0B1C2D3E4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3D4E5F6-A7B8-6C7D-AE8F-9A0B1C2D3E4F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4E5F6A7-B8C9-7D8E-BF9A-0B1C2D3E4F5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4E5F6A7-B8C9-7D8E-BF9A-0B1C2D3E4F5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4E5F6A7-B8C9-7D8E-BF9A-0B1C2D3E4F5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4E5F6A7-B8C9-7D8E-BF9A-0B1C2D3E4F5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5F6A7B8-C9D0-8E9F-CA0B-1C2D3E4F5A6B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5F6A7B8-C9D0-8E9F-CA0B-1C2D3E4F5A6B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5F6A7B8-C9D0-8E9F-CA0B-1C2D3E4F5A6B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5F6A7B8-C9D0-8E9F-CA0B-1C2D3E4F5A6B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6A7B8C9-D0E1-9FA0-DB1C-2D3E4F5A6B7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6A7B8C9-D0E1-9FA0-DB1C-2D3E4F5A6B7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6A7B8C9-D0E1-9FA0-DB1C-2D3E4F5A6B7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6A7B8C9-D0E1-9FA0-DB1C-2D3E4F5A6B7C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7B8C9D0-E1F2-0AB1-EC2D-3E4F5A6B7C8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7B8C9D0-E1F2-0AB1-EC2D-3E4F5A6B7C8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7B8C9D0-E1F2-0AB1-EC2D-3E4F5A6B7C8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7B8C9D0-E1F2-0AB1-EC2D-3E4F5A6B7C8D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8C9D0E1-F2A3-1BC2-FD3E-4F5A6B7C8D9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8C9D0E1-F2A3-1BC2-FD3E-4F5A6B7C8D9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8C9D0E1-F2A3-1BC2-FD3E-4F5A6B7C8D9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8C9D0E1-F2A3-1BC2-FD3E-4F5A6B7C8D9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C9D0E1F2-A3B4-2CD3-AE4F-5A6B7C8D9E0F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C9D0E1F2-A3B4-2CD3-AE4F-5A6B7C8D9E0F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C9D0E1F2-A3B4-2CD3-AE4F-5A6B7C8D9E0F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C9D0E1F2-A3B4-2CD3-AE4F-5A6B7C8D9E0F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9A19103F-16F7-4668-BE54-9A1E7A4F7556} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{1B4F7568-8E2C-4A7D-9A63-3E2C8B5F6A9D} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{3A5F7568-9F3D-4B8E-AA74-4F3D9C6G7B0E} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{A1B2C3D4-E5F6-4A5B-8C6D-7E8F9A0B1C2D} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{B2C3D4E5-F6A7-5B6C-9D7E-8F9A0B1C2D3E} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{C3D4E5F6-A7B8-6C7D-AE8F-9A0B1C2D3E4F} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{D4E5F6A7-B8C9-7D8E-BF9A-0B1C2D3E4F5A} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{E5F6A7B8-C9D0-8E9F-CA0B-1C2D3E4F5A6B} = {9A19103F-16F7-4668-BE54-9A1E7A4F7556}
+		{F6A7B8C9-D0E1-9FA0-DB1C-2D3E4F5A6B7C} = {9A19103F-16F7-4668-BE54-9A1E7A4F7556}
+		{A7B8C9D0-E1F2-0AB1-EC2D-3E4F5A6B7C8D} = {9A19103F-16F7-4668-BE54-9A1E7A4F7556}
+		{B8C9D0E1-F2A3-1BC2-FD3E-4F5A6B7C8D9E} = {9A19103F-16F7-4668-BE54-9A1E7A4F7556}
+		{C9D0E1F2-A3B4-2CD3-AE4F-5A6B7C8D9E0F} = {1B4F7568-8E2C-4A7D-9A63-3E2C8B5F6A9D}
+	EndGlobalSection
+EndGlobal
