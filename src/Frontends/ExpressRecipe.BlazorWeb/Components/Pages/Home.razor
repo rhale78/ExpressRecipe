@@ -1,0 +1,72 @@
+@page "/"
+@rendermode InteractiveServer
+
+<PageTitle>Home - ExpressRecipe</PageTitle>
+
+<div class="text-center">
+    <h1 class="display-4">Welcome to ExpressRecipe</h1>
+    <p class="lead">Your complete dietary management solution</p>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">📱 Scan Products</h5>
+                <p class="card-text">Instant allergen alerts and compatibility checks</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">🍲 Discover Recipes</h5>
+                <p class="card-text">Find recipes that match your dietary needs</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">🏠 Track Inventory</h5>
+                <p class="card-text">Monitor expiration dates and reduce waste</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="card-title">📋 Plan Meals</h5>
+                <p class="card-text">Smart meal planning with auto-generated shopping lists</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-5">
+    <h2>Key Features</h2>
+    <ul class="list-group">
+        <li class="list-group-item">✅ Smart barcode scanning with instant allergen alerts</li>
+        <li class="list-group-item">✅ Personalized recipe recommendations</li>
+        <li class="list-group-item">✅ Food inventory tracking with expiration monitoring</li>
+        <li class="list-group-item">✅ Intelligent shopping list generation</li>
+        <li class="list-group-item">✅ Price comparison and tracking</li>
+        <li class="list-group-item">✅ FDA/USDA recall notifications</li>
+        <li class="list-group-item">✅ Community-driven product database</li>
+        <li class="list-group-item">✅ Works offline with cloud sync</li>
+    </ul>
+</div>
+
+<div class="mt-5 alert alert-info">
+    <h4>🚧 Development in Progress</h4>
+    <p>ExpressRecipe is currently under active development. Check the <a href="https://github.com/yourusername/ExpressRecipe">GitHub repository</a> for the latest updates.</p>
+    <p class="mb-0"><strong>Current Phase:</strong> Foundation - Setting up microservices architecture</p>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize component
+        await base.OnInitializedAsync();
+    }
+}

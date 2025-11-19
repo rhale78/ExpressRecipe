@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsAspireHost>true</IsAspireHost>
+    <UserSecretsId>ExpressRecipe-AppHost-2025</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="9.0.0" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ExpressRecipe.ServiceDefaults\ExpressRecipe.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.AuthService\ExpressRecipe.AuthService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.RecipeService\ExpressRecipe.RecipeService.csproj" />
+    <ProjectReference Include="..\Frontends\ExpressRecipe.BlazorWeb\ExpressRecipe.BlazorWeb.csproj" />
+  </ItemGroup>
+
+</Project>
