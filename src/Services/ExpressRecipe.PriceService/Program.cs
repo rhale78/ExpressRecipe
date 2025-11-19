@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("pricedb")
+
+// Register repositories
+builder.Services.AddScoped<IPriceRepository>(sp =>
+    new PriceRepository(connectionString, sp.GetRequiredService<ILogger<PriceRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'pricedb' not found");
 
 // Add controllers

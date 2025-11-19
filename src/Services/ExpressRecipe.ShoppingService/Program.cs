@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("shoppingdb")
+
+// Register repositories
+builder.Services.AddScoped<IShoppingRepository>(sp =>
+    new ShoppingRepository(connectionString, sp.GetRequiredService<ILogger<ShoppingRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'shoppingdb' not found");
 
 // Add controllers

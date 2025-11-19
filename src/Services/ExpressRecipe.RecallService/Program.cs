@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("recalldb")
+
+// Register repositories
+builder.Services.AddScoped<IRecallRepository>(sp =>
+    new RecallRepository(connectionString, sp.GetRequiredService<ILogger<RecallRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'recalldb' not found");
 
 // Add controllers

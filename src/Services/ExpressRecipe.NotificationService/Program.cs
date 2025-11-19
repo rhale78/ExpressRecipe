@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("notificationdb")
+
+// Register repositories
+builder.Services.AddScoped<INotificationRepository>(sp =>
+    new NotificationRepository(connectionString, sp.GetRequiredService<ILogger<NotificationRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'notificationdb' not found");
 
 // Add controllers

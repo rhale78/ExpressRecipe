@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("mealplandb")
+
+// Register repositories
+builder.Services.AddScoped<IMealPlanningRepository>(sp =>
+    new MealPlanningRepository(connectionString, sp.GetRequiredService<ILogger<MealPlanningRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'mealplandb' not found");
 
 // Add controllers
