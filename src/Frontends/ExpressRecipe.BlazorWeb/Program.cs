@@ -26,6 +26,9 @@ builder.Services.AddAuthorizationCore();
 // Register token provider
 builder.Services.AddScoped<ITokenProvider, LocalStorageTokenProvider>();
 
+// Register toast notification service
+builder.Services.AddSingleton<IToastService, ToastService>();
+
 // Register HTTP clients for each microservice with service discovery
 builder.Services.AddHttpClient<IAuthService, AuthService>(client =>
 {
