@@ -49,6 +49,8 @@ builder.Services.AddScoped<ICuisineRepository>(sp => new CuisineRepository(conne
 builder.Services.AddScoped<IHealthGoalRepository>(sp => new HealthGoalRepository(connectionString));
 builder.Services.AddScoped<IUserPreferenceRepository>(sp => new UserPreferenceRepository(connectionString));
 builder.Services.AddScoped<IPointsRepository>(sp => new PointsRepository(connectionString));
+builder.Services.AddScoped<IFriendsRepository>(sp => new FriendsRepository(connectionString));
+builder.Services.AddScoped<IFamilyScoreRepository>(sp => new FamilyScoreRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();
