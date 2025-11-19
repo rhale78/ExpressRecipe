@@ -52,6 +52,8 @@ builder.Services.AddScoped<IUserPreferenceRepository>(sp => new UserPreferenceRe
 builder.Services.AddScoped<IPointsRepository>(sp => new PointsRepository(connectionString));
 builder.Services.AddScoped<IFriendsRepository>(sp => new FriendsRepository(connectionString));
 builder.Services.AddScoped<IFamilyScoreRepository>(sp => new FamilyScoreRepository(connectionString));
+builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(connectionString));
+builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();

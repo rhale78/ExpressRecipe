@@ -42,6 +42,7 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
     ?? throw new InvalidOperationException("Database connection string 'recipedb' not found");
 
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
+builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();
