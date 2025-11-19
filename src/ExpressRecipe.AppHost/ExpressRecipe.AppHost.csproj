@@ -22,6 +22,17 @@
     <ProjectReference Include="..\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.RecipeService\ExpressRecipe.RecipeService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.InventoryService\ExpressRecipe.InventoryService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.ScannerService\ExpressRecipe.ScannerService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.ShoppingService\ExpressRecipe.ShoppingService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.MealPlanningService\ExpressRecipe.MealPlanningService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.PriceService\ExpressRecipe.PriceService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.RecallService\ExpressRecipe.RecallService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.NotificationService\ExpressRecipe.NotificationService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.CommunityService\ExpressRecipe.CommunityService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.SyncService\ExpressRecipe.SyncService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.SearchService\ExpressRecipe.SearchService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.AnalyticsService\ExpressRecipe.AnalyticsService.csproj" />
     <ProjectReference Include="..\Frontends\ExpressRecipe.BlazorWeb\ExpressRecipe.BlazorWeb.csproj" />
   </ItemGroup>
 
