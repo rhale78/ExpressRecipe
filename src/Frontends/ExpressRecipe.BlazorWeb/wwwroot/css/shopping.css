@@ -1,0 +1,774 @@
+/* ==========================================
+   SHOPPING LISTS PAGE STYLES
+   ========================================== */
+
+.shopping-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.shopping-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.shopping-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+.shopping-subtitle {
+    font-size: 1.05rem;
+    color: #6c757d;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+/* ==========================================
+   SUMMARY DASHBOARD
+   ========================================== */
+
+.summary-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.summary-card.success {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border-color: #28a745;
+}
+
+.summary-card.success:hover {
+    border-color: #218838;
+}
+
+/* ==========================================
+   STATUS TABS
+   ========================================== */
+
+.status-tabs {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.status-tab {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.status-tab:hover {
+    border-color: #28a745;
+    color: #28a745;
+}
+
+.status-tab.active {
+    background: #28a745;
+    border-color: #28a745;
+    color: white;
+}
+
+/* ==========================================
+   SHOPPING LISTS GRID
+   ========================================== */
+
+.shopping-lists-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.shopping-list-card {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.shopping-list-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+    border-color: #28a745;
+}
+
+/* ==========================================
+   LIST STATUS BADGE
+   ========================================== */
+
+.list-status-badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.list-status-badge.active {
+    background: #28a745;
+    color: white;
+}
+
+.list-status-badge.completed {
+    background: #17a2b8;
+    color: white;
+}
+
+.list-status-badge.archived {
+    background: #6c757d;
+    color: white;
+}
+
+/* ==========================================
+   LIST CARD COMPONENTS
+   ========================================== */
+
+.list-header {
+    margin-bottom: 1rem;
+    padding-right: 5rem; /* Space for badge */
+}
+
+.list-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+    color: #1a1a1a;
+}
+
+.list-date {
+    font-size: 0.95rem;
+    color: #6c757d;
+    margin: 0;
+}
+
+.list-description {
+    font-size: 0.95rem;
+    color: #6c757d;
+    margin: 0 0 1rem 0;
+    line-height: 1.5;
+}
+
+/* ==========================================
+   PROGRESS BAR
+   ========================================== */
+
+.progress-section {
+    margin-bottom: 1rem;
+}
+
+.progress-bar-container {
+    background: #e9ecef;
+    border-radius: 8px;
+    height: 12px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+    position: relative;
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.9rem;
+    color: #495057;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* ==========================================
+   ITEM PREVIEW
+   ========================================== */
+
+.item-preview {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.preview-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.preview-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+    color: #495057;
+}
+
+.item-checkbox {
+    font-size: 1.25rem;
+    color: #6c757d;
+}
+
+.item-name-preview {
+    flex: 1;
+}
+
+.preview-more {
+    font-size: 0.9rem;
+    color: #6c757d;
+    font-style: italic;
+    margin-top: 0.25rem;
+}
+
+/* ==========================================
+   CARD ACTIONS
+   ========================================== */
+
+.card-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.list-meta {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.meta-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+/* ==========================================
+   SHOPPING LIST DETAIL PAGE
+   ========================================== */
+
+.shopping-detail-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.header-title {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header-title h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0;
+    color: #1a1a1a;
+}
+
+.list-description-detail {
+    font-size: 1.05rem;
+    color: #6c757d;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+/* ==========================================
+   PROGRESS SECTION (LARGE)
+   ========================================== */
+
+.progress-section-large {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #28a745;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    font-size: 0.95rem;
+    color: #6c757d;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.progress-bar-container.large {
+    height: 20px;
+    position: relative;
+}
+
+.progress-percentage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ==========================================
+   QUICK ACTIONS
+   ========================================== */
+
+.quick-actions {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+/* ==========================================
+   SHOPPING ITEMS
+   ========================================== */
+
+.items-container {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.items-section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 1.5rem 0;
+    color: #1a1a1a;
+}
+
+.category-section {
+    margin-bottom: 2rem;
+}
+
+.category-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #495057;
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* ==========================================
+   SHOPPING ITEM
+   ========================================== */
+
+.shopping-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.shopping-item:hover {
+    background: white;
+    border-color: #28a745;
+}
+
+.shopping-item.purchased {
+    opacity: 0.6;
+    background: #e9ecef;
+}
+
+.shopping-item.purchased .item-name {
+    text-decoration: line-through;
+}
+
+.item-checkbox-container {
+    display: flex;
+    align-items: center;
+}
+
+.item-checkbox-input {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    accent-color: #28a745;
+}
+
+.item-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.item-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.item-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    color: #1a1a1a;
+}
+
+.item-brand {
+    font-size: 0.9rem;
+    color: #6c757d;
+    padding: 0.25rem 0.75rem;
+    background: white;
+    border-radius: 6px;
+}
+
+.item-quantity {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #495057;
+    padding: 0.25rem 0.75rem;
+    background: white;
+    border-radius: 6px;
+}
+
+.item-allergens {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.item-notes-small {
+    font-size: 0.9rem;
+    color: #6c757d;
+    font-style: italic;
+    margin: 0.5rem 0 0 0;
+}
+
+.item-source {
+    font-size: 0.85rem;
+    color: #17a2b8;
+    font-weight: 600;
+    padding: 0.25rem 0.75rem;
+    background: #e7f5ff;
+    border-radius: 6px;
+    margin-top: 0.5rem;
+    display: inline-block;
+}
+
+.purchased-time {
+    font-size: 0.85rem;
+    color: #28a745;
+    font-weight: 600;
+}
+
+.priority-badge {
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.priority-badge.high {
+    background: #dc3545;
+    color: white;
+}
+
+.item-actions-inline {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-icon-sm {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.btn-icon-sm:hover {
+    background: #f8f9fa;
+}
+
+/* ==========================================
+   COMPLETED SECTION
+   ========================================== */
+
+.completed-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.completed-header {
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 1rem;
+}
+
+.completed-header:hover h2 {
+    color: #28a745;
+}
+
+/* ==========================================
+   EMPTY ITEMS
+   ========================================== */
+
+.empty-items {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.empty-items .empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-items h3 {
+    font-size: 1.5rem;
+    margin: 0 0 0.75rem 0;
+    color: #333;
+}
+
+.empty-items p {
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+}
+
+/* ==========================================
+   MODAL VARIATIONS
+   ========================================== */
+
+.modal-content.large {
+    max-width: 700px;
+}
+
+.product-search-bar {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.product-search-bar input {
+    flex: 1;
+}
+
+.product-search-results {
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    margin-top: 1rem;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.product-result-card-small {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.product-result-card-small:last-child {
+    border-bottom: none;
+}
+
+.product-result-card-small:hover {
+    background: #f8f9fa;
+}
+
+.product-result-card-small strong {
+    flex: 1;
+}
+
+.divider-small {
+    text-align: center;
+    position: relative;
+    margin: 1.5rem 0;
+    color: #6c757d;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.divider-small::before,
+.divider-small::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 45%;
+    height: 1px;
+    background: #e9ecef;
+}
+
+.divider-small::before {
+    left: 0;
+}
+
+.divider-small::after {
+    right: 0;
+}
+
+.info-text {
+    color: #6c757d;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+/* ==========================================
+   RESPONSIVE DESIGN
+   ========================================== */
+
+@media (max-width: 1024px) {
+    .shopping-lists-grid {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .shopping-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .detail-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .header-title {
+        width: 100%;
+    }
+
+    .header-title h1 {
+        font-size: 1.5rem;
+    }
+
+    .shopping-lists-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .summary-dashboard {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .progress-stats {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+    }
+
+    .quick-actions {
+        flex-direction: column;
+    }
+
+    .quick-actions button {
+        width: 100%;
+    }
+
+    .item-main {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .card-actions {
+        flex-direction: column;
+    }
+
+    .product-search-bar {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    .shopping-container,
+    .shopping-detail-container {
+        padding: 1rem;
+    }
+
+    .items-container {
+        padding: 1.5rem;
+    }
+
+    .summary-dashboard {
+        grid-template-columns: 1fr;
+    }
+}

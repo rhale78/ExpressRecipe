@@ -1,0 +1,595 @@
+@page "/shopping/{id:guid}"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.Client.Shared.Models.Product
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Services
+@inject IShoppingListApiClient ShoppingApi
+@inject IProductApiClient ProductApi
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+
+<PageTitle>@(_list?.Name ?? "Shopping List") - ExpressRecipe</PageTitle>
+
+<div class="shopping-detail-container">
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading shopping list...</p>
+        </div>
+    }
+    else if (_list == null)
+    {
+        <div class="error-state">
+            <div class="error-icon">⚠️</div>
+            <h3>List Not Found</h3>
+            <p>The shopping list you're looking for doesn't exist or has been deleted.</p>
+            <button class="btn btn-primary" @onclick="NavigateBack">Back to Lists</button>
+        </div>
+    }
+    else
+    {
+        <!-- Header -->
+        <div class="detail-header">
+            <button class="back-button" @onclick="NavigateBack">← Back</button>
+            <div class="header-title">
+                <h1>@_list.Name</h1>
+                <div class="list-status-badge @_list.Status.ToLower()">@_list.Status</div>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" @onclick="ToggleEditMode">
+                    @(_isEditMode ? "Done Editing" : "Edit List")
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_list.Description))
+        {
+            <p class="list-description-detail">@_list.Description</p>
+        }
+
+        <!-- Progress Section -->
+        <div class="progress-section-large">
+            <div class="progress-stats">
+                <div class="stat">
+                    <span class="stat-value">@_list.CompletedItems</span>
+                    <span class="stat-label">Completed</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">@_list.RemainingItems</span>
+                    <span class="stat-label">Remaining</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">@_list.TotalItems</span>
+                    <span class="stat-label">Total</span>
+                </div>
+            </div>
+            <div class="progress-bar-container large">
+                <div class="progress-bar" style="width: @_list.CompletionPercentage%"></div>
+                <span class="progress-percentage">@_list.CompletionPercentage.ToString("0")%</span>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+            <button class="btn btn-primary" @onclick="ShowAddItemModal">
+                <span class="btn-icon">➕</span> Add Item
+            </button>
+            <button class="btn btn-secondary" @onclick="ShowAddFromRecipeModal">
+                <span class="btn-icon">🍳</span> Add from Recipe
+            </button>
+            <button class="btn btn-secondary" @onclick="AddLowStockItems">
+                <span class="btn-icon">📉</span> Add Low Stock Items
+            </button>
+        </div>
+
+        <!-- Shopping Items -->
+        <div class="items-container">
+            @if (_list.Items.Any())
+            {
+                <!-- Group by category -->
+                @{
+                    var itemsByCategory = _list.Items
+                        .GroupBy(i => i.Category ?? "Other")
+                        .OrderBy(g => g.Key);
+
+                    var remainingItems = _list.Items.Where(i => !i.IsPurchased).ToList();
+                    var completedItems = _list.Items.Where(i => i.IsPurchased).ToList();
+                }
+
+                <!-- Remaining Items -->
+                @if (remainingItems.Any())
+                {
+                    <h2 class="items-section-title">To Buy (@remainingItems.Count)</h2>
+
+                    @foreach (var category in remainingItems.GroupBy(i => i.Category ?? "Other").OrderBy(g => g.Key))
+                    {
+                        <div class="category-section">
+                            <h3 class="category-title">@category.Key</h3>
+                            <div class="items-list">
+                                @foreach (var item in category.OrderBy(i => i.OrderIndex))
+                                {
+                                    <div class="shopping-item @(item.IsPurchased ? "purchased" : "")">
+                                        <div class="item-checkbox-container">
+                                            <input type="checkbox" class="item-checkbox-input"
+                                                   checked="@item.IsPurchased"
+                                                   @onchange="@(e => ToggleItemPurchased(item))" />
+                                        </div>
+
+                                        <div class="item-details">
+                                            <div class="item-main">
+                                                <h4 class="item-name">@item.Name</h4>
+                                                @if (!string.IsNullOrWhiteSpace(item.Brand))
+                                                {
+                                                    <span class="item-brand">@item.Brand</span>
+                                                }
+                                                <span class="item-quantity">@item.Quantity @item.Unit</span>
+                                            </div>
+
+                                            @if (item.ProductAllergens.Any())
+                                            {
+                                                <div class="item-allergens">
+                                                    @foreach (var allergen in item.ProductAllergens)
+                                                    {
+                                                        <span class="allergen-tag-sm">⚠️ @allergen</span>
+                                                    }
+                                                </div>
+                                            }
+
+                                            @if (!string.IsNullOrWhiteSpace(item.Notes))
+                                            {
+                                                <p class="item-notes-small">💬 @item.Notes</p>
+                                            }
+
+                                            @if (!string.IsNullOrWhiteSpace(item.Source))
+                                            {
+                                                <span class="item-source">From @item.Source</span>
+                                            }
+                                        </div>
+
+                                        @if (item.Priority == "High")
+                                        {
+                                            <div class="priority-badge high">High Priority</div>
+                                        }
+
+                                        @if (_isEditMode)
+                                        {
+                                            <div class="item-actions-inline">
+                                                <button class="btn-icon-sm" @onclick="() => EditItem(item)" title="Edit">✏️</button>
+                                                <button class="btn-icon-sm" @onclick="() => DeleteItem(item.Id)" title="Delete">🗑️</button>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+
+                <!-- Completed Items (Collapsible) -->
+                @if (completedItems.Any())
+                {
+                    <div class="completed-section">
+                        <button class="completed-header" @onclick="ToggleCompleted">
+                            <h2 class="items-section-title">
+                                @(_showCompleted ? "▼" : "▶") Completed (@completedItems.Count)
+                            </h2>
+                        </button>
+
+                        @if (_showCompleted)
+                        {
+                            <div class="items-list">
+                                @foreach (var item in completedItems.OrderByDescending(i => i.PurchasedAt))
+                                {
+                                    <div class="shopping-item purchased">
+                                        <div class="item-checkbox-container">
+                                            <input type="checkbox" class="item-checkbox-input"
+                                                   checked="@item.IsPurchased"
+                                                   @onchange="@(e => ToggleItemPurchased(item))" />
+                                        </div>
+
+                                        <div class="item-details">
+                                            <div class="item-main">
+                                                <h4 class="item-name">@item.Name</h4>
+                                                @if (!string.IsNullOrWhiteSpace(item.Brand))
+                                                {
+                                                    <span class="item-brand">@item.Brand</span>
+                                                }
+                                                <span class="item-quantity">@item.Quantity @item.Unit</span>
+                                            </div>
+
+                                            @if (item.PurchasedAt.HasValue)
+                                            {
+                                                <span class="purchased-time">✓ @item.PurchasedAt.Value.ToString("MMM dd, h:mm tt")</span>
+                                            }
+                                        </div>
+
+                                        @if (_isEditMode)
+                                        {
+                                            <div class="item-actions-inline">
+                                                <button class="btn-icon-sm" @onclick="() => DeleteItem(item.Id)" title="Delete">🗑️</button>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-items">
+                    <div class="empty-icon">📝</div>
+                    <h3>No Items Yet</h3>
+                    <p>Add items to your shopping list manually, from a recipe, or from low-stock inventory.</p>
+                    <button class="btn btn-primary" @onclick="ShowAddItemModal">
+                        <span class="btn-icon">➕</span> Add First Item
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Add Item Modal -->
+@if (_showAddItemModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddItemModal">
+        <div class="modal-content large" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(_editingItem != null ? "Edit" : "Add") Item</h2>
+                <button class="modal-close" @onclick="CloseAddItemModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Product Search -->
+                <div class="form-group">
+                    <label>Search Product Database (Optional)</label>
+                    <div class="product-search-bar">
+                        <input type="text" class="form-control" placeholder="Search products..."
+                               @bind="_productSearchTerm" @bind:event="oninput" />
+                        <button class="btn btn-secondary" @onclick="SearchProducts">Search</button>
+                    </div>
+
+                    @if (_productSearchResults?.Any() == true)
+                    {
+                        <div class="product-search-results">
+                            @foreach (var product in _productSearchResults.Take(5))
+                            {
+                                <div class="product-result-card-small" @onclick="() => SelectProduct(product)">
+                                    <strong>@product.Name</strong>
+                                    <span class="text-muted">@product.Brand</span>
+                                    <button class="btn btn-sm btn-primary">Select</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="divider-small">OR</div>
+
+                <!-- Manual Entry -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Item Name *</label>
+                        <input type="text" class="form-control" @bind="_newItem.Name" placeholder="e.g., Milk" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Brand</label>
+                        <input type="text" class="form-control" @bind="_newItem.Brand" placeholder="Optional" />
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Quantity *</label>
+                        <input type="number" step="0.1" class="form-control" @bind="_newItem.Quantity" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Unit *</label>
+                        <select class="form-control" @bind="_newItem.Unit">
+                            <option value="count">count</option>
+                            <option value="lb">lb</option>
+                            <option value="oz">oz</option>
+                            <option value="kg">kg</option>
+                            <option value="g">g</option>
+                            <option value="L">L</option>
+                            <option value="ml">ml</option>
+                            <option value="gallon">gallon</option>
+                            <option value="package">package</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select class="form-control" @bind="_newItem.Category">
+                            <option value="">Select category...</option>
+                            <option value="Produce">Produce</option>
+                            <option value="Dairy">Dairy</option>
+                            <option value="Meat">Meat & Poultry</option>
+                            <option value="Bakery">Bakery</option>
+                            <option value="Frozen">Frozen</option>
+                            <option value="Canned">Canned Goods</option>
+                            <option value="Snacks">Snacks</option>
+                            <option value="Beverages">Beverages</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select class="form-control" @bind="_newItem.Priority">
+                            <option value="Normal">Normal</option>
+                            <option value="High">High</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea class="form-control" rows="2" @bind="_newItem.Notes" placeholder="Optional notes..."></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_addItemError))
+                {
+                    <div class="alert alert-error">@_addItemError</div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="CloseAddItemModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveItem">
+                    @(_editingItem != null ? "Update" : "Add") Item
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Add from Recipe Modal -->
+@if (_showAddFromRecipeModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddFromRecipeModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Add Ingredients from Recipe</h2>
+                <button class="modal-close" @onclick="CloseAddFromRecipeModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <p class="info-text">This feature will be available once recipe backend is implemented.</p>
+                <p>You'll be able to add all recipe ingredients to your shopping list and automatically subtract what you already have in inventory.</p>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" @onclick="CloseAddFromRecipeModal">OK</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private bool _isLoading = true;
+    private ShoppingListDto? _list;
+    private bool _isEditMode = false;
+    private bool _showCompleted = false;
+
+    // Add/Edit item
+    private bool _showAddItemModal = false;
+    private AddShoppingListItemRequest _newItem = new() { Quantity = 1, Unit = "count" };
+    private ShoppingListItemDto? _editingItem;
+    private string _addItemError = string.Empty;
+    private string _productSearchTerm = string.Empty;
+    private List<ProductDto>? _productSearchResults;
+
+    // Add from recipe
+    private bool _showAddFromRecipeModal = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadList();
+    }
+
+    private async Task LoadList()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _list = await ShoppingApi.GetShoppingListAsync(Id);
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/shopping");
+    }
+
+    private void ToggleEditMode()
+    {
+        _isEditMode = !_isEditMode;
+    }
+
+    private void ToggleCompleted()
+    {
+        _showCompleted = !_showCompleted;
+    }
+
+    private async Task ToggleItemPurchased(ShoppingListItemDto item)
+    {
+        var request = new MarkItemPurchasedRequest
+        {
+            ItemId = item.Id,
+            IsPurchased = !item.IsPurchased
+        };
+
+        var success = await ShoppingApi.MarkItemPurchasedAsync(request);
+
+        if (success)
+        {
+            await LoadList();
+        }
+    }
+
+    private void ShowAddItemModal()
+    {
+        _newItem = new AddShoppingListItemRequest
+        {
+            ShoppingListId = Id,
+            Quantity = 1,
+            Unit = "count",
+            Priority = "Normal"
+        };
+        _editingItem = null;
+        _addItemError = string.Empty;
+        _productSearchResults = null;
+        _showAddItemModal = true;
+    }
+
+    private void EditItem(ShoppingListItemDto item)
+    {
+        _editingItem = item;
+        _newItem = new AddShoppingListItemRequest
+        {
+            ShoppingListId = Id,
+            ProductId = item.ProductId,
+            Name = item.Name,
+            Brand = item.Brand,
+            Category = item.Category,
+            Quantity = item.Quantity,
+            Unit = item.Unit,
+            Priority = item.Priority,
+            Notes = item.Notes
+        };
+        _showAddItemModal = true;
+    }
+
+    private void CloseAddItemModal()
+    {
+        _showAddItemModal = false;
+        _editingItem = null;
+    }
+
+    private async Task SaveItem()
+    {
+        _addItemError = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(_newItem.Name))
+        {
+            _addItemError = "Item name is required.";
+            return;
+        }
+
+        if (_newItem.Quantity <= 0)
+        {
+            _addItemError = "Quantity must be greater than 0.";
+            return;
+        }
+
+        bool success;
+        if (_editingItem != null)
+        {
+            var updateRequest = new UpdateShoppingListItemRequest
+            {
+                ShoppingListId = Id,
+                ProductId = _newItem.ProductId,
+                Name = _newItem.Name,
+                Brand = _newItem.Brand,
+                Category = _newItem.Category,
+                Quantity = _newItem.Quantity,
+                Unit = _newItem.Unit,
+                Priority = _newItem.Priority,
+                Notes = _newItem.Notes
+            };
+            success = await ShoppingApi.UpdateItemAsync(_editingItem.Id, updateRequest);
+        }
+        else
+        {
+            var itemId = await ShoppingApi.AddItemAsync(_newItem);
+            success = itemId.HasValue;
+        }
+
+        if (success)
+        {
+            CloseAddItemModal();
+            await LoadList();
+        }
+        else
+        {
+            _addItemError = "Failed to save item. Please try again.";
+        }
+    }
+
+    private async Task SearchProducts()
+    {
+        if (string.IsNullOrWhiteSpace(_productSearchTerm))
+            return;
+
+        var request = new ProductSearchRequest
+        {
+            SearchTerm = _productSearchTerm,
+            Page = 1,
+            PageSize = 10
+        };
+
+        var result = await ProductApi.SearchProductsAsync(request);
+        _productSearchResults = result?.Products ?? new();
+        StateHasChanged();
+    }
+
+    private void SelectProduct(ProductDto product)
+    {
+        _newItem.ProductId = product.Id;
+        _newItem.Name = product.Name;
+        _newItem.Brand = product.Brand;
+        _newItem.Category = product.Category;
+        _productSearchResults = null;
+        _productSearchTerm = string.Empty;
+    }
+
+    private async Task DeleteItem(Guid itemId)
+    {
+        var success = await ShoppingApi.DeleteItemAsync(itemId);
+
+        if (success)
+        {
+            await LoadList();
+        }
+    }
+
+    private void ShowAddFromRecipeModal()
+    {
+        _showAddFromRecipeModal = true;
+    }
+
+    private void CloseAddFromRecipeModal()
+    {
+        _showAddFromRecipeModal = false;
+    }
+
+    private async Task AddLowStockItems()
+    {
+        var request = new AddLowStockItemsRequest
+        {
+            ShoppingListId = Id
+        };
+
+        var success = await ShoppingApi.AddLowStockItemsAsync(request);
+
+        if (success)
+        {
+            await LoadList();
+        }
+    }
+}
