@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageReference Include="Aspire.Microsoft.Data.SqlClient" Version="9.0.0" />
     <PackageReference Include="Aspire.StackExchange.Redis" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
   </ItemGroup>
@@ -14,5 +15,8 @@
     <ProjectReference Include="..\..\ExpressRecipe.ServiceDefaults\ExpressRecipe.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Data.Common\ExpressRecipe.Data.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Data\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
