@@ -70,6 +70,26 @@ builder.Services.AddHttpClient<IMealPlanApiClient, MealPlanApiClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:MealPlanningService"] ?? "http://mealplanningservice");
 });
 
+builder.Services.AddHttpClient<INotificationApiClient, NotificationApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:NotificationService"] ?? "http://notificationservice");
+});
+
+builder.Services.AddHttpClient<IAnalyticsApiClient, AnalyticsApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:AnalyticsService"] ?? "http://analyticsservice");
+});
+
+builder.Services.AddHttpClient<ICommunityApiClient, CommunityApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:CommunityService"] ?? "http://communityservice");
+});
+
+builder.Services.AddHttpClient<IPriceApiClient, PriceApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:PriceService"] ?? "http://priceservice");
+});
+
 // Register custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
 builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 

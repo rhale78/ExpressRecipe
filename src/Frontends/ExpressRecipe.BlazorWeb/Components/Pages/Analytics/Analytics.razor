@@ -1,0 +1,246 @@
+@page "/analytics"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Analytics
+@using ExpressRecipe.Client.Shared.Services
+@inject IAnalyticsApiClient AnalyticsApi
+@inject IToastService ToastService
+
+<PageTitle>Analytics & Reports - ExpressRecipe</PageTitle>
+
+<div class="analytics-container">
+    <div class="analytics-header">
+        <h1>📊 Analytics & Reports</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary-outline" @onclick="RefreshData">
+                🔄 Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading analytics...</p>
+        </div>
+    }
+    else if (_dashboard != null)
+    {
+        <!-- Quick Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card spending">
+                <div class="stat-icon">💰</div>
+                <div class="stat-content">
+                    <h3>@_dashboard.SpendingSummary.TotalSpentThisMonth.ToString("C")</h3>
+                    <p>Spent This Month</p>
+                    @if (_dashboard.SpendingSummary.MonthlyBudget > 0)
+                    {
+                        <small>@_dashboard.SpendingSummary.BudgetRemaining.ToString("C") remaining</small>
+                    }
+                </div>
+            </div>
+
+            <div class="stat-card nutrition">
+                <div class="stat-icon">🥗</div>
+                <div class="stat-content">
+                    <h3>@_dashboard.NutritionSummary.DailyAverageCalories</h3>
+                    <p>Avg Calories/Day</p>
+                    <small>Last 30 days</small>
+                </div>
+            </div>
+
+            <div class="stat-card inventory">
+                <div class="stat-icon">📦</div>
+                <div class="stat-content">
+                    <h3>@_dashboard.InventorySummary.TotalItems</h3>
+                    <p>Items in Inventory</p>
+                    <small>@_dashboard.InventorySummary.ItemsExpiringSoon expiring soon</small>
+                </div>
+            </div>
+
+            <div class="stat-card waste">
+                <div class="stat-icon">🗑️</div>
+                <div class="stat-content">
+                    <h3>@_dashboard.WasteSummary.TotalValueWasted.ToString("C")</h3>
+                    <p>Total Waste</p>
+                    <small>@_dashboard.WasteSummary.TotalItemsWasted items wasted</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Type Tabs -->
+        <div class="report-tabs">
+            <button class="report-tab @(_activeTab == "spending" ? "active" : "")"
+                    @onclick='() => SetActiveTab("spending")'>
+                💰 Spending
+            </button>
+            <button class="report-tab @(_activeTab == "nutrition" ? "active" : "")"
+                    @onclick='() => SetActiveTab("nutrition")'>
+                🥗 Nutrition
+            </button>
+            <button class="report-tab @(_activeTab == "inventory" ? "active" : "")"
+                    @onclick='() => SetActiveTab("inventory")'>
+                📦 Inventory
+            </button>
+            <button class="report-tab @(_activeTab == "waste" ? "active" : "")"
+                    @onclick='() => SetActiveTab("waste")'>
+                🗑️ Waste
+            </button>
+        </div>
+
+        <!-- Date Range Selector -->
+        <div class="date-range-selector">
+            <label>Date Range:</label>
+            <select class="date-range-select" @bind="_selectedDateRange" @bind:after="LoadReportData">
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="last7days">Last 7 Days</option>
+                <option value="last30days" selected>Last 30 Days</option>
+                <option value="thismonth">This Month</option>
+                <option value="lastmonth">Last Month</option>
+                <option value="thisyear">This Year</option>
+                <option value="custom">Custom Range</option>
+            </select>
+
+            @if (_selectedDateRange == "custom")
+            {
+                <input type="date" class="date-input" @bind="_customStartDate" />
+                <span>to</span>
+                <input type="date" class="date-input" @bind="_customEndDate" />
+                <button class="btn btn-primary-sm" @onclick="LoadReportData">Apply</button>
+            }
+        </div>
+
+        <!-- Report Content -->
+        <div class="report-content">
+            @if (_activeTab == "spending" && _spendingReport != null)
+            {
+                <SpendingReport Report="_spendingReport" />
+            }
+            else if (_activeTab == "nutrition" && _nutritionReport != null)
+            {
+                <NutritionReport Report="_nutritionReport" />
+            }
+            else if (_activeTab == "inventory" && _inventoryReport != null)
+            {
+                <InventoryReport Report="_inventoryReport" />
+            }
+            else if (_activeTab == "waste" && _wasteReport != null)
+            {
+                <WasteReport Report="_wasteReport" />
+            }
+            else
+            {
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading @_activeTab report...</p>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private AnalyticsDashboardDto? _dashboard;
+
+    private string _activeTab = "spending";
+    private string _selectedDateRange = "last30days";
+    private DateTime _customStartDate = DateTime.Today.AddDays(-30);
+    private DateTime _customEndDate = DateTime.Today;
+
+    private SpendingReportDto? _spendingReport;
+    private NutritionReportDto? _nutritionReport;
+    private InventoryReportDto? _inventoryReport;
+    private WasteReportDto? _wasteReport;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboard();
+        await LoadReportData();
+    }
+
+    private async Task LoadDashboard()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _dashboard = await AnalyticsApi.GetDashboardAsync();
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadReportData()
+    {
+        var (startDate, endDate) = GetDateRange();
+
+        if (_activeTab == "spending")
+        {
+            _spendingReport = await AnalyticsApi.GetSpendingReportAsync(new SpendingReportRequest
+            {
+                StartDate = startDate,
+                EndDate = endDate,
+                GroupBy = "Day"
+            });
+        }
+        else if (_activeTab == "nutrition")
+        {
+            _nutritionReport = await AnalyticsApi.GetNutritionReportAsync(new NutritionReportRequest
+            {
+                StartDate = startDate,
+                EndDate = endDate,
+                IncludeMealPlans = true,
+                IncludeConsumed = true
+            });
+        }
+        else if (_activeTab == "inventory")
+        {
+            _inventoryReport = await AnalyticsApi.GetInventoryReportAsync(new InventoryReportRequest
+            {
+                StartDate = startDate,
+                EndDate = endDate,
+                IncludeExpired = true
+            });
+        }
+        else if (_activeTab == "waste")
+        {
+            _wasteReport = await AnalyticsApi.GetWasteReportAsync(new WasteReportRequest
+            {
+                StartDate = startDate,
+                EndDate = endDate
+            });
+        }
+
+        StateHasChanged();
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        _activeTab = tab;
+        _ = LoadReportData();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadDashboard();
+        await LoadReportData();
+        ToastService.ShowSuccess("Analytics refreshed successfully!");
+    }
+
+    private (DateTime Start, DateTime End) GetDateRange()
+    {
+        return _selectedDateRange switch
+        {
+            "today" => DateRangePresets.Today,
+            "yesterday" => DateRangePresets.Yesterday,
+            "last7days" => DateRangePresets.Last7Days,
+            "last30days" => DateRangePresets.Last30Days,
+            "thismonth" => DateRangePresets.ThisMonth,
+            "lastmonth" => DateRangePresets.LastMonth,
+            "thisyear" => DateRangePresets.ThisYear,
+            "custom" => (_customStartDate, _customEndDate),
+            _ => DateRangePresets.Last30Days
+        };
+    }
+}

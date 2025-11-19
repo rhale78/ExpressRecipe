@@ -1,0 +1,125 @@
+@using ExpressRecipe.Client.Shared.Models.Analytics
+
+<div class="report-section">
+    <div class="report-header">
+        <h2>🥗 Nutrition Report</h2>
+        <div class="report-summary">
+            <span class="summary-item">
+                <strong>@Report.TotalCalories</strong> total calories
+            </span>
+            <span class="summary-item">
+                <strong>@Report.TotalProtein.ToString("F1")g</strong> protein
+            </span>
+            <span class="summary-item">
+                <strong>@Report.TotalCarbs.ToString("F1")g</strong> carbs
+            </span>
+            <span class="summary-item">
+                <strong>@Report.TotalFat.ToString("F1")g</strong> fat
+            </span>
+        </div>
+    </div>
+
+    <!-- Macro Breakdown -->
+    <div class="macro-breakdown">
+        <h3>Macronutrient Breakdown</h3>
+        <div class="macro-bars">
+            @{
+                var totalMacros = Report.TotalProtein + Report.TotalCarbs + Report.TotalFat;
+                if (totalMacros > 0)
+                {
+                    var proteinPercent = (Report.TotalProtein / totalMacros) * 100;
+                    var carbsPercent = (Report.TotalCarbs / totalMacros) * 100;
+                    var fatPercent = (Report.TotalFat / totalMacros) * 100;
+
+                    <div class="macro-bar protein" style="width: @proteinPercent%">
+                        <span>Protein @proteinPercent.ToString("F0")%</span>
+                    </div>
+                    <div class="macro-bar carbs" style="width: @carbsPercent%">
+                        <span>Carbs @carbsPercent.ToString("F0")%</span>
+                    </div>
+                    <div class="macro-bar fat" style="width: @fatPercent%">
+                        <span>Fat @fatPercent.ToString("F0")%</span>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <!-- Daily Nutrition Trend -->
+    <div class="chart-container">
+        <h3>Daily Calorie Trend</h3>
+        <div class="simple-chart">
+            @foreach (var day in Report.DailyData.OrderBy(d => d.Date))
+            {
+                var heightPercent = Report.DailyData.Max(d => d.Calories) > 0
+                    ? ((double)day.Calories / Report.DailyData.Max(d => d.Calories)) * 100
+                    : 0;
+
+                <div class="chart-bar" style="height: @heightPercent%" title="@day.Date.ToString("MMM dd"): @day.Calories cal">
+                    <span class="bar-label">@day.Date.ToString("MMM dd")</span>
+                    <span class="bar-value">@day.Calories</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Top Protein Sources -->
+    @if (Report.TopProteinSources.Any())
+    {
+        <div class="nutrient-sources">
+            <div class="source-section">
+                <h3>🥩 Top Protein Sources</h3>
+                <ul class="source-list">
+                    @foreach (var source in Report.TopProteinSources.Take(5))
+                    {
+                        <li>
+                            <strong>@source.ProductName</strong>
+                            <span>@source.Amount.ToString("F1")@source.Unit</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+
+            <!-- Top Fiber Sources -->
+            @if (Report.TopFiberSources.Any())
+            {
+                <div class="source-section">
+                    <h3>🌾 Top Fiber Sources</h3>
+                    <ul class="source-list">
+                        @foreach (var source in Report.TopFiberSources.Take(5))
+                        {
+                            <li>
+                                <strong>@source.ProductName</strong>
+                                <span>@source.Amount.ToString("F1")@source.Unit</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Nutrition Details -->
+    <div class="nutrition-details">
+        <h3>Additional Nutrients</h3>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <span class="detail-label">Fiber</span>
+                <span class="detail-value">@Report.TotalFiber.ToString("F1")g</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Sugar</span>
+                <span class="detail-value">@Report.TotalSugar.ToString("F1")g</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Sodium</span>
+                <span class="detail-value">@Report.TotalSodium.ToString("F0")mg</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public NutritionReportDto Report { get; set; } = new();
+}

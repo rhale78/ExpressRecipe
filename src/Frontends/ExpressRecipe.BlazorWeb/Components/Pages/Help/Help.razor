@@ -1,0 +1,250 @@
+@page "/help"
+@page "/faq"
+
+<PageTitle>Help & FAQ - ExpressRecipe</PageTitle>
+
+<div class="help-container">
+    <div class="help-header">
+        <h1>❓ Help & FAQ</h1>
+        <p>Find answers to common questions and learn how to use ExpressRecipe</p>
+    </div>
+
+    <!-- Search Help -->
+    <div class="help-search">
+        <input type="text"
+               class="search-input"
+               placeholder="Search for help..."
+               @bind="_searchQuery"
+               @bind:event="oninput"
+               @bind:after="FilterQuestions" />
+    </div>
+
+    <!-- Quick Links -->
+    <div class="quick-links">
+        <h2>Quick Links</h2>
+        <div class="links-grid">
+            <a href="/help#getting-started" class="link-card">
+                <span class="link-icon">🚀</span>
+                <strong>Getting Started</strong>
+                <small>New to ExpressRecipe?</small>
+            </a>
+            <a href="/help#recipes" class="link-card">
+                <span class="link-icon">🍳</span>
+                <strong>Recipes</strong>
+                <small>Creating and managing recipes</small>
+            </a>
+            <a href="/help#inventory" class="link-card">
+                <span class="link-icon">📦</span>
+                <strong>Inventory</strong>
+                <small>Track your food items</small>
+            </a>
+            <a href="/help#allergens" class="link-card">
+                <span class="link-icon">⚠️</span>
+                <strong>Allergens</strong>
+                <small>Managing dietary restrictions</small>
+            </a>
+            <a href="/help#meal-planning" class="link-card">
+                <span class="link-icon">📅</span>
+                <strong>Meal Planning</strong>
+                <small>Plan your weekly meals</small>
+            </a>
+            <a href="/help#troubleshooting" class="link-card">
+                <span class="link-icon">🔧</span>
+                <strong>Troubleshooting</strong>
+                <small>Common issues & fixes</small>
+            </a>
+        </div>
+    </div>
+
+    <!-- FAQ Sections -->
+    <div class="faq-sections">
+        @foreach (var section in _filteredSections)
+        {
+            <div class="faq-section" id="@section.Id">
+                <h2>@section.Icon @section.Title</h2>
+                <div class="faq-items">
+                    @foreach (var item in section.Items)
+                    {
+                        <div class="faq-item">
+                            <button class="faq-question" @onclick="() => ToggleQuestion(item.Id)">
+                                <span>@item.Question</span>
+                                <span class="toggle-icon">@(item.IsExpanded ? "−" : "+")</span>
+                            </button>
+                            @if (item.IsExpanded)
+                            {
+                                <div class="faq-answer">@((MarkupString)item.Answer)</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Contact Support -->
+    <div class="contact-support">
+        <h2>Still need help?</h2>
+        <p>Can't find what you're looking for? We're here to help!</p>
+        <div class="contact-options">
+            <a href="mailto:support@expressrecipe.com" class="contact-btn">
+                📧 Email Support
+            </a>
+            <a href="/feedback" class="contact-btn">
+                💬 Send Feedback
+            </a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _searchQuery = "";
+    private List<FaqSection> _allSections = new();
+    private List<FaqSection> _filteredSections = new();
+
+    protected override void OnInitialized()
+    {
+        InitializeFaq();
+        _filteredSections = _allSections;
+    }
+
+    private void ToggleQuestion(string questionId)
+    {
+        foreach (var section in _allSections)
+        {
+            var item = section.Items.FirstOrDefault(i => i.Id == questionId);
+            if (item != null)
+            {
+                item.IsExpanded = !item.IsExpanded;
+                break;
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void FilterQuestions()
+    {
+        if (string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _filteredSections = _allSections;
+        }
+        else
+        {
+            var query = _searchQuery.ToLowerInvariant();
+            _filteredSections = _allSections
+                .Select(section => new FaqSection
+                {
+                    Id = section.Id,
+                    Title = section.Title,
+                    Icon = section.Icon,
+                    Items = section.Items
+                        .Where(item =>
+                            item.Question.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                            item.Answer.Contains(query, StringComparison.OrdinalIgnoreCase))
+                        .ToList()
+                })
+                .Where(section => section.Items.Any())
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private void InitializeFaq()
+    {
+        _allSections = new List<FaqSection>
+        {
+            new FaqSection
+            {
+                Id = "getting-started",
+                Title = "Getting Started",
+                Icon = "🚀",
+                Items = new List<FaqItem>
+                {
+                    new FaqItem { Id = "gs1", Question = "How do I create an account?", Answer = "Click the 'Register' button on the login page, fill in your details, and verify your email address. You'll be ready to start using ExpressRecipe immediately!" },
+                    new FaqItem { Id = "gs2", Question = "How do I set up my family profile?", Answer = "Go to Settings → Family Members to add family members and their dietary restrictions. This ensures recipes are filtered for everyone's safety." },
+                    new FaqItem { Id = "gs3", Question = "What makes ExpressRecipe different?", Answer = "ExpressRecipe is designed specifically for people with dietary restrictions. It prioritizes allergen safety, provides smart filtering, and helps you manage your food inventory to reduce waste." }
+                }
+            },
+            new FaqSection
+            {
+                Id = "allergens",
+                Title = "Allergens & Dietary Restrictions",
+                Icon = "⚠️",
+                Items = new List<FaqItem>
+                {
+                    new FaqItem { Id = "al1", Question = "How do I add allergens to my profile?", Answer = "Navigate to Settings → User Profile → Allergens. Click 'Add Allergen' and select from the list or add a custom allergen. Recipes containing these allergens will be clearly marked." },
+                    new FaqItem { Id = "al2", Question = "Can I set different allergens for family members?", Answer = "Yes! Go to Settings → Family Members, select a family member, and add their specific allergens. Recipe filtering will consider all family members' restrictions." },
+                    new FaqItem { Id = "al3", Question = "How does allergen detection work?", Answer = "When you scan a product or search for recipes, ExpressRecipe automatically checks ingredients against your allergen profile and highlights any matches in red with warning icons." },
+                    new FaqItem { Id = "al4", Question = "What's the difference between allergens and dislikes?", Answer = "Allergens are medical conditions that can cause serious reactions. Dislikes are preferences (foods you don't enjoy). Allergens trigger safety warnings, while dislikes are used for recipe recommendations." }
+                }
+            },
+            new FaqSection
+            {
+                Id = "recipes",
+                Title = "Recipes",
+                Icon = "🍳",
+                Items = new List<FaqItem>
+                {
+                    new FaqItem { Id = "r1", Question = "How do I create a recipe?", Answer = "Go to Recipes → Create New. You can enter details manually, paste from a URL, upload a file, or use AI to extract recipe information automatically." },
+                    new FaqItem { Id = "r2", Question = "Can I import recipes from websites?", Answer = "Yes! Use the 'Import from URL' feature. Paste the recipe URL and ExpressRecipe will automatically extract the ingredients, instructions, and other details." },
+                    new FaqItem { Id = "r3", Question = "How do I mark a recipe as favorite?", Answer = "Click the heart icon on any recipe card or detail page. Your favorites are accessible from the Recipes page using the 'Favorites' filter." },
+                    new FaqItem { Id = "r4", Question = "Can I share my recipes?", Answer = "Absolutely! On the recipe detail page, click 'Share' to generate a shareable link. You can make it public or keep it private with an expiring link." }
+                }
+            },
+            new FaqSection
+            {
+                Id = "inventory",
+                Title = "Inventory Management",
+                Icon = "📦",
+                Items = new List<FaqItem>
+                {
+                    new FaqItem { Id = "i1", Question = "How do I add items to my inventory?", Answer = "Use the barcode scanner, search for products, or manually add items. When adding, specify quantity, expiration date, and location for better tracking." },
+                    new FaqItem { Id = "i2", Question = "Will I get notified when items expire?", Answer = "Yes! Enable notifications in Settings → Notification Preferences. You'll receive alerts 3 days before items expire (customizable)." },
+                    new FaqItem { Id = "i3", Question = "How does low stock notification work?", Answer = "Set a minimum quantity threshold for each product. When stock falls below that level, you'll receive a notification and it will appear on your shopping list." },
+                    new FaqItem { Id = "i4", Question = "Can I organize items by location?", Answer = "Yes! Specify locations like 'Pantry', 'Fridge', 'Freezer' when adding items. This makes it easier to find things and plan meals." }
+                }
+            },
+            new FaqSection
+            {
+                Id = "meal-planning",
+                Title = "Meal Planning",
+                Icon = "📅",
+                Items = new List<FaqItem>
+                {
+                    new FaqItem { Id = "mp1", Question = "How do I create a meal plan?", Answer = "Go to Meal Plans → Create New. Select the week, add meals for each day, and ExpressRecipe will automatically generate a shopping list based on your inventory." },
+                    new FaqItem { Id = "mp2", Question = "Can meal plans use ingredients I already have?", Answer = "Yes! The meal planner integrates with your inventory. It prioritizes recipes using ingredients you already have and suggests alternatives." },
+                    new FaqItem { Id = "mp3", Question = "How do I generate a shopping list from a meal plan?", Answer = "When viewing your meal plan, click 'Generate Shopping List'. It will create a list containing only items you don't have in inventory." },
+                    new FaqItem { Id = "mp4", Question = "Can I repeat previous meal plans?", Answer = "Absolutely! Go to past meal plans and click 'Copy to This Week' to reuse a successful plan." }
+                }
+            },
+            new FaqSection
+            {
+                Id = "troubleshooting",
+                Title = "Troubleshooting",
+                Icon = "🔧",
+                Items = new List<FaqItem>
+                {
+                    new FaqItem { Id = "t1", Question = "The barcode scanner isn't working", Answer = "Ensure you've granted camera permissions in your browser/app settings. Try cleaning the camera lens and scanning in good lighting. If issues persist, you can manually enter the product UPC." },
+                    new FaqItem { Id = "t2", Question = "I'm not receiving notifications", Answer = "Check Settings → Notification Preferences to ensure notifications are enabled. Also verify your browser/device notification settings allow ExpressRecipe to send notifications." },
+                    new FaqItem { Id = "t3", Question = "Product information is incorrect", Answer = "You can edit product details by clicking the edit icon. If you notice widespread issues with a product, please report it so we can update our database." },
+                    new FaqItem { Id = "t4", Question = "The app is running slowly", Answer = "Try clearing your browser cache or app data. If you have a large inventory, consider archiving old/expired items. Contact support if performance issues continue." }
+                }
+            }
+        };
+    }
+
+    private class FaqSection
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Icon { get; set; } = "";
+        public List<FaqItem> Items { get; set; } = new();
+    }
+
+    private class FaqItem
+    {
+        public string Id { get; set; } = "";
+        public string Question { get; set; } = "";
+        public string Answer { get; set; } = "";
+        public bool IsExpanded { get; set; } = false;
+    }
+}

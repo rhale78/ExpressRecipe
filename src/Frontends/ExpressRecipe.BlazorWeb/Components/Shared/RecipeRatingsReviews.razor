@@ -1,0 +1,325 @@
+@using ExpressRecipe.Client.Shared.Models.Community
+@using ExpressRecipe.Client.Shared.Services
+@inject ICommunityApiClient CommunityApi
+@inject IToastService ToastService
+
+<div class="ratings-reviews-container">
+    <!-- Rating Summary -->
+    @if (_summary != null)
+    {
+        <div class="rating-summary-section">
+            <div class="overall-rating">
+                <div class="rating-number">@_summary.AverageRating.ToString("F1")</div>
+                <div class="rating-stars">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        var filled = i <= Math.Round(_summary.AverageRating);
+                        <span class="star @(filled ? "filled" : "")">★</span>
+                    }
+                </div>
+                <div class="rating-count">@_summary.TotalRatings ratings · @_summary.TotalReviews reviews</div>
+            </div>
+
+            <div class="rating-breakdown">
+                @for (int stars = 5; stars >= 1; stars--)
+                {
+                    var count = _summary.RatingDistribution.GetValueOrDefault(stars, 0);
+                    var percent = _summary.TotalRatings > 0 ? (count / (double)_summary.TotalRatings) * 100 : 0;
+
+                    <div class="rating-bar-item">
+                        <span class="star-label">@stars ★</span>
+                        <div class="rating-bar-container">
+                            <div class="rating-bar" style="width: @percent%"></div>
+                        </div>
+                        <span class="rating-count-small">@count</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- User's Rating -->
+    <div class="user-rating-section">
+        <h3>Your Rating</h3>
+        <div class="star-rating-input">
+            @for (int i = 1; i <= 5; i++)
+            {
+                var starValue = i;
+                var isFilled = starValue <= _userRating;
+                <button class="star-btn @(isFilled ? "filled" : "")"
+                        @onclick="() => RateRecipe(starValue)">
+                    ★
+                </button>
+            }
+        </div>
+        @if (_userRating > 0)
+        {
+            <p class="rating-message">You rated this recipe @_userRating out of 5 stars</p>
+        }
+    </div>
+
+    <!-- Write Review Button -->
+    <div class="write-review-section">
+        @if (!_isWritingReview)
+        {
+            <button class="btn btn-primary" @onclick="() => _isWritingReview = true">
+                ✍️ Write a Review
+            </button>
+        }
+        else
+        {
+            <div class="review-form">
+                <h3>Write Your Review</h3>
+                <div class="form-group">
+                    <label>Rating</label>
+                    <div class="star-rating-input">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            var starValue = i;
+                            var isFilled = starValue <= _newReview.Rating;
+                            <button class="star-btn @(isFilled ? "filled" : "")"
+                                    @onclick="() => _newReview.Rating = starValue">
+                                ★
+                            </button>
+                        }
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Review Title</label>
+                    <input type="text" class="form-control" @bind="_newReview.Title" placeholder="Sum up your experience" />
+                </div>
+                <div class="form-group">
+                    <label>Review</label>
+                    <textarea class="form-control" rows="4" @bind="_newReview.Comment"
+                              placeholder="What did you think of this recipe?"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-secondary-outline" @onclick="CancelReview">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SubmitReview" disabled="@(_newReview.Rating == 0 || string.IsNullOrWhiteSpace(_newReview.Comment))">
+                        Submit Review
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Reviews List -->
+    <div class="reviews-section">
+        <div class="reviews-header">
+            <h3>Reviews (@_totalReviews)</h3>
+            <select class="sort-select" @bind="_sortBy" @bind:after="LoadReviews">
+                <option value="MostRecent">Most Recent</option>
+                <option value="MostHelpful">Most Helpful</option>
+                <option value="HighestRating">Highest Rating</option>
+                <option value="LowestRating">Lowest Rating</option>
+            </select>
+        </div>
+
+        @if (_reviews.Any())
+        {
+            <div class="reviews-list">
+                @foreach (var review in _reviews)
+                {
+                    <div class="review-item">
+                        <div class="review-header">
+                            <div class="reviewer-info">
+                                <div class="reviewer-avatar">@review.UserName[0]</div>
+                                <div>
+                                    <strong class="reviewer-name">@review.UserName</strong>
+                                    @if (review.IsVerifiedPurchase)
+                                    {
+                                        <span class="verified-badge">✓ Verified</span>
+                                    }
+                                    <div class="review-meta">
+                                        <span class="review-stars">
+                                            @for (int i = 1; i <= 5; i++)
+                                            {
+                                                <span class="star @(i <= review.Rating ? "filled" : "")">★</span>
+                                            }
+                                        </span>
+                                        <span class="review-date">@FormatDate(review.CreatedAt)</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="review-content">
+                            @if (!string.IsNullOrWhiteSpace(review.Title))
+                            {
+                                <h4 class="review-title">@review.Title</h4>
+                            }
+                            <p class="review-comment">@review.Comment</p>
+                        </div>
+
+                        <div class="review-footer">
+                            <button class="helpful-btn @(review.CurrentUserMarkedHelpful ? "marked" : "")"
+                                    @onclick="() => MarkHelpful(review.Id, !review.CurrentUserMarkedHelpful)">
+                                👍 Helpful (@review.HelpfulCount)
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (_totalPages > 1)
+            {
+                <div class="pagination">
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
+                            @onclick="() => ChangePage(_currentPage - 1)">
+                        ← Previous
+                    </button>
+                    <span class="pagination-info">Page @_currentPage of @_totalPages</span>
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _totalPages)"
+                            @onclick="() => ChangePage(_currentPage + 1)">
+                        Next →
+                    </button>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="no-reviews">
+                <p>No reviews yet. Be the first to review this recipe!</p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Guid RecipeId { get; set; }
+
+    private RecipeRatingSummaryDto? _summary;
+    private List<RecipeReviewDto> _reviews = new();
+    private int _userRating = 0;
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private int _totalReviews = 0;
+    private string _sortBy = "MostRecent";
+
+    private bool _isWritingReview = false;
+    private CreateRecipeReviewRequest _newReview = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadRatingSummary();
+        await LoadUserRating();
+        await LoadReviews();
+    }
+
+    private async Task LoadRatingSummary()
+    {
+        _summary = await CommunityApi.GetRecipeRatingSummaryAsync(RecipeId);
+        StateHasChanged();
+    }
+
+    private async Task LoadUserRating()
+    {
+        var userRating = await CommunityApi.GetUserRatingAsync(RecipeId);
+        _userRating = userRating?.Rating ?? 0;
+        StateHasChanged();
+    }
+
+    private async Task LoadReviews()
+    {
+        var result = await CommunityApi.SearchReviewsAsync(new RecipeReviewSearchRequest
+        {
+            RecipeId = RecipeId,
+            SortBy = _sortBy,
+            Page = _currentPage,
+            PageSize = 10
+        });
+
+        if (result != null)
+        {
+            _reviews = result.Reviews;
+            _totalReviews = result.TotalCount;
+            _totalPages = result.TotalPages;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RateRecipe(int rating)
+    {
+        if (_userRating == 0)
+        {
+            var success = await CommunityApi.CreateRatingAsync(new CreateRecipeRatingRequest
+            {
+                RecipeId = RecipeId,
+                Rating = rating
+            });
+
+            if (success)
+            {
+                _userRating = rating;
+                ToastService.ShowSuccess($"You rated this recipe {rating} stars!");
+                await LoadRatingSummary();
+            }
+            else
+            {
+                ToastService.ShowError("Failed to save rating");
+            }
+        }
+        else
+        {
+            ToastService.ShowInfo("You've already rated this recipe. You can edit your review to change your rating.");
+        }
+    }
+
+    private async Task SubmitReview()
+    {
+        _newReview.RecipeId = RecipeId;
+
+        var reviewId = await CommunityApi.CreateReviewAsync(_newReview);
+
+        if (reviewId != Guid.Empty)
+        {
+            ToastService.ShowSuccess("Your review has been submitted!");
+            _isWritingReview = false;
+            _newReview = new CreateRecipeReviewRequest();
+            await LoadReviews();
+            await LoadRatingSummary();
+        }
+        else
+        {
+            ToastService.ShowError("Failed to submit review");
+        }
+    }
+
+    private void CancelReview()
+    {
+        _isWritingReview = false;
+        _newReview = new CreateRecipeReviewRequest();
+    }
+
+    private async Task MarkHelpful(Guid reviewId, bool isHelpful)
+    {
+        var success = await CommunityApi.MarkReviewHelpfulAsync(new MarkReviewHelpfulRequest
+        {
+            ReviewId = reviewId,
+            IsHelpful = isHelpful
+        });
+
+        if (success)
+        {
+            await LoadReviews();
+        }
+    }
+
+    private void ChangePage(int page)
+    {
+        _currentPage = page;
+        _ = LoadReviews();
+    }
+
+    private string FormatDate(DateTime date)
+    {
+        var diff = DateTime.UtcNow - date;
+        if (diff.TotalDays < 1) return "Today";
+        if (diff.TotalDays < 2) return "Yesterday";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays} days ago";
+        if (diff.TotalDays < 30) return $"{(int)(diff.TotalDays / 7)} weeks ago";
+        return date.ToString("MMM dd, yyyy");
+    }
+}

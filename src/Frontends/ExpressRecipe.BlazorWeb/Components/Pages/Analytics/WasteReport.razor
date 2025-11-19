@@ -1,0 +1,161 @@
+@using ExpressRecipe.Client.Shared.Models.Analytics
+
+<div class="report-section">
+    <div class="report-header">
+        <h2>🗑️ Food Waste Report</h2>
+        <div class="report-summary">
+            <span class="summary-item waste-metric">
+                <strong>@Report.TotalItemsExpired</strong> items wasted
+            </span>
+            <span class="summary-item waste-metric">
+                <strong>@Report.TotalValueWasted.ToString("C")</strong> value lost
+            </span>
+            <span class="summary-item">
+                <strong>@Report.AverageWastePerWeek.ToString("F1")</strong> avg waste/week
+            </span>
+        </div>
+    </div>
+
+    <!-- Waste Impact Alert -->
+    <div class="waste-impact-alert">
+        <h3>💡 Waste Reduction Opportunity</h3>
+        <p>
+            You've wasted <strong>@Report.TotalItemsExpired items</strong> worth
+            <strong>@Report.TotalValueWasted.ToString("C")</strong> during this period.
+            Reducing waste by just 25% could save you approximately
+            <strong>@((Report.TotalValueWasted * 0.25m).ToString("C"))</strong>!
+        </p>
+    </div>
+
+    <!-- Waste Trend -->
+    <div class="chart-container">
+        <h3>Waste Trend Over Time</h3>
+        <div class="simple-chart waste-chart">
+            @foreach (var point in Report.TrendData.OrderBy(t => t.Date))
+            {
+                var heightPercent = Report.TrendData.Max(t => t.ItemsWasted) > 0
+                    ? ((double)point.ItemsWasted / Report.TrendData.Max(t => t.ItemsWasted)) * 100
+                    : 0;
+
+                <div class="chart-bar waste-bar" style="height: @heightPercent%"
+                     title="@point.Date.ToString("MMM dd"): @point.ItemsWasted items (@point.ValueWasted.ToString("C"))">
+                    <span class="bar-label">@point.Date.ToString("MMM dd")</span>
+                    <span class="bar-value">@point.ItemsWasted</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Waste by Category -->
+    @if (Report.WasteByCategory.Any())
+    {
+        <div class="waste-breakdown">
+            <h3>Waste by Category</h3>
+            <div class="category-bars">
+                @{
+                    var maxCategoryWaste = Report.WasteByCategory.Max(c => c.ItemCount);
+                }
+                @foreach (var category in Report.WasteByCategory.OrderByDescending(c => c.ItemCount))
+                {
+                    var widthPercent = maxCategoryWaste > 0 ? (category.ItemCount / (double)maxCategoryWaste) * 100 : 0;
+
+                    <div class="category-bar-item">
+                        <div class="category-info">
+                            <span class="category-name">@category.Category</span>
+                            <span class="category-stats">@category.ItemCount items · @category.EstimatedValue.ToString("C")</span>
+                        </div>
+                        <div class="category-bar-container">
+                            <div class="category-bar waste" style="width: @widthPercent%"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Most Wasted Products -->
+    @if (Report.MostWastedProducts.Any())
+    {
+        <div class="data-table-container">
+            <h3>⚠️ Products Wasted Most Often</h3>
+            <table class="data-table waste-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Brand</th>
+                        <th>Times Wasted</th>
+                        <th>Estimated Value Lost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var product in Report.MostWastedProducts.Take(10))
+                    {
+                        <tr class="waste-row">
+                            <td>@product.ProductName</td>
+                            <td>@product.Brand</td>
+                            <td class="count">@product.ExpiredCount</td>
+                            <td class="amount waste-amount">@product.EstimatedValue.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <div class="waste-tip">
+                💡 <strong>Tip:</strong> Consider buying these products in smaller quantities or using them in meal plans more frequently.
+            </div>
+        </div>
+    }
+
+    <!-- Waste Reasons -->
+    @if (Report.WasteReasons.Any())
+    {
+        <div class="waste-reasons">
+            <h3>Why Food Was Wasted</h3>
+            <div class="reason-list">
+                @foreach (var reason in Report.WasteReasons.OrderByDescending(r => r.Count))
+                {
+                    <div class="reason-item">
+                        <div class="reason-header">
+                            <span class="reason-name">@reason.Reason</span>
+                            <span class="reason-count">@reason.Count items (@reason.Percentage.ToString("F1")%)</span>
+                        </div>
+                        <div class="reason-bar-container">
+                            <div class="reason-bar" style="width: @reason.Percentage%"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Waste Reduction Tips -->
+    <div class="tips-section">
+        <h3>💡 Waste Reduction Tips</h3>
+        <div class="tips-grid">
+            <div class="tip-card">
+                <div class="tip-icon">📅</div>
+                <h4>Plan Meals</h4>
+                <p>Use meal planning to ensure all items are used before expiration</p>
+            </div>
+            <div class="tip-card">
+                <div class="tip-icon">🛒</div>
+                <h4>Shop Smart</h4>
+                <p>Buy only what you need based on your meal plan and inventory</p>
+            </div>
+            <div class="tip-card">
+                <div class="tip-icon">❄️</div>
+                <h4>Freeze Items</h4>
+                <p>Freeze items before they expire to extend their shelf life</p>
+            </div>
+            <div class="tip-card">
+                <div class="tip-icon">🔔</div>
+                <h4>Enable Alerts</h4>
+                <p>Turn on notifications for items expiring soon</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public WasteReportDto Report { get; set; } = new();
+}

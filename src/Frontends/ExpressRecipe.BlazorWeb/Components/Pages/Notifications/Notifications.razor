@@ -1,0 +1,299 @@
+@page "/notifications"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Notification
+@using ExpressRecipe.Client.Shared.Services
+@inject INotificationApiClient NotificationApi
+@inject NavigationManager Navigation
+
+<PageTitle>Notifications - ExpressRecipe</PageTitle>
+
+<div class="notifications-container">
+    <div class="notifications-header">
+        <h1>🔔 Notifications</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" @onclick="MarkAllAsRead" disabled="@(_summary?.UnreadNotifications == 0)">
+                Mark All as Read
+            </button>
+            <button class="btn btn-secondary-outline" @onclick="DeleteAllRead">
+                Delete Read
+            </button>
+            <button class="btn btn-secondary-outline" @onclick="() => Navigation.NavigateTo("/notifications/preferences")">
+                ⚙️ Preferences
+            </button>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading notifications...</p>
+        </div>
+    }
+    else if (_summary != null)
+    {
+        <!-- Summary Cards -->
+        <div class="notification-summary">
+            <div class="summary-card">
+                <span class="summary-value">@_summary.TotalNotifications</span>
+                <span class="summary-label">Total</span>
+            </div>
+            <div class="summary-card unread">
+                <span class="summary-value">@_summary.UnreadNotifications</span>
+                <span class="summary-label">Unread</span>
+            </div>
+            <div class="summary-card high-priority">
+                <span class="summary-value">@_summary.HighPriorityUnread</span>
+                <span class="summary-label">High Priority</span>
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="filter-tabs">
+            <button class="filter-tab @(_filterType == "All" ? "active" : "")" @onclick="() => SetFilter("All")">
+                All (@_summary.TotalNotifications)
+            </button>
+            <button class="filter-tab @(_filterType == "Unread" ? "active" : "")" @onclick="() => SetFilter("Unread")">
+                Unread (@_summary.UnreadNotifications)
+            </button>
+            @foreach (var type in _summary.NotificationsByType.OrderByDescending(t => t.Value))
+            {
+                <button class="filter-tab @(_filterType == type.Key ? "active" : "")" @onclick="() => SetFilter(type.Key)">
+                    @GetTypeIcon(type.Key) @FormatTypeName(type.Key) (@type.Value)
+                </button>
+            }
+        </div>
+
+        <!-- Notifications List -->
+        @if (_notifications?.Any() == true)
+        {
+            <div class="notifications-list">
+                @foreach (var notification in _notifications)
+                {
+                    <div class="notification-item @(notification.IsRead ? "read" : "unread") @GetPriorityClass(notification.Priority)"
+                         @onclick="() => HandleNotificationClick(notification)">
+                        <div class="notification-icon">
+                            @GetTypeIcon(notification.Type)
+                        </div>
+
+                        <div class="notification-content">
+                            <div class="notification-header-row">
+                                <h3 class="notification-title">@notification.Title</h3>
+                                <span class="notification-time">@FormatTime(notification.CreatedAt)</span>
+                            </div>
+                            <p class="notification-message">@notification.Message</p>
+                            @if (notification.Priority == "High")
+                            {
+                                <span class="priority-badge">High Priority</span>
+                            }
+                        </div>
+
+                        <div class="notification-actions">
+                            @if (!notification.IsRead)
+                            {
+                                <button class="btn-icon" @onclick:stopPropagation="true" @onclick="() => MarkAsRead(notification.Id)" title="Mark as read">
+                                    ✓
+                                </button>
+                            }
+                            <button class="btn-icon" @onclick:stopPropagation="true" @onclick="() => DeleteNotification(notification.Id)" title="Delete">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Pagination -->
+            @if (_searchResult?.TotalPages > 1)
+            {
+                <div class="pagination">
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
+                            @onclick="() => ChangePage(_currentPage - 1)">
+                        ← Previous
+                    </button>
+
+                    <span class="pagination-info">
+                        Page @_currentPage of @_searchResult.TotalPages
+                    </span>
+
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _searchResult.TotalPages)"
+                            @onclick="() => ChangePage(_currentPage + 1)">
+                        Next →
+                    </button>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="empty-state">
+                <div class="empty-icon">🔔</div>
+                <h3>No Notifications</h3>
+                <p>
+                    @if (_filterType == "Unread")
+                    {
+                        <span>You're all caught up! No unread notifications.</span>
+                    }
+                    else
+                    {
+                        <span>You don't have any notifications yet.</span>
+                    }
+                </p>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private NotificationSummaryDto? _summary;
+    private NotificationSearchResult? _searchResult;
+    private List<NotificationDto>? _notifications;
+
+    private string _filterType = "All";
+    private int _currentPage = 1;
+    private const int PageSize = 20;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotifications();
+    }
+
+    private async Task LoadNotifications()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _summary = await NotificationApi.GetNotificationSummaryAsync();
+
+        await SearchNotifications();
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task SearchNotifications()
+    {
+        var request = new NotificationSearchRequest
+        {
+            Type = _filterType == "All" || _filterType == "Unread" ? null : _filterType,
+            IsRead = _filterType == "Unread" ? false : null,
+            Page = _currentPage,
+            PageSize = PageSize
+        };
+
+        _searchResult = await NotificationApi.SearchNotificationsAsync(request);
+        _notifications = _searchResult?.Notifications ?? new();
+        StateHasChanged();
+    }
+
+    private void SetFilter(string filterType)
+    {
+        _filterType = filterType;
+        _currentPage = 1;
+        _ = SearchNotifications();
+    }
+
+    private void ChangePage(int page)
+    {
+        _currentPage = page;
+        _ = SearchNotifications();
+    }
+
+    private async Task HandleNotificationClick(NotificationDto notification)
+    {
+        if (!notification.IsRead)
+        {
+            await MarkAsRead(notification.Id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(notification.ActionUrl))
+        {
+            Navigation.NavigateTo(notification.ActionUrl);
+        }
+    }
+
+    private async Task MarkAsRead(Guid id)
+    {
+        var success = await NotificationApi.MarkAsReadAsync(id, true);
+        if (success)
+        {
+            await LoadNotifications();
+        }
+    }
+
+    private async Task MarkAllAsRead()
+    {
+        var success = await NotificationApi.MarkAllAsReadAsync();
+        if (success)
+        {
+            await LoadNotifications();
+        }
+    }
+
+    private async Task DeleteNotification(Guid id)
+    {
+        var success = await NotificationApi.DeleteNotificationAsync(id);
+        if (success)
+        {
+            await LoadNotifications();
+        }
+    }
+
+    private async Task DeleteAllRead()
+    {
+        var success = await NotificationApi.DeleteAllReadAsync();
+        if (success)
+        {
+            await LoadNotifications();
+        }
+    }
+
+    private string GetTypeIcon(string type)
+    {
+        return type switch
+        {
+            "ExpiringItem" => "⏰",
+            "ProductRecall" => "⚠️",
+            "LowStock" => "📉",
+            "ShoppingReminder" => "🛒",
+            "MealPlanReminder" => "📅",
+            "RecipeRecommendation" => "🍳",
+            _ => "🔔"
+        };
+    }
+
+    private string FormatTypeName(string type)
+    {
+        return type switch
+        {
+            "ExpiringItem" => "Expiring Items",
+            "ProductRecall" => "Product Recalls",
+            "LowStock" => "Low Stock",
+            "ShoppingReminder" => "Shopping",
+            "MealPlanReminder" => "Meal Plans",
+            "RecipeRecommendation" => "Recipes",
+            _ => type
+        };
+    }
+
+    private string GetPriorityClass(string priority)
+    {
+        return priority == "High" ? "high-priority" : "";
+    }
+
+    private string FormatTime(DateTime time)
+    {
+        var diff = DateTime.UtcNow - time;
+
+        if (diff.TotalMinutes < 1)
+            return "Just now";
+        if (diff.TotalMinutes < 60)
+            return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24)
+            return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7)
+            return $"{(int)diff.TotalDays}d ago";
+
+        return time.ToString("MMM dd");
+    }
+}

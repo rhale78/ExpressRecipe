@@ -1,0 +1,194 @@
+@page "/discover"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Community
+@using ExpressRecipe.Client.Shared.Services
+@inject ICommunityApiClient CommunityApi
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+
+<PageTitle>Discover Recipes - ExpressRecipe</PageTitle>
+
+<div class="community-container">
+    <div class="community-header">
+        <h1>🔥 Discover Recipes</h1>
+        <p>Explore trending and popular recipes from the community</p>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <div class="filter-row">
+            <label>Show:</label>
+            <select class="filter-select" @bind="_timePeriod" @bind:after="LoadRecipes">
+                <option value="Day">Today</option>
+                <option value="Week">This Week</option>
+                <option value="Month">This Month</option>
+                <option value="AllTime">All Time</option>
+            </select>
+
+            <label>Category:</label>
+            <select class="filter-select" @bind="_category" @bind:after="LoadRecipes">
+                <option value="">All Categories</option>
+                <option value="Breakfast">Breakfast</option>
+                <option value="Lunch">Lunch</option>
+                <option value="Dinner">Dinner</option>
+                <option value="Snacks">Snacks</option>
+                <option value="Desserts">Desserts</option>
+                <option value="Beverages">Beverages</option>
+                <option value="Appetizers">Appetizers</option>
+            </select>
+
+            <label>View:</label>
+            <select class="filter-select" @bind="_viewMode" @bind:after="LoadRecipes">
+                <option value="trending">🔥 Trending</option>
+                <option value="popular">⭐ Popular</option>
+            </select>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading recipes...</p>
+        </div>
+    }
+    else if (_recipes.Any())
+    {
+        <div class="recipe-grid">
+            @foreach (var recipe in _recipes)
+            {
+                <div class="recipe-card" @onclick="() => ViewRecipe(recipe.RecipeId)">
+                    @if (!string.IsNullOrWhiteSpace(recipe.ImageUrl))
+                    {
+                        <img src="@recipe.ImageUrl" alt="@recipe.RecipeName" class="recipe-card-image" />
+                    }
+                    else
+                    {
+                        <div class="recipe-card-image"></div>
+                    }
+
+                    <div class="recipe-card-content">
+                        <h3 class="recipe-card-title">@recipe.RecipeName</h3>
+
+                        @if (!string.IsNullOrWhiteSpace(recipe.Description))
+                        {
+                            <p class="recipe-card-description">@recipe.Description</p>
+                        }
+
+                        <div class="recipe-card-meta">
+                            <div class="recipe-rating">
+                                <span class="stars">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        var filled = i <= Math.Round(recipe.AverageRating);
+                                        <span class="star @(filled ? "filled" : "")">★</span>
+                                    }
+                                </span>
+                                <span class="count">@recipe.AverageRating.ToString("F1") (@recipe.RatingCount)</span>
+                            </div>
+
+                            <div class="recipe-stats">
+                                <span>👁️ @recipe.ViewCount</span>
+                                <span>❤️ @recipe.FavoriteCount</span>
+                            </div>
+                        </div>
+
+                        @if (recipe.Tags.Any())
+                        {
+                            <div class="recipe-tags">
+                                @foreach (var tag in recipe.Tags.Take(3))
+                                {
+                                    <span class="recipe-tag">@tag</span>
+                                }
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(recipe.CreatedBy))
+                        {
+                            <p class="created-by">by @recipe.CreatedBy</p>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (_totalPages > 1)
+        {
+            <div class="pagination">
+                <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
+                        @onclick="() => ChangePage(_currentPage - 1)">
+                    ← Previous
+                </button>
+
+                <span class="pagination-info">
+                    Page @_currentPage of @_totalPages
+                </span>
+
+                <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _totalPages)"
+                        @onclick="() => ChangePage(_currentPage + 1)">
+                    Next →
+                </button>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <h3>No Recipes Found</h3>
+            <p>Try adjusting your filters to see more results.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private List<TrendingRecipeDto> _recipes = new();
+    private bool _isLoading = true;
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private const int PageSize = 20;
+
+    private string _viewMode = "trending";
+    private string _timePeriod = "Week";
+    private string _category = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRecipes();
+    }
+
+    private async Task LoadRecipes()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        if (_viewMode == "trending")
+        {
+            _recipes = await CommunityApi.GetTrendingRecipesAsync();
+        }
+        else
+        {
+            _recipes = await CommunityApi.GetPopularRecipesAsync(new PopularRecipesRequest
+            {
+                TimePeriod = _timePeriod,
+                Category = string.IsNullOrWhiteSpace(_category) ? null : _category,
+                Page = _currentPage,
+                PageSize = PageSize
+            });
+        }
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private void ChangePage(int page)
+    {
+        _currentPage = page;
+        _ = LoadRecipes();
+    }
+
+    private void ViewRecipe(Guid recipeId)
+    {
+        Navigation.NavigateTo($"/recipes/{recipeId}");
+    }
+}
