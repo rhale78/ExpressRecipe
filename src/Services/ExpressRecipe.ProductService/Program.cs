@@ -43,6 +43,8 @@ var connectionString = builder.Configuration.GetConnectionString("productdb")
 
 builder.Services.AddScoped<IProductRepository>(sp => new ProductRepository(connectionString));
 builder.Services.AddScoped<IIngredientRepository>(sp => new IngredientRepository(connectionString));
+builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
+builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();

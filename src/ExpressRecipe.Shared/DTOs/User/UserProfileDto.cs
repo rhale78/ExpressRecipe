@@ -13,12 +13,11 @@ public class UserProfileDto
     public decimal? HeightCm { get; set; }
     public decimal? WeightKg { get; set; }
     public string? ActivityLevel { get; set; }
-    public string? HealthGoals { get; set; }
-    public string? PreferredCuisines { get; set; }
-    public string? DislikedFoods { get; set; }
     public string? CookingSkillLevel { get; set; }
     public string SubscriptionTier { get; set; } = "Free";
     public DateTime? SubscriptionExpiresAt { get; set; }
+    // Note: HealthGoals, PreferredCuisines, and Favorite/Disliked Foods
+    // are now accessed through separate endpoints for proper normalization
 }
 
 public class CreateUserProfileRequest
@@ -44,9 +43,6 @@ public class CreateUserProfileRequest
     public decimal? WeightKg { get; set; }
 
     public string? ActivityLevel { get; set; }
-    public string? HealthGoals { get; set; }
-    public string? PreferredCuisines { get; set; }
-    public string? DislikedFoods { get; set; }
     public string? CookingSkillLevel { get; set; }
 }
 
@@ -70,8 +66,5 @@ public class UpdateUserProfileRequest
     public decimal? WeightKg { get; set; }
 
     public string? ActivityLevel { get; set; }
-    public string? HealthGoals { get; set; }
-    public string? PreferredCuisines { get; set; }
-    public string? DislikedFoods { get; set; }
     public string? CookingSkillLevel { get; set; }
 }

@@ -23,8 +23,7 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
     {
         const string sql = @"
             SELECT Id, UserId, FirstName, LastName, DateOfBirth, Gender,
-                   HeightCm, WeightKg, ActivityLevel, HealthGoals,
-                   PreferredCuisines, DislikedFoods, CookingSkillLevel,
+                   HeightCm, WeightKg, ActivityLevel, CookingSkillLevel,
                    SubscriptionTier, SubscriptionExpiresAt
             FROM UserProfile
             WHERE UserId = @UserId AND IsDeleted = 0";
@@ -42,9 +41,6 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
                 HeightCm = GetDecimal(reader, "HeightCm"),
                 WeightKg = GetDecimal(reader, "WeightKg"),
                 ActivityLevel = GetString(reader, "ActivityLevel"),
-                HealthGoals = GetString(reader, "HealthGoals"),
-                PreferredCuisines = GetString(reader, "PreferredCuisines"),
-                DislikedFoods = GetString(reader, "DislikedFoods"),
                 CookingSkillLevel = GetString(reader, "CookingSkillLevel"),
                 SubscriptionTier = GetString(reader, "SubscriptionTier") ?? "Free",
                 SubscriptionExpiresAt = GetDateTime(reader, "SubscriptionExpiresAt")
@@ -59,14 +55,12 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
         const string sql = @"
             INSERT INTO UserProfile (
                 Id, UserId, FirstName, LastName, DateOfBirth, Gender,
-                HeightCm, WeightKg, ActivityLevel, HealthGoals,
-                PreferredCuisines, DislikedFoods, CookingSkillLevel,
+                HeightCm, WeightKg, ActivityLevel, CookingSkillLevel,
                 SubscriptionTier, CreatedBy, CreatedAt
             )
             VALUES (
                 @Id, @UserId, @FirstName, @LastName, @DateOfBirth, @Gender,
-                @HeightCm, @WeightKg, @ActivityLevel, @HealthGoals,
-                @PreferredCuisines, @DislikedFoods, @CookingSkillLevel,
+                @HeightCm, @WeightKg, @ActivityLevel, @CookingSkillLevel,
                 'Free', @CreatedBy, GETUTCDATE()
             )";
 
@@ -83,9 +77,6 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
             CreateParameter("@HeightCm", request.HeightCm),
             CreateParameter("@WeightKg", request.WeightKg),
             CreateParameter("@ActivityLevel", request.ActivityLevel),
-            CreateParameter("@HealthGoals", request.HealthGoals),
-            CreateParameter("@PreferredCuisines", request.PreferredCuisines),
-            CreateParameter("@DislikedFoods", request.DislikedFoods),
             CreateParameter("@CookingSkillLevel", request.CookingSkillLevel),
             CreateParameter("@CreatedBy", createdBy));
 
@@ -103,9 +94,6 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
                 HeightCm = @HeightCm,
                 WeightKg = @WeightKg,
                 ActivityLevel = @ActivityLevel,
-                HealthGoals = @HealthGoals,
-                PreferredCuisines = @PreferredCuisines,
-                DislikedFoods = @DislikedFoods,
                 CookingSkillLevel = @CookingSkillLevel,
                 UpdatedBy = @UpdatedBy,
                 UpdatedAt = GETUTCDATE()
@@ -121,9 +109,6 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
             CreateParameter("@HeightCm", request.HeightCm),
             CreateParameter("@WeightKg", request.WeightKg),
             CreateParameter("@ActivityLevel", request.ActivityLevel),
-            CreateParameter("@HealthGoals", request.HealthGoals),
-            CreateParameter("@PreferredCuisines", request.PreferredCuisines),
-            CreateParameter("@DislikedFoods", request.DislikedFoods),
             CreateParameter("@CookingSkillLevel", request.CookingSkillLevel),
             CreateParameter("@UpdatedBy", updatedBy));
 
