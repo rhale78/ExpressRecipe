@@ -54,6 +54,7 @@ builder.Services.AddScoped<IFriendsRepository>(sp => new FriendsRepository(conne
 builder.Services.AddScoped<IFamilyScoreRepository>(sp => new FamilyScoreRepository(connectionString));
 builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(connectionString));
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
+builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();
