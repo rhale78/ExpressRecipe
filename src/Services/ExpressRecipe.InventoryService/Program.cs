@@ -24,6 +24,10 @@ builder.Services.AddAuthorization();
 var connectionString = builder.Configuration.GetConnectionString("inventorydb")
     ?? throw new InvalidOperationException("Database connection string 'inventorydb' not found");
 
+// Register repositories
+builder.Services.AddScoped<IInventoryRepository>(sp =>
+    new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
+
 // Add controllers
 builder.Services.AddControllers();
 
