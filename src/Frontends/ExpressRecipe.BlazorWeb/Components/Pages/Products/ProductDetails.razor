@@ -1,0 +1,278 @@
+@page "/products/{ProductId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Product
+@attribute [Authorize]
+@inject IProductApiClient ProductApi
+@inject NavigationManager Navigation
+
+<PageTitle>@(_product?.Name ?? "Product Details") - ExpressRecipe</PageTitle>
+
+<div class="product-details-container">
+    <!-- Back Button -->
+    <div class="navigation-bar">
+        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/products")">
+            ← Back to Products
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading product details...</p>
+        </div>
+    }
+    else if (_product != null)
+    {
+        <div class="product-details-grid">
+            <!-- Product Image Section -->
+            <div class="product-image-section">
+                @if (!string.IsNullOrEmpty(_product.ImageUrl))
+                {
+                    <img src="@_product.ImageUrl" alt="@_product.Name" class="product-detail-image" />
+                }
+                else
+                {
+                    <div class="product-detail-image-placeholder">
+                        <div class="placeholder-icon">📦</div>
+                        <p>No image available</p>
+                    </div>
+                }
+            </div>
+
+            <!-- Product Information Section -->
+            <div class="product-info-section">
+                <h1 class="product-title">@_product.Name</h1>
+                <p class="product-brand-large">@_product.Brand</p>
+
+                @if (!string.IsNullOrEmpty(_product.UPC))
+                {
+                    <div class="info-row">
+                        <span class="info-label">UPC:</span>
+                        <span class="info-value">@_product.UPC</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(_product.Description))
+                {
+                    <div class="product-description">
+                        <h3>Description</h3>
+                        <p>@_product.Description</p>
+                    </div>
+                }
+
+                <!-- Allergen Information -->
+                @if (_product.Allergens.Any())
+                {
+                    <div class="allergen-section">
+                        <h3>⚠️ Allergen Information</h3>
+                        <div class="allergen-tags-large">
+                            @foreach (var allergen in _product.Allergens)
+                            {
+                                <span class="allergen-tag-large">@allergen</span>
+                            }
+                        </div>
+                        <p class="allergen-warning">
+                            This product contains or may contain the allergens listed above.
+                            Please review carefully if you have dietary restrictions.
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="allergen-section">
+                        <h3>✅ Allergen Information</h3>
+                        <p class="no-allergens">No major allergens detected in this product.</p>
+                    </div>
+                }
+
+                <!-- Ingredients -->
+                @if (_product.Ingredients.Any())
+                {
+                    <div class="ingredients-section">
+                        <h3>Ingredients</h3>
+                        <div class="ingredients-list">
+                            @foreach (var ingredient in _product.Ingredients)
+                            {
+                                <span class="ingredient-item">@ingredient</span>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- Action Buttons -->
+                <div class="product-actions-section">
+                    <button class="btn btn-primary" @onclick="AddToInventory">
+                        📦 Add to Inventory
+                    </button>
+                    <button class="btn btn-outline" @onclick="AddToShoppingList">
+                        🛒 Add to Shopping List
+                    </button>
+                    <button class="btn btn-outline" @onclick="ViewRecipes">
+                        🍳 Find Recipes
+                    </button>
+                </div>
+
+                <!-- Product Metadata -->
+                <div class="product-metadata">
+                    <p class="metadata-item">
+                        <span class="metadata-label">Added:</span>
+                        <span class="metadata-value">@_product.CreatedAt.ToString("MMMM dd, yyyy")</span>
+                    </p>
+                    <p class="metadata-item">
+                        <span class="metadata-label">Product ID:</span>
+                        <span class="metadata-value">@_product.Id.ToString("N").Substring(0, 8)...</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Related Products Section -->
+        <div class="related-products-section">
+            <h2>Similar Products from @_product.Brand</h2>
+            @if (_relatedProducts.Any())
+            {
+                <div class="related-products-grid">
+                    @foreach (var related in _relatedProducts.Take(4))
+                    {
+                        <div class="related-product-card" @onclick="() => ViewProduct(related.Id)">
+                            <div class="related-product-image">
+                                @if (!string.IsNullOrEmpty(related.ImageUrl))
+                                {
+                                    <img src="@related.ImageUrl" alt="@related.Name" />
+                                }
+                                else
+                                {
+                                    <div class="related-image-placeholder">📦</div>
+                                }
+                            </div>
+                            <h4>@related.Name</h4>
+                            <p>@related.Brand</p>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="no-related">No related products found.</p>
+            }
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="error-container">
+            <div class="error-icon">❌</div>
+            <h2>Product Not Found</h2>
+            <p>@_errorMessage</p>
+            <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/products")">
+                Browse All Products
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid ProductId { get; set; }
+
+    private ProductDto? _product;
+    private List<ProductDto> _relatedProducts = new();
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_product?.Id != ProductId)
+        {
+            await LoadProductAsync();
+        }
+    }
+
+    private async Task LoadProductAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            _product = await ProductApi.GetProductAsync(ProductId);
+
+            if (_product == null)
+            {
+                _errorMessage = "Product not found. It may have been removed or the ID is invalid.";
+                return;
+            }
+
+            // Load related products from the same brand
+            await LoadRelatedProductsAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load product: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadRelatedProductsAsync()
+    {
+        if (_product == null) return;
+
+        try
+        {
+            var searchResult = await ProductApi.SearchProductsAsync(new ProductSearchRequest
+            {
+                Brand = _product.Brand,
+                Page = 1,
+                PageSize = 5
+            });
+
+            if (searchResult != null)
+            {
+                // Exclude the current product from related products
+                _relatedProducts = searchResult.Products
+                    .Where(p => p.Id != _product.Id)
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // Silently fail for related products - not critical
+            _relatedProducts = new();
+        }
+    }
+
+    private void ViewProduct(Guid productId)
+    {
+        Navigation.NavigateTo($"/products/{productId}");
+    }
+
+    private async Task AddToInventory()
+    {
+        // TODO: Implement add to inventory
+        // For now, navigate to inventory page
+        Navigation.NavigateTo("/inventory");
+    }
+
+    private async Task AddToShoppingList()
+    {
+        // TODO: Implement add to shopping list
+        // For now, navigate to shopping page
+        Navigation.NavigateTo("/shopping");
+    }
+
+    private void ViewRecipes()
+    {
+        // TODO: Implement recipe search by product
+        // For now, navigate to recipes page
+        Navigation.NavigateTo("/recipes");
+    }
+}

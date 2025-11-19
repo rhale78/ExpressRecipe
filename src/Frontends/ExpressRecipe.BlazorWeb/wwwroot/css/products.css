@@ -1,0 +1,1166 @@
+/* ==========================================
+   PRODUCT PAGES STYLES
+   ========================================== */
+
+/* Products List Page */
+.products-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.products-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.products-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+/* Search Section */
+.search-section {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 2rem;
+}
+
+.search-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.875rem 1.25rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+}
+
+/* Filters */
+.filters-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.filter-group label {
+    font-weight: 600;
+    color: #333;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.filter-input {
+    padding: 0.75rem 1rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+.filter-input:focus {
+    outline: none;
+    border-color: #ff6b6b;
+}
+
+.allergen-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.allergen-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.allergen-checkbox:hover {
+    background: #e9ecef;
+}
+
+.allergen-checkbox input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+}
+
+.allergen-checkbox span {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    padding-top: 1rem;
+}
+
+/* Results */
+.results-summary {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.results-summary p {
+    margin: 0;
+    color: #495057;
+    font-size: 0.95rem;
+}
+
+.filter-indicator {
+    color: #ff6b6b;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+
+/* Product Grid */
+.products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.product-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+}
+
+.product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.product-image {
+    width: 100%;
+    height: 200px;
+    overflow: hidden;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.product-image-placeholder {
+    font-size: 4rem;
+    color: #dee2e6;
+}
+
+.product-info {
+    padding: 1.25rem;
+    flex: 1;
+}
+
+.product-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 0.5rem 0;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.product-brand {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin: 0 0 0.75rem 0;
+}
+
+.product-upc {
+    font-size: 0.85rem;
+    color: #adb5bd;
+    margin: 0 0 0.75rem 0;
+    font-family: monospace;
+}
+
+.product-allergens {
+    margin-top: 1rem;
+}
+
+.allergen-label {
+    font-size: 0.85rem;
+    color: #dc3545;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.allergen-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.allergen-tag {
+    background: #fff3cd;
+    color: #856404;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid #ffeaa7;
+}
+
+.product-actions {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: #ff6b6b;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95rem;
+    padding: 0;
+    transition: color 0.2s;
+}
+
+.btn-link:hover {
+    color: #ff5252;
+    text-decoration: underline;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 3rem;
+}
+
+.page-numbers {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.page-number {
+    padding: 0.5rem 1rem;
+    border: 2px solid #e0e0e0;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.page-number:hover {
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+}
+
+.page-number.active {
+    background: #ff6b6b;
+    border-color: #ff6b6b;
+    color: white;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.empty-state h2 {
+    font-size: 1.5rem;
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+}
+
+/* ==========================================
+   PRODUCT DETAILS PAGE
+   ========================================== */
+
+.product-details-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.navigation-bar {
+    margin-bottom: 2rem;
+}
+
+.product-details-grid {
+    display: grid;
+    grid-template-columns: 400px 1fr;
+    gap: 3rem;
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 3rem;
+}
+
+.product-image-section {
+    position: sticky;
+    top: 2rem;
+    height: fit-content;
+}
+
+.product-detail-image {
+    width: 100%;
+    height: 400px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.product-detail-image-placeholder {
+    width: 100%;
+    height: 400px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.placeholder-icon {
+    font-size: 6rem;
+    opacity: 0.3;
+}
+
+.product-detail-image-placeholder p {
+    color: #adb5bd;
+    font-size: 1rem;
+}
+
+.product-info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.product-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.product-brand-large {
+    font-size: 1.25rem;
+    color: #6c757d;
+    margin: 0;
+    font-weight: 500;
+}
+
+.info-row {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem 0;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #495057;
+    min-width: 80px;
+}
+
+.info-value {
+    color: #212529;
+    font-family: monospace;
+}
+
+.product-description {
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.product-description h3 {
+    font-size: 1.1rem;
+    margin: 0 0 0.75rem 0;
+    color: #333;
+}
+
+.product-description p {
+    margin: 0;
+    line-height: 1.6;
+    color: #495057;
+}
+
+/* Allergen Section */
+.allergen-section {
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 2px solid #fff3cd;
+    background: #fffbf0;
+}
+
+.allergen-section h3 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    color: #856404;
+}
+
+.allergen-tags-large {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.allergen-tag-large {
+    background: #ffc107;
+    color: #000;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.allergen-warning {
+    margin: 1rem 0 0 0;
+    padding: 1rem;
+    background: #fff;
+    border-radius: 6px;
+    color: #856404;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.no-allergens {
+    margin: 0;
+    color: #28a745;
+    font-weight: 500;
+}
+
+/* Ingredients Section */
+.ingredients-section {
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.ingredients-section h3 {
+    font-size: 1.1rem;
+    margin: 0 0 1rem 0;
+    color: #333;
+}
+
+.ingredients-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.ingredient-item {
+    background: white;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+/* Product Actions */
+.product-actions-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e9ecef;
+}
+
+/* Product Metadata */
+.product-metadata {
+    padding-top: 1.5rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.metadata-item {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.metadata-label {
+    font-weight: 600;
+    color: #6c757d;
+}
+
+.metadata-value {
+    color: #495057;
+}
+
+/* Related Products */
+.related-products-section {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.related-products-section h2 {
+    font-size: 1.5rem;
+    margin: 0 0 1.5rem 0;
+    color: #1a1a1a;
+}
+
+.related-products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.related-product-card {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.related-product-card:hover {
+    background: #e9ecef;
+    transform: translateY(-2px);
+}
+
+.related-product-image {
+    width: 100%;
+    height: 150px;
+    background: white;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+
+.related-product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.related-image-placeholder {
+    font-size: 3rem;
+    color: #dee2e6;
+}
+
+.related-product-card h4 {
+    font-size: 0.95rem;
+    margin: 0 0 0.25rem 0;
+    color: #1a1a1a;
+    font-weight: 600;
+}
+
+.related-product-card p {
+    font-size: 0.85rem;
+    margin: 0;
+    color: #6c757d;
+}
+
+.no-related {
+    color: #6c757d;
+    text-align: center;
+    padding: 2rem;
+}
+
+/* Error Container */
+.error-container {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.error-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.error-container h2 {
+    font-size: 1.75rem;
+    color: #dc3545;
+    margin-bottom: 0.5rem;
+}
+
+.error-container p {
+    color: #6c757d;
+    margin-bottom: 1.5rem;
+}
+
+/* ==========================================
+   BARCODE SCANNER PAGE
+   ========================================== */
+
+.barcode-scan-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.scan-header {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.scan-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+/* Scanner Modes */
+.scanner-modes {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    background: white;
+    padding: 0.5rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 1rem;
+    border: 2px solid transparent;
+    background: transparent;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #6c757d;
+}
+
+.mode-btn:hover {
+    background: #f8f9fa;
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+    color: white;
+    border-color: #ff5252;
+}
+
+/* Camera Scanner */
+.camera-scanner-section {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 2rem;
+}
+
+.camera-placeholder {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.camera-icon {
+    font-size: 5rem;
+    margin-bottom: 1rem;
+    opacity: 0.6;
+}
+
+.camera-placeholder h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+}
+
+.camera-placeholder p {
+    color: #6c757d;
+    margin-bottom: 2rem;
+}
+
+.btn-large {
+    padding: 1rem 2.5rem;
+    font-size: 1.1rem;
+}
+
+.camera-note {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.camera-note p {
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.camera-view {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.camera-frame {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+#barcode-scanner {
+    width: 100%;
+    display: block;
+}
+
+.scan-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    height: 40%;
+    border: 3px solid #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+}
+
+.scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #ff6b6b, transparent);
+    animation: scan 2s linear infinite;
+}
+
+@keyframes scan {
+    0%, 100% { top: 0; }
+    50% { top: calc(100% - 2px); }
+}
+
+.camera-controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    align-items: center;
+}
+
+.scanning-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #28a745;
+    font-weight: 600;
+}
+
+.camera-instructions {
+    text-align: center;
+    color: #6c757d;
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+/* Manual Entry */
+.manual-entry-section {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 2rem;
+}
+
+.manual-entry-card {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.manual-entry-card h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+    color: #1a1a1a;
+}
+
+.manual-entry-card > p {
+    color: #6c757d;
+    margin-bottom: 2rem;
+}
+
+.upc-input-group {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.upc-input {
+    flex: 1;
+    padding: 1rem 1.5rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1.25rem;
+    font-family: monospace;
+    text-align: center;
+    letter-spacing: 2px;
+    transition: all 0.2s;
+}
+
+.upc-input:focus {
+    outline: none;
+    border-color: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+}
+
+.upc-examples {
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.examples-label {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.example-codes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.example-code {
+    padding: 0.75rem;
+    background: white;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.example-code:hover {
+    border-color: #ff6b6b;
+    background: #fff5f5;
+}
+
+.examples-note {
+    font-size: 0.85rem;
+    color: #adb5bd;
+    margin: 0;
+}
+
+/* Scan Results */
+.scan-result-section {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.result-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.result-header h2 {
+    font-size: 1.5rem;
+    color: #28a745;
+    margin: 0;
+}
+
+.scanned-product-card {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.scanned-product-image {
+    width: 100%;
+    height: 250px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.scanned-product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scanned-image-placeholder {
+    font-size: 5rem;
+    color: #dee2e6;
+}
+
+.scanned-product-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.scanned-product-info h3 {
+    font-size: 1.5rem;
+    margin: 0;
+    color: #1a1a1a;
+}
+
+.scanned-brand {
+    font-size: 1.1rem;
+    color: #6c757d;
+    margin: 0;
+}
+
+.scanned-upc {
+    font-family: monospace;
+    color: #adb5bd;
+    margin: 0;
+}
+
+/* Allergen Alert */
+.allergen-alert {
+    padding: 1.5rem;
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+}
+
+.allergen-alert h4 {
+    font-size: 1.1rem;
+    color: #856404;
+    margin: 0 0 1rem 0;
+}
+
+.allergen-tag-alert {
+    background: #dc3545;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+    display: inline-block;
+}
+
+.allergen-safe {
+    padding: 1.5rem;
+    background: #d4edda;
+    border: 2px solid #28a745;
+    border-radius: 8px;
+}
+
+.allergen-safe h4 {
+    font-size: 1.1rem;
+    color: #155724;
+    margin: 0;
+}
+
+.scanned-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Not Found */
+.not-found-section {
+    text-align: center;
+    padding: 3rem 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.not-found-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.not-found-section h2 {
+    font-size: 1.75rem;
+    color: #1a1a1a;
+    margin-bottom: 1rem;
+}
+
+.not-found-section p {
+    color: #6c757d;
+    margin-bottom: 0.75rem;
+    font-size: 1.05rem;
+}
+
+.not-found-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 2rem;
+}
+
+/* Spinner */
+.spinner-small {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #ff6b6b;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}
+
+/* Alert Close */
+.alert-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    margin-left: 1rem;
+}
+
+.alert-close:hover {
+    opacity: 1;
+}
+
+/* ==========================================
+   RESPONSIVE DESIGN
+   ========================================== */
+
+@media (max-width: 768px) {
+    .products-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .search-bar {
+        flex-direction: column;
+    }
+
+    .products-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .product-details-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+
+    .product-image-section {
+        position: static;
+    }
+
+    .scanned-product-card {
+        grid-template-columns: 1fr;
+    }
+
+    .allergen-checkboxes {
+        flex-direction: column;
+    }
+
+    .filter-actions {
+        flex-direction: column;
+    }
+
+    .pagination {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
