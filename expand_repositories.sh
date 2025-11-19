@@ -1,3 +1,7 @@
+#!/bin/bash
+
+# Create full SyncRepository
+cat > src/Services/ExpressRecipe.SyncService/Data/SyncRepository.cs << 'EOF'
 using Microsoft.Data.SqlClient;
 using System.Text.Json;
 
@@ -501,3 +505,6 @@ public class SyncRepository : ISyncRepository
         return queue;
     }
 }
+EOF
+
+echo "SyncRepository expanded"
