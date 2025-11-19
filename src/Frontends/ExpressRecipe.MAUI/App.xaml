@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ExpressRecipe.MAUI.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
+                <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Brand Colors -->
+            <Color x:Key="Primary">#4CAF50</Color>
+            <Color x:Key="PrimaryDark">#388E3C</Color>
+            <Color x:Key="PrimaryLight">#C8E6C9</Color>
+            <Color x:Key="Accent">#FF9800</Color>
+            <Color x:Key="Warning">#FFC107</Color>
+            <Color x:Key="Error">#F44336</Color>
+            <Color x:Key="Success">#4CAF50</Color>
+
+            <!-- Neutral Colors -->
+            <Color x:Key="White">#FFFFFF</Color>
+            <Color x:Key="Black">#000000</Color>
+            <Color x:Key="Gray100">#F5F5F5</Color>
+            <Color x:Key="Gray200">#EEEEEE</Color>
+            <Color x:Key="Gray300">#E0E0E0</Color>
+            <Color x:Key="Gray400">#BDBDBD</Color>
+            <Color x:Key="Gray500">#9E9E9E</Color>
+            <Color x:Key="Gray600">#757575</Color>
+            <Color x:Key="Gray700">#616161</Color>
+            <Color x:Key="Gray800">#424242</Color>
+            <Color x:Key="Gray900">#212121</Color>
+
+            <!-- Font Sizes -->
+            <x:Double x:Key="FontSizeSmall">12</x:Double>
+            <x:Double x:Key="FontSizeRegular">14</x:Double>
+            <x:Double x:Key="FontSizeMedium">16</x:Double>
+            <x:Double x:Key="FontSizeLarge">20</x:Double>
+            <x:Double x:Key="FontSizeXLarge">24</x:Double>
+            <x:Double x:Key="FontSizeXXLarge">32</x:Double>
+
+            <!-- Spacing -->
+            <x:Double x:Key="SpacingSmall">8</x:Double>
+            <x:Double x:Key="SpacingMedium">16</x:Double>
+            <x:Double x:Key="SpacingLarge">24</x:Double>
+            <x:Double x:Key="SpacingXLarge">32</x:Double>
+
+            <!-- Border Radius -->
+            <x:Double x:Key="BorderRadiusSmall">4</x:Double>
+            <x:Double x:Key="BorderRadiusMedium">8</x:Double>
+            <x:Double x:Key="BorderRadiusLarge">16</x:Double>
+
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
