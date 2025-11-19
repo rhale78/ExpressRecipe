@@ -1,0 +1,450 @@
+@page "/dashboard"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.User
+@using ExpressRecipe.Client.Shared.Models.Inventory
+@using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IUserProfileApiClient UserProfileApi
+@inject IInventoryApiClient InventoryApi
+@inject IShoppingListApiClient ShoppingApi
+@inject IMealPlanApiClient MealPlanApi
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Dashboard - ExpressRecipe</PageTitle>
+
+<div class="dashboard-container">
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading your dashboard...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Welcome Section -->
+        <div class="welcome-section">
+            <h1>👋 Welcome back, @_userName!</h1>
+            <p class="welcome-subtitle">Here's what's happening with your meals and dietary management.</p>
+        </div>
+
+        <!-- Quick Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card" @onclick="() => Navigation.NavigateTo("/inventory")">
+                <div class="stat-icon">🥫</div>
+                <div class="stat-content">
+                    <div class="stat-value">@(_inventorySummary?.TotalItems ?? 0)</div>
+                    <div class="stat-label">Inventory Items</div>
+                </div>
+            </div>
+
+            <div class="stat-card warning" @onclick="() => Navigation.NavigateTo("/inventory")">
+                <div class="stat-icon">⏰</div>
+                <div class="stat-content">
+                    <div class="stat-value">@(_inventorySummary?.ExpiringSoonItems ?? 0)</div>
+                    <div class="stat-label">Expiring Soon</div>
+                </div>
+            </div>
+
+            <div class="stat-card" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+                <div class="stat-icon">🍽️</div>
+                <div class="stat-content">
+                    <div class="stat-value">@(_mealPlanSummary?.MealsThisWeek ?? 0)</div>
+                    <div class="stat-label">Meals This Week</div>
+                </div>
+            </div>
+
+            <div class="stat-card" @onclick="() => Navigation.NavigateTo("/shopping")">
+                <div class="stat-icon">🛒</div>
+                <div class="stat-content">
+                    <div class="stat-value">@(_shoppingSummary?.TotalActiveItems ?? 0)</div>
+                    <div class="stat-label">Shopping Items</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Family Allergen Summary -->
+        @if (_userProfile != null && (_userProfile.Allergens.Any() || _userProfile.FamilyMembers.Any()))
+        {
+            <div class="allergen-summary-card">
+                <h2>🛡️ Family Safety Summary</h2>
+                <div class="allergen-summary-content">
+                    <!-- User Allergens -->
+                    @if (_userProfile.Allergens.Any())
+                    {
+                        <div class="allergen-section">
+                            <h3>Your Allergens</h3>
+                            <div class="allergen-tags">
+                                @foreach (var allergen in _userProfile.Allergens)
+                                {
+                                    <span class="allergen-tag">⚠️ @allergen</span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Family Member Allergens -->
+                    @if (_userProfile.FamilyMembers.Any(fm => fm.Allergens.Any()))
+                    {
+                        <div class="allergen-section">
+                            <h3>Family Member Allergens</h3>
+                            @foreach (var member in _userProfile.FamilyMembers.Where(fm => fm.Allergens.Any()))
+                            {
+                                <div class="family-member-allergens">
+                                    <strong>@member.Name (@member.Relationship):</strong>
+                                    @foreach (var allergen in member.Allergens)
+                                    {
+                                        <span class="allergen-tag-sm">⚠️ @allergen</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <div class="allergen-summary-footer">
+                        <span>All recipes and meal plans are filtered for family safety</span>
+                        <button class="btn-link" @onclick="() => Navigation.NavigateTo("/settings")">
+                            Manage →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Main Content Grid -->
+        <div class="dashboard-grid">
+            <!-- Left Column -->
+            <div class="dashboard-column">
+                <!-- Upcoming Meals Widget -->
+                <div class="widget">
+                    <div class="widget-header">
+                        <h3>📅 Upcoming Meals</h3>
+                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+                            View All →
+                        </button>
+                    </div>
+
+                    <div class="widget-content">
+                        @if (_upcomingMeals?.Any() == true)
+                        {
+                            @foreach (var meal in _upcomingMeals.Take(5))
+                            {
+                                <div class="meal-item">
+                                    <div class="meal-date">
+                                        <span class="date-day">@meal.Date.ToString("ddd")</span>
+                                        <span class="date-num">@meal.Date.Day</span>
+                                    </div>
+                                    <div class="meal-details">
+                                        <div class="meal-type-icon">@GetMealTypeIcon(meal.MealType)</div>
+                                        <div class="meal-info">
+                                            <strong>@(meal.RecipeName ?? meal.CustomMealName)</strong>
+                                            <span class="meal-meta">@meal.MealType • @meal.Servings servings</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="widget-empty">
+                                <p>No meals planned yet</p>
+                                <button class="btn btn-primary-sm" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+                                    Plan Meals
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Expiring Soon Widget -->
+                <div class="widget">
+                    <div class="widget-header">
+                        <h3>⏰ Expiring Soon</h3>
+                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/inventory")">
+                            View All →
+                        </button>
+                    </div>
+
+                    <div class="widget-content">
+                        @if (_expiringItems?.Any() == true)
+                        {
+                            @foreach (var item in _expiringItems.Take(5))
+                            {
+                                <div class="expiring-item">
+                                    <div class="item-icon">
+                                        @if (item.IsExpired)
+                                        {
+                                            <span class="expired-badge">❌</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="expiring-badge">⚠️</span>
+                                        }
+                                    </div>
+                                    <div class="item-details">
+                                        <strong>@item.Name</strong>
+                                        <span class="item-expiry">
+                                            @if (item.IsExpired)
+                                            {
+                                                <span class="expired-text">Expired @item.ExpirationDate?.ToString("MMM dd")</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="expiring-text">Expires @item.ExpirationDate?.ToString("MMM dd")</span>
+                                            }
+                                        </span>
+                                    </div>
+                                    <div class="item-location">@GetLocationIcon(item.Location)</div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="widget-empty">
+                                <p>✓ No items expiring soon</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="dashboard-column">
+                <!-- Active Shopping Lists Widget -->
+                <div class="widget">
+                    <div class="widget-header">
+                        <h3>🛒 Shopping Lists</h3>
+                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/shopping")">
+                            View All →
+                        </button>
+                    </div>
+
+                    <div class="widget-content">
+                        @if (_activeShoppingLists?.Any() == true)
+                        {
+                            @foreach (var list in _activeShoppingLists.Take(3))
+                            {
+                                <div class="shopping-list-item" @onclick="() => Navigation.NavigateTo($"/shopping/{list.Id}")">
+                                    <div class="list-info">
+                                        <strong>@list.Name</strong>
+                                        <div class="list-progress-small">
+                                            <div class="progress-bar-small">
+                                                <div class="progress-fill-small" style="width: @list.CompletionPercentage%"></div>
+                                            </div>
+                                            <span class="progress-text-small">
+                                                @list.CompletedItems/@list.TotalItems items
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="widget-empty">
+                                <p>No active shopping lists</p>
+                                <button class="btn btn-primary-sm" @onclick="() => Navigation.NavigateTo("/shopping")">
+                                    Create List
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Quick Actions Widget -->
+                <div class="widget quick-actions-widget">
+                    <div class="widget-header">
+                        <h3>⚡ Quick Actions</h3>
+                    </div>
+
+                    <div class="widget-content">
+                        <div class="quick-actions-grid">
+                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/products/scan")">
+                                <span class="action-icon">📷</span>
+                                <span class="action-label">Scan Product</span>
+                            </button>
+
+                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/recipes")">
+                                <span class="action-icon">🍳</span>
+                                <span class="action-label">Find Recipe</span>
+                            </button>
+
+                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/inventory/add")">
+                                <span class="action-icon">➕</span>
+                                <span class="action-label">Add to Inventory</span>
+                            </button>
+
+                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+                                <span class="action-icon">📅</span>
+                                <span class="action-label">Plan Meals</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recipe Suggestions Widget -->
+                <div class="widget">
+                    <div class="widget-header">
+                        <h3>💡 Recipe Suggestions</h3>
+                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/recipes")">
+                            Browse All →
+                        </button>
+                    </div>
+
+                    <div class="widget-content">
+                        @if (_suggestedRecipes?.Any() == true)
+                        {
+                            @foreach (var recipe in _suggestedRecipes.Take(3))
+                            {
+                                <div class="recipe-suggestion-item" @onclick="() => Navigation.NavigateTo($"/recipes/{recipe.Id}")">
+                                    @if (!string.IsNullOrWhiteSpace(recipe.ImageUrl))
+                                    {
+                                        <img src="@recipe.ImageUrl" alt="@recipe.Title" class="recipe-thumb" />
+                                    }
+                                    else
+                                    {
+                                        <div class="recipe-thumb placeholder">🍳</div>
+                                    }
+                                    <div class="recipe-suggestion-info">
+                                        <strong>@recipe.Title</strong>
+                                        <span class="recipe-meta">⏱️ @recipe.TotalTimeMinutes min</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="widget-empty">
+                                <p>Browse recipes safe for your family</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private string _userName = "there";
+    private UserProfileDto? _userProfile;
+    private InventorySummaryDto? _inventorySummary;
+    private ShoppingSummaryDto? _shoppingSummary;
+    private MealPlanSummaryDto? _mealPlanSummary;
+
+    private List<MealPlanEntryDto>? _upcomingMeals;
+    private List<InventoryItemDto>? _expiringItems;
+    private List<ShoppingListDto>? _activeShoppingLists;
+    private List<RecipeDto>? _suggestedRecipes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboard();
+    }
+
+    private async Task LoadDashboard()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        // Get user name
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var firstName = authState.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+        if (!string.IsNullOrEmpty(firstName))
+        {
+            _userName = firstName;
+        }
+
+        // Load all data in parallel for performance
+        var profileTask = UserProfileApi.GetUserProfileAsync();
+        var inventorySummaryTask = InventoryApi.GetInventorySummaryAsync();
+        var shoppingSummaryTask = ShoppingApi.GetShoppingSummaryAsync();
+        var mealPlanSummaryTask = MealPlanApi.GetMealPlanSummaryAsync();
+
+        await Task.WhenAll(profileTask, inventorySummaryTask, shoppingSummaryTask, mealPlanSummaryTask);
+
+        _userProfile = profileTask.Result;
+        _inventorySummary = inventorySummaryTask.Result;
+        _shoppingSummary = shoppingSummaryTask.Result;
+        _mealPlanSummary = mealPlanSummaryTask.Result;
+
+        // Load upcoming meals
+        var weekView = await MealPlanApi.GetWeekViewAsync(DateTime.Today);
+        if (weekView != null)
+        {
+            _upcomingMeals = weekView.Days
+                .Where(d => d.Date >= DateTime.Today)
+                .SelectMany(d => d.Meals)
+                .Where(m => !m.IsPrepared)
+                .OrderBy(m => m.Date)
+                .ToList();
+        }
+
+        // Load expiring items
+        var inventoryResult = await InventoryApi.SearchInventoryAsync(new InventorySearchRequest
+        {
+            IsExpiringSoon = true,
+            Page = 1,
+            PageSize = 10,
+            SortBy = "ExpirationDate",
+            SortDescending = false
+        });
+        _expiringItems = inventoryResult?.Items ?? new();
+
+        // Load active shopping lists
+        var shoppingResult = await ShoppingApi.SearchShoppingListsAsync(new ShoppingListSearchRequest
+        {
+            Status = "Active",
+            Page = 1,
+            PageSize = 5
+        });
+        _activeShoppingLists = shoppingResult?.Lists ?? new();
+
+        // Load recipe suggestions (filtered by user allergens)
+        if (_userProfile != null)
+        {
+            var allergensDto = await UserProfileApi.GetAllergensAndRestrictionsAsync();
+            var recipeResult = await RecipeApi.SearchRecipesAsync(new RecipeSearchRequest
+            {
+                ExcludeAllergens = allergensDto?.AllAllergens,
+                ExcludeIngredients = allergensDto?.AllDislikedFoods,
+                Page = 1,
+                PageSize = 10,
+                SortBy = "ViewCount"
+            });
+            _suggestedRecipes = recipeResult?.Recipes ?? new();
+        }
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private string GetMealTypeIcon(string mealType)
+    {
+        return mealType switch
+        {
+            "Breakfast" => "🍳",
+            "Lunch" => "🥗",
+            "Dinner" => "🍽️",
+            "Snack" => "🍿",
+            _ => "🍴"
+        };
+    }
+
+    private string GetLocationIcon(string location)
+    {
+        return location.ToLower() switch
+        {
+            "pantry" => "🏺",
+            "fridge" => "❄️",
+            "freezer" => "🧊",
+            _ => "📦"
+        };
+    }
+}
