@@ -90,6 +90,11 @@ builder.Services.AddHttpClient<IPriceApiClient, PriceApiClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:PriceService"] ?? "http://priceservice");
 });
 
+builder.Services.AddHttpClient<IAIApiClient, AIApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:AIService"] ?? "http://aiservice");
+});
+
 // Register custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
 builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 

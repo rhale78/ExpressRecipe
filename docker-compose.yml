@@ -1,0 +1,219 @@
+version: '3.8'
+
+services:
+  # Ollama AI Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: expressrecipe-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - expressrecipe-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: expressrecipe-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: expressrecipe
+      POSTGRES_PASSWORD: expressrecipe_dev_password
+      POSTGRES_DB: expressrecipe
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expressrecipe"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - expressrecipe-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: expressrecipe-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - expressrecipe-network
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: expressrecipe-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: expressrecipe
+      RABBITMQ_DEFAULT_PASS: expressrecipe_dev_password
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - expressrecipe-network
+
+  # AI Service
+  aiservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.AIService/Dockerfile
+    container_name: expressrecipe-aiservice
+    ports:
+      - "5100:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - AI__Provider=Ollama
+      - AI__OllamaEndpoint=http://ollama:11434
+      - AI__DefaultModel=llama2
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Notification Service
+  notificationservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.NotificationService/Dockerfile
+    container_name: expressrecipe-notificationservice
+    ports:
+      - "5101:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Analytics Service
+  analyticsservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.AnalyticsService/Dockerfile
+    container_name: expressrecipe-analyticsservice
+    ports:
+      - "5102:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Community Service
+  communityservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.CommunityService/Dockerfile
+    container_name: expressrecipe-communityservice
+    ports:
+      - "5103:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Price Service
+  priceservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.PriceService/Dockerfile
+    container_name: expressrecipe-priceservice
+    ports:
+      - "5104:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+volumes:
+  ollama-data:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+
+networks:
+  expressrecipe-network:
+    driver: bridge
