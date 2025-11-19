@@ -1,0 +1,178 @@
+@* Ingredient Tag Input Component - For adding custom ingredients to avoid *@
+
+<div class="ingredient-tag-input">
+    <label class="form-label">@Label</label>
+
+    <!-- Display existing ingredients as tags -->
+    <div class="ingredient-tags mb-2">
+        @foreach (var ingredient in Ingredients)
+        {
+            <span class="badge bg-secondary me-2 mb-2" style="font-size: 0.9rem; padding: 0.4rem 0.6rem;">
+                @ingredient
+                <button type="button" class="btn-close btn-close-white ms-2"
+                        style="font-size: 0.6rem; padding: 0.2rem;"
+                        @onclick="() => RemoveIngredient(ingredient)"
+                        aria-label="Remove"></button>
+            </span>
+        }
+    </div>
+
+    <!-- Input for adding new ingredients -->
+    <div class="input-group">
+        <input type="text"
+               class="form-control"
+               placeholder="@Placeholder"
+               @bind="newIngredient"
+               @onkeypress="HandleKeyPress"
+               list="@($"ingredient-suggestions-{UniqueId}")">
+        <button class="btn btn-outline-primary" type="button" @onclick="AddIngredient">
+            <i class="bi bi-plus-lg"></i> Add
+        </button>
+    </div>
+
+    @if (ShowSuggestions && CommonIngredients.Any())
+    {
+        <datalist id="@($"ingredient-suggestions-{UniqueId}")">
+            @foreach (var suggestion in CommonIngredients)
+            {
+                <option value="@suggestion">@suggestion</option>
+            }
+        </datalist>
+    }
+
+    @if (!string.IsNullOrEmpty(HelpText))
+    {
+        <small class="text-muted d-block mt-1">@HelpText</small>
+    }
+
+    @if (ShowCommonOptions && CommonIngredients.Any())
+    {
+        <div class="mt-2">
+            <small class="text-muted d-block mb-1">Quick add common items:</small>
+            <div class="d-flex flex-wrap gap-1">
+                @foreach (var common in CommonIngredients.Take(10))
+                {
+                    @if (!Ingredients.Contains(common))
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                @onclick="() => QuickAddIngredient(common)">
+                            + @common
+                        </button>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<string> Ingredients { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<List<string>> IngredientsChanged { get; set; }
+
+    [Parameter]
+    public string Label { get; set; } = "Ingredients to Avoid";
+
+    [Parameter]
+    public string Placeholder { get; set; } = "Type ingredient name (e.g., annatto, strawberries, corn)";
+
+    [Parameter]
+    public string? HelpText { get; set; }
+
+    [Parameter]
+    public bool ShowSuggestions { get; set; } = true;
+
+    [Parameter]
+    public bool ShowCommonOptions { get; set; } = true;
+
+    [Parameter]
+    public List<string> CommonIngredients { get; set; } = new();
+
+    private string newIngredient = "";
+    private string UniqueId = Guid.NewGuid().ToString("N").Substring(0, 8);
+
+    protected override void OnInitialized()
+    {
+        if (!CommonIngredients.Any())
+        {
+            // Default common ingredients to avoid
+            CommonIngredients = new List<string>
+            {
+                // Allergens
+                "Milk", "Eggs", "Peanuts", "Tree Nuts", "Almonds", "Cashews", "Walnuts",
+                "Soy", "Wheat", "Fish", "Shellfish", "Sesame",
+
+                // Common additives
+                "Annatto", "Carrageenan", "MSG", "Aspartame", "Red 40", "Yellow 5",
+                "Sodium Benzoate", "BHA", "BHT",
+
+                // Religious/dietary
+                "Gelatin", "Pork", "Beef", "Alcohol", "Wine", "Lard",
+
+                // Specific fruits/vegetables
+                "Strawberries", "Tomatoes", "Avocado", "Banana", "Kiwi",
+
+                // Grains
+                "Corn", "Rice", "Oats", "Barley", "Rye",
+
+                // Others
+                "Coconut", "Palm Oil", "Canola Oil", "High Fructose Corn Syrup",
+                "Citric Acid", "Xanthan Gum", "Yeast", "Garlic", "Onion"
+            };
+        }
+    }
+
+    private async Task AddIngredient()
+    {
+        if (!string.IsNullOrWhiteSpace(newIngredient))
+        {
+            var ingredient = newIngredient.Trim();
+
+            // Capitalize first letter
+            ingredient = char.ToUpper(ingredient[0]) + ingredient.Substring(1).ToLower();
+
+            if (!Ingredients.Contains(ingredient, StringComparer.OrdinalIgnoreCase))
+            {
+                Ingredients.Add(ingredient);
+                await IngredientsChanged.InvokeAsync(Ingredients);
+            }
+
+            newIngredient = "";
+        }
+    }
+
+    private async Task RemoveIngredient(string ingredient)
+    {
+        Ingredients.Remove(ingredient);
+        await IngredientsChanged.InvokeAsync(Ingredients);
+    }
+
+    private async Task QuickAddIngredient(string ingredient)
+    {
+        if (!Ingredients.Contains(ingredient, StringComparer.OrdinalIgnoreCase))
+        {
+            Ingredients.Add(ingredient);
+            await IngredientsChanged.InvokeAsync(Ingredients);
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddIngredient();
+        }
+    }
+}
+
+<style>
+    .ingredient-tags {
+        min-height: 2rem;
+    }
+
+    .ingredient-tag-input .btn-close-white {
+        filter: brightness(0) invert(1);
+    }
+</style>

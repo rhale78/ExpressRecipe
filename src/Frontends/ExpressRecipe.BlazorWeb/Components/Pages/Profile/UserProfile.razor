@@ -78,7 +78,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Allergens to Avoid</label>
+                            <label class="form-label">Major Allergen Groups (Quick Select)</label>
                             <div class="row g-2">
                                 @foreach (var allergen in availableAllergens)
                                 {
@@ -94,6 +94,22 @@
                                     </div>
                                 }
                             </div>
+                            <small class="text-muted d-block mt-1">
+                                Select major allergen groups. For specific ingredients, use the detailed list below.
+                            </small>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Custom Ingredients to Avoid -->
+                        <div class="mb-3">
+                            <IngredientTagInput
+                                Ingredients="@profile.IngredientsToAvoid"
+                                IngredientsChanged="@((list) => profile.IngredientsToAvoid = list)"
+                                Label="Specific Ingredients to Avoid"
+                                Placeholder="Type ingredient name (e.g., annatto, strawberries, gelatin, palm oil)"
+                                HelpText="Add individual ingredients you need to avoid due to allergies, religious beliefs, or personal preferences. Press Enter or click Add."
+                                ShowCommonOptions="true" />
                         </div>
 
                         <div class="mb-3">
