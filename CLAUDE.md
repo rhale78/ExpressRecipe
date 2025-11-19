@@ -1,924 +1,693 @@
 # CLAUDE.md - AI Assistant Guide for ExpressRecipe
 
-**Last Updated:** 2025-11-14
-**Project Status:** Early-stage development (partially implemented, untested)
+**Last Updated:** 2025-11-19
+**Project Status:** Planning Complete - Ready for Development
 
 ---
 
 ## Project Overview
 
-**ExpressRecipe** is a template-driven code generation engine written in C# that automates boilerplate code creation from database schemas. The name reflects providing "express" (quick) code generation using template "recipes."
+**ExpressRecipe** is a local-first, cloud-capable dietary management platform built with .NET 10, Aspire, and microservices architecture. The application helps individuals with dietary restrictions (medical, religious, health-related, or personal) manage food choices, meal planning, inventory, and shopping.
 
-### Core Capabilities
-- Database schema introspection (SQL Server)
-- Template-based code generation with dynamic expressions
-- Multiple output strategies (file, console, string, debug)
-- Extensible parser and command system
-- Support for C# and SQL code file generation
-- Configurable file overwrite behavior
-
-### Technology Stack
-- **Language:** C# (.NET Framework 4.5.2)
-- **UI:** Windows Forms
-- **Database:** SQL Server (via ADO.NET)
-- **Testing:** Microsoft Pex Framework
-- **Platform:** AnyCPU
+**Key Differentiators:**
+- Local-first architecture (works offline)
+- Real-time barcode scanning with allergen alerts
+- AI-powered recommendations and pattern detection
+- Community-driven product database
+- Multi-platform (Web, Windows, Android, PWA)
 
 ---
 
-## Codebase Structure
+## Architecture Principles
+
+### 1. Local-First Design
+- All user data stored locally (SQLite) by default
+- Cloud sync is optional enhancement
+- Full offline functionality
+- User owns their data
+
+### 2. Microservices Architecture
+- 15 specialized services (Auth, Products, Recipes, Inventory, Shopping, etc.)
+- Bounded contexts per domain
+- Independent deployment
+- Event-driven communication
+
+### 3. .NET Aspire Orchestration
+- AppHost manages all services
+- Service discovery and configuration
+- Built-in observability
+- Development environment coordination
+
+### 4. ADO.NET Data Access
+- No Entity Framework (performance reasons)
+- Custom `SqlHelper` base class
+- Direct SQL with full control
+- Explicit and debuggable
+
+### 5. Multi-Platform Frontends
+- **Blazor** (Web) - Auto rendering mode (Server → WASM)
+- **WinUI 3** (Windows) - Native desktop app
+- **.NET MAUI** (Android/iOS) - Mobile apps
+- **PWA** - Progressive web app fallback
+
+---
+
+## Project Structure
 
 ```
 ExpressRecipe/
-├── CodeGenerator/                    # Main module (all core logic)
-│   ├── CodeGenerator/               # Core library
-│   │   ├── Templates/               # Template processing engine
-│   │   │   ├── Parser/              # Template syntax parsing
-│   │   │   ├── Interpreter/         # Command execution engine
-│   │   │   ├── Commands/            # Command implementations
-│   │   │   │   └── Parameters/      # Command parameter types
-│   │   │   └── TemplateProcessing/  # Line/part processing
-│   │   ├── OutputStrategy/          # Output destination strategies
-│   │   ├── SourceDataStrategies/    # Data source integrations
-│   │   ├── OverwriteStrategies/     # File overwrite policies
-│   │   └── CodeFiles/               # Generated file abstractions
-│   ├── CodeGenerator.Winforms/      # Windows Forms UI
-│   ├── CodeGenerator.Core.Tests/    # Unit tests (Pex)
-│   └── TestApp/                     # Manual test application
-├── Logging/                         # Logging infrastructure (stubs)
-│   ├── Logging.Core/
-│   ├── Logging.BL/
-│   ├── Logging.DAL/
-│   └── Logging.Database/
-└── Main/                           # Main database schemas
-    └── Main.Database/
-```
-
-### Module Responsibilities
-
-| Module | Purpose | Status |
-|--------|---------|--------|
-| `CodeGenerator/CodeGenerator` | Core engine, all generation logic | In development |
-| `Templates/Parser` | Parse template syntax into commands | Functional |
-| `Templates/Interpreter` | Execute commands, manage variables | Functional |
-| `Templates/Commands` | Command implementations | Partial |
-| `SourceDataStrategies` | Database schema extraction | Functional |
-| `OutputStrategy` | Output destination handling | Functional |
-| `CodeFiles` | File type abstractions | Partial |
-| `Logging.*` | Logging infrastructure | Stub only |
-| `CodeGenerator.Winforms` | Visual template editor | Minimal |
-
----
-
-## Architecture & Design Patterns
-
-### 1. Strategy Pattern (Extensively Used)
-
-**OutputStrategy** - How to write generated code:
-```csharp
-OutputStrategyBase
-├── FileOutputStrategy       // Write to filesystem
-├── ConsoleOutputStrategy    // Write to console
-├── StringOutputStrategy     // Accumulate in memory
-└── DebugOutputStrategy      // Debug output
-```
-
-**OverwriteStrategy** - File conflict resolution:
-```csharp
-OverwriteStrategyBase
-├── AlwaysOverwriteStrategy      // Overwrite existing files
-├── CreateIfNotExistsStrategy    // Create only if missing
-└── FileDefaultStrategy          // Default behavior
-```
-
-**DataSourceStrategy** - Where to get schema data:
-```csharp
-DataSourceStrategyBase
-└── DatabaseDataSourceStrategy   // SQL Server introspection
-```
-
-### 2. Factory Pattern
-
-All strategies use factory registration:
-```csharp
-OutputStrategyFactory.GetOutputStrategy("File")
-OverwriteStrategyFactory.GetOverwriteStrategy("Always Overwrite")
-CodeFileFactory.GetCodeFile(type)
-CommandFactory.LoadAllCommands()  // TODO: Not implemented
-```
-
-### 3. Parser Pattern (Pratt-like)
-
-Recursive descent parsing with self-describing commands:
-```csharp
-interface IParsable {
-    CommandParserBase GetParser();
-}
-
-CommandParserBase
-├── PrefixParser         // "bool myVar"
-├── InfixParser          // "x = 5"
-├── SurroundParser       // "!@ content @!"
-├── BlockParser
-├── RegexParser
-└── LineParserBase
-    ├── BoolParser
-    ├── IntegerParser
-    ├── DoubleParser
-    └── FallbackParser
-```
-
-### 4. Command Pattern
-
-Commands represent template operations:
-```csharp
-CommandBase
-├── VariableDeclarationCommand<T>
-│   ├── BoolVariableDeclarationCommand
-│   ├── IntegerVariableDeclarationCommand
-│   └── StringVariableDeclarationCommand
-├── AssignmentCommand
-├── VariableCommand
-├── GlobalVariableCommand
-└── NullCommand
-```
-
-### 5. Template Method Pattern
-
-Abstract base classes define execution flow; subclasses provide specifics.
-
----
-
-## Template System Deep Dive
-
-### Template Types
-
-**Static Templates:**
-- Pure literal text (no dynamic expressions)
-- Loaded as `StaticTemplateLine` instances
-- `Generate()` adds all lines to output verbatim
-- Use for: Headers, licenses, fixed structures
-
-**Dynamic Templates:**
-- Contains expressions marked with `!@` ... `@!` delimiters
-- Parsed into commands and executed
-- Supports variables, assignments, expressions
-- Use for: Loops over tables, conditional logic, data-driven generation
-
-### Delimiter Syntax
-
-**Dynamic Region Markers:**
-```
-!@ <dynamic expression> @!
-```
-
-**Examples:**
-```
-Static line: This is literal text
-Dynamic line: The table name is !@ TableName @!
-Mixed line: public class !@ TableName @!Repository { }
-```
-
-### Code Generation Pipeline
-
-```
-Template File
-    ↓
-[Load & Classify Lines]
-    ↓
-Static: StaticTemplateLine → Direct output
-Dynamic: DynamicTemplateLine → Parser
-    ↓
-[TemplateParser]
-    ↓
-Extract commands from !@ @! regions
-    ↓
-[CommandInterpreter]
-    ↓
-Execute commands with data context
-    ↓
-[CodeFile]
-    ↓
-[OutputStrategy]
-    ↓
-Generated File
-```
-
-### Variable System
-
-**Variable Types:**
-```csharp
-VariableBase<T>
-├── IntVariable
-├── BooleanVariable
-└── StringVariable
-```
-
-**Scoping:**
-- Stack-based with `VariableStack` and `VariableStackFrame`
-- Global variables (e.g., `TableName`) persist across scopes
-- Local variables destroyed when frame popped
-
-**Global Variables (Set by Interpreter):**
-- `TableName` - Current table being processed
-- Additional globals can be injected per iteration
-
-### Command Language Features
-
-**Supported Syntax:**
-```csharp
-// Variable declarations
-bool isActive
-int count
-string name
-
-// Variable assignment
-isActive = true
-count = TableName.Length
-name = "Repository"
-
-// Variable access
-!@ name @!
-```
-
-**Parameter Types:**
-- Literal parameters: `BoolLiteralCommandParameter`, `IntLiteralCommandParameter`, etc.
-- Variable references: `VariableNameCommandParameter`
-
----
-
-## Database Schema Extraction
-
-### DatabaseDataSourceStrategy
-
-**Configuration:**
-```csharp
-var strategy = new DatabaseDataSourceStrategy();
-strategy.Settings = "Data Source=server;Initial Catalog=db;...";
-strategy.TableNamesToIgnore = new List<string> { "sysdiagrams" };
-```
-
-**Key Methods:**
-
-| Method | Returns | Data Source |
-|--------|---------|-------------|
-| `GetTableNames()` | `List<string>` | `INFORMATION_SCHEMA.TABLES` |
-| `GetColumnsForTable(table)` | `List<ColumnDefinition>` | `INFORMATION_SCHEMA.COLUMNS` |
-| `GetIndexes(tableName)` | `Dictionary<string, List<string>>` | `sys.indexes`, `sys.index_columns` |
-| `GetReferencedTablesForColumn()` | Foreign key data | `sys.foreign_key_columns` |
-| `GetUniqueKeys()` | Unique constraints | `sys.key_constraints` |
-| `GetAllTables()` | `List<TableDefinition>` | Combines all above |
-
-**Data Objects:**
-```csharp
-TableDefinition {
-    string TableName
-    List<ColumnDefinition> Columns
-    Dictionary<string, List<string>> Indexes
-}
-
-ColumnDefinition {
-    string ColumnName
-    int OrdinalPosition
-    bool IsNullable
-    string DataType
-    int? MaxCharLength
-    bool IsIndexColumn
-    bool IsUniqueKeyColumn
-    List<ReferencedTable> ReferencedTables
-}
-
-ReferencedTable {
-    string TableName
-    string ColumnName
-}
+├── old/                          # Previous code generation project (archived)
+├── docs/                         # Comprehensive planning documents
+│   ├── 00-PROJECT-OVERVIEW.md
+│   ├── 01-ARCHITECTURE.md
+│   ├── 02-MICROSERVICES.md
+│   ├── 03-DATA-MODELS.md
+│   ├── 04-LOCAL-FIRST-SYNC.md
+│   ├── 05-FRONTEND-ARCHITECTURE.md
+│   └── 06-IMPLEMENTATION-ROADMAP.md
+├── src/                          # Source code (to be created)
+│   ├── ExpressRecipe.AppHost/           # Aspire orchestration
+│   ├── ExpressRecipe.ServiceDefaults/   # Shared defaults
+│   ├── ExpressRecipe.Shared/            # Shared models/DTOs
+│   ├── ExpressRecipe.Data.Common/       # ADO.NET helpers
+│   ├── Services/                        # Microservices
+│   │   ├── ExpressRecipe.AuthService/
+│   │   ├── ExpressRecipe.UserService/
+│   │   ├── ExpressRecipe.ProductService/
+│   │   ├── ExpressRecipe.RecipeService/
+│   │   ├── ExpressRecipe.InventoryService/
+│   │   ├── ExpressRecipe.ShoppingService/
+│   │   ├── ExpressRecipe.MealPlanningService/
+│   │   ├── ExpressRecipe.PriceService/
+│   │   ├── ExpressRecipe.ScannerService/
+│   │   ├── ExpressRecipe.RecallService/
+│   │   ├── ExpressRecipe.NotificationService/
+│   │   ├── ExpressRecipe.CommunityService/
+│   │   ├── ExpressRecipe.SyncService/
+│   │   ├── ExpressRecipe.SearchService/
+│   │   └── ExpressRecipe.AnalyticsService/
+│   ├── Frontends/
+│   │   ├── ExpressRecipe.BlazorWeb/     # Web app
+│   │   ├── ExpressRecipe.Windows/       # WinUI 3 app
+│   │   └── ExpressRecipe.MAUI/          # Mobile apps
+│   └── Tests/
+│       ├── ExpressRecipe.Tests.Unit/
+│       ├── ExpressRecipe.Tests.Integration/
+│       └── ExpressRecipe.Tests.E2E/
+├── README.md
+└── CLAUDE.md
 ```
 
 ---
 
-## Code File System
+## Technology Stack
 
-### File Type Hierarchy
-
-```csharp
-CodeFileBase
-├── TextualFileBase          // Simple text files
-├── IndentableCodeFile       // Supports auto-indentation
-│   ├── CSharpCodeFile       // C# with indentation rules
-│   └── SQLCodeFile          // SQL with indentation rules
-└── StructuredFileBase       // Extends IndentableCodeFile
-```
-
-### Key Properties
-
-```csharp
-class CodeFileBase {
-    string FileName { get; set; }
-    string FilePath { get; set; }        // Relative to RootPath
-    string FileExtension { get; set; }
-    string FullFilename { get; }         // RootPath + FilePath + FileName + Extension
-    static string RootPath { get; set; } // Global base directory
-    OutputStrategyBase OutputStrategy { get; set; }
-    OverwriteStrategyBase OverwriteStrategy { get; set; }
-}
-```
-
-### Indentation Rules
-
-**IndentableCodeFile** supports pattern-based indentation:
-```csharp
-indentRules.Add(new StringStartsWithIncreaseIndentationRule("{"));
-indentRules.Add(new StringStartsWithDecreaseIndentationRule("}"));
-```
-
-Automatically adjusts indentation when adding lines with `{` or `}`.
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Framework** | .NET 10 | Latest features, performance |
+| **Orchestration** | .NET Aspire | Service coordination, dev environment |
+| **Data Access** | ADO.NET | Maximum performance and control |
+| **Cloud DB** | SQL Server | Scalable relational database |
+| **Local DB** | SQLite | Offline storage |
+| **Cache** | Redis | Fast in-memory cache |
+| **Messaging** | RabbitMQ/ASB | Async communication |
+| **Web UI** | Blazor | Interactive web application |
+| **Desktop** | WinUI 3 | Native Windows app |
+| **Mobile** | .NET MAUI | Android/iOS apps |
+| **Auth** | Duende/Custom | OAuth 2.0 / OpenID Connect |
+| **Logging** | Serilog | Structured logging |
+| **Metrics** | OpenTelemetry | Observability |
+| **Hosting** | Azure Container Apps | Serverless containers |
+| **CI/CD** | GitHub Actions | Automation |
 
 ---
 
-## Development Workflows
+## Key Design Patterns
 
-### Adding a New Command
-
-1. **Create Command Class:**
-   ```csharp
-   public class MyCommand : CommandBase<MyCommand>
-   {
-       public override CommandParserBase GetParser() { ... }
-       protected override ICommand Create(params object[] parameters) { ... }
-       public void Execute(CommandInterpreter interpreter) { ... }
-   }
-   ```
-
-2. **Implement Parser:**
-   ```csharp
-   public class MyCommandParser : PrefixParser
-   {
-       public MyCommandParser() : base("mycommand ") { }
-       // Implement parsing logic
-   }
-   ```
-
-3. **Register in Factory:**
-   Add to `CommandFactory.LoadAllCommands()` (currently not implemented)
-
-### Adding a New Output Strategy
-
-1. **Extend OutputStrategyBase:**
-   ```csharp
-   public class CustomOutputStrategy : OutputStrategyBase
-   {
-       public override void Write(CodeFileBase codeFile) { ... }
-       public override bool Exists(CodeFileBase codeFile) { ... }
-       public override string Contents(CodeFileBase codeFile) { ... }
-   }
-   ```
-
-2. **Register in Factory:**
-   ```csharp
-   OutputStrategyFactory.Register("Custom", () => new CustomOutputStrategy());
-   ```
-
-### Adding a New Data Source
-
-1. **Extend DataSourceStrategyBase:**
-   ```csharp
-   public class ApiDataSourceStrategy : DataSourceStrategyBase
-   {
-       public override List<TableDefinition> GetAllTables() { ... }
-   }
-   ```
-
-2. **Implement Schema Extraction:**
-   - Convert API schema to `TableDefinition` objects
-   - Populate columns, indexes, relationships
-
-### Adding a New Code File Type
-
-1. **Extend CodeFileBase:**
-   ```csharp
-   public class TypeScriptCodeFile : IndentableCodeFile
-   {
-       public TypeScriptCodeFile()
-       {
-           FileExtension = ".ts";
-           // Add indentation rules
-       }
-   }
-   ```
-
-2. **Register in Factory:**
-   ```csharp
-   CodeFileFactory.Register("TypeScript", () => new TypeScriptCodeFile());
-   ```
-
----
-
-## Git & Commit Conventions
-
-### Recent Development History
-
-```
-9e4c3da  MainDB changes
-b2ffaf7  Template parsing changes - !@ @! delimiters for templated regions
-9c8d637  Code cleanup - classes in separate files, variable commands added
-f2522cf  Initial checkin - untested/not complete
-b0919fe  Initial commit
-```
-
-### Commit Style Observations
-
-- **Format:** Short subject line, optional body with details
-- **Tone:** Direct, technical descriptions
-- **Status Notes:** Includes "untested/not complete" when applicable
-- **Focus:** Feature/change description
-
-### Recommended Commit Message Format
-
-```
-<Type>: <Short description>
-
-<Optional detailed explanation>
-<Status notes if incomplete/untested>
-```
-
-**Types:**
-- Feature: New functionality
-- Fix: Bug fix
-- Refactor: Code restructuring
-- Test: Test additions/changes
-- Docs: Documentation updates
-- Cleanup: Code organization improvements
-
----
-
-## Testing Approach
-
-### Current Test Coverage
-
-**Project:** `CodeGenerator.Core.Tests`
-- **Framework:** Microsoft Pex (parameterized testing)
-- **Status:** Mostly stubs with TODO comments
-- **Coverage:** Limited to `DatabaseDataSourceStrategy`
-
-**Test Classes:**
+### ADO.NET Base Helper
 ```csharp
-DatabaseDataSourceStrategyTest
-├── GetAllTablesTest()
-├── GetColumnsForTableTest()
-├── GetIndexesTest()
-├── GetReferencedTablesForColumnTest()
-├── GetTableNamesTest()
-└── GetUniqueKeysTest()
-```
-
-### Test Factory Pattern
-
-```csharp
-[PexFactoryMethod(typeof(DatabaseDataSourceStrategy))]
-public static DatabaseDataSourceStrategy Create(string settings)
+public abstract class SqlHelper
 {
-    return DatabaseDataSourceStrategyFactory.CreateDatabaseDataSourceStrategy(settings);
+    protected string ConnectionString { get; }
+
+    protected async Task<T> ExecuteScalarAsync<T>(
+        string sql, params SqlParameter[] parameters);
+
+    protected async Task<int> ExecuteNonQueryAsync(
+        string sql, params SqlParameter[] parameters);
+
+    protected async Task<List<T>> ExecuteReaderAsync<T>(
+        string sql,
+        Func<SqlDataReader, T> mapper,
+        params SqlParameter[] parameters);
+
+    protected async Task<T> ExecuteTransactionAsync<T>(
+        Func<SqlConnection, SqlTransaction, Task<T>> operation);
 }
 ```
 
-### Adding New Tests
-
-1. **Create Test Method:**
-   ```csharp
-   [PexMethod]
-   [PexAllowedException(typeof(ArgumentException))]
-   public void MyMethodTest([PexAssumeUnderTest]MyClass target, int param)
-   {
-       target.MyMethod(param);
-       // Assertions
-   }
-   ```
-
-2. **Configure Pex Attributes:**
-   ```csharp
-   [PexClass(typeof(MyClass))]
-   [PexMaxBranches(2000)]
-   [PexMaxConditions(2000)]
-   public partial class MyClassTest { }
-   ```
-
-3. **Run Pex:**
-   - Pex auto-generates test inputs
-   - Explores code paths
-   - Creates parameterized unit tests
-
----
-
-## Extension Points & Patterns
-
-### 1. Strategy Extension Points
-
-**Where:** Any `*StrategyBase` class
-**How:** Extend base, implement abstract methods, register in factory
-**Examples:**
-- `DatabaseDataSourceStrategy` → `ApiDataSourceStrategy`
-- `FileOutputStrategy` → `CloudStorageOutputStrategy`
-- `AlwaysOverwriteStrategy` → `PromptUserStrategy`
-
-### 2. Command Extension Points
-
-**Where:** `CommandBase<T>`
-**How:**
-1. Implement `GetParser()` to define syntax
-2. Implement `Create()` for instantiation
-3. Implement `Execute()` for behavior
-4. Register in `CommandFactory`
-
-**Example Use Cases:**
-- Loop commands (foreach table, foreach column)
-- Conditional commands (if/else)
-- String manipulation commands
-- File system commands
-
-### 3. Parser Extension Points
-
-**Where:** `CommandParserBase`
-**How:**
-1. Extend appropriate parser type (`PrefixParser`, `InfixParser`, etc.)
-2. Implement `CanParse()` and `Parse()`
-3. Return command instance with extracted parameters
-
-**Example Use Cases:**
-- New operators
-- Complex expressions
-- Nested structures
-- Multi-token patterns
-
-### 4. Code File Extension Points
-
-**Where:** `CodeFileBase`, `IndentableCodeFile`
-**How:**
-1. Extend base class
-2. Set `FileExtension`
-3. Add indentation rules if needed
-4. Override `Generate()` if custom logic required
-
-**Example Use Cases:**
-- JavaScript/TypeScript files
-- Python files
-- Configuration files (JSON, XML, YAML)
-- Documentation files (Markdown)
-
----
-
-## Common Tasks & Patterns
-
-### Task: Generate Code for All Tables
-
+### Repository Pattern
 ```csharp
-var dataSource = new DatabaseDataSourceStrategy();
-dataSource.Settings = connectionString;
-
-var tables = dataSource.GetAllTables();
-foreach (var table in tables)
+public class ProductRepository : SqlHelper
 {
-    var template = new DynamicTemplate();
-    // Load template file
-
-    var interpreter = new CommandInterpreter();
-    interpreter.SetGlobalVariable("TableName", table.TableName);
-
-    var codeFile = new CSharpCodeFile();
-    codeFile.FileName = table.TableName + "Repository";
-    codeFile.OutputStrategy = new FileOutputStrategy();
-
-    template.Generate(codeFile, interpreter);
-    codeFile.Write();
-}
-```
-
-### Task: Parse Template with Dynamic Content
-
-```csharp
-var template = new DynamicTemplate();
-var lines = File.ReadAllLines("template.txt");
-
-foreach (var line in lines)
-{
-    if (line.Contains("!@") && line.Contains("@!"))
+    public async Task<Product?> GetByIdAsync(Guid id)
     {
-        template.AddLine(new DynamicTemplateLine(line));
-    }
-    else
-    {
-        template.AddLine(new StaticTemplateLine(line));
+        const string sql = @"
+            SELECT Id, Name, Brand, UPC
+            FROM Product
+            WHERE Id = @Id AND IsDeleted = 0";
+
+        var products = await ExecuteReaderAsync(
+            sql,
+            reader => new Product
+            {
+                Id = reader.GetGuid("Id"),
+                Name = reader.GetString("Name"),
+                Brand = reader.GetString("Brand"),
+                UPC = reader.GetString("UPC")
+            },
+            new SqlParameter("@Id", id)
+        );
+
+        return products.FirstOrDefault();
     }
 }
 ```
 
-### Task: Add Variable to Interpreter
-
+### CQRS Pattern (for complex queries)
 ```csharp
-var interpreter = new CommandInterpreter();
+// Command (write)
+public record CreateProductCommand(string Name, string Brand);
 
-// Global variable (persists)
-interpreter.SetGlobalVariable("TableName", "Users");
+// Query (read)
+public record GetProductsByBrandQuery(string Brand);
 
-// Local variable (current scope)
-var stack = interpreter.VariableStack;
-stack.PushFrame();
-stack.SetVariable(new IntVariable { Name = "count", Value = 5 });
-// ... use variable
-stack.PopFrame(); // Variable destroyed
+// Handler
+public class CreateProductHandler
+{
+    public async Task<Guid> Handle(CreateProductCommand command)
+    {
+        // Insert and return ID
+    }
+}
 ```
 
-### Task: Configure Output Behavior
-
+### Event Sourcing (for audit-critical data)
 ```csharp
-var codeFile = new CSharpCodeFile();
-codeFile.FileName = "Repository";
-codeFile.FilePath = "Generated/Repositories/";
-CodeFileBase.RootPath = @"C:\Projects\Output\";
-// Final path: C:\Projects\Output\Generated\Repositories\Repository.cs
+// Events
+public record ProductCreatedEvent(Guid ProductId, string Name);
+public record ProductUpdatedEvent(Guid ProductId, string Name);
 
-codeFile.OutputStrategy = OutputStrategyFactory.GetOutputStrategy("File");
-codeFile.OverwriteStrategy = OverwriteStrategyFactory.GetOverwriteStrategy("Always Overwrite");
+// Aggregate
+public class ProductAggregate
+{
+    private List<object> _events = new();
 
-codeFile.Write();
+    public void Create(string name)
+    {
+        _events.Add(new ProductCreatedEvent(Guid.NewGuid(), name));
+    }
+}
 ```
 
 ---
 
-## Key Conventions & Standards
+## Coding Conventions
 
-### Naming Conventions
-
-| Type | Convention | Example |
-|------|------------|---------|
-| Classes | PascalCase | `DatabaseDataSourceStrategy` |
-| Interfaces | IPascalCase | `IParsable`, `IConfigDriven` |
-| Methods | PascalCase | `GetAllTables()` |
-| Properties | PascalCase | `TableName`, `IsNullable` |
-| Fields (private) | camelCase | `_connectionString` |
-| Parameters | camelCase | `tableName`, `columnDef` |
-| Constants | PascalCase | `MaxRetries` |
+### Naming Standards
+- **Classes**: PascalCase (`ProductService`, `InventoryRepository`)
+- **Interfaces**: IPascalCase (`IProductService`, `IRepository<T>`)
+- **Methods**: PascalCase (`GetProductByIdAsync`)
+- **Parameters**: camelCase (`productId`, `userName`)
+- **Private fields**: `_camelCase` (`_httpClient`, `_connectionString`)
+- **Constants**: PascalCase (`MaxRetryAttempts`)
+- **Database tables**: PascalCase, singular (`Product`, `User`)
+- **Database columns**: PascalCase (`ProductId`, `CreatedAt`)
 
 ### File Organization
+- One class per file
+- Namespace matches folder structure
+- File name matches primary class name
+- `Program.cs` for service entry points
+- `*.Tests.cs` for test files
 
-- **One class per file** (recent cleanup in commit 9c8d637)
-- **Namespace matches folder structure:** `CodeGenerator.Templates.Parser`
-- **File name matches class name:** `BoolParser.cs` contains `BoolParser`
+### API Endpoint Conventions
+```
+GET    /api/products          - List products
+GET    /api/products/{id}     - Get product by ID
+POST   /api/products          - Create product
+PUT    /api/products/{id}     - Update product
+DELETE /api/products/{id}     - Delete product
+GET    /api/products/search   - Search products
+```
 
-### Code Patterns
+### DTOs vs Domain Models
+- **Domain Models**: Internal business objects
+- **DTOs**: API contracts (request/response)
+- Never expose domain models directly in APIs
+- Use mapping libraries (AutoMapper) or manual mapping
 
-**Factory Pattern Registration:**
+---
+
+## Microservice Structure
+
+### Standard Service Layout
+```
+ExpressRecipe.ProductService/
+├── Controllers/              # API endpoints
+│   └── ProductsController.cs
+├── Services/                 # Business logic
+│   ├── ProductService.cs
+│   └── ProductValidator.cs
+├── Data/                     # Data access
+│   ├── ProductRepository.cs
+│   ├── SqlHelper.cs
+│   └── Migrations/
+│       └── 001_CreateProductTable.sql
+├── Models/                   # Domain models
+│   ├── Product.cs
+│   └── Ingredient.cs
+├── Contracts/                # DTOs
+│   ├── Requests/
+│   │   └── CreateProductRequest.cs
+│   └── Responses/
+│       └── ProductResponse.cs
+├── Events/                   # Message bus events
+│   └── ProductCreatedEvent.cs
+├── Configuration/
+│   └── ProductServiceOptions.cs
+├── Middleware/
+│   └── ExceptionHandlingMiddleware.cs
+├── Program.cs
+└── appsettings.json
+```
+
+### Service Registration (Program.cs)
 ```csharp
-public static void Initialize()
+var builder = WebApplication.CreateBuilder(args);
+
+// Add Aspire defaults (logging, health checks, telemetry)
+builder.AddServiceDefaults();
+
+// Database
+builder.Services.AddSingleton<IProductRepository>(sp =>
+    new ProductRepository(builder.Configuration.GetConnectionString("ProductDb")));
+
+// Business logic
+builder.Services.AddScoped<IProductService, ProductService>();
+
+// Caching
+builder.AddRedisClient("cache");
+
+// Message bus
+builder.AddRabbitMQClient("messaging");
+
+// Controllers
+builder.Services.AddControllers();
+
+var app = builder.Build();
+
+app.MapDefaultEndpoints(); // Aspire health checks
+app.MapControllers();
+app.Run();
+```
+
+---
+
+## Database Guidelines
+
+### Migration Strategy
+- SQL scripts in `Migrations/` folder
+- Numbered sequentially: `001_Initial.sql`, `002_AddIndexes.sql`
+- Run migrations on startup in development
+- Use DbUp or FluentMigrator for production
+
+### Schema Conventions
+```sql
+-- Base entity pattern (all tables)
+Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+CreatedBy UNIQUEIDENTIFIER NULL,
+UpdatedAt DATETIME2 NULL,
+UpdatedBy UNIQUEIDENTIFIER NULL,
+IsDeleted BIT NOT NULL DEFAULT 0,
+DeletedAt DATETIME2 NULL,
+RowVersion ROWVERSION
+
+-- Indexes
+CREATE INDEX IX_{TableName}_{ColumnName} ON {TableName}({ColumnName});
+
+-- Foreign keys
+CONSTRAINT FK_{ParentTable}_{ChildTable}_{Column}
+    FOREIGN KEY ({Column}) REFERENCES {ParentTable}(Id)
+
+-- Check constraints
+CONSTRAINT CK_{TableName}_{Rule}
+    CHECK ({Condition})
+```
+
+### Soft Deletes
+```sql
+-- Mark as deleted (don't actually delete)
+UPDATE Product
+SET IsDeleted = 1, DeletedAt = GETUTCDATE()
+WHERE Id = @Id;
+
+-- Always filter in queries
+SELECT * FROM Product
+WHERE IsDeleted = 0;
+```
+
+---
+
+## Testing Strategy
+
+### Test Pyramid
+```
+      /\        E2E Tests (5%)
+     /  \       - Full workflows
+    /────\      Integration Tests (15%)
+   /      \     - API + DB
+  /────────\    Unit Tests (80%)
+ /          \   - Business logic
+```
+
+### Unit Tests (xUnit)
+```csharp
+public class ProductServiceTests
 {
-    Register("TypeName", () => new ConcreteType());
+    [Fact]
+    public async Task CreateProduct_WithValidData_ReturnsProductId()
+    {
+        // Arrange
+        var mockRepo = new Mock<IProductRepository>();
+        var service = new ProductService(mockRepo.Object);
+
+        // Act
+        var id = await service.CreateAsync(new CreateProductRequest
+        {
+            Name = "Test Product",
+            Brand = "Test Brand"
+        });
+
+        // Assert
+        Assert.NotEqual(Guid.Empty, id);
+        mockRepo.Verify(r => r.InsertAsync(It.IsAny<Product>()), Times.Once);
+    }
 }
 ```
 
-**Strategy Pattern Usage:**
+### Integration Tests
 ```csharp
-public abstract class StrategyBase
+public class ProductApiTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    public abstract void Execute();
-}
+    private readonly HttpClient _client;
 
-public class ConcreteStrategy : StrategyBase
-{
-    public override void Execute() { ... }
-}
-```
+    public ProductApiTests(WebApplicationFactory<Program> factory)
+    {
+        _client = factory.CreateClient();
+    }
 
-**Parser Pattern:**
-```csharp
-public class MyParser : PrefixParser
-{
-    public MyParser() : base("prefix ") { }
+    [Fact]
+    public async Task GetProduct_ExistingId_ReturnsProduct()
+    {
+        // Arrange
+        var productId = await CreateTestProductAsync();
 
-    public override bool CanParse(string[] tokens) { ... }
-    public override ICommand Parse(string[] tokens) { ... }
+        // Act
+        var response = await _client.GetAsync($"/api/products/{productId}");
+
+        // Assert
+        response.EnsureSuccessStatusCode();
+        var product = await response.Content.ReadFromJsonAsync<ProductResponse>();
+        Assert.NotNull(product);
+    }
 }
 ```
 
 ---
 
-## Important Gotchas & Warnings
+## Sync Implementation
 
-### 1. Incomplete Implementation
-
-**Many features are stubs or incomplete:**
-- `CommandFactory.LoadAllCommands()` is empty
-- Many `Generate()` methods throw `NotImplementedException`
-- Logging module contains only placeholder `Class1.cs` files
-- WinForms UI is minimal
-
-**Action:** Check implementation status before assuming functionality.
-
-### 2. Template Delimiter Parsing
-
-**Recent change (commit b2ffaf7):** Dynamic regions use `!@` and `@!`.
-
-**Previous delimiter system may differ** - check git history if working with old templates.
-
-**Mixing static and dynamic:** Ensure proper delimiter placement; errors may fail silently.
-
-### 3. Variable Scoping
-
-**Global variables persist forever** - no cleanup mechanism.
-
-**Stack frames must be manually managed:**
+### Sync Queue Pattern
 ```csharp
-stack.PushFrame();
-// Use variables
-stack.PopFrame(); // Don't forget!
-```
+public class SyncQueue
+{
+    public async Task EnqueueAsync(string entityType, Guid entityId, object data)
+    {
+        await _localDb.ExecuteAsync(@"
+            INSERT INTO SyncQueue (EntityType, EntityId, Data, CreatedAt)
+            VALUES (@Type, @Id, @Data, @Now)",
+            new { Type = entityType, Id = entityId, Data = JsonSerializer.Serialize(data), Now = DateTime.UtcNow });
+    }
 
-**Missing PopFrame()** causes memory leaks and variable pollution.
+    public async Task ProcessQueueAsync()
+    {
+        var pending = await _localDb.QueryAsync<SyncQueueItem>(
+            "SELECT * FROM SyncQueue WHERE IsSynced = 0 LIMIT 100");
 
-### 4. Factory Registration
+        var response = await _httpClient.PostAsJsonAsync("/sync/push", pending);
 
-**Factories require explicit registration** - types not auto-discovered.
-
-**Adding new strategies requires factory updates:**
-```csharp
-// In factory class
-static Constructor() {
-    Register("NewType", () => new NewTypeClass());
+        foreach (var id in response.AcceptedIds)
+        {
+            await _localDb.ExecuteAsync(
+                "UPDATE SyncQueue SET IsSynced = 1 WHERE EntityId = ?", id);
+        }
+    }
 }
 ```
 
-### 5. RootPath Configuration
+---
 
-**CodeFileBase.RootPath is static** - affects ALL code files globally.
+## AI Assistant Workflows
 
-**Change carefully:**
+### When Adding a New Feature
+
+1. **Review Planning Docs**
+   - Check if feature is in roadmap
+   - Identify affected services
+   - Review data model requirements
+
+2. **Design First**
+   - Sketch API endpoints
+   - Define DTOs
+   - Plan database changes
+   - Consider sync implications
+
+3. **Implement Backend**
+   - Database migration
+   - Repository methods
+   - Service logic
+   - Controller endpoints
+   - Event publishing (if needed)
+
+4. **Implement Frontend**
+   - ViewModels
+   - UI components
+   - State management
+   - API integration
+
+5. **Add Tests**
+   - Unit tests for business logic
+   - Integration tests for APIs
+   - E2E test for critical paths
+
+6. **Document**
+   - Update CLAUDE.md if architectural change
+   - Add XML comments to public APIs
+   - Update README if user-facing
+
+### When Fixing Bugs
+
+1. **Reproduce**
+   - Add failing test first (TDD)
+   - Understand root cause
+   - Check if it affects multiple services
+
+2. **Fix**
+   - Minimal change to fix issue
+   - Ensure test passes
+   - Check for similar issues elsewhere
+
+3. **Verify**
+   - All tests pass
+   - Manual testing if UI-related
+   - Performance impact minimal
+
+### When Refactoring
+
+1. **Safety First**
+   - Ensure good test coverage
+   - Make small, incremental changes
+   - Keep tests green
+
+2. **Patterns**
+   - Extract interfaces for testability
+   - Use dependency injection
+   - Follow SOLID principles
+
+3. **Performance**
+   - Measure before and after
+   - Profile if performance-critical
+   - Cache appropriately
+
+---
+
+## Common Pitfalls
+
+### 1. Don't Mix Concerns
+❌ **Bad**: Controller with database access
 ```csharp
-CodeFileBase.RootPath = @"C:\NewPath\"; // Affects all subsequent file operations
+public class ProductsController : ControllerBase
+{
+    [HttpGet]
+    public async Task<IActionResult> Get()
+    {
+        using var conn = new SqlConnection(_connectionString);
+        // Direct SQL in controller - BAD
+    }
+}
 ```
 
-**Not thread-safe** - concurrent generation to different paths will conflict.
-
-### 6. Database Connection Management
-
-**No connection pooling or disposal pattern** in `DatabaseDataSourceStrategy`.
-
-**Connections opened/closed per query** - can be inefficient.
-
-**Recommendation:** Refactor to use `using` statements or connection pooling.
-
-### 7. Error Handling
-
-**Limited exception handling** - most methods throw on error.
-
-**Template parsing errors may be cryptic** - no detailed error messages.
-
-**Action:** Add comprehensive try-catch and logging when extending.
-
-### 8. Testing Status
-
-**Tests are stubs** - don't rely on test coverage for correctness.
-
-**No integration tests** - end-to-end workflows untested.
-
-**Action:** Manually test changes thoroughly; add real assertions to tests.
-
----
-
-## Working with AI Assistants
-
-### Best Practices for AI-Assisted Development
-
-1. **Always check implementation status** before assuming a feature exists
-2. **Read recent commit messages** to understand latest changes
-3. **Follow existing patterns** (Strategy, Factory, Parser)
-4. **Maintain one class per file** convention
-5. **Use factories for instantiation**, not direct `new` calls
-6. **Test manually** since automated tests are incomplete
-7. **Document incomplete features** in commit messages
-8. **Preserve architectural patterns** when extending
-
-### Questions to Ask Before Making Changes
-
-- Is this component fully implemented or a stub?
-- Which factory needs updating for this new type?
-- Does this affect global state (RootPath, factories)?
-- Are variable scopes properly managed?
-- Is the template delimiter syntax `!@` ... `@!` correctly used?
-- Have I followed the naming conventions?
-- Does this fit the existing architectural patterns?
-
-### Code Review Checklist
-
-- [ ] One class per file
-- [ ] Namespace matches folder structure
-- [ ] Factory registration added if new strategy/type
-- [ ] Variable stack properly managed (push/pop frames)
-- [ ] Exception handling appropriate
-- [ ] Template delimiters correct (`!@` ... `@!`)
-- [ ] PascalCase for public members, camelCase for private
-- [ ] Abstract base used if multiple implementations expected
-- [ ] Interface segregation (IParsable, IConfigDriven, etc.)
-- [ ] No hardcoded paths or connection strings
-
-### Recommended Development Flow
-
-1. **Explore codebase** - understand current implementation state
-2. **Identify pattern** - which architectural pattern applies?
-3. **Find similar implementation** - use as template
-4. **Extend appropriately** - follow base class contracts
-5. **Register in factory** - if applicable
-6. **Test manually** - create small test case in TestApp
-7. **Document status** - note if incomplete/untested
-8. **Commit with clear message** - describe what was added/changed
-
----
-
-## Quick Reference
-
-### File Locations
-
-| Component | Path |
-|-----------|------|
-| Template Parser | `CodeGenerator/CodeGenerator/Templates/Parser/` |
-| Command Implementations | `CodeGenerator/CodeGenerator/Templates/Commands/` |
-| Interpreter | `CodeGenerator/CodeGenerator/Templates/Interpreter/` |
-| Data Source Strategies | `CodeGenerator/CodeGenerator/SourceDataStrategies/` |
-| Output Strategies | `CodeGenerator/CodeGenerator/OutputStrategy/` |
-| Code File Types | `CodeGenerator/CodeGenerator/CodeFiles/` |
-| Tests | `CodeGenerator/CodeGenerator.Core.Tests/` |
-
-### Key Classes
-
-| Class | Location | Purpose |
-|-------|----------|---------|
-| `TemplateParser` | `Templates/Parser/` | Parse template syntax |
-| `CommandInterpreter` | `Templates/Interpreter/` | Execute commands |
-| `DatabaseDataSourceStrategy` | `SourceDataStrategies/` | Extract DB schema |
-| `OutputStrategyFactory` | `OutputStrategy/` | Create output strategies |
-| `CommandFactory` | `Templates/Commands/` | Create commands (stub) |
-| `VariableStack` | `Templates/Interpreter/` | Manage variable scopes |
-
-### Common Operations
-
+✅ **Good**: Controller → Service → Repository
 ```csharp
-// Load template
-var template = new DynamicTemplate();
-// Parse template file...
+public class ProductsController : ControllerBase
+{
+    private readonly IProductService _service;
 
-// Configure data source
-var dataSource = new DatabaseDataSourceStrategy();
-dataSource.Settings = "connection_string";
+    [HttpGet]
+    public async Task<IActionResult> Get()
+    {
+        var products = await _service.GetAllAsync();
+        return Ok(products);
+    }
+}
+```
 
-// Create interpreter
-var interpreter = new CommandInterpreter();
-interpreter.SetGlobalVariable("TableName", "Users");
+### 2. Don't Forget Async/Await
+❌ **Bad**: Blocking calls
+```csharp
+var result = _service.GetAsync().Result; // Deadlock risk!
+```
 
-// Create code file
-var codeFile = new CSharpCodeFile();
-codeFile.FileName = "UserRepository";
-CodeFileBase.RootPath = @"C:\Output\";
+✅ **Good**: Proper async
+```csharp
+var result = await _service.GetAsync();
+```
 
-// Generate
-template.Generate(codeFile, interpreter);
-codeFile.Write();
+### 3. Don't Expose Domain Models
+❌ **Bad**: Domain model in API
+```csharp
+[HttpPost]
+public async Task<Product> Create(Product product) // Domain model exposed
+```
+
+✅ **Good**: Use DTOs
+```csharp
+[HttpPost]
+public async Task<ProductResponse> Create(CreateProductRequest request)
+```
+
+### 4. Don't Ignore Sync
+- Every create/update/delete must be queued for sync (if applicable)
+- Think about offline scenarios
+- Handle conflicts gracefully
+
+### 5. Don't Skip Validation
+```csharp
+public class CreateProductRequest
+{
+    [Required]
+    [StringLength(200)]
+    public string Name { get; set; }
+
+    [Required]
+    public string Brand { get; set; }
+}
+```
+
+---
+
+## Development Workflow
+
+### Daily Development
+```bash
+# Start Aspire (all services)
+cd src/ExpressRecipe.AppHost
+dotnet run
+
+# Run specific service
+cd src/Services/ExpressRecipe.ProductService
+dotnet run
+
+# Run tests
+dotnet test
+
+# Watch tests
+dotnet watch test
+```
+
+### Git Workflow
+```bash
+# Feature branch
+git checkout -b feature/add-barcode-scanner
+
+# Commit often
+git add .
+git commit -m "Add barcode scanning endpoint"
+
+# Push and create PR
+git push -u origin feature/add-barcode-scanner
+```
+
+### Commit Message Format
+```
+<type>: <short description>
+
+<optional detailed explanation>
+<status notes if incomplete>
+
+Types: feat, fix, refactor, test, docs, chore
 ```
 
 ---
 
 ## Resources
 
-### Project Files
-- `.csproj` files contain dependency information
-- `Properties/AssemblyInfo.cs` contains version metadata
-- No external configuration files (all hardcoded)
+### Planning Documents
+Read these first when working on features:
+- `docs/00-PROJECT-OVERVIEW.md` - Vision and features
+- `docs/01-ARCHITECTURE.md` - System architecture
+- `docs/02-MICROSERVICES.md` - Service boundaries
+- `docs/03-DATA-MODELS.md` - Database schemas
+- `docs/04-LOCAL-FIRST-SYNC.md` - Sync patterns
+- `docs/05-FRONTEND-ARCHITECTURE.md` - UI architecture
+- `docs/06-IMPLEMENTATION-ROADMAP.md` - Development phases
 
-### External Dependencies
-- .NET Framework 4.5.2 SDK
-- SQL Server (for DatabaseDataSourceStrategy)
-- Visual Studio (for Pex testing framework)
-
-### Documentation Gaps
-- No API documentation or XML comments
-- No user guide or template authoring guide
-- No architecture decision records (ADRs)
-- Limited inline comments
-
-### Future Documentation Needs
-1. Template authoring guide (syntax, commands, examples)
-2. API documentation (XML comments)
-3. Architecture decision records
-4. Integration guide (how to use as library)
-5. Extension guide (adding commands, strategies, parsers)
+### External Documentation
+- [.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/)
+- [Blazor](https://learn.microsoft.com/en-us/aspnet/core/blazor/)
+- [.NET MAUI](https://learn.microsoft.com/en-us/dotnet/maui/)
+- [WinUI 3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/)
 
 ---
 
-## Contact & Support
+## Current Status & Next Steps
 
-**Project:** ExpressRecipe
-**Repository:** /home/user/ExpressRecipe
-**Current Branch:** claude/claude-md-mhz33kx5hof78p4b-01YNh5TGrEBZmnhXorytTych
-**Git Status:** Clean (at time of CLAUDE.md creation)
+**Status**: Planning Complete ✅
 
-For AI assistants: Refer to this guide when making changes. Follow established patterns, maintain consistency, and document your work clearly.
+**Next Immediate Actions**:
+1. Create .NET solution file
+2. Set up ExpressRecipe.AppHost (Aspire)
+3. Create all service projects
+4. Implement SqlHelper base class
+5. Create first migration (Auth.User table)
+6. Implement user registration
+
+**Current Phase**: Phase 0 → Phase 1 Transition
+
+**See**: `docs/06-IMPLEMENTATION-ROADMAP.md` for detailed next steps
 
 ---
 
-*This document is maintained by AI assistants working on the ExpressRecipe codebase. Update it whenever significant architectural changes are made or new patterns are established.*
+*This guide helps AI assistants understand the ExpressRecipe architecture and development practices. Update it when significant patterns or conventions change.*
