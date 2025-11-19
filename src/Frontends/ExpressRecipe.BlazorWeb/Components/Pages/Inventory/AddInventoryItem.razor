@@ -1,0 +1,361 @@
+@page "/inventory/add"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Inventory
+@using ExpressRecipe.Client.Shared.Models.Product
+@using ExpressRecipe.Client.Shared.Services
+@inject IInventoryApiClient InventoryApi
+@inject IProductApiClient ProductApi
+@inject NavigationManager Navigation
+
+<PageTitle>Add Inventory Item - ExpressRecipe</PageTitle>
+
+<div class="inventory-form-container">
+    <div class="form-header">
+        <button class="back-button" @onclick="NavigateBack">← Back</button>
+        <h1>➕ Add Inventory Item</h1>
+    </div>
+
+    <div class="form-content">
+        <!-- Product Search Option -->
+        <div class="info-box">
+            <strong>💡 Tip: Link to Product Database</strong>
+            <p>Search for a product to automatically load details including allergen information.</p>
+        </div>
+
+        <div class="search-product-section">
+            <label>Search Product Database (Optional)</label>
+            <div class="product-search-bar">
+                <input type="text" class="form-control" placeholder="Search by name, brand, or barcode..."
+                       @bind="_productSearchTerm" @bind:event="oninput" @onkeyup="HandleProductSearchKeyUp" />
+                <button class="btn btn-secondary" @onclick="SearchProducts">Search</button>
+            </div>
+
+            @if (_searchingProducts)
+            {
+                <div class="search-loading">
+                    <div class="spinner-small"></div> Searching...
+                </div>
+            }
+
+            @if (_productSearchResults?.Any() == true)
+            {
+                <div class="product-search-results">
+                    @foreach (var product in _productSearchResults)
+                    {
+                        <div class="product-result-card" @onclick="() => SelectProduct(product)">
+                            @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+                            {
+                                <img src="@product.ImageUrl" alt="@product.Name" class="product-result-image" />
+                            }
+                            <div class="product-result-info">
+                                <strong>@product.Name</strong>
+                                <p class="text-muted">@product.Brand</p>
+                                @if (product.Allergens.Any())
+                                {
+                                    <div class="product-allergens">
+                                        @foreach (var allergen in product.Allergens.Take(3))
+                                        {
+                                            <span class="allergen-tag-sm">⚠️ @allergen</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <button class="btn btn-sm btn-primary">Select</button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="divider">OR</div>
+
+        <!-- Manual Entry Form -->
+        <div class="manual-entry-section">
+            <h3>Manual Entry</h3>
+
+            @if (_selectedProduct != null)
+            {
+                <div class="alert alert-success">
+                    ✓ Linked to product: <strong>@_selectedProduct.Name</strong> by @_selectedProduct.Brand
+                    <button class="btn-link" @onclick="ClearSelectedProduct">Change</button>
+                </div>
+            }
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Item Name *</label>
+                    <input type="text" class="form-control" @bind="_item.Name"
+                           placeholder="e.g., Whole Milk, Chicken Breast" />
+                </div>
+
+                <div class="form-group">
+                    <label>Brand</label>
+                    <input type="text" class="form-control" @bind="_item.Brand"
+                           placeholder="e.g., Organic Valley" />
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Category</label>
+                    <select class="form-control" @bind="_item.Category">
+                        <option value="">Select category...</option>
+                        <option value="Dairy">Dairy</option>
+                        <option value="Meat">Meat & Poultry</option>
+                        <option value="Produce">Produce</option>
+                        <option value="Grains">Grains & Pasta</option>
+                        <option value="Canned">Canned Goods</option>
+                        <option value="Frozen">Frozen Foods</option>
+                        <option value="Beverages">Beverages</option>
+                        <option value="Snacks">Snacks</option>
+                        <option value="Condiments">Condiments & Sauces</option>
+                        <option value="Baking">Baking Supplies</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Storage Location *</label>
+                    <select class="form-control" @bind="_item.Location">
+                        <option value="Pantry">🏺 Pantry</option>
+                        <option value="Fridge">❄️ Fridge</option>
+                        <option value="Freezer">🧊 Freezer</option>
+                        <option value="Other">📦 Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Quantity *</label>
+                    <input type="number" step="0.1" class="form-control" @bind="_item.Quantity"
+                           placeholder="e.g., 2" />
+                </div>
+
+                <div class="form-group">
+                    <label>Unit *</label>
+                    <select class="form-control" @bind="_item.Unit">
+                        <option value="">Select unit...</option>
+                        <optgroup label="Weight">
+                            <option value="oz">oz (ounces)</option>
+                            <option value="lb">lb (pounds)</option>
+                            <option value="g">g (grams)</option>
+                            <option value="kg">kg (kilograms)</option>
+                        </optgroup>
+                        <optgroup label="Volume">
+                            <option value="fl oz">fl oz (fluid ounces)</option>
+                            <option value="cup">cup</option>
+                            <option value="pint">pint</option>
+                            <option value="quart">quart</option>
+                            <option value="gallon">gallon</option>
+                            <option value="ml">ml (milliliters)</option>
+                            <option value="L">L (liters)</option>
+                        </optgroup>
+                        <optgroup label="Other">
+                            <option value="count">count (individual items)</option>
+                            <option value="package">package</option>
+                            <option value="can">can</option>
+                            <option value="jar">jar</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Purchase Date</label>
+                    <input type="date" class="form-control"
+                           value="@(_item.PurchaseDate?.ToString("yyyy-MM-dd"))"
+                           @onchange="@(e => _item.PurchaseDate = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value.ToString()!))" />
+                </div>
+
+                <div class="form-group">
+                    <label>Expiration Date</label>
+                    <input type="date" class="form-control"
+                           value="@(_item.ExpirationDate?.ToString("yyyy-MM-dd"))"
+                           @onchange="@(e => _item.ExpirationDate = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value.ToString()!))" />
+                    <span class="form-hint">We'll alert you when items are expiring soon</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Opened Date (Optional)</label>
+                <input type="date" class="form-control"
+                       value="@(_item.OpenedDate?.ToString("yyyy-MM-dd"))"
+                       @onchange="@(e => _item.OpenedDate = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value.ToString()!))" />
+                <span class="form-hint">For items that expire faster once opened</span>
+            </div>
+
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="_item.IsLowStock" />
+                    <span>Mark as Low Stock</span>
+                </label>
+                <span class="form-hint">Check this to get reminders to restock</span>
+            </div>
+
+            <div class="form-group">
+                <label>Notes</label>
+                <textarea class="form-control" rows="3" @bind="_item.Notes"
+                          placeholder="Any additional notes about this item..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Tags (comma-separated)</label>
+                <input type="text" class="form-control" @bind="_tagsInput"
+                       placeholder="e.g., organic, local, gluten-free" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-error">
+                    ⚠️ @_errorMessage
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_successMessage))
+            {
+                <div class="alert alert-success">
+                    ✓ @_successMessage
+                </div>
+            }
+
+            <div class="form-actions">
+                <button class="btn btn-secondary-outline" @onclick="NavigateBack">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveItem" disabled="@_isSaving">
+                    @if (_isSaving)
+                    {
+                        <span class="spinner-small"></span>
+                        <span>Saving...</span>
+                    }
+                    else
+                    {
+                        <span>Add to Inventory</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private CreateInventoryItemRequest _item = new() { Location = "Pantry", Quantity = 1, Unit = "count" };
+    private string _tagsInput = string.Empty;
+
+    private string _productSearchTerm = string.Empty;
+    private bool _searchingProducts = false;
+    private List<ProductDto>? _productSearchResults;
+    private ProductDto? _selectedProduct;
+
+    private bool _isSaving = false;
+    private string _errorMessage = string.Empty;
+    private string _successMessage = string.Empty;
+
+    private async Task SearchProducts()
+    {
+        if (string.IsNullOrWhiteSpace(_productSearchTerm))
+            return;
+
+        _searchingProducts = true;
+        StateHasChanged();
+
+        var request = new ProductSearchRequest
+        {
+            SearchTerm = _productSearchTerm,
+            Page = 1,
+            PageSize = 10
+        };
+
+        var result = await ProductApi.SearchProductsAsync(request);
+        _productSearchResults = result?.Products ?? new();
+
+        _searchingProducts = false;
+        StateHasChanged();
+    }
+
+    private void HandleProductSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _ = SearchProducts();
+        }
+    }
+
+    private void SelectProduct(ProductDto product)
+    {
+        _selectedProduct = product;
+        _item.ProductId = product.Id;
+        _item.Name = product.Name;
+        _item.Brand = product.Brand;
+        _item.Category = product.Category;
+
+        _productSearchResults = null;
+        _productSearchTerm = string.Empty;
+    }
+
+    private void ClearSelectedProduct()
+    {
+        _selectedProduct = null;
+        _item.ProductId = null;
+    }
+
+    private async Task SaveItem()
+    {
+        _errorMessage = string.Empty;
+        _successMessage = string.Empty;
+
+        // Validation
+        if (string.IsNullOrWhiteSpace(_item.Name))
+        {
+            _errorMessage = "Item name is required.";
+            return;
+        }
+
+        if (_item.Quantity <= 0)
+        {
+            _errorMessage = "Quantity must be greater than 0.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_item.Unit))
+        {
+            _errorMessage = "Unit is required.";
+            return;
+        }
+
+        // Parse tags
+        if (!string.IsNullOrWhiteSpace(_tagsInput))
+        {
+            _item.Tags = _tagsInput.Split(',')
+                .Select(t => t.Trim())
+                .Where(t => !string.IsNullOrEmpty(t))
+                .ToList();
+        }
+
+        _isSaving = true;
+        StateHasChanged();
+
+        var itemId = await InventoryApi.CreateInventoryItemAsync(_item);
+
+        _isSaving = false;
+
+        if (itemId.HasValue)
+        {
+            _successMessage = "Item added successfully!";
+            StateHasChanged();
+
+            await Task.Delay(1000);
+            Navigation.NavigateTo("/inventory");
+        }
+        else
+        {
+            _errorMessage = "Failed to add item. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/inventory");
+    }
+}

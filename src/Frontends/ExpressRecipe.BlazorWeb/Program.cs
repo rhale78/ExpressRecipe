@@ -52,6 +52,11 @@ builder.Services.AddHttpClient<IUserProfileApiClient, UserProfileApiClient>(clie
     client.BaseAddress = new Uri(builder.Configuration["Services:UserService"] ?? "http://userservice");
 });
 
+builder.Services.AddHttpClient<IInventoryApiClient, InventoryApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:InventoryService"] ?? "http://inventoryservice");
+});
+
 // Register custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
 builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 
