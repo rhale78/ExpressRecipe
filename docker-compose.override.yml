@@ -1,0 +1,91 @@
+# Docker Compose Override for Development
+# This file is automatically merged with docker-compose.yml
+# Use it for local development customizations
+
+version: '3.8'
+
+services:
+  # AI Service - Development overrides
+  aiservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      # Enable hot reload by mounting source
+      - ./src/Services/ExpressRecipe.AIService:/app:ro
+    labels:
+      - "dev.service=aiservice"
+
+  # Notification Service - Development overrides
+  notificationservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./src/Services/ExpressRecipe.NotificationService:/app:ro
+    labels:
+      - "dev.service=notificationservice"
+
+  # Analytics Service - Development overrides
+  analyticsservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./src/Services/ExpressRecipe.AnalyticsService:/app:ro
+    labels:
+      - "dev.service=analyticsservice"
+
+  # Community Service - Development overrides
+  communityservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./src/Services/ExpressRecipe.CommunityService:/app:ro
+    labels:
+      - "dev.service=communityservice"
+
+  # Price Service - Development overrides
+  priceservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./src/Services/ExpressRecipe.PriceService:/app:ro
+    labels:
+      - "dev.service=priceservice"
+
+  # SQL Server - Development overrides
+  sqlserver:
+    # Expose additional ports for debugging if needed
+    # ports:
+    #   - "1433:1433"
+    labels:
+      - "dev.service=database"
+
+  # Redis - Development overrides
+  redis:
+    # Enable Redis CLI access
+    command: redis-server --appendonly yes --requirepass ""
+    labels:
+      - "dev.service=cache"
+
+  # RabbitMQ - Development overrides
+  rabbitmq:
+    # Additional environment for development
+    environment:
+      RABBITMQ_DEFAULT_USER: expressrecipe
+      RABBITMQ_DEFAULT_PASS: expressrecipe_dev_password
+      # Enable trace logging in development
+      RABBITMQ_LOGS: "-"
+    labels:
+      - "dev.service=messagebus"
+
+  # Ollama - Development overrides
+  ollama:
+    # Mount models directory for easier management
+    # volumes:
+    #   - ./ollama-models:/root/.ollama
+    labels:
+      - "dev.service=ai-engine"
