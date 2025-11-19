@@ -9,15 +9,27 @@ namespace ExpressRecipe.RecipeService.Services;
 /// </summary>
 public class RecipeImportService
 {
-    private readonly IRecipeImportRepository _repository;
+    private readonly IRecipeImportRepository _importRepository;
+    private readonly IRecipeRepository _recipeRepository;
     private readonly RecipeParserFactory _parserFactory;
+    private readonly NutritionExtractionService _nutritionService;
+    private readonly AllergenDetectionService _allergenService;
+    private readonly ImageDownloadService _imageService;
     private readonly ILogger<RecipeImportService> _logger;
 
     public RecipeImportService(
-        IRecipeImportRepository repository,
+        IRecipeImportRepository importRepository,
+        IRecipeRepository recipeRepository,
+        NutritionExtractionService nutritionService,
+        AllergenDetectionService allergenService,
+        ImageDownloadService imageService,
         ILogger<RecipeImportService> logger)
     {
-        _repository = repository;
+        _importRepository = importRepository;
+        _recipeRepository = recipeRepository;
+        _nutritionService = nutritionService;
+        _allergenService = allergenService;
+        _imageService = imageService;
         _parserFactory = new RecipeParserFactory();
         _logger = logger;
     }
@@ -41,14 +53,14 @@ public class RecipeImportService
             _logger.LogInformation("Starting import job {JobId} for user {UserId}", jobId, userId);
 
             // Get the import job to determine which parser to use
-            var job = await _repository.GetImportJobByIdAsync(jobId);
+            var job = await _importRepository.GetImportJobByIdAsync(jobId);
             if (job == null)
             {
                 throw new InvalidOperationException($"Import job {jobId} not found");
             }
 
             // Get the import source to find the parser
-            var source = await _repository.GetImportSourceByIdAsync(job.ImportSourceId);
+            var source = await _importRepository.GetImportSourceByIdAsync(job.ImportSourceId);
             if (source == null)
             {
                 throw new InvalidOperationException($"Import source {job.ImportSourceId} not found");
@@ -88,17 +100,107 @@ public class RecipeImportService
             {
                 try
                 {
-                    // Convert parsed recipe to CreateRecipeRequest
-                    var createRequest = ConvertToCreateRequest(parsedRecipe, userId);
+                    // Check for duplicates
+                    var duplicate = await _recipeRepository.FindDuplicateRecipeAsync(parsedRecipe.Name, userId);
+                    if (duplicate != null)
+                    {
+                        _logger.LogWarning("Skipping duplicate recipe: {RecipeName}", parsedRecipe.Name);
+                        result.FailureCount++;
+                        result.Errors.Add($"Recipe '{parsedRecipe.Name}' already exists");
+                        continue;
+                    }
 
-                    // Create the recipe (would typically call a RecipeService or Repository)
-                    // For now, we'll just log success
-                    _logger.LogInformation("Successfully imported recipe: {RecipeName}", parsedRecipe.Name);
+                    // Download image if URL is provided
+                    string? imageUrl = parsedRecipe.ImageUrl;
+                    if (!string.IsNullOrWhiteSpace(imageUrl))
+                    {
+                        try
+                        {
+                            var downloadedImagePath = await _imageService.DownloadImageAsync(imageUrl, Guid.NewGuid());
+                            if (!string.IsNullOrWhiteSpace(downloadedImagePath))
+                            {
+                                imageUrl = downloadedImagePath;
+                            }
+                        }
+                        catch (Exception imgEx)
+                        {
+                            _logger.LogWarning(imgEx, "Failed to download image for recipe: {RecipeName}", parsedRecipe.Name);
+                            // Continue with original URL
+                        }
+                    }
+
+                    // Convert parsed recipe to CreateRecipeRequest
+                    var createRequest = ConvertToCreateRequest(parsedRecipe, userId, imageUrl);
+
+                    // Create the recipe
+                    var recipeId = await _recipeRepository.CreateRecipeAsync(createRequest, userId);
+
+                    _logger.LogInformation("Created recipe {RecipeId}: {RecipeName}", recipeId, parsedRecipe.Name);
+
+                    // Add ingredients
+                    if (parsedRecipe.Ingredients.Any())
+                    {
+                        var ingredients = parsedRecipe.Ingredients.Select(i => new RecipeIngredientDto
+                        {
+                            IngredientName = i.IngredientName,
+                            Quantity = i.Quantity,
+                            Unit = i.Unit,
+                            OrderIndex = i.Order,
+                            PreparationNote = i.Preparation,
+                            IsOptional = i.IsOptional,
+                            SubstituteNotes = i.SubstituteNotes
+                        }).ToList();
+
+                        await _recipeRepository.AddRecipeIngredientsAsync(recipeId, ingredients, userId);
+                        _logger.LogDebug("Added {Count} ingredients to recipe {RecipeId}", ingredients.Count, recipeId);
+                    }
+
+                    // Add structured instructions if available
+                    if (parsedRecipe.Instructions.Any())
+                    {
+                        var instructionsText = string.Join("\n\n", parsedRecipe.Instructions
+                            .OrderBy(i => i.StepNumber)
+                            .Select(i => $"{i.StepNumber}. {i.InstructionText}"));
+
+                        await _recipeRepository.UpdateRecipeInstructionsAsync(recipeId, instructionsText);
+                    }
+
+                    // Extract and add nutrition data
+                    var nutrition = _nutritionService.ExtractNutrition(parsedRecipe);
+                    if (nutrition != null)
+                    {
+                        nutrition.RecipeId = recipeId;
+                        await _recipeRepository.AddRecipeNutritionAsync(recipeId, nutrition);
+                        _logger.LogDebug("Added nutrition data to recipe {RecipeId}", recipeId);
+                    }
+
+                    // Detect and add allergens
+                    var allergens = await _allergenService.DetectAllergensAsync(parsedRecipe);
+                    if (allergens.Any())
+                    {
+                        await _recipeRepository.AddRecipeAllergensAsync(recipeId, allergens);
+                        _logger.LogInformation("Detected {Count} allergens in recipe {RecipeId}", allergens.Count, recipeId);
+                    }
+
+                    // Add tags/categories
+                    var tags = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(parsedRecipe.Category))
+                        tags.Add(parsedRecipe.Category);
+                    if (!string.IsNullOrWhiteSpace(parsedRecipe.Cuisine))
+                        tags.Add(parsedRecipe.Cuisine);
+                    if (!string.IsNullOrWhiteSpace(parsedRecipe.DifficultyLevel))
+                        tags.Add(parsedRecipe.DifficultyLevel);
+
+                    if (tags.Any())
+                    {
+                        await _recipeRepository.AddRecipeTagsAsync(recipeId, tags);
+                    }
 
                     result.SuccessCount++;
+                    _logger.LogInformation("Successfully imported recipe {RecipeId}: {RecipeName}", recipeId, parsedRecipe.Name);
 
                     // Record the import result
-                    // await _repository.CreateImportResultAsync(jobId, parsedRecipe.Name, status: "Success");
+                    // await _importRepository.CreateImportResultAsync(jobId, parsedRecipe.Name, recipeId, status: "Success");
                 }
                 catch (Exception ex)
                 {
@@ -107,7 +209,7 @@ public class RecipeImportService
                     result.Errors.Add($"Recipe '{parsedRecipe.Name}': {ex.Message}");
 
                     // Record the import failure
-                    // await _repository.CreateImportResultAsync(jobId, parsedRecipe.Name, status: "Failed", error: ex.Message);
+                    // await _importRepository.CreateImportResultAsync(jobId, parsedRecipe.Name, null, status: "Failed", error: ex.Message);
                 }
             }
 
@@ -126,19 +228,22 @@ public class RecipeImportService
     /// <summary>
     /// Convert ParsedRecipe to CreateRecipeRequest
     /// </summary>
-    private CreateRecipeRequest ConvertToCreateRequest(ParsedRecipe parsed, Guid userId)
+    private CreateRecipeRequest ConvertToCreateRequest(ParsedRecipe parsed, Guid userId, string? imageUrl = null)
     {
         var request = new CreateRecipeRequest
         {
             Name = parsed.Name,
             Description = parsed.Description,
+            Category = parsed.Category,
+            Cuisine = parsed.Cuisine,
+            DifficultyLevel = parsed.DifficultyLevel,
             PrepTimeMinutes = parsed.PrepTimeMinutes,
             CookTimeMinutes = parsed.CookTimeMinutes,
-            TotalTimeMinutes = parsed.TotalTimeMinutes,
             Servings = parsed.Servings,
-            Source = parsed.Source,
             SourceUrl = parsed.SourceUrl,
-            ImageUrl = parsed.ImageUrl,
+            ImageUrl = imageUrl ?? parsed.ImageUrl,
+            Notes = parsed.Notes,
+            IsPublic = false, // Imported recipes are private by default
             CreatedBy = userId
         };
 
@@ -155,7 +260,7 @@ public class RecipeImportService
         try
         {
             // Get the import source
-            var source = await _repository.GetImportSourceByIdAsync(importSourceId);
+            var source = await _importRepository.GetImportSourceByIdAsync(importSourceId);
             if (source == null)
             {
                 result.IsValid = false;

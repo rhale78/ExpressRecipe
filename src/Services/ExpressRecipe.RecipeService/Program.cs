@@ -43,9 +43,16 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
 
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
+builder.Services.AddScoped<IRecipeRepository>(sp => new RecipeRepository(connectionString));
 
 // Register services
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.RecipeImportService>();
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.NutritionExtractionService>();
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectionService>(sp =>
+    new ExpressRecipe.RecipeService.Services.AllergenDetectionService(
+        connectionString,
+        sp.GetRequiredService<ILogger<ExpressRecipe.RecipeService.Services.AllergenDetectionService>>()));
+builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloadService>();
 
 // Add controllers
 builder.Services.AddControllers();

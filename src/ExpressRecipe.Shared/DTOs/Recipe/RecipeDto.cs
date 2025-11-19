@@ -131,6 +131,8 @@ public class CreateRecipeRequest
     [StringLength(500)]
     public string? SourceUrl { get; set; }
 
+    public Guid CreatedBy { get; set; }
+
     // Ingredients and tags added separately via dedicated endpoints
 }
 
