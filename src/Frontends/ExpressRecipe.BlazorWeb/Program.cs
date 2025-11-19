@@ -62,6 +62,11 @@ builder.Services.AddHttpClient<IShoppingListApiClient, ShoppingListApiClient>(cl
     client.BaseAddress = new Uri(builder.Configuration["Services:ShoppingService"] ?? "http://shoppingservice");
 });
 
+builder.Services.AddHttpClient<IMealPlanApiClient, MealPlanApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:MealPlanningService"] ?? "http://mealplanningservice");
+});
+
 // Register custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
 builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 
