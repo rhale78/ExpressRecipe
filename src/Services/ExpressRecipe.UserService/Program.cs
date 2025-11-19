@@ -56,6 +56,11 @@ builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(conne
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 
+// Register background services
+builder.Services.AddHostedService<ExpressRecipe.UserService.Services.SubscriptionRenewalService>();
+builder.Services.AddHostedService<ExpressRecipe.UserService.Services.ScheduledReportsService>();
+builder.Services.AddHostedService<ExpressRecipe.UserService.Services.PointsManagementService>();
+
 // Add controllers
 builder.Services.AddControllers();
 
@@ -125,6 +130,10 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Use activity tracking middleware (must be after authentication)
+app.UseMiddleware<ExpressRecipe.UserService.Middleware.ActivityTrackingMiddleware>();
+
 app.MapControllers();
 
 app.Run();
