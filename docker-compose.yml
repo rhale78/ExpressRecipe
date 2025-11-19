@@ -20,21 +20,20 @@ services:
     networks:
       - expressrecipe-network
 
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: expressrecipe-postgres
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: expressrecipe-sqlserver
     ports:
-      - "5432:5432"
+      - "1433:1433"
     environment:
-      POSTGRES_USER: expressrecipe
-      POSTGRES_PASSWORD: expressrecipe_dev_password
-      POSTGRES_DB: expressrecipe
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "ExpressRecipe123!"
+      MSSQL_PID: "Developer"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - sqlserver-data:/var/opt/mssql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U expressrecipe"]
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ExpressRecipe123! -Q 'SELECT 1'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -88,7 +87,7 @@ services:
       - "5100:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
       - AI__Provider=Ollama
       - AI__OllamaEndpoint=http://ollama:11434
       - AI__DefaultModel=llama2
@@ -97,7 +96,7 @@ services:
       - RabbitMQ__UserName=expressrecipe
       - RabbitMQ__Password=expressrecipe_dev_password
     depends_on:
-      postgres:
+      sqlserver:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -118,13 +117,13 @@ services:
       - "5101:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
       - Redis__ConnectionString=redis:6379
       - RabbitMQ__HostName=rabbitmq
       - RabbitMQ__UserName=expressrecipe
       - RabbitMQ__Password=expressrecipe_dev_password
     depends_on:
-      postgres:
+      sqlserver:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -143,13 +142,13 @@ services:
       - "5102:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
       - Redis__ConnectionString=redis:6379
       - RabbitMQ__HostName=rabbitmq
       - RabbitMQ__UserName=expressrecipe
       - RabbitMQ__Password=expressrecipe_dev_password
     depends_on:
-      postgres:
+      sqlserver:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -168,13 +167,13 @@ services:
       - "5103:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
       - Redis__ConnectionString=redis:6379
       - RabbitMQ__HostName=rabbitmq
       - RabbitMQ__UserName=expressrecipe
       - RabbitMQ__Password=expressrecipe_dev_password
     depends_on:
-      postgres:
+      sqlserver:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -193,13 +192,13 @@ services:
       - "5104:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__PostgreSQL=Host=postgres;Database=expressrecipe;Username=expressrecipe;Password=expressrecipe_dev_password
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
       - Redis__ConnectionString=redis:6379
       - RabbitMQ__HostName=rabbitmq
       - RabbitMQ__UserName=expressrecipe
       - RabbitMQ__Password=expressrecipe_dev_password
     depends_on:
-      postgres:
+      sqlserver:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -210,7 +209,7 @@ services:
 
 volumes:
   ollama-data:
-  postgres-data:
+  sqlserver-data:
   redis-data:
   rabbitmq-data:
 
