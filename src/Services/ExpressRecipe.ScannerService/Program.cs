@@ -24,6 +24,10 @@ builder.Services.AddAuthorization();
 var connectionString = builder.Configuration.GetConnectionString("scandb")
     ?? throw new InvalidOperationException("Database connection string 'scandb' not found");
 
+// Register repositories
+builder.Services.AddScoped<IScannerRepository>(sp =>
+    new ScannerRepository(connectionString, sp.GetRequiredService<ILogger<ScannerRepository>>()));
+
 // Add controllers
 builder.Services.AddControllers();
 
