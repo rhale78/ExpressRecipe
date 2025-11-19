@@ -95,6 +95,26 @@ builder.Services.AddHttpClient<IAIApiClient, AIApiClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:AIService"] ?? "http://aiservice");
 });
 
+builder.Services.AddHttpClient<IScannerApiClient, ScannerApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:ScannerService"] ?? "http://scannerservice");
+});
+
+builder.Services.AddHttpClient<IRecallApiClient, RecallApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:RecallService"] ?? "http://recallservice");
+});
+
+builder.Services.AddHttpClient<ISearchApiClient, SearchApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:SearchService"] ?? "http://searchservice");
+});
+
+builder.Services.AddHttpClient<ISyncApiClient, SyncApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:SyncService"] ?? "http://syncservice");
+});
+
 // Register custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
 builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 
