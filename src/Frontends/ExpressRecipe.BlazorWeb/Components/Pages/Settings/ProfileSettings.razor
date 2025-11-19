@@ -1,0 +1,686 @@
+@page "/settings"
+@page "/settings/profile"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.User
+@attribute [Authorize]
+@inject IUserProfileApiClient UserProfileApi
+@inject NavigationManager Navigation
+
+<PageTitle>Profile & Family Settings - ExpressRecipe</PageTitle>
+
+<div class="settings-container">
+    <div class="settings-header">
+        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/dashboard")">
+            ← Back to Dashboard
+        </button>
+        <h1>Profile & Family Settings</h1>
+    </div>
+
+    <p class="settings-subtitle">
+        Manage your dietary restrictions and allergies. These settings will automatically filter recipes
+        to keep you and your family safe.
+    </p>
+
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading profile...</p>
+        </div>
+    }
+    else if (_profile != null)
+    {
+        <!-- My Profile Section -->
+        <div class="settings-section">
+            <div class="section-header">
+                <h2>👤 My Profile</h2>
+                @if (!_isEditingProfile)
+                {
+                    <button class="btn btn-outline btn-sm" @onclick="() => _isEditingProfile = true">
+                        ✏️ Edit
+                    </button>
+                }
+            </div>
+
+            <div class="profile-card">
+                @if (_isEditingProfile)
+                {
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>First Name</label>
+                            <input type="text" class="form-control" @bind="_profileEdit.FirstName" />
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name</label>
+                            <input type="text" class="form-control" @bind="_profileEdit.LastName" />
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="profile-info">
+                        <h3>@_profile.FullName</h3>
+                        <p class="profile-email">@_profile.Email</p>
+                    </div>
+                }
+
+                <!-- My Allergies -->
+                <div class="restriction-section">
+                    <h4>⚠️ My Allergies</h4>
+                    <p class="restriction-description">
+                        Select all allergens you need to avoid. Recipes will be automatically filtered.
+                    </p>
+
+                    @if (_isEditingProfile)
+                    {
+                        <div class="allergen-grid">
+                            @foreach (var allergen in _commonAllergens)
+                            {
+                                <label class="allergen-checkbox-card @(_profileEdit.Allergens.Contains(allergen) ? "selected" : "")">
+                                    <input type="checkbox"
+                                           checked="@_profileEdit.Allergens.Contains(allergen)"
+                                           @onchange="e => ToggleAllergen(_profileEdit.Allergens, allergen, (bool)e.Value!)" />
+                                    <span class="allergen-name">@allergen</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        @if (_profile.Allergens.Any())
+                        {
+                            <div class="tags-display">
+                                @foreach (var allergen in _profile.Allergens)
+                                {
+                                    <span class="allergen-tag">⚠️ @allergen</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="empty-message">No allergens specified</p>
+                        }
+                    }
+                </div>
+
+                <!-- My Dietary Restrictions -->
+                <div class="restriction-section">
+                    <h4>🥗 My Dietary Restrictions</h4>
+                    <p class="restriction-description">
+                        Select your dietary preferences (e.g., vegetarian, gluten-free).
+                    </p>
+
+                    @if (_isEditingProfile)
+                    {
+                        <div class="dietary-grid">
+                            @foreach (var diet in _dietaryOptions)
+                            {
+                                <label class="dietary-checkbox-card @(_profileEdit.DietaryRestrictions.Contains(diet) ? "selected" : "")">
+                                    <input type="checkbox"
+                                           checked="@_profileEdit.DietaryRestrictions.Contains(diet)"
+                                           @onchange="e => ToggleDietary(_profileEdit.DietaryRestrictions, diet, (bool)e.Value!)" />
+                                    <span class="dietary-name">@diet</span>
+                                </label>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        @if (_profile.DietaryRestrictions.Any())
+                        {
+                            <div class="tags-display">
+                                @foreach (var diet in _profile.DietaryRestrictions)
+                                {
+                                    <span class="dietary-tag">@diet</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="empty-message">No dietary restrictions specified</p>
+                        }
+                    }
+                </div>
+
+                @if (_isEditingProfile)
+                {
+                    <div class="form-actions">
+                        <button class="btn btn-outline" @onclick="CancelProfileEdit">Cancel</button>
+                        <button class="btn btn-primary" @onclick="SaveProfile" disabled="@_isSaving">
+                            @if (_isSaving)
+                            {
+                                <span class="spinner-small"></span>
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <span>💾 Save Profile</span>
+                            }
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Family Members Section -->
+        <div class="settings-section">
+            <div class="section-header">
+                <h2>👨‍👩‍👧‍👦 Family Members</h2>
+                <button class="btn btn-primary btn-sm" @onclick="AddFamilyMember">
+                    ➕ Add Family Member
+                </button>
+            </div>
+
+            <p class="family-description">
+                Add family members and their allergies. When filtering recipes for family dinners,
+                we'll exclude anything that anyone in the family can't eat.
+            </p>
+
+            @if (_profile.FamilyMembers.Any() || _newFamilyMember != null)
+            {
+                <div class="family-grid">
+                    <!-- Existing family members -->
+                    @foreach (var member in _profile.FamilyMembers)
+                    {
+                        <div class="family-member-card">
+                            @if (_editingFamilyMemberId == member.Id)
+                            {
+                                <!-- Edit mode -->
+                                <div class="family-member-form">
+                                    <div class="form-group">
+                                        <label>Name</label>
+                                        <input type="text" class="form-control" @bind="_familyMemberEdit.Name" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Relationship</label>
+                                        <select class="form-control" @bind="_familyMemberEdit.Relationship">
+                                            <option value="">Select...</option>
+                                            <option value="Spouse">Spouse</option>
+                                            <option value="Partner">Partner</option>
+                                            <option value="Child">Child</option>
+                                            <option value="Parent">Parent</option>
+                                            <option value="Sibling">Sibling</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label>Allergies</label>
+                                        <div class="allergen-grid-compact">
+                                            @foreach (var allergen in _commonAllergens)
+                                            {
+                                                <label class="allergen-checkbox-compact">
+                                                    <input type="checkbox"
+                                                           checked="@_familyMemberEdit.Allergens.Contains(allergen)"
+                                                           @onchange="e => ToggleAllergen(_familyMemberEdit.Allergens, allergen, (bool)e.Value!)" />
+                                                    <span>@allergen</span>
+                                                </label>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label>Dietary Restrictions</label>
+                                        <div class="dietary-grid-compact">
+                                            @foreach (var diet in _dietaryOptions)
+                                            {
+                                                <label class="dietary-checkbox-compact">
+                                                    <input type="checkbox"
+                                                           checked="@_familyMemberEdit.DietaryRestrictions.Contains(diet)"
+                                                           @onchange="e => ToggleDietary(_familyMemberEdit.DietaryRestrictions, diet, (bool)e.Value!)" />
+                                                    <span>@diet</span>
+                                                </label>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <div class="form-actions">
+                                        <button class="btn btn-outline btn-sm" @onclick="CancelFamilyMemberEdit">Cancel</button>
+                                        <button class="btn btn-primary btn-sm" @onclick="() => SaveFamilyMember(member.Id)" disabled="@_isSaving">
+                                            @if (_isSaving)
+                                            {
+                                                <span class="spinner-small"></span>
+                                            }
+                                            else
+                                            {
+                                                <span>💾 Save</span>
+                                            }
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- Display mode -->
+                                <div class="family-member-header">
+                                    <h3>@member.Name</h3>
+                                    <span class="relationship-badge">@member.Relationship</span>
+                                </div>
+
+                                @if (member.Allergens.Any())
+                                {
+                                    <div class="member-restriction-section">
+                                        <h5>⚠️ Allergies:</h5>
+                                        <div class="tags-display">
+                                            @foreach (var allergen in member.Allergens)
+                                            {
+                                                <span class="allergen-tag-sm">@allergen</span>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (member.DietaryRestrictions.Any())
+                                {
+                                    <div class="member-restriction-section">
+                                        <h5>🥗 Dietary:</h5>
+                                        <div class="tags-display">
+                                            @foreach (var diet in member.DietaryRestrictions)
+                                            {
+                                                <span class="dietary-tag-sm">@diet</span>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (!member.Allergens.Any() && !member.DietaryRestrictions.Any())
+                                {
+                                    <p class="empty-message-sm">No restrictions</p>
+                                }
+
+                                <div class="family-member-actions">
+                                    <button class="btn btn-outline btn-sm" @onclick="() => EditFamilyMember(member)">
+                                        ✏️ Edit
+                                    </button>
+                                    <button class="btn btn-outline btn-sm btn-danger" @onclick="() => DeleteFamilyMember(member.Id)">
+                                        🗑️ Delete
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- New family member form -->
+                    @if (_newFamilyMember != null)
+                    {
+                        <div class="family-member-card new">
+                            <h3>Add Family Member</h3>
+                            <div class="family-member-form">
+                                <div class="form-group">
+                                    <label>Name *</label>
+                                    <input type="text" class="form-control" @bind="_newFamilyMember.Name" placeholder="Enter name" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Relationship</label>
+                                    <select class="form-control" @bind="_newFamilyMember.Relationship">
+                                        <option value="">Select...</option>
+                                        <option value="Spouse">Spouse</option>
+                                        <option value="Partner">Partner</option>
+                                        <option value="Child">Child</option>
+                                        <option value="Parent">Parent</option>
+                                        <option value="Sibling">Sibling</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Allergies</label>
+                                    <div class="allergen-grid-compact">
+                                        @foreach (var allergen in _commonAllergens)
+                                        {
+                                            <label class="allergen-checkbox-compact">
+                                                <input type="checkbox"
+                                                       checked="@_newFamilyMember.Allergens.Contains(allergen)"
+                                                       @onchange="e => ToggleAllergen(_newFamilyMember.Allergens, allergen, (bool)e.Value!)" />
+                                                <span>@allergen</span>
+                                            </label>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Dietary Restrictions</label>
+                                    <div class="dietary-grid-compact">
+                                        @foreach (var diet in _dietaryOptions)
+                                        {
+                                            <label class="dietary-checkbox-compact">
+                                                <input type="checkbox"
+                                                       checked="@_newFamilyMember.DietaryRestrictions.Contains(diet)"
+                                                       @onchange="e => ToggleDietary(_newFamilyMember.DietaryRestrictions, diet, (bool)e.Value!)" />
+                                                <span>@diet</span>
+                                            </label>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="form-actions">
+                                    <button class="btn btn-outline btn-sm" @onclick="CancelNewFamilyMember">Cancel</button>
+                                    <button class="btn btn-primary btn-sm" @onclick="SaveNewFamilyMember" disabled="@(string.IsNullOrWhiteSpace(_newFamilyMember.Name) || _isSaving)">
+                                        @if (_isSaving)
+                                        {
+                                            <span class="spinner-small"></span>
+                                        }
+                                        else
+                                        {
+                                            <span>✅ Add Member</span>
+                                        }
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">👨‍👩‍👧‍👦</div>
+                    <h3>No family members added yet</h3>
+                    <p>Add family members to track their allergies and dietary restrictions.</p>
+                    <button class="btn btn-primary" @onclick="AddFamilyMember">
+                        ➕ Add First Family Member
+                    </button>
+                </div>
+            }
+        </div>
+
+        <!-- Summary Section -->
+        <div class="settings-section">
+            <div class="section-header">
+                <h2>📊 Family Summary</h2>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-item">
+                    <h4>Total People</h4>
+                    <div class="summary-value">@(_profile.FamilyMembers.Count + 1)</div>
+                    <p class="summary-label">You + @_profile.FamilyMembers.Count family members</p>
+                </div>
+
+                <div class="summary-item">
+                    <h4>Combined Allergens</h4>
+                    <div class="summary-value">@(_profile.Allergens.Concat(_profile.FamilyMembers.SelectMany(f => f.Allergens)).Distinct().Count())</div>
+                    <p class="summary-label">Total unique allergens to avoid</p>
+                </div>
+
+                <div class="summary-item">
+                    <h4>Dietary Restrictions</h4>
+                    <div class="summary-value">@(_profile.DietaryRestrictions.Concat(_profile.FamilyMembers.SelectMany(f => f.DietaryRestrictions)).Distinct().Count())</div>
+                    <p class="summary-label">Total dietary preferences</p>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>💡 How this helps:</strong>
+                <p>
+                    When browsing recipes, you can choose to filter by:
+                </p>
+                <ul>
+                    <li><strong>My Allergies Only</strong> - Filter recipes just for you</li>
+                    <li><strong>Entire Family</strong> - Filter recipes safe for everyone (recommended for family dinners)</li>
+                    <li><strong>Custom</strong> - Manually select who to filter for</li>
+                </ul>
+            </div>
+        </div>
+    }
+
+    <!-- Error Message -->
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-error">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+
+    <!-- Success Message -->
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="alert alert-success">
+            <strong>Success:</strong> @_successMessage
+        </div>
+    }
+</div>
+
+@code {
+    private UserProfileDto? _profile;
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private bool _isEditingProfile = false;
+    private Guid? _editingFamilyMemberId;
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    private UpdateUserProfileRequest _profileEdit = new();
+    private UpdateFamilyMemberRequest _familyMemberEdit = new();
+    private CreateFamilyMemberRequest? _newFamilyMember;
+
+    private readonly string[] _commonAllergens = new[]
+    {
+        "Dairy", "Eggs", "Fish", "Shellfish", "Tree Nuts",
+        "Peanuts", "Wheat", "Soy", "Sesame"
+    };
+
+    private readonly string[] _dietaryOptions = new[]
+    {
+        "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
+        "Keto", "Paleo", "Low-Carb", "Low-Fat", "Halal", "Kosher"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfileAsync();
+    }
+
+    private async Task LoadProfileAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            _profile = await UserProfileApi.GetProfileAsync();
+
+            if (_profile == null)
+            {
+                _errorMessage = "Failed to load profile.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load profile: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SaveProfile()
+    {
+        _isSaving = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var success = await UserProfileApi.UpdateProfileAsync(_profileEdit);
+
+            if (success)
+            {
+                _successMessage = "Profile updated successfully!";
+                _isEditingProfile = false;
+                await LoadProfileAsync();
+            }
+            else
+            {
+                _errorMessage = "Failed to update profile.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to save profile: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void CancelProfileEdit()
+    {
+        _isEditingProfile = false;
+        _errorMessage = null;
+    }
+
+    private void AddFamilyMember()
+    {
+        _newFamilyMember = new CreateFamilyMemberRequest
+        {
+            Allergens = new(),
+            DietaryRestrictions = new()
+        };
+        _editingFamilyMemberId = null;
+    }
+
+    private void EditFamilyMember(FamilyMemberDto member)
+    {
+        _editingFamilyMemberId = member.Id;
+        _familyMemberEdit = new UpdateFamilyMemberRequest
+        {
+            Name = member.Name,
+            Relationship = member.Relationship,
+            Allergens = new List<string>(member.Allergens),
+            DietaryRestrictions = new List<string>(member.DietaryRestrictions),
+            Notes = member.Notes
+        };
+        _newFamilyMember = null;
+    }
+
+    private async Task SaveFamilyMember(Guid memberId)
+    {
+        _isSaving = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var success = await UserProfileApi.UpdateFamilyMemberAsync(memberId, _familyMemberEdit);
+
+            if (success)
+            {
+                _successMessage = "Family member updated successfully!";
+                _editingFamilyMemberId = null;
+                await LoadProfileAsync();
+            }
+            else
+            {
+                _errorMessage = "Failed to update family member.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to save family member: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task SaveNewFamilyMember()
+    {
+        if (_newFamilyMember == null || string.IsNullOrWhiteSpace(_newFamilyMember.Name))
+            return;
+
+        _isSaving = true;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var memberId = await UserProfileApi.CreateFamilyMemberAsync(_newFamilyMember);
+
+            if (memberId.HasValue)
+            {
+                _successMessage = "Family member added successfully!";
+                _newFamilyMember = null;
+                await LoadProfileAsync();
+            }
+            else
+            {
+                _errorMessage = "Failed to add family member.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to add family member: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void CancelNewFamilyMember()
+    {
+        _newFamilyMember = null;
+        _errorMessage = null;
+    }
+
+    private void CancelFamilyMemberEdit()
+    {
+        _editingFamilyMemberId = null;
+        _errorMessage = null;
+    }
+
+    private async Task DeleteFamilyMember(Guid memberId)
+    {
+        // TODO: Add confirmation dialog
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            var success = await UserProfileApi.DeleteFamilyMemberAsync(memberId);
+
+            if (success)
+            {
+                _successMessage = "Family member deleted successfully.";
+                await LoadProfileAsync();
+            }
+            else
+            {
+                _errorMessage = "Failed to delete family member.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to delete family member: {ex.Message}";
+        }
+    }
+
+    private void ToggleAllergen(List<string> list, string allergen, bool isChecked)
+    {
+        if (isChecked && !list.Contains(allergen))
+        {
+            list.Add(allergen);
+        }
+        else if (!isChecked && list.Contains(allergen))
+        {
+            list.Remove(allergen);
+        }
+    }
+
+    private void ToggleDietary(List<string> list, string diet, bool isChecked)
+    {
+        if (isChecked && !list.Contains(diet))
+        {
+            list.Add(diet);
+        }
+        else if (!isChecked && list.Contains(diet))
+        {
+            list.Remove(diet);
+        }
+    }
+}

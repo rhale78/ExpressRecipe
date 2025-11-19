@@ -13,6 +13,146 @@
 }
 
 /* ==========================================
+   ALLERGEN MODE SELECTOR (PRIORITY FEATURE)
+   ========================================== */
+
+.allergen-mode-section {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 3px solid #ffc107;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+}
+
+.allergen-mode-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.allergen-mode-header h2 {
+    font-size: 1.75rem;
+    margin: 0;
+    color: #856404;
+}
+
+.allergen-mode-description {
+    color: #856404;
+    margin: 0 0 1.5rem 0;
+    font-size: 1.05rem;
+}
+
+.filter-mode-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.filter-mode-btn {
+    background: white;
+    border: 3px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    text-align: left;
+}
+
+.filter-mode-btn:hover {
+    border-color: #ff6b6b;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.filter-mode-btn.active {
+    border-color: #ff6b6b;
+    background: #fff5f5;
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.2);
+}
+
+.mode-icon {
+    font-size: 3rem;
+    line-height: 1;
+}
+
+.mode-content {
+    flex: 1;
+}
+
+.mode-content h3 {
+    font-size: 1.25rem;
+    margin: 0 0 0.5rem 0;
+    color: #1a1a1a;
+}
+
+.mode-content p {
+    margin: 0 0 0.75rem 0;
+    color: #6c757d;
+    font-size: 0.95rem;
+}
+
+.mode-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.mode-tag {
+    background: #ff6b6b;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.mode-empty {
+    font-size: 0.85rem;
+    color: #adb5bd;
+    font-style: italic;
+}
+
+/* Advanced Filters Toggle */
+.advanced-filters-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid #e9ecef;
+}
+
+.advanced-filters-toggle {
+    background: none;
+    border: none;
+    color: #ff6b6b;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.75rem 0;
+    transition: color 0.2s;
+}
+
+.advanced-filters-toggle:hover {
+    color: #ff5252;
+    text-decoration: underline;
+}
+
+/* Alert Link */
+.alert-link {
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+.alert-link:hover {
+    color: #000;
+}
+
+/* ==========================================
    RECIPE LIST PAGE
    ========================================== */
 
