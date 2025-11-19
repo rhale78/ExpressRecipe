@@ -1,5 +1,7 @@
 using ExpressRecipe.BlazorWeb.Components;
 using ExpressRecipe.Client.Shared.Services;
+using ExpressRecipe.Client.Shared.Services.LocalStorage;
+using ExpressRecipe.Client.Shared.Services.SignalR;
 using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.Authorization;
 
@@ -115,9 +117,42 @@ builder.Services.AddHttpClient<ISyncApiClient, SyncApiClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:SyncService"] ?? "http://syncservice");
 });
 
+// Register local storage services
+builder.Services.AddScoped(typeof(LocalStorageRepository<>));
+builder.Services.AddScoped<SyncQueueService>();
+builder.Services.AddScoped<OfflineDetectionService>();
+
+// Register SignalR client services (these would be initialized per-user)
+builder.Services.AddScoped<NotificationHubClient>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<NotificationHubClient>>();
+    var toast = sp.GetRequiredService<IToastService>();
+    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+
+    var baseUrl = config["Services:NotificationService"] ?? "http://notificationservice";
+    var hubUrl = $"{baseUrl}/hubs/notifications";
+    var token = tokenProvider.GetTokenAsync().Result; // Get auth token
+
+    return new NotificationHubClient(hubUrl, token, logger, toast);
+});
+
+builder.Services.AddScoped<SyncHubClient>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<SyncHubClient>>();
+    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+
+    var baseUrl = config["Services:SyncService"] ?? "http://syncservice";
+    var hubUrl = $"{baseUrl}/hubs/sync";
+    var token = tokenProvider.GetTokenAsync().Result; // Get auth token
+
+    return new SyncHubClient(hubUrl, token, logger);
+});
+
 // Register custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
-builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 
+builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp =>
     (CustomAuthenticationStateProvider)sp.GetRequiredService<AuthenticationStateProvider>());
 
 var app = builder.Build();

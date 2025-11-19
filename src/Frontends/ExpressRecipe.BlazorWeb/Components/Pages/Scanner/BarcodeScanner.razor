@@ -1,6 +1,8 @@
 @page "/scanner"
 @using ExpressRecipe.Client.Shared.Services
 @inject IScannerApiClient ScannerClient
+@inject IInventoryApiClient InventoryClient
+@inject IShoppingListApiClient ShoppingClient
 @inject IToastService ToastService
 @rendermode InteractiveServer
 
@@ -304,15 +306,75 @@
         ToastService.ShowInfo("Coming Soon", "Report missing product feature");
     }
 
-    private void AddToInventory()
+    private async Task AddToInventory()
     {
-        // TODO: Implement add to inventory
-        ToastService.ShowInfo("Coming Soon", "Add to inventory feature");
+        if (scanResult?.Product == null)
+            return;
+
+        try
+        {
+            var request = new
+            {
+                ProductName = scanResult.Product.Name,
+                Brand = scanResult.Product.Brand,
+                Quantity = 1,
+                Unit = "unit",
+                ExpirationDate = (DateTime?)null,
+                Location = "Pantry",
+                Barcode = scanResult.Barcode
+            };
+
+            // Add to inventory via API
+            var success = await InventoryClient.AddItemAsync(request.ProductName, request.Brand, request.Quantity, request.Unit);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to inventory");
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to add item to inventory");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to add to inventory: {ex.Message}");
+        }
     }
 
-    private void AddToShoppingList()
+    private async Task AddToShoppingList()
     {
-        // TODO: Implement add to shopping list
-        ToastService.ShowInfo("Coming Soon", "Add to shopping list feature");
+        if (scanResult?.Product == null)
+            return;
+
+        try
+        {
+            var request = new
+            {
+                ProductName = scanResult.Product.Name,
+                Brand = scanResult.Product.Brand,
+                Quantity = 1,
+                Unit = "unit",
+                Category = scanResult.Product.Category ?? "General",
+                Priority = "Medium",
+                Barcode = scanResult.Barcode
+            };
+
+            // Add to shopping list via API
+            var success = await ShoppingClient.AddItemAsync(request.ProductName, request.Brand, request.Quantity, request.Unit);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to shopping list");
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to add item to shopping list");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to add to shopping list: {ex.Message}");
+        }
     }
 }
