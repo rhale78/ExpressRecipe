@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("analyticsdb")
+
+// Register repositories
+builder.Services.AddScoped<IAnalyticsRepository>(sp =>
+    new AnalyticsRepository(connectionString, sp.GetRequiredService<ILogger<AnalyticsRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'analyticsdb' not found");
 
 // Add controllers

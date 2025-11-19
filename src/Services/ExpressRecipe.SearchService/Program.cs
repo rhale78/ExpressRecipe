@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("searchdb")
+
+// Register repositories
+builder.Services.AddScoped<ISearchRepository>(sp =>
+    new SearchRepository(connectionString, sp.GetRequiredService<ILogger<SearchRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'searchdb' not found");
 
 // Add controllers

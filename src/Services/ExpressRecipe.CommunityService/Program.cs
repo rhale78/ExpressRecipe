@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("communitydb")
+
+// Register repositories
+builder.Services.AddScoped<ICommunityRepository>(sp =>
+    new CommunityRepository(connectionString, sp.GetRequiredService<ILogger<CommunityRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'communitydb' not found");
 
 // Add controllers

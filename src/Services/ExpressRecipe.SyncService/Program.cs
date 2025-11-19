@@ -22,6 +22,10 @@ builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("syncdb")
+
+// Register repositories
+builder.Services.AddScoped<ISyncRepository>(sp =>
+    new SyncRepository(connectionString, sp.GetRequiredService<ILogger<SyncRepository>>()));
     ?? throw new InvalidOperationException("Database connection string 'syncdb' not found");
 
 // Add controllers
