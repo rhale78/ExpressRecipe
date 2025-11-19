@@ -47,6 +47,8 @@ builder.Services.AddScoped<IIngredientRepository>(sp => new IngredientRepository
 builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
 builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
 builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
+builder.Services.AddScoped<IStoreRepository>(sp => new StoreRepository(connectionString));
+builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connectionString));
 
 // Register ingredient parser service
 builder.Services.AddScoped<IIngredientParser, IngredientParser>();
