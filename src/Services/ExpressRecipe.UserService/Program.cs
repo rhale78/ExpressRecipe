@@ -43,6 +43,7 @@ var connectionString = builder.Configuration.GetConnectionString("userdb")
 
 builder.Services.AddScoped<IUserProfileRepository>(sp => new UserProfileRepository(connectionString));
 builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(connectionString));
+builder.Services.AddScoped<IEnhancedAllergenRepository>(sp => new EnhancedAllergenRepository(connectionString));
 builder.Services.AddScoped<IDietaryRestrictionRepository>(sp => new DietaryRestrictionRepository(connectionString));
 builder.Services.AddScoped<IFamilyMemberRepository>(sp => new FamilyMemberRepository(connectionString));
 builder.Services.AddScoped<ICuisineRepository>(sp => new CuisineRepository(connectionString));
