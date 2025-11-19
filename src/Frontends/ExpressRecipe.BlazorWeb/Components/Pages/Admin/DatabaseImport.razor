@@ -1,0 +1,221 @@
+@page "/admin/import"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@attribute [Authorize]
+@inject IAdminApiClient AdminApi
+
+<PageTitle>Database Import - ExpressRecipe Admin</PageTitle>
+
+<div class="admin-container">
+    <div class="admin-header">
+        <h1>Database Import Management</h1>
+        <p class="subtitle">Import food data from USDA, FDA, and OpenFoodFacts databases</p>
+    </div>
+
+    <!-- Import Actions -->
+    <div class="import-grid">
+        <!-- USDA FoodData Central -->
+        <div class="import-card">
+            <div class="import-icon">🇺🇸</div>
+            <h3>USDA FoodData Central</h3>
+            <p>Import comprehensive nutrition data from the USDA database</p>
+            <div class="import-stats">
+                <span class="stat-label">Contains:</span>
+                <span class="stat-value">~900,000 food items</span>
+            </div>
+
+            <button class="btn btn-primary" @@onclick="() => StartImport(ImportSource.USDA)" disabled="@@_isImporting">
+                @@if (_isImporting && _currentImportSource == ImportSource.USDA)
+                {
+                    <span class="spinner"></span>
+                    <span>Starting...</span>
+                }
+                else
+                {
+                    <span>Import USDA Data</span>
+                }
+            </button>
+        </div>
+
+        <!-- FDA Recalls -->
+        <div class="import-card">
+            <div class="import-icon">⚠️</div>
+            <h3>FDA Food Recalls</h3>
+            <p>Import food recall data from the FDA Enforcement Reports API</p>
+            <div class="import-stats">
+                <span class="stat-label">Contains:</span>
+                <span class="stat-value">Current recall alerts</span>
+            </div>
+
+            <button class="btn btn-primary" @@onclick="() => StartImport(ImportSource.FDA)" disabled="@@_isImporting">
+                @@if (_isImporting && _currentImportSource == ImportSource.FDA)
+                {
+                    <span class="spinner"></span>
+                    <span>Starting...</span>
+                }
+                else
+                {
+                    <span>Import FDA Recalls</span>
+                }
+            </button>
+        </div>
+
+        <!-- OpenFoodFacts -->
+        <div class="import-card">
+            <div class="import-icon">🌍</div>
+            <h3>OpenFoodFacts</h3>
+            <p>Import crowd-sourced product data with barcodes and allergens</p>
+            <div class="import-stats">
+                <span class="stat-label">Contains:</span>
+                <span class="stat-value">~2.8M products</span>
+            </div>
+
+            <button class="btn btn-primary" @@onclick="() => StartImport(ImportSource.OpenFoodFacts)" disabled="@@_isImporting">
+                @@if (_isImporting && _currentImportSource == ImportSource.OpenFoodFacts)
+                {
+                    <span class="spinner"></span>
+                    <span>Starting...</span>
+                }
+                else
+                {
+                    <span>Import OpenFoodFacts</span>
+                }
+            </button>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    @@if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-error">
+            <strong>Error:</strong> @@_errorMessage
+        </div>
+    }
+
+    @@if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="alert alert-success">
+            <strong>Success:</strong> @@_successMessage
+        </div>
+    }
+
+    <!-- Import History -->
+    <div class="import-history">
+        <h2>Import History</h2>
+        @@if (_importHistory.Any())
+        {
+            <div class="history-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Status</th>
+                            <th>Records</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @@foreach (var import in _importHistory.Take(10))
+                        {
+                            <tr>
+                                <td><span class="source-badge">@@import.Source</span></td>
+                                <td><span class="status-badge status-@@import.Status.ToLower()">@@import.Status</span></td>
+                                <td>@@import.RecordsImported.ToString("N0")</td>
+                                <td>@@import.StartedAt.ToString("g")</td>
+                                <td>
+                                    @@if (import.Duration.HasValue)
+                                    {
+                                        <span>@@FormatDuration(import.Duration.Value)</span>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="empty-state">No import history available. Start an import to see history.</p>
+        }
+    </div>
+</div>
+
+@@code {
+    private enum ImportSource { USDA, FDA, OpenFoodFacts }
+
+    private bool _isImporting;
+    private ImportSource? _currentImportSource;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private List<ImportHistoryDto> _importHistory = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadImportHistoryAsync();
+    }
+
+    private async Task StartImport(ImportSource source)
+    {
+        _isImporting = true;
+        _currentImportSource = source;
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            ImportStatusDto? result = source switch
+            {
+                ImportSource.USDA => await AdminApi.ImportUSDADatabaseAsync(),
+                ImportSource.FDA => await AdminApi.ImportFDARecallsAsync(),
+                ImportSource.OpenFoodFacts => await AdminApi.ImportOpenFoodFactsAsync(),
+                _ => null
+            };
+
+            if (result != null)
+            {
+                _successMessage = $"{source} import started successfully! Import ID: {result.ImportId}";
+                await LoadImportHistoryAsync();
+            }
+            else
+            {
+                _errorMessage = $"Failed to start {source} import. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error starting import: {ex.Message}";
+        }
+        finally
+        {
+            _isImporting = false;
+            _currentImportSource = null;
+        }
+    }
+
+    private async Task LoadImportHistoryAsync()
+    {
+        try
+        {
+            _importHistory = await AdminApi.GetImportHistoryAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load import history: {ex.Message}";
+        }
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return $"{duration.Hours}h {duration.Minutes}m";
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.Minutes}m {duration.Seconds}s";
+        return $"{duration.Seconds}s";
+    }
+}
