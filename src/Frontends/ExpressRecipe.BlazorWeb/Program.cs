@@ -1,4 +1,5 @@
 using ExpressRecipe.BlazorWeb.Components;
+using ExpressRecipe.BlazorWeb.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +33,9 @@ builder.Services.AddHttpClient("RecipeService", client =>
 {
     client.BaseAddress = new Uri("http://recipeservice");
 });
+
+// Register application services
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 
 var app = builder.Build();
 

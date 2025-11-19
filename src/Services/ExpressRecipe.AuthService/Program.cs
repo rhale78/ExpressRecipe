@@ -1,5 +1,6 @@
 using ExpressRecipe.AuthService.Data;
 using ExpressRecipe.AuthService.Services;
+using ExpressRecipe.Data.Common;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -89,6 +90,17 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Run database migrations
+var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+if (!Directory.Exists(migrationsPath))
+{
+    migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
+}
+var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+var connectionString = builder.Configuration.GetConnectionString("authdb")
+    ?? throw new InvalidOperationException("Database connection string 'authdb' not found");
+await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure the HTTP request pipeline
 app.MapDefaultEndpoints();

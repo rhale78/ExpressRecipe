@@ -23,4 +23,8 @@
     <ProjectReference Include="..\..\ExpressRecipe.Data.Common\ExpressRecipe.Data.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Data\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

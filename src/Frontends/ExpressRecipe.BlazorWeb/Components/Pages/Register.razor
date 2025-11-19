@@ -1,0 +1,139 @@
+@page "/register"
+@using ExpressRecipe.Shared.DTOs.Auth
+@using ExpressRecipe.BlazorWeb.Services
+@inject IAuthenticationService AuthService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>Register - ExpressRecipe</PageTitle>
+
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h2 class="card-title text-center mb-4">Create Your Account</h2>
+
+                    <p class="text-muted text-center mb-4">
+                        Join ExpressRecipe to manage your dietary needs and discover recipes tailored to you.
+                    </p>
+
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            @_errorMessage
+                        </div>
+                    }
+
+                    @if (_registrationSuccess)
+                    {
+                        <div class="alert alert-success" role="alert">
+                            <h5 class="alert-heading">Registration Successful!</h5>
+                            <p>Your account has been created. Redirecting you to the home page...</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <EditForm Model="@_registerRequest" OnValidSubmit="HandleRegisterAsync">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address</label>
+                                <InputText id="email" class="form-control" @bind-Value="_registerRequest.Email" placeholder="your@email.com" />
+                                <ValidationMessage For="@(() => _registerRequest.Email)" />
+                                <div class="form-text">We'll never share your email with anyone else.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <InputText id="password" type="password" class="form-control" @bind-Value="_registerRequest.Password" placeholder="Choose a strong password" />
+                                <ValidationMessage For="@(() => _registerRequest.Password)" />
+                                <div class="form-text">Minimum 8 characters</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="confirmPassword" class="form-label">Confirm Password</label>
+                                <InputText id="confirmPassword" type="password" class="form-control" @bind-Value="_registerRequest.ConfirmPassword" placeholder="Re-enter your password" />
+                                <ValidationMessage For="@(() => _registerRequest.ConfirmPassword)" />
+                            </div>
+
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="terms" @bind="_acceptTerms" />
+                                <label class="form-check-label" for="terms">
+                                    I agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>
+                                </label>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary" disabled="@(_isLoading || !_acceptTerms)">
+                                    @if (_isLoading)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        <span>Creating account...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Create Account</span>
+                                    }
+                                </button>
+                            </div>
+                        </EditForm>
+
+                        <hr class="my-4" />
+
+                        <div class="text-center">
+                            <p class="mb-0">Already have an account? <a href="/login">Login here</a></p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private RegisterRequest _registerRequest = new();
+    private bool _isLoading;
+    private bool _acceptTerms;
+    private bool _registrationSuccess;
+    private string? _errorMessage;
+
+    private async Task HandleRegisterAsync()
+    {
+        if (!_acceptTerms)
+        {
+            _errorMessage = "You must accept the Terms of Service and Privacy Policy to continue.";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await AuthService.RegisterAsync(_registerRequest);
+
+            if (result != null)
+            {
+                _registrationSuccess = true;
+
+                // Wait a moment to show success message, then redirect
+                await Task.Delay(2000);
+                Navigation.NavigateTo("/");
+            }
+            else
+            {
+                _errorMessage = "Registration failed. The email may already be in use or the password doesn't meet requirements.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred during registration. Please try again later.";
+            Console.Error.WriteLine($"Registration error: {ex}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

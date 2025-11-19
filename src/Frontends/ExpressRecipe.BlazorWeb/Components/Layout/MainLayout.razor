@@ -1,10 +1,14 @@
 @inherits LayoutComponentBase
+@using ExpressRecipe.BlazorWeb.Services
+@inject IAuthenticationService AuthService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
 
 <div class="page">
     <header>
         <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
             <div class="container-fluid">
-                <a class="navbar-brand" href="/">ExpressRecipe</a>
+                <a class="navbar-brand" href="/">🍽️ ExpressRecipe</a>
                 <button class="navbar-toggler" type="button">
                     <span class="navbar-toggler-icon"></span>
                 </button>
@@ -23,6 +27,26 @@
                             <a class="nav-link" href="/shopping">Shopping</a>
                         </li>
                     </ul>
+                    <ul class="navbar-nav ms-auto">
+                        @if (AuthService.IsAuthenticated)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="/profile">👤 Profile</a>
+                            </li>
+                            <li class="nav-item">
+                                <button class="btn btn-outline-light btn-sm" @onclick="HandleLogoutAsync">Logout</button>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link" href="/login">Login</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="btn btn-outline-light btn-sm ms-2" href="/register">Sign Up</a>
+                            </li>
+                        }
+                    </ul>
                 </div>
             </div>
         </nav>
@@ -38,3 +62,11 @@
         </div>
     </footer>
 </div>
+
+@code {
+    private async Task HandleLogoutAsync()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}
