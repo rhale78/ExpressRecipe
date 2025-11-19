@@ -42,6 +42,11 @@ builder.Services.AddHttpClient<IAdminApiClient, AdminApiClient>(client =>
     client.BaseAddress = new Uri(builder.Configuration["Services:ProductService"] ?? "http://productservice");
 });
 
+builder.Services.AddHttpClient<IRecipeApiClient, RecipeApiClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:RecipeService"] ?? "http://recipeservice");
+});
+
 // Register custom authentication state provider
 builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
 builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp => 

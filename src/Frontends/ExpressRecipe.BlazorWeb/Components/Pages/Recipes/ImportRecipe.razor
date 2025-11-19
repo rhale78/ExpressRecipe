@@ -1,0 +1,573 @@
+@page "/recipes/import"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using System.Text
+@attribute [Authorize]
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+
+<PageTitle>Import Recipe - ExpressRecipe</PageTitle>
+
+<div class="import-recipe-container">
+    <!-- Header -->
+    <div class="import-header">
+        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/recipes")">
+            ← Back to Recipes
+        </button>
+        <h1>Import Recipe</h1>
+    </div>
+
+    <p class="import-subtitle">
+        Import recipes from files, paste from websites, or fetch from URLs.
+        We support JSON format and will attempt to parse text from popular recipe sites.
+    </p>
+
+    <!-- Import Method Tabs -->
+    <div class="import-tabs">
+        <button class="tab-btn @(_importMode == ImportMode.File ? "active" : "")"
+                @onclick="() => SetImportMode(ImportMode.File)">
+            📁 Upload File
+        </button>
+        <button class="tab-btn @(_importMode == ImportMode.Paste ? "active" : "")"
+                @onclick="() => SetImportMode(ImportMode.Paste)">
+            📋 Paste Recipe
+        </button>
+        <button class="tab-btn @(_importMode == ImportMode.Url ? "active" : "")"
+                @onclick="() => SetImportMode(ImportMode.Url)">
+            🔗 From URL
+        </button>
+    </div>
+
+    <!-- File Upload Mode -->
+    @if (_importMode == ImportMode.File)
+    {
+        <div class="import-section">
+            <div class="import-card">
+                <h2>Upload Recipe File</h2>
+                <p>Upload a JSON file containing recipe data. We'll validate and import it.</p>
+
+                <div class="file-upload-zone @(_isDragOver ? "drag-over" : "")"
+                     @ondrop="HandleFileDrop"
+                     @ondragenter="HandleDragEnter"
+                     @ondragleave="HandleDragLeave"
+                     @ondragover:preventDefault
+                     @ondrop:preventDefault>
+
+                    <div class="upload-icon">📁</div>
+                    <h3>Drop file here or click to browse</h3>
+                    <p>Supported formats: JSON, TXT</p>
+
+                    <InputFile OnChange="HandleFileSelected" accept=".json,.txt" class="file-input-hidden" id="fileInput" />
+                    <label for="fileInput" class="btn btn-primary">Choose File</label>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_selectedFileName))
+                {
+                    <div class="selected-file-info">
+                        <span class="file-icon">📄</span>
+                        <span class="file-name">@_selectedFileName</span>
+                        <span class="file-size">(@FormatFileSize(_selectedFileSize))</span>
+                        <button class="btn-icon" @onclick="ClearFile">❌</button>
+                    </div>
+                }
+
+                <!-- JSON Format Example -->
+                <details class="format-example">
+                    <summary>📖 View JSON Format Example</summary>
+                    <pre class="code-block">@GetJsonExample()</pre>
+                </details>
+            </div>
+        </div>
+    }
+
+    <!-- Paste Recipe Mode -->
+    @if (_importMode == ImportMode.Paste)
+    {
+        <div class="import-section">
+            <div class="import-card">
+                <h2>Paste Recipe Content</h2>
+                <p>Paste recipe text from websites or documents. We'll attempt to parse the ingredients and instructions.</p>
+
+                <div class="paste-formats">
+                    <span class="format-label">Supported sources:</span>
+                    <span class="format-badge">AllRecipes</span>
+                    <span class="format-badge">Food Network</span>
+                    <span class="format-badge">Bon Appétit</span>
+                    <span class="format-badge">Custom JSON</span>
+                    <span class="format-badge">Plain Text</span>
+                </div>
+
+                <textarea class="paste-textarea"
+                          placeholder="Paste recipe content here...&#10;&#10;Example:&#10;Title: Chocolate Chip Cookies&#10;Prep Time: 15 minutes&#10;Cook Time: 10 minutes&#10;Servings: 24&#10;&#10;Ingredients:&#10;- 2 1/4 cups all-purpose flour&#10;- 1 tsp baking soda&#10;- 1 cup butter, softened&#10;- 3/4 cup sugar&#10;&#10;Instructions:&#10;1. Preheat oven to 375°F&#10;2. Mix flour and baking soda...&#10;&#10;Or paste JSON format or HTML from recipe websites."
+                          @bind="_pastedContent"
+                          rows="20"></textarea>
+
+                <div class="character-count">
+                    @_pastedContent.Length characters
+                    @if (_pastedContent.Length > 10000)
+                    {
+                        <span class="warning">(⚠️ Very long - may take time to parse)</span>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- URL Import Mode -->
+    @if (_importMode == ImportMode.Url)
+    {
+        <div class="import-section">
+            <div class="import-card">
+                <h2>Import from URL</h2>
+                <p>Enter a URL to a recipe page and we'll attempt to extract the recipe data.</p>
+
+                <div class="url-input-group">
+                    <input type="url"
+                           class="url-input"
+                           placeholder="https://example.com/recipes/chocolate-cake"
+                           @bind="_recipeUrl"
+                           @bind:event="oninput" />
+                    <button class="btn btn-outline" @onclick="TestUrl" disabled="@(string.IsNullOrWhiteSpace(_recipeUrl))">
+                        🔍 Preview
+                    </button>
+                </div>
+
+                <div class="url-examples">
+                    <p class="examples-label">Supported websites:</p>
+                    <ul class="examples-list">
+                        <li>AllRecipes.com</li>
+                        <li>FoodNetwork.com</li>
+                        <li>BonAppetit.com</li>
+                        <li>SeriousEats.com</li>
+                        <li>NYTimes Cooking</li>
+                        <li>Most recipe sites with structured data</li>
+                    </ul>
+                    <p class="examples-note">
+                        ⚠️ Note: Some sites may block automated access or require authentication.
+                    </p>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Import Preview -->
+    @if (_importResult != null && _importResult.Recipe != null)
+    {
+        <div class="import-preview-section">
+            <h2>Import Preview</h2>
+            @if (_importResult.Warnings.Any())
+            {
+                <div class="alert alert-warning">
+                    <strong>⚠️ Warnings:</strong>
+                    <ul>
+                        @foreach (var warning in _importResult.Warnings)
+                        {
+                            <li>@warning</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <div class="preview-card">
+                <div class="preview-header">
+                    <div class="preview-image">
+                        @if (!string.IsNullOrEmpty(_importResult.Recipe.ImageUrl))
+                        {
+                            <img src="@_importResult.Recipe.ImageUrl" alt="@_importResult.Recipe.Title" />
+                        }
+                        else
+                        {
+                            <div class="preview-placeholder">🍽️</div>
+                        }
+                    </div>
+                    <div class="preview-info">
+                        <h3>@_importResult.Recipe.Title</h3>
+                        <p>@_importResult.Recipe.Description</p>
+                        <div class="preview-meta">
+                            <span>⏱️ @_importResult.Recipe.TotalTimeMinutes min</span>
+                            <span>🍴 @_importResult.Recipe.Servings servings</span>
+                            <span>📊 Difficulty: @_importResult.Recipe.Difficulty</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="preview-content">
+                    <div class="preview-section">
+                        <h4>Ingredients (@_importResult.Recipe.Ingredients.Count)</h4>
+                        <ul class="preview-list">
+                            @foreach (var ing in _importResult.Recipe.Ingredients.Take(5))
+                            {
+                                <li>@ing.Quantity @ing.Unit @ing.Name</li>
+                            }
+                            @if (_importResult.Recipe.Ingredients.Count > 5)
+                            {
+                                <li class="preview-more">... and @(_importResult.Recipe.Ingredients.Count - 5) more</li>
+                            }
+                        </ul>
+                    </div>
+
+                    <div class="preview-section">
+                        <h4>Instructions (@_importResult.Recipe.Steps.Count steps)</h4>
+                        <ol class="preview-list">
+                            @foreach (var step in _importResult.Recipe.Steps.Take(3))
+                            {
+                                <li>@TruncateText(step.Instruction, 100)</li>
+                            }
+                            @if (_importResult.Recipe.Steps.Count > 3)
+                            {
+                                <li class="preview-more">... and @(_importResult.Recipe.Steps.Count - 3) more steps</li>
+                            }
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Action Buttons -->
+    <div class="import-actions">
+        @if (_importResult != null && _importResult.Recipe != null)
+        {
+            <button class="btn btn-outline" @onclick="ClearImport">
+                ← Start Over
+            </button>
+            <button class="btn btn-primary" @onclick="SaveImportedRecipe" disabled="@_isSaving">
+                @if (_isSaving)
+                {
+                    <span class="spinner-small"></span>
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <span>✅ Save Recipe</span>
+                }
+            </button>
+        }
+        else
+        {
+            <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/recipes")">
+                Cancel
+            </button>
+            <button class="btn btn-primary" @onclick="ProcessImport" disabled="@(!CanImport() || _isImporting)">
+                @if (_isImporting)
+                {
+                    <span class="spinner-small"></span>
+                    <span>Processing...</span>
+                }
+                else
+                {
+                    <span>📥 Import Recipe</span>
+                }
+            </button>
+        }
+    </div>
+
+    <!-- Error Messages -->
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-error">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+
+    @if (_importResult != null && _importResult.Errors.Any())
+    {
+        <div class="alert alert-error">
+            <strong>Import Errors:</strong>
+            <ul>
+                @foreach (var error in _importResult.Errors)
+                {
+                    <li>@error</li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    private enum ImportMode { File, Paste, Url }
+
+    private ImportMode _importMode = ImportMode.Paste;
+    private bool _isDragOver = false;
+    private bool _isImporting = false;
+    private bool _isSaving = false;
+    private string? _errorMessage;
+
+    // File upload
+    private string _selectedFileName = string.Empty;
+    private long _selectedFileSize = 0;
+    private string _fileContent = string.Empty;
+
+    // Paste
+    private string _pastedContent = string.Empty;
+
+    // URL
+    private string _recipeUrl = string.Empty;
+
+    // Import result
+    private ImportRecipeResponse? _importResult;
+
+    private void SetImportMode(ImportMode mode)
+    {
+        _importMode = mode;
+        ClearImport();
+    }
+
+    private void HandleDragEnter()
+    {
+        _isDragOver = true;
+    }
+
+    private void HandleDragLeave()
+    {
+        _isDragOver = false;
+    }
+
+    private async Task HandleFileDrop(DragEventArgs e)
+    {
+        _isDragOver = false;
+        // File drop handling would require JavaScript interop
+        // This is a placeholder for the UI
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _selectedFileName = file.Name;
+        _selectedFileSize = file.Size;
+
+        // Validate file size (max 5MB)
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errorMessage = "File size must be less than 5MB";
+            ClearFile();
+            return;
+        }
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            _fileContent = await reader.ReadToEndAsync();
+            _errorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to read file: {ex.Message}";
+            ClearFile();
+        }
+    }
+
+    private void ClearFile()
+    {
+        _selectedFileName = string.Empty;
+        _selectedFileSize = 0;
+        _fileContent = string.Empty;
+    }
+
+    private void TestUrl()
+    {
+        // TODO: Implement URL preview/validation
+        _errorMessage = "URL preview will be implemented in the backend";
+    }
+
+    private bool CanImport()
+    {
+        return _importMode switch
+        {
+            ImportMode.File => !string.IsNullOrWhiteSpace(_fileContent),
+            ImportMode.Paste => !string.IsNullOrWhiteSpace(_pastedContent),
+            ImportMode.Url => !string.IsNullOrWhiteSpace(_recipeUrl) && Uri.IsWellFormedUriString(_recipeUrl, UriKind.Absolute),
+            _ => false
+        };
+    }
+
+    private async Task ProcessImport()
+    {
+        _isImporting = true;
+        _errorMessage = null;
+        _importResult = null;
+
+        try
+        {
+            ImportRecipeResponse? result = _importMode switch
+            {
+                ImportMode.File => await RecipeApi.ImportRecipeFromFileAsync(_fileContent, DetermineContentType(_selectedFileName)),
+                ImportMode.Paste => await RecipeApi.ImportRecipeFromPasteAsync(_pastedContent),
+                ImportMode.Url => await RecipeApi.ImportRecipeFromUrlAsync(_recipeUrl),
+                _ => null
+            };
+
+            if (result != null)
+            {
+                _importResult = result;
+
+                if (!result.Success)
+                {
+                    _errorMessage = result.Message ?? "Failed to import recipe. Please check the format and try again.";
+                }
+            }
+            else
+            {
+                _errorMessage = "Failed to import recipe. The server returned no response.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Import failed: {ex.Message}";
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+
+    private async Task SaveImportedRecipe()
+    {
+        if (_importResult?.Recipe == null)
+            return;
+
+        _isSaving = true;
+        _errorMessage = null;
+
+        try
+        {
+            var recipe = _importResult.Recipe;
+            var createRequest = new CreateRecipeRequest
+            {
+                Title = recipe.Title,
+                Description = recipe.Description,
+                ImageUrl = recipe.ImageUrl,
+                PrepTimeMinutes = recipe.PrepTimeMinutes,
+                CookTimeMinutes = recipe.CookTimeMinutes,
+                Servings = recipe.Servings,
+                Difficulty = recipe.Difficulty,
+                Source = recipe.Source,
+                SourceUrl = recipe.SourceUrl,
+                Ingredients = recipe.Ingredients.Select(i => new CreateRecipeIngredientRequest
+                {
+                    OrderIndex = i.OrderIndex,
+                    Name = i.Name,
+                    Quantity = i.Quantity,
+                    Unit = i.Unit,
+                    Notes = i.Notes,
+                    IsOptional = i.IsOptional,
+                    GroupName = i.GroupName
+                }).ToList(),
+                Steps = recipe.Steps.Select(s => new CreateRecipeStepRequest
+                {
+                    OrderIndex = s.OrderIndex,
+                    Instruction = s.Instruction,
+                    DurationMinutes = s.DurationMinutes,
+                    ImageUrl = s.ImageUrl,
+                    Tips = s.Tips
+                }).ToList(),
+                Tags = recipe.Tags,
+                DietaryInfo = recipe.DietaryInfo,
+                Nutrition = recipe.Nutrition,
+                IsPublic = recipe.IsPublic
+            };
+
+            var recipeId = await RecipeApi.CreateRecipeAsync(createRequest);
+
+            if (recipeId.HasValue)
+            {
+                Navigation.NavigateTo($"/recipes/{recipeId.Value}");
+            }
+            else
+            {
+                _errorMessage = "Failed to save recipe. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to save recipe: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void ClearImport()
+    {
+        _importResult = null;
+        _errorMessage = null;
+        _fileContent = string.Empty;
+        _pastedContent = string.Empty;
+        _recipeUrl = string.Empty;
+        _selectedFileName = string.Empty;
+        _selectedFileSize = 0;
+    }
+
+    private string DetermineContentType(string fileName)
+    {
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".json" => "json",
+            ".txt" => "text",
+            _ => "text"
+        };
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return text;
+        return text.Substring(0, maxLength) + "...";
+    }
+
+    private string GetJsonExample()
+    {
+        return @"{
+  ""title"": ""Chocolate Chip Cookies"",
+  ""description"": ""Classic homemade chocolate chip cookies"",
+  ""prepTimeMinutes"": 15,
+  ""cookTimeMinutes"": 10,
+  ""servings"": 24,
+  ""difficulty"": ""Easy"",
+  ""ingredients"": [
+    {
+      ""orderIndex"": 1,
+      ""name"": ""all-purpose flour"",
+      ""quantity"": 2.25,
+      ""unit"": ""cups""
+    },
+    {
+      ""orderIndex"": 2,
+      ""name"": ""baking soda"",
+      ""quantity"": 1,
+      ""unit"": ""tsp""
+    }
+  ],
+  ""steps"": [
+    {
+      ""orderIndex"": 1,
+      ""instruction"": ""Preheat oven to 375°F""
+    },
+    {
+      ""orderIndex"": 2,
+      ""instruction"": ""Mix dry ingredients""
+    }
+  ],
+  ""tags"": [""dessert"", ""cookies"", ""baking""],
+  ""dietaryInfo"": [""Vegetarian""]
+}";
+    }
+}

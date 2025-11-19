@@ -1,0 +1,464 @@
+@page "/recipes/create"
+@page "/recipes/{RecipeId:guid}/edit"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@attribute [Authorize]
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEditMode ? "Edit Recipe" : "Create Recipe") - ExpressRecipe</PageTitle>
+
+<div class="create-recipe-container">
+    <!-- Header -->
+    <div class="create-header">
+        <button class="btn btn-outline" @onclick="GoBack">
+            ← Cancel
+        </button>
+        <h1>@(_isEditMode ? "Edit Recipe" : "Create New Recipe")</h1>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading recipe...</p>
+        </div>
+    }
+    else
+    {
+        <div class="recipe-form">
+            <!-- Basic Information -->
+            <div class="form-section">
+                <h2>Basic Information</h2>
+
+                <div class="form-group">
+                    <label>Recipe Title *</label>
+                    <input type="text" class="form-control" @bind="_recipe.Title" placeholder="E.g., Homemade Chocolate Chip Cookies" />
+                </div>
+
+                <div class="form-group">
+                    <label>Description *</label>
+                    <textarea class="form-control" @bind="_recipe.Description" rows="4"
+                              placeholder="Brief description of your recipe..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Prep Time (minutes) *</label>
+                        <input type="number" class="form-control" @bind="_recipe.PrepTimeMinutes" min="0" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Cook Time (minutes) *</label>
+                        <input type="number" class="form-control" @bind="_recipe.CookTimeMinutes" min="0" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Servings *</label>
+                        <input type="number" class="form-control" @bind="_recipe.Servings" min="1" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Difficulty</label>
+                        <select class="form-control" @bind="_recipe.Difficulty">
+                            <option value="Easy">Easy</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Hard">Hard</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Image URL (optional)</label>
+                    <input type="url" class="form-control" @bind="_recipe.ImageUrl" placeholder="https://example.com/image.jpg" />
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Source (optional)</label>
+                        <input type="text" class="form-control" @bind="_recipe.Source" placeholder="E.g., Grandma's cookbook" />
+                    </div>
+
+                    <div class="form-group">
+                        <label>Source URL (optional)</label>
+                        <input type="url" class="form-control" @bind="_recipe.SourceUrl" placeholder="https://..." />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ingredients -->
+            <div class="form-section">
+                <div class="section-header">
+                    <h2>Ingredients</h2>
+                    <button class="btn btn-outline btn-sm" @onclick="AddIngredient">
+                        ➕ Add Ingredient
+                    </button>
+                </div>
+
+                @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
+                {
+                    var index = _recipe.Ingredients.IndexOf(ingredient);
+                    <div class="ingredient-row">
+                        <div class="ingredient-fields">
+                            <input type="number"
+                                   class="form-control form-control-sm"
+                                   @bind="ingredient.Quantity"
+                                   placeholder="Qty"
+                                   step="0.1"
+                                   style="width: 80px;" />
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   @bind="ingredient.Unit"
+                                   placeholder="Unit"
+                                   style="width: 100px;" />
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   @bind="ingredient.Name"
+                                   placeholder="Ingredient name"
+                                   style="flex: 1;" />
+
+                            <input type="text"
+                                   class="form-control form-control-sm"
+                                   @bind="ingredient.Notes"
+                                   placeholder="Notes (optional)"
+                                   style="flex: 1;" />
+
+                            <label class="checkbox-label">
+                                <input type="checkbox" @bind="ingredient.IsOptional" />
+                                Optional
+                            </label>
+                        </div>
+                        <button class="btn-icon btn-danger" @onclick="() => RemoveIngredient(ingredient)">
+                            🗑️
+                        </button>
+                    </div>
+                }
+
+                @if (!_recipe.Ingredients.Any())
+                {
+                    <p class="empty-message">No ingredients added yet. Click "Add Ingredient" to start.</p>
+                }
+            </div>
+
+            <!-- Instructions -->
+            <div class="form-section">
+                <div class="section-header">
+                    <h2>Instructions</h2>
+                    <button class="btn btn-outline btn-sm" @onclick="AddStep">
+                        ➕ Add Step
+                    </button>
+                </div>
+
+                @foreach (var step in _recipe.Steps.OrderBy(s => s.OrderIndex))
+                {
+                    var index = _recipe.Steps.IndexOf(step);
+                    <div class="step-row">
+                        <div class="step-number">@(step.OrderIndex)</div>
+                        <div class="step-fields">
+                            <textarea class="form-control"
+                                      @bind="step.Instruction"
+                                      placeholder="Describe this step in detail..."
+                                      rows="3"></textarea>
+                            <div class="step-meta">
+                                <input type="number"
+                                       class="form-control form-control-sm"
+                                       @bind="step.DurationMinutes"
+                                       placeholder="Duration (min)"
+                                       min="0"
+                                       style="width: 150px;" />
+                                <input type="text"
+                                       class="form-control form-control-sm"
+                                       @bind="step.Tips"
+                                       placeholder="Tips (optional)"
+                                       style="flex: 1;" />
+                            </div>
+                        </div>
+                        <button class="btn-icon btn-danger" @onclick="() => RemoveStep(step)">
+                            🗑️
+                        </button>
+                    </div>
+                }
+
+                @if (!_recipe.Steps.Any())
+                {
+                    <p class="empty-message">No steps added yet. Click "Add Step" to start.</p>
+                }
+            </div>
+
+            <!-- Tags and Dietary Info -->
+            <div class="form-section">
+                <h2>Tags & Dietary Information</h2>
+
+                <div class="form-group">
+                    <label>Tags (comma-separated)</label>
+                    <input type="text" class="form-control" @bind="_tagsInput"
+                           placeholder="E.g., dessert, cookies, easy, quick" />
+                    <small>Separate tags with commas</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Dietary Information</label>
+                    <div class="checkbox-grid">
+                        @foreach (var diet in _dietaryOptions)
+                        {
+                            <label class="checkbox-label">
+                                <input type="checkbox"
+                                       checked="@_recipe.DietaryInfo.Contains(diet)"
+                                       @onchange="e => ToggleDietary(diet, (bool)e.Value!)" />
+                                @diet
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="_recipe.IsPublic" />
+                        Make this recipe public (visible to other users)
+                    </label>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="form-actions">
+                <button class="btn btn-outline" @onclick="GoBack">
+                    Cancel
+                </button>
+                <button class="btn btn-primary" @onclick="SaveRecipe" disabled="@(!IsValid() || _isSaving)">
+                    @if (_isSaving)
+                    {
+                        <span class="spinner-small"></span>
+                        <span>Saving...</span>
+                    }
+                    else
+                    {
+                        <span>@(_isEditMode ? "💾 Save Changes" : "✅ Create Recipe")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    }
+
+    <!-- Error Messages -->
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-error">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid? RecipeId { get; set; }
+
+    private bool _isEditMode => RecipeId.HasValue;
+    private bool _isLoading = false;
+    private bool _isSaving = false;
+    private string? _errorMessage;
+    private string _tagsInput = string.Empty;
+
+    private readonly string[] _dietaryOptions = new[]
+    {
+        "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
+        "Keto", "Paleo", "Low-Carb", "Low-Fat"
+    };
+
+    private CreateRecipeRequest _recipe = new()
+    {
+        Title = string.Empty,
+        Description = string.Empty,
+        PrepTimeMinutes = 15,
+        CookTimeMinutes = 30,
+        Servings = 4,
+        Difficulty = "Medium",
+        Ingredients = new(),
+        Steps = new(),
+        Tags = new(),
+        DietaryInfo = new(),
+        IsPublic = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEditMode)
+        {
+            await LoadRecipeAsync();
+        }
+    }
+
+    private async Task LoadRecipeAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            var existingRecipe = await RecipeApi.GetRecipeAsync(RecipeId!.Value);
+            if (existingRecipe != null)
+            {
+                _recipe.Title = existingRecipe.Title;
+                _recipe.Description = existingRecipe.Description;
+                _recipe.ImageUrl = existingRecipe.ImageUrl;
+                _recipe.PrepTimeMinutes = existingRecipe.PrepTimeMinutes;
+                _recipe.CookTimeMinutes = existingRecipe.CookTimeMinutes;
+                _recipe.Servings = existingRecipe.Servings;
+                _recipe.Difficulty = existingRecipe.Difficulty;
+                _recipe.Source = existingRecipe.Source;
+                _recipe.SourceUrl = existingRecipe.SourceUrl;
+                _recipe.Tags = existingRecipe.Tags;
+                _recipe.DietaryInfo = existingRecipe.DietaryInfo;
+                _recipe.IsPublic = existingRecipe.IsPublic;
+
+                _recipe.Ingredients = existingRecipe.Ingredients.Select(i => new CreateRecipeIngredientRequest
+                {
+                    OrderIndex = i.OrderIndex,
+                    Name = i.Name,
+                    Quantity = i.Quantity,
+                    Unit = i.Unit,
+                    Notes = i.Notes,
+                    IsOptional = i.IsOptional,
+                    GroupName = i.GroupName
+                }).ToList();
+
+                _recipe.Steps = existingRecipe.Steps.Select(s => new CreateRecipeStepRequest
+                {
+                    OrderIndex = s.OrderIndex,
+                    Instruction = s.Instruction,
+                    DurationMinutes = s.DurationMinutes,
+                    Tips = s.Tips
+                }).ToList();
+
+                _tagsInput = string.Join(", ", _recipe.Tags);
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load recipe: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void AddIngredient()
+    {
+        _recipe.Ingredients.Add(new CreateRecipeIngredientRequest
+        {
+            OrderIndex = _recipe.Ingredients.Count + 1
+        });
+    }
+
+    private void RemoveIngredient(CreateRecipeIngredientRequest ingredient)
+    {
+        _recipe.Ingredients.Remove(ingredient);
+        // Reorder
+        for (int i = 0; i < _recipe.Ingredients.Count; i++)
+        {
+            _recipe.Ingredients[i].OrderIndex = i + 1;
+        }
+    }
+
+    private void AddStep()
+    {
+        _recipe.Steps.Add(new CreateRecipeStepRequest
+        {
+            OrderIndex = _recipe.Steps.Count + 1
+        });
+    }
+
+    private void RemoveStep(CreateRecipeStepRequest step)
+    {
+        _recipe.Steps.Remove(step);
+        // Reorder
+        for (int i = 0; i < _recipe.Steps.Count; i++)
+        {
+            _recipe.Steps[i].OrderIndex = i + 1;
+        }
+    }
+
+    private void ToggleDietary(string diet, bool isChecked)
+    {
+        if (isChecked && !_recipe.DietaryInfo.Contains(diet))
+        {
+            _recipe.DietaryInfo.Add(diet);
+        }
+        else if (!isChecked && _recipe.DietaryInfo.Contains(diet))
+        {
+            _recipe.DietaryInfo.Remove(diet);
+        }
+    }
+
+    private bool IsValid()
+    {
+        return !string.IsNullOrWhiteSpace(_recipe.Title) &&
+               !string.IsNullOrWhiteSpace(_recipe.Description) &&
+               _recipe.PrepTimeMinutes >= 0 &&
+               _recipe.CookTimeMinutes >= 0 &&
+               _recipe.Servings > 0 &&
+               _recipe.Ingredients.Any() &&
+               _recipe.Steps.Any();
+    }
+
+    private async Task SaveRecipe()
+    {
+        _isSaving = true;
+        _errorMessage = null;
+
+        // Parse tags
+        if (!string.IsNullOrWhiteSpace(_tagsInput))
+        {
+            _recipe.Tags = _tagsInput.Split(',')
+                .Select(t => t.Trim())
+                .Where(t => !string.IsNullOrEmpty(t))
+                .Distinct()
+                .ToList();
+        }
+
+        try
+        {
+            Guid? resultId;
+
+            if (_isEditMode)
+            {
+                var success = await RecipeApi.UpdateRecipeAsync(RecipeId!.Value, _recipe);
+                resultId = success ? RecipeId : null;
+            }
+            else
+            {
+                resultId = await RecipeApi.CreateRecipeAsync(_recipe);
+            }
+
+            if (resultId.HasValue)
+            {
+                Navigation.NavigateTo($"/recipes/{resultId.Value}");
+            }
+            else
+            {
+                _errorMessage = $"Failed to {(_isEditMode ? "update" : "create")} recipe. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to save recipe: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        if (_isEditMode)
+        {
+            Navigation.NavigateTo($"/recipes/{RecipeId}");
+        }
+        else
+        {
+            Navigation.NavigateTo("/recipes");
+        }
+    }
+}
