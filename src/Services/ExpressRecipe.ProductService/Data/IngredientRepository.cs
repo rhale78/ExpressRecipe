@@ -26,7 +26,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
     public async Task<List<IngredientDto>> GetAllAsync()
     {
         const string sql = @"
-            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen
+            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
             FROM Ingredient
             WHERE IsDeleted = 0
             ORDER BY Name";
@@ -40,14 +40,15 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
                 Category = GetString(reader, "Category"),
-                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen")
+                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen"),
+                IngredientListString = GetString(reader, "IngredientListString")
             });
     }
 
     public async Task<IngredientDto?> GetByIdAsync(Guid id)
     {
         const string sql = @"
-            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen
+            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
             FROM Ingredient
             WHERE Id = @Id AND IsDeleted = 0";
 
@@ -60,7 +61,8 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
                 Category = GetString(reader, "Category"),
-                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen")
+                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen"),
+                IngredientListString = GetString(reader, "IngredientListString")
             },
             CreateParameter("@Id", id));
 
@@ -70,7 +72,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
     public async Task<List<IngredientDto>> SearchByNameAsync(string searchTerm)
     {
         const string sql = @"
-            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen
+            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
             FROM Ingredient
             WHERE (Name LIKE @SearchTerm OR AlternativeNames LIKE @SearchTerm)
                   AND IsDeleted = 0
@@ -85,7 +87,8 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
                 Category = GetString(reader, "Category"),
-                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen")
+                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen"),
+                IngredientListString = GetString(reader, "IngredientListString")
             },
             CreateParameter("@SearchTerm", $"%{searchTerm}%"));
     }
@@ -93,7 +96,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
     public async Task<List<IngredientDto>> GetByCategoryAsync(string category)
     {
         const string sql = @"
-            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen
+            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
             FROM Ingredient
             WHERE Category = @Category AND IsDeleted = 0
             ORDER BY Name";
@@ -107,7 +110,8 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
                 Category = GetString(reader, "Category"),
-                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen")
+                IsCommonAllergen = GetBoolean(reader, "IsCommonAllergen"),
+                IngredientListString = GetString(reader, "IngredientListString")
             },
             CreateParameter("@Category", category));
     }
@@ -117,11 +121,11 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
         const string sql = @"
             INSERT INTO Ingredient (
                 Id, Name, AlternativeNames, Description, Category,
-                IsCommonAllergen, CreatedBy, CreatedAt
+                IsCommonAllergen, IngredientListString, CreatedBy, CreatedAt
             )
             VALUES (
                 @Id, @Name, @AlternativeNames, @Description, @Category,
-                @IsCommonAllergen, @CreatedBy, GETUTCDATE()
+                @IsCommonAllergen, @IngredientListString, @CreatedBy, GETUTCDATE()
             )";
 
         var ingredientId = Guid.NewGuid();
@@ -134,6 +138,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             CreateParameter("@Description", request.Description),
             CreateParameter("@Category", request.Category),
             CreateParameter("@IsCommonAllergen", request.IsCommonAllergen),
+            CreateParameter("@IngredientListString", request.IngredientListString),
             CreateParameter("@CreatedBy", createdBy));
 
         return ingredientId;
@@ -148,6 +153,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 Description = @Description,
                 Category = @Category,
                 IsCommonAllergen = @IsCommonAllergen,
+                IngredientListString = @IngredientListString,
                 UpdatedBy = @UpdatedBy,
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND IsDeleted = 0";
@@ -160,6 +166,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             CreateParameter("@Description", request.Description),
             CreateParameter("@Category", request.Category),
             CreateParameter("@IsCommonAllergen", request.IsCommonAllergen),
+            CreateParameter("@IngredientListString", request.IngredientListString),
             CreateParameter("@UpdatedBy", updatedBy));
 
         return rowsAffected > 0;
@@ -187,7 +194,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
     {
         const string sql = @"
             SELECT pi.Id, pi.ProductId, pi.IngredientId, i.Name as IngredientName,
-                   pi.OrderIndex, pi.Quantity, pi.Notes
+                   pi.OrderIndex, pi.Quantity, pi.Notes, pi.IngredientListString
             FROM ProductIngredient pi
             INNER JOIN Ingredient i ON pi.IngredientId = i.Id
             WHERE pi.ProductId = @ProductId AND pi.IsDeleted = 0 AND i.IsDeleted = 0
@@ -203,7 +210,8 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 IngredientName = GetString(reader, "IngredientName") ?? string.Empty,
                 OrderIndex = GetInt32(reader, "OrderIndex"),
                 Quantity = GetString(reader, "Quantity"),
-                Notes = GetString(reader, "Notes")
+                Notes = GetString(reader, "Notes"),
+                IngredientListString = GetString(reader, "IngredientListString")
             },
             CreateParameter("@ProductId", productId));
     }
@@ -212,11 +220,11 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
     {
         const string sql = @"
             INSERT INTO ProductIngredient (
-                Id, ProductId, IngredientId, OrderIndex, Quantity, Notes,
+                Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString,
                 CreatedBy, CreatedAt
             )
             VALUES (
-                @Id, @ProductId, @IngredientId, @OrderIndex, @Quantity, @Notes,
+                @Id, @ProductId, @IngredientId, @OrderIndex, @Quantity, @Notes, @IngredientListString,
                 @CreatedBy, GETUTCDATE()
             )";
 
@@ -230,6 +238,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             CreateParameter("@OrderIndex", request.OrderIndex),
             CreateParameter("@Quantity", request.Quantity),
             CreateParameter("@Notes", request.Notes),
+            CreateParameter("@IngredientListString", request.IngredientListString),
             CreateParameter("@CreatedBy", createdBy));
 
         return productIngredientId;

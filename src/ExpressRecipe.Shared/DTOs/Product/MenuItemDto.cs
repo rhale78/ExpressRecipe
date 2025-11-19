@@ -31,6 +31,9 @@ public class MenuItemIngredientDto
     public string IngredientName { get; set; } = string.Empty;
     public int OrderIndex { get; set; }
     public string? Notes { get; set; }
+
+    // Raw ingredient string from menu (e.g., for complex ingredient descriptions)
+    public string? IngredientListString { get; set; }
 }
 
 public class MenuItemNutritionDto

@@ -11,6 +11,12 @@ public class IngredientDto
     public string? Category { get; set; }
     public bool IsCommonAllergen { get; set; }
     public List<Guid> AllergenIds { get; set; } = new();
+
+    // Raw ingredient string from product label (e.g., "Enriched Wheat Flour (Wheat Flour, Niacin, Iron)")
+    public string? IngredientListString { get; set; }
+
+    // Base components this ingredient is composed of (populated on demand)
+    public List<IngredientBaseComponentDto>? BaseComponents { get; set; }
 }
 
 public class ProductIngredientDto
@@ -22,6 +28,9 @@ public class ProductIngredientDto
     public int OrderIndex { get; set; }
     public string? Quantity { get; set; }
     public string? Notes { get; set; }
+
+    // Raw ingredient string from product label for this specific ingredient
+    public string? IngredientListString { get; set; }
 }
 
 public class CreateIngredientRequest
@@ -38,6 +47,9 @@ public class CreateIngredientRequest
 
     public bool IsCommonAllergen { get; set; }
     public List<Guid> AllergenIds { get; set; } = new();
+
+    // Optional raw ingredient string for parsing into base components
+    public string? IngredientListString { get; set; }
 }
 
 public class UpdateIngredientRequest
@@ -53,6 +65,9 @@ public class UpdateIngredientRequest
     public string? Category { get; set; }
 
     public bool IsCommonAllergen { get; set; }
+
+    // Optional raw ingredient string for parsing into base components
+    public string? IngredientListString { get; set; }
 }
 
 public class AddProductIngredientRequest
@@ -63,4 +78,7 @@ public class AddProductIngredientRequest
     public int OrderIndex { get; set; }
     public string? Quantity { get; set; }
     public string? Notes { get; set; }
+
+    // Optional raw ingredient string from product label
+    public string? IngredientListString { get; set; }
 }

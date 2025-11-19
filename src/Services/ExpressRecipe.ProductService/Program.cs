@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.ProductService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -45,6 +46,10 @@ builder.Services.AddScoped<IProductRepository>(sp => new ProductRepository(conne
 builder.Services.AddScoped<IIngredientRepository>(sp => new IngredientRepository(connectionString));
 builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
 builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
+builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
+
+// Register ingredient parser service
+builder.Services.AddScoped<IIngredientParser, IngredientParser>();
 
 // Add controllers
 builder.Services.AddControllers();

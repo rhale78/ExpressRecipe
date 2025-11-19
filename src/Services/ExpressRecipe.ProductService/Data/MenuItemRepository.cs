@@ -199,7 +199,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     public async Task<List<MenuItemIngredientDto>> GetMenuItemIngredientsAsync(Guid menuItemId)
     {
         const string sql = @"
-            SELECT mii.Id, mii.MenuItemId, mii.IngredientId, mii.OrderIndex,
+            SELECT mii.Id, mii.MenuItemId, mii.IngredientId, mii.OrderIndex, mii.IngredientListString,
                    i.Name AS IngredientName, i.Category AS IngredientCategory
             FROM MenuItemIngredient mii
             INNER JOIN Ingredient i ON mii.IngredientId = i.Id
@@ -215,7 +215,8 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
                 IngredientId = GetGuid(reader, "IngredientId"),
                 IngredientName = GetString(reader, "IngredientName") ?? string.Empty,
                 IngredientCategory = GetString(reader, "IngredientCategory"),
-                OrderIndex = GetInt(reader, "OrderIndex") ?? 0
+                OrderIndex = GetInt(reader, "OrderIndex") ?? 0,
+                IngredientListString = GetString(reader, "IngredientListString")
             },
             CreateParameter("@MenuItemId", menuItemId));
     }
