@@ -11,6 +11,7 @@ public class UserProfileDto
     // User's personal dietary restrictions
     public List<string> Allergens { get; set; } = new();
     public List<string> DietaryRestrictions { get; set; } = new();
+    public List<string> DislikedFoods { get; set; } = new(); // Foods they don't like (preference, not medical)
 
     // Family members
     public List<FamilyMemberDto> FamilyMembers { get; set; } = new();
@@ -26,6 +27,7 @@ public class FamilyMemberDto
     public string Relationship { get; set; } = string.Empty; // Spouse, Child, Parent, etc.
     public List<string> Allergens { get; set; } = new();
     public List<string> DietaryRestrictions { get; set; } = new();
+    public List<string> DislikedFoods { get; set; } = new(); // Foods they don't like (preference, not medical)
     public string? Notes { get; set; }
 }
 
@@ -35,6 +37,7 @@ public class UpdateUserProfileRequest
     public string LastName { get; set; } = string.Empty;
     public List<string> Allergens { get; set; } = new();
     public List<string> DietaryRestrictions { get; set; } = new();
+    public List<string> DislikedFoods { get; set; } = new();
 }
 
 public class CreateFamilyMemberRequest
@@ -43,6 +46,7 @@ public class CreateFamilyMemberRequest
     public string Relationship { get; set; } = string.Empty;
     public List<string> Allergens { get; set; } = new();
     public List<string> DietaryRestrictions { get; set; } = new();
+    public List<string> DislikedFoods { get; set; } = new();
     public string? Notes { get; set; }
 }
 
@@ -54,10 +58,13 @@ public class AllergensAndRestrictionsDto
 {
     public List<string> UserAllergens { get; set; } = new();
     public List<string> UserDietaryRestrictions { get; set; } = new();
+    public List<string> UserDislikedFoods { get; set; } = new();
     public List<string> FamilyAllergens { get; set; } = new();
     public List<string> FamilyDietaryRestrictions { get; set; } = new();
+    public List<string> FamilyDislikedFoods { get; set; } = new();
 
     // Combined lists (user + all family members)
     public List<string> AllAllergens => UserAllergens.Concat(FamilyAllergens).Distinct().ToList();
     public List<string> AllDietaryRestrictions => UserDietaryRestrictions.Concat(FamilyDietaryRestrictions).Distinct().ToList();
+    public List<string> AllDislikedFoods => UserDislikedFoods.Concat(FamilyDislikedFoods).Distinct().ToList();
 }

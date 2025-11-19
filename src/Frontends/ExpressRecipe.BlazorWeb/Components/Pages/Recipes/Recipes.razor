@@ -557,6 +557,15 @@
                 _ => new()
             };
 
+            // Determine which foods/ingredients to exclude (disliked foods - preferences, not allergies)
+            List<string> ingredientsToExclude = _filterMode switch
+            {
+                FilterMode.MyAllergies => _userAllergensAndRestrictions?.UserDislikedFoods ?? new(),
+                FilterMode.EntireFamily => _userAllergensAndRestrictions?.AllDislikedFoods ?? new(),
+                FilterMode.Custom => new(), // Custom mode only uses manual allergen selection
+                _ => new()
+            };
+
             // Also apply dietary restrictions from user profile (optional enhancement to dietary filters)
             var dietaryFilters = _selectedDietary.Where(x => x.Value).Select(x => x.Key).ToList();
             if (_filterMode != FilterMode.Custom && _userAllergensAndRestrictions != null)
@@ -577,6 +586,7 @@
                 MaxCookTime = _maxCookTime > 0 ? _maxCookTime : null,
                 DietaryInfo = dietaryFilters.Any() ? dietaryFilters : null,
                 ExcludeAllergens = allergensToExclude.Any() ? allergensToExclude : null,
+                ExcludeIngredients = ingredientsToExclude.Any() ? ingredientsToExclude : null,
                 Page = _currentPage,
                 PageSize = _pageSize,
                 SortBy = _sortBy,

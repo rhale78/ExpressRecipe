@@ -66,6 +66,7 @@ public class RecipeSearchRequest
     public List<string>? Tags { get; set; }
     public List<string>? DietaryInfo { get; set; }
     public List<string>? ExcludeAllergens { get; set; }
+    public List<string>? ExcludeIngredients { get; set; } // Foods/ingredients user dislikes (preference, not medical)
     public int? MaxPrepTime { get; set; }
     public int? MaxCookTime { get; set; }
     public string? Difficulty { get; set; }

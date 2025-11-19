@@ -143,6 +143,40 @@
                     }
                 </div>
 
+                <!-- Foods I Don't Like -->
+                <div class="restriction-section">
+                    <h4>👎 Foods I Don't Like</h4>
+                    <p class="restriction-description">
+                        List foods or ingredients you prefer to avoid (not allergies, just preferences).
+                        Recipes with these ingredients will be filtered out.
+                    </p>
+
+                    @if (_isEditingProfile)
+                    {
+                        <input type="text"
+                               class="form-control"
+                               @bind="_dislikedFoodsInput"
+                               placeholder="e.g., turkey, mushrooms, olives, anchovies (comma-separated)" />
+                        <small class="form-hint">Separate multiple items with commas</small>
+                    }
+                    else
+                    {
+                        @if (_profile.DislikedFoods.Any())
+                        {
+                            <div class="tags-display">
+                                @foreach (var food in _profile.DislikedFoods)
+                                {
+                                    <span class="disliked-food-tag">👎 @food</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="empty-message">No food preferences specified</p>
+                        }
+                    }
+                </div>
+
                 @if (_isEditingProfile)
                 {
                     <div class="form-actions">
@@ -235,6 +269,15 @@
                                         </div>
                                     </div>
 
+                                    <div class="form-group">
+                                        <label>Foods They Don't Like</label>
+                                        <input type="text"
+                                               class="form-control"
+                                               @bind="_familyMemberDislikedFoodsInput"
+                                               placeholder="e.g., turkey, mushrooms, olives (comma-separated)" />
+                                        <small class="form-hint">Separate multiple items with commas</small>
+                                    </div>
+
                                     <div class="form-actions">
                                         <button class="btn btn-outline btn-sm" @onclick="CancelFamilyMemberEdit">Cancel</button>
                                         <button class="btn btn-primary btn-sm" @onclick="() => SaveFamilyMember(member.Id)" disabled="@_isSaving">
@@ -284,9 +327,22 @@
                                     </div>
                                 }
 
-                                @if (!member.Allergens.Any() && !member.DietaryRestrictions.Any())
+                                @if (member.DislikedFoods.Any())
                                 {
-                                    <p class="empty-message-sm">No restrictions</p>
+                                    <div class="member-restriction-section">
+                                        <h5>👎 Dislikes:</h5>
+                                        <div class="tags-display">
+                                            @foreach (var food in member.DislikedFoods)
+                                            {
+                                                <span class="disliked-food-tag-sm">@food</span>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (!member.Allergens.Any() && !member.DietaryRestrictions.Any() && !member.DislikedFoods.Any())
+                                {
+                                    <p class="empty-message-sm">No restrictions or preferences</p>
                                 }
 
                                 <div class="family-member-actions">
@@ -352,6 +408,15 @@
                                             </label>
                                         }
                                     </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Foods They Don't Like</label>
+                                    <input type="text"
+                                           class="form-control"
+                                           @bind="_newFamilyMemberDislikedFoodsInput"
+                                           placeholder="e.g., turkey, mushrooms, olives (comma-separated)" />
+                                    <small class="form-hint">Separate multiple items with commas</small>
                                 </div>
 
                                 <div class="form-actions">
@@ -455,6 +520,11 @@
     private UpdateFamilyMemberRequest _familyMemberEdit = new();
     private CreateFamilyMemberRequest? _newFamilyMember;
 
+    // Disliked foods input (comma-separated)
+    private string _dislikedFoodsInput = string.Empty;
+    private string _familyMemberDislikedFoodsInput = string.Empty;
+    private string _newFamilyMemberDislikedFoodsInput = string.Empty;
+
     private readonly string[] _commonAllergens = new[]
     {
         "Dairy", "Eggs", "Fish", "Shellfish", "Tree Nuts",
@@ -504,6 +574,20 @@
 
         try
         {
+            // Parse disliked foods from comma-separated input
+            if (!string.IsNullOrWhiteSpace(_dislikedFoodsInput))
+            {
+                _profileEdit.DislikedFoods = _dislikedFoodsInput.Split(',')
+                    .Select(f => f.Trim())
+                    .Where(f => !string.IsNullOrEmpty(f))
+                    .Distinct()
+                    .ToList();
+            }
+            else
+            {
+                _profileEdit.DislikedFoods = new();
+            }
+
             var success = await UserProfileApi.UpdateProfileAsync(_profileEdit);
 
             if (success)
