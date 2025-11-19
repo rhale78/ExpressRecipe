@@ -141,11 +141,16 @@ if [ "$FIRST_RUN" = true ]; then
 fi
 
 # Start application services
-echo -e "${BLUE}Starting application services...${NC}"
-$DOCKER_COMPOSE up -d aiservice notificationservice analyticsservice communityservice priceservice
+echo -e "${BLUE}Starting all microservices...${NC}"
+$DOCKER_COMPOSE up -d \
+    authservice userservice productservice recipeservice \
+    inventoryservice shoppingservice mealplanningservice \
+    scannerservice recallservice searchservice syncservice \
+    aiservice notificationservice analyticsservice \
+    communityservice priceservice blazorweb
 
 echo "Waiting for services to be ready..."
-sleep 15
+sleep 20
 
 # Check service health
 echo ""
@@ -168,6 +173,24 @@ check_service() {
     return 1
 }
 
+echo "Core Services:"
+check_service "Auth Service" 5000
+check_service "User Service" 5001
+check_service "Product Service" 5002
+check_service "Recipe Service" 5003
+check_service "Inventory Service" 5004
+check_service "Shopping Service" 5005
+check_service "Meal Planning Service" 5006
+
+echo ""
+echo "Supporting Services:"
+check_service "Scanner Service" 5007
+check_service "Recall Service" 5008
+check_service "Search Service" 5009
+check_service "Sync Service" 5010
+
+echo ""
+echo "Advanced Services:"
 check_service "AI Service" 5100
 check_service "Notification Service" 5101
 check_service "Analytics Service" 5102
@@ -175,25 +198,51 @@ check_service "Community Service" 5103
 check_service "Price Service" 5104
 
 echo ""
+echo "Frontend:"
+check_service "Blazor Web" 5080
+
+echo ""
 echo -e "${GREEN}================================================${NC}"
 echo -e "${GREEN}ExpressRecipe Platform is running!${NC}"
 echo -e "${GREEN}================================================${NC}"
 echo ""
 echo "Service URLs:"
+echo ""
+echo "Web Application:"
+echo "  • Blazor Web UI:       http://localhost:5080"
+echo ""
+echo "Infrastructure:"
 echo "  • Ollama API:          http://localhost:11434"
 echo "  • RabbitMQ Management: http://localhost:15672 (expressrecipe / expressrecipe_dev_password)"
-echo "  • AI Service:          http://localhost:5100"
-echo "  • Notification Service: http://localhost:5101"
-echo "  • Analytics Service:   http://localhost:5102"
-echo "  • Community Service:   http://localhost:5103"
-echo "  • Price Service:       http://localhost:5104"
+echo "  • SQL Server:          localhost:1433 (sa / ExpressRecipe123!)"
+echo "  • Redis:               localhost:6379"
 echo ""
-echo "API Documentation (Swagger):"
-echo "  • http://localhost:5100/swagger"
-echo "  • http://localhost:5101/swagger"
-echo "  • http://localhost:5102/swagger"
-echo "  • http://localhost:5103/swagger"
-echo "  • http://localhost:5104/swagger"
+echo "Core Microservices:"
+echo "  • Auth Service:        http://localhost:5000"
+echo "  • User Service:        http://localhost:5001"
+echo "  • Product Service:     http://localhost:5002"
+echo "  • Recipe Service:      http://localhost:5003"
+echo "  • Inventory Service:   http://localhost:5004"
+echo "  • Shopping Service:    http://localhost:5005"
+echo "  • Meal Planning:       http://localhost:5006"
+echo ""
+echo "Supporting Services:"
+echo "  • Scanner Service:     http://localhost:5007"
+echo "  • Recall Service:      http://localhost:5008"
+echo "  • Search Service:      http://localhost:5009"
+echo "  • Sync Service:        http://localhost:5010"
+echo "  • AI Service:          http://localhost:5100"
+echo "  • Notifications:       http://localhost:5101"
+echo "  • Analytics:           http://localhost:5102"
+echo "  • Community:           http://localhost:5103"
+echo "  • Price Tracking:      http://localhost:5104"
+echo ""
+echo "API Documentation (Swagger) - Add /swagger to any service URL"
+echo "Examples:"
+echo "  • http://localhost:5000/swagger (Auth)"
+echo "  • http://localhost:5002/swagger (Products)"
+echo "  • http://localhost:5100/swagger (AI)"
+echo "  • http://localhost:5080 (Blazor Web UI)"
 echo ""
 echo "Useful commands:"
 echo "  • View logs:     $DOCKER_COMPOSE logs -f"

@@ -207,6 +207,328 @@ services:
     networks:
       - expressrecipe-network
 
+  # Auth Service
+  authservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.AuthService/Dockerfile
+    container_name: expressrecipe-authservice
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # User Service
+  userservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.UserService/Dockerfile
+    container_name: expressrecipe-userservice
+    ports:
+      - "5001:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Product Service
+  productservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.ProductService/Dockerfile
+    container_name: expressrecipe-productservice
+    ports:
+      - "5002:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Recipe Service
+  recipeservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.RecipeService/Dockerfile
+    container_name: expressrecipe-recipeservice
+    ports:
+      - "5003:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Inventory Service
+  inventoryservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.InventoryService/Dockerfile
+    container_name: expressrecipe-inventoryservice
+    ports:
+      - "5004:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Shopping Service
+  shoppingservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.ShoppingService/Dockerfile
+    container_name: expressrecipe-shoppingservice
+    ports:
+      - "5005:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # MealPlanning Service
+  mealplanningservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.MealPlanningService/Dockerfile
+    container_name: expressrecipe-mealplanningservice
+    ports:
+      - "5006:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Scanner Service
+  scannerservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.ScannerService/Dockerfile
+    container_name: expressrecipe-scannerservice
+    ports:
+      - "5007:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Recall Service
+  recallservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.RecallService/Dockerfile
+    container_name: expressrecipe-recallservice
+    ports:
+      - "5008:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Search Service
+  searchservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.SearchService/Dockerfile
+    container_name: expressrecipe-searchservice
+    ports:
+      - "5009:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Sync Service
+  syncservice:
+    build:
+      context: .
+      dockerfile: src/Services/ExpressRecipe.SyncService/Dockerfile
+    container_name: expressrecipe-syncservice
+    ports:
+      - "5010:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__SqlServer=Server=sqlserver;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True
+      - Redis__ConnectionString=redis:6379
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=expressrecipe
+      - RabbitMQ__Password=expressrecipe_dev_password
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - expressrecipe-network
+
+  # Blazor Web Frontend
+  blazorweb:
+    build:
+      context: .
+      dockerfile: src/Frontends/ExpressRecipe.BlazorWeb/Dockerfile
+    container_name: expressrecipe-blazorweb
+    ports:
+      - "5080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Services__AuthService=http://authservice:8080
+      - Services__UserService=http://userservice:8080
+      - Services__ProductService=http://productservice:8080
+      - Services__RecipeService=http://recipeservice:8080
+      - Services__InventoryService=http://inventoryservice:8080
+      - Services__ShoppingService=http://shoppingservice:8080
+      - Services__MealPlanningService=http://mealplanningservice:8080
+      - Services__NotificationService=http://notificationservice:8080
+      - Services__AnalyticsService=http://analyticsservice:8080
+      - Services__CommunityService=http://communityservice:8080
+      - Services__PriceService=http://priceservice:8080
+      - Services__AIService=http://aiservice:8080
+      - Services__ScannerService=http://scannerservice:8080
+      - Services__RecallService=http://recallservice:8080
+      - Services__SearchService=http://searchservice:8080
+      - Services__SyncService=http://syncservice:8080
+      - Redis__ConnectionString=redis:6379
+    depends_on:
+      - authservice
+      - userservice
+      - productservice
+      - recipeservice
+      - inventoryservice
+      - shoppingservice
+      - mealplanningservice
+      - notificationservice
+      - analyticsservice
+      - communityservice
+      - priceservice
+      - aiservice
+      - scannerservice
+      - recallservice
+      - searchservice
+      - syncservice
+    networks:
+      - expressrecipe-network
+
 volumes:
   ollama-data:
   sqlserver-data:

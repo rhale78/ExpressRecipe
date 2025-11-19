@@ -89,3 +89,99 @@ services:
     #   - ./ollama-models:/root/.ollama
     labels:
       - "dev.service=ai-engine"
+
+  # Auth Service - Development overrides
+  authservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=authservice"
+
+  # User Service - Development overrides
+  userservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=userservice"
+
+  # Product Service - Development overrides
+  productservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=productservice"
+
+  # Recipe Service - Development overrides
+  recipeservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=recipeservice"
+
+  # Inventory Service - Development overrides
+  inventoryservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=inventoryservice"
+
+  # Shopping Service - Development overrides
+  shoppingservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=shoppingservice"
+
+  # MealPlanning Service - Development overrides
+  mealplanningservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=mealplanningservice"
+
+  # Scanner Service - Development overrides
+  scannerservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=scannerservice"
+
+  # Recall Service - Development overrides
+  recallservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=recallservice"
+
+  # Search Service - Development overrides
+  searchservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=searchservice"
+
+  # Sync Service - Development overrides
+  syncservice:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=syncservice"
+
+  # Blazor Web - Development overrides
+  blazorweb:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+    labels:
+      - "dev.service=frontend"
