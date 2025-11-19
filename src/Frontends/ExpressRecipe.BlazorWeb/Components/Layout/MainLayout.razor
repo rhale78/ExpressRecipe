@@ -49,9 +49,35 @@
 
                     <div class="nav-divider"></div>
 
+                    <a href="/discover" class="nav-link @GetActiveClass("/discover")">
+                        <span class="nav-icon">🔥</span>
+                        <span class="nav-text">Discover</span>
+                    </a>
+
+                    <a href="/analytics" class="nav-link @GetActiveClass("/analytics")">
+                        <span class="nav-icon">📊</span>
+                        <span class="nav-text">Analytics</span>
+                    </a>
+
+                    <a href="/notifications" class="nav-link @GetActiveClass("/notifications")">
+                        <span class="nav-icon">🔔</span>
+                        <span class="nav-text">Notifications</span>
+                        @if (_unreadCount > 0)
+                        {
+                            <span class="notification-badge">@_unreadCount</span>
+                        }
+                    </a>
+
+                    <div class="nav-divider"></div>
+
                     <a href="/settings" class="nav-link @GetActiveClass("/settings")">
                         <span class="nav-icon">⚙️</span>
                         <span class="nav-text">Settings</span>
+                    </a>
+
+                    <a href="/help" class="nav-link @GetActiveClass("/help")">
+                        <span class="nav-icon">❓</span>
+                        <span class="nav-text">Help</span>
                     </a>
 
                     <button @onclick="HandleLogout" class="nav-link logout-btn">
@@ -100,6 +126,8 @@
 <ToastContainer />
 
 @code {
+    private int _unreadCount = 0;
+
     private string GetActiveClass(string path)
     {
         return Navigation.Uri.Contains(path, StringComparison.OrdinalIgnoreCase) ? "active" : "";
@@ -118,4 +146,10 @@
         await AuthService.LogoutAsync();
         Navigation.NavigateTo("/login");
     }
+
+    // TODO: Load unread notification count when NotificationService is available
+    // protected override async Task OnInitializedAsync()
+    // {
+    //     _unreadCount = await NotificationApi.GetUnreadCountAsync();
+    // }
 }
