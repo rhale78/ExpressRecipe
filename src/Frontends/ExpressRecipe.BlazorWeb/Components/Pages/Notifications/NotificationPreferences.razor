@@ -1,0 +1,313 @@
+@page "/notifications/preferences"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Notification
+@using ExpressRecipe.Client.Shared.Services
+@inject INotificationApiClient NotificationApi
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Notification Preferences - ExpressRecipe</PageTitle>
+
+<div class="preferences-container">
+    <div class="notifications-header">
+        <h1>⚙️ Notification Preferences</h1>
+        <button class="btn btn-secondary-outline" @onclick="() => Navigation.NavigateTo("/notifications")">
+            ← Back to Notifications
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading preferences...</p>
+        </div>
+    }
+    else if (_preferences != null)
+    {
+        <!-- Email Notifications -->
+        <div class="preferences-section">
+            <h2>📧 Email Notifications</h2>
+
+            <div class="preference-group">
+                <div class="preference-item">
+                    <div class="preference-label">
+                        <strong>Enable Email Notifications</strong>
+                        <small>Receive notifications via email</small>
+                    </div>
+                    <div class="preference-control">
+                        <label class="toggle-switch">
+                            <input type="checkbox" @bind="_preferences.EmailEnabled" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                @if (_preferences.EmailEnabled)
+                {
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <strong>Expiring Items</strong>
+                            <small>Get notified when items are about to expire</small>
+                        </div>
+                        <div class="preference-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" @bind="_preferences.EmailOnExpiringItems" />
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <strong>Product Recalls</strong>
+                            <small>Get notified about product safety recalls</small>
+                        </div>
+                        <div class="preference-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" @bind="_preferences.EmailOnProductRecalls" />
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <strong>Low Stock</strong>
+                            <small>Get notified when inventory items are running low</small>
+                        </div>
+                        <div class="preference-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" @bind="_preferences.EmailOnLowStock" />
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Push Notifications -->
+        <div class="preferences-section">
+            <h2>🔔 Push Notifications</h2>
+
+            <div class="preference-group">
+                <div class="preference-item">
+                    <div class="preference-label">
+                        <strong>Enable Push Notifications</strong>
+                        <small>Receive push notifications on your device</small>
+                    </div>
+                    <div class="preference-control">
+                        <label class="toggle-switch">
+                            <input type="checkbox" @bind="_preferences.PushEnabled" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                @if (_preferences.PushEnabled)
+                {
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <strong>Expiring Items</strong>
+                            <small>Get notified when items are about to expire</small>
+                        </div>
+                        <div class="preference-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" @bind="_preferences.PushOnExpiringItems" />
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <strong>Product Recalls</strong>
+                            <small>Get notified about product safety recalls</small>
+                        </div>
+                        <div class="preference-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" @bind="_preferences.PushOnProductRecalls" />
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="preference-item">
+                        <div class="preference-label">
+                            <strong>Low Stock</strong>
+                            <small>Get notified when inventory items are running low</small>
+                        </div>
+                        <div class="preference-control">
+                            <label class="toggle-switch">
+                                <input type="checkbox" @bind="_preferences.PushOnLowStock" />
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- In-App Notifications -->
+        <div class="preferences-section">
+            <h2>📱 In-App Notifications</h2>
+
+            <div class="preference-group">
+                <div class="preference-item">
+                    <div class="preference-label">
+                        <strong>Enable In-App Notifications</strong>
+                        <small>See notifications in the app notification center</small>
+                    </div>
+                    <div class="preference-control">
+                        <label class="toggle-switch">
+                            <input type="checkbox" @bind="_preferences.InAppEnabled" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timing & Threshold Settings -->
+        <div class="preferences-section">
+            <h2>⏱️ Timing & Thresholds</h2>
+
+            <div class="preference-group">
+                <div class="preference-item">
+                    <div class="preference-label">
+                        <strong>Expiring Items Alert</strong>
+                        <small>How many days before expiration to alert you</small>
+                    </div>
+                    <div class="preference-control">
+                        <input type="number"
+                               class="number-input"
+                               min="1"
+                               max="30"
+                               @bind="_preferences.ExpiringItemsDaysAhead" />
+                        <span>days ahead</span>
+                    </div>
+                </div>
+
+                <div class="preference-item">
+                    <div class="preference-label">
+                        <strong>Low Stock Threshold</strong>
+                        <small>Alert when quantity falls below this number</small>
+                    </div>
+                    <div class="preference-control">
+                        <input type="number"
+                               class="number-input"
+                               min="1"
+                               max="20"
+                               @bind="_preferences.LowStockThreshold" />
+                        <span>items</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="preferences-actions">
+            <button class="btn btn-secondary-outline" @onclick="() => Navigation.NavigateTo("/notifications")">
+                Cancel
+            </button>
+            <button class="btn btn-primary" @onclick="SavePreferences" disabled="@_isSaving">
+                @if (_isSaving)
+                {
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <span>💾 Save Preferences</span>
+                }
+            </button>
+        </div>
+
+        @if (_preferences.UpdatedAt.HasValue)
+        {
+            <div style="text-align: center; margin-top: 1rem; color: #6c757d; font-size: 0.9rem;">
+                Last updated: @_preferences.UpdatedAt.Value.ToString("MMM dd, yyyy 'at' h:mm tt")
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isSaving = false;
+    private NotificationPreferencesDto? _preferences;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPreferences();
+    }
+
+    private async Task LoadPreferences()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _preferences = await NotificationApi.GetPreferencesAsync();
+
+        // If no preferences exist, create defaults
+        if (_preferences == null)
+        {
+            _preferences = new NotificationPreferencesDto
+            {
+                EmailEnabled = true,
+                EmailOnExpiringItems = true,
+                EmailOnProductRecalls = true,
+                EmailOnLowStock = true,
+                PushEnabled = true,
+                PushOnExpiringItems = true,
+                PushOnProductRecalls = true,
+                PushOnLowStock = true,
+                InAppEnabled = true,
+                ExpiringItemsDaysAhead = 3,
+                LowStockThreshold = 2
+            };
+        }
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task SavePreferences()
+    {
+        if (_preferences == null) return;
+
+        _isSaving = true;
+        StateHasChanged();
+
+        var request = new UpdateNotificationPreferencesRequest
+        {
+            EmailEnabled = _preferences.EmailEnabled,
+            EmailOnExpiringItems = _preferences.EmailOnExpiringItems,
+            EmailOnProductRecalls = _preferences.EmailOnProductRecalls,
+            EmailOnLowStock = _preferences.EmailOnLowStock,
+            PushEnabled = _preferences.PushEnabled,
+            PushOnExpiringItems = _preferences.PushOnExpiringItems,
+            PushOnProductRecalls = _preferences.PushOnProductRecalls,
+            PushOnLowStock = _preferences.PushOnLowStock,
+            InAppEnabled = _preferences.InAppEnabled,
+            ExpiringItemsDaysAhead = _preferences.ExpiringItemsDaysAhead,
+            LowStockThreshold = _preferences.LowStockThreshold
+        };
+
+        var success = await NotificationApi.UpdatePreferencesAsync(request);
+
+        _isSaving = false;
+
+        if (success)
+        {
+            ToastService.ShowSuccess("Your notification preferences have been saved successfully!");
+            _preferences.UpdatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            ToastService.ShowError("Failed to save preferences. Please try again.");
+        }
+
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,81 @@
+@page "/error"
+
+<PageTitle>Error - ExpressRecipe</PageTitle>
+
+<div class="error-container">
+    <div class="error-content">
+        <div class="error-code">⚠️</div>
+        <h1>Something Went Wrong</h1>
+        <p class="error-message">
+            We're sorry, but something unexpected happened. Our team has been notified and is working on it.
+        </p>
+
+        <div class="error-details">
+            <button class="btn-link" @onclick="ToggleDetails">
+                @(_showDetails ? "Hide" : "Show") Error Details
+            </button>
+
+            @if (_showDetails && !string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="error-stack">
+                    <pre>@ErrorMessage</pre>
+                </div>
+            }
+        </div>
+
+        <div class="error-actions">
+            <button class="btn btn-primary" @onclick="GoBack">
+                ← Go Back
+            </button>
+            <button class="btn btn-secondary-outline" @onclick='() => Navigation.NavigateTo("/")'>
+                🏠 Go to Homepage
+            </button>
+            <button class="btn btn-secondary-outline" @onclick="RefreshPage">
+                🔄 Refresh Page
+            </button>
+        </div>
+
+        <div class="help-section">
+            <h3>Need help?</h3>
+            <p>If this problem persists, you can:</p>
+            <ul>
+                <li><a href="/help">Visit our Help Center</a></li>
+                <li><a href="mailto:support@expressrecipe.com">Contact Support</a></li>
+                <li><a href="/settings">Check your Settings</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="error-illustration">
+        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="100" cy="100" r="80" fill="#fff5f5" stroke="#dc3545" stroke-width="2"/>
+            <text x="100" y="120" text-anchor="middle" font-size="60" fill="#dc3545">⚠️</text>
+        </svg>
+    </div>
+</div>
+
+@code {
+    @inject NavigationManager Navigation
+    @inject IJSRuntime JS
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public string? ErrorMessage { get; set; }
+
+    private bool _showDetails = false;
+
+    private void ToggleDetails()
+    {
+        _showDetails = !_showDetails;
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/", forceLoad: false);
+    }
+
+    private async Task RefreshPage()
+    {
+        await JS.InvokeVoidAsync("location.reload");
+    }
+}

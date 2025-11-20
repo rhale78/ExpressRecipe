@@ -1,0 +1,417 @@
+@page "/recipes/{RecipeId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using System.Security.Claims
+@attribute [Authorize]
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>@(_recipe?.Title ?? "Recipe Details") - ExpressRecipe</PageTitle>
+
+<div class="recipe-details-container">
+    <!-- Back Button -->
+    <div class="navigation-bar">
+        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/recipes")">
+            ← Back to Recipes
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading recipe...</p>
+        </div>
+    }
+    else if (_recipe != null)
+    {
+        <!-- Recipe Header -->
+        <div class="recipe-header-section">
+            <div class="recipe-header-image">
+                @if (!string.IsNullOrEmpty(_recipe.ImageUrl))
+                {
+                    <img src="@_recipe.ImageUrl" alt="@_recipe.Title" />
+                }
+                else
+                {
+                    <div class="recipe-header-placeholder">
+                        <div class="placeholder-icon">🍽️</div>
+                    </div>
+                }
+            </div>
+
+            <div class="recipe-header-info">
+                <div class="recipe-badges">
+                    <span class="difficulty-badge @_recipe.Difficulty.ToLower()">@_recipe.Difficulty</span>
+                    @foreach (var diet in _recipe.DietaryInfo.Take(3))
+                    {
+                        <span class="dietary-badge">@diet</span>
+                    }
+                </div>
+
+                <h1 class="recipe-detail-title">@_recipe.Title</h1>
+                <p class="recipe-detail-description">@_recipe.Description</p>
+
+                <!-- Recipe Stats -->
+                <div class="recipe-stats">
+                    <div class="stat-item">
+                        <span class="stat-icon">⏱️</span>
+                        <div class="stat-content">
+                            <span class="stat-label">Prep</span>
+                            <span class="stat-value">@_recipe.PrepTimeMinutes min</span>
+                        </div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">🔥</span>
+                        <div class="stat-content">
+                            <span class="stat-label">Cook</span>
+                            <span class="stat-value">@_recipe.CookTimeMinutes min</span>
+                        </div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">🕐</span>
+                        <div class="stat-content">
+                            <span class="stat-label">Total</span>
+                            <span class="stat-value">@_recipe.TotalTimeMinutes min</span>
+                        </div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">🍴</span>
+                        <div class="stat-content">
+                            <span class="stat-label">Servings</span>
+                            <span class="stat-value">@_recipe.Servings</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="recipe-actions">
+                    <button class="btn @(_isFavorite ? "btn-primary" : "btn-outline")" @onclick="ToggleFavorite">
+                        @if (_isFavorite)
+                        {
+                            <span>⭐ Favorited (@_recipe.FavoriteCount)</span>
+                        }
+                        else
+                        {
+                            <span>☆ Favorite</span>
+                        }
+                    </button>
+                    @if (_isOwner)
+                    {
+                        <button class="btn btn-outline" @onclick="EditRecipe">
+                            ✏️ Edit
+                        </button>
+                        <button class="btn btn-outline btn-danger" @onclick="DeleteRecipe">
+                            🗑️ Delete
+                        </button>
+                    }
+                    <button class="btn btn-outline" @onclick="AddToMealPlan">
+                        📅 Add to Meal Plan
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_recipe.Source))
+                {
+                    <div class="recipe-source">
+                        <span class="source-label">Source:</span>
+                        @if (!string.IsNullOrEmpty(_recipe.SourceUrl))
+                        {
+                            <a href="@_recipe.SourceUrl" target="_blank" class="source-link">@_recipe.Source</a>
+                        }
+                        else
+                        {
+                            <span>@_recipe.Source</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Allergen Warning -->
+        @if (_recipe.Allergens.Any())
+        {
+            <div class="allergen-warning-section">
+                <h3>⚠️ Allergen Information</h3>
+                <div class="allergen-tags-large">
+                    @foreach (var allergen in _recipe.Allergens)
+                    {
+                        <span class="allergen-tag-large">@allergen</span>
+                    }
+                </div>
+                <p class="allergen-warning-text">
+                    This recipe contains or may contain the allergens listed above.
+                </p>
+            </div>
+        }
+
+        <!-- Main Content Grid -->
+        <div class="recipe-content-grid">
+            <!-- Ingredients Section -->
+            <div class="ingredients-section">
+                <h2>Ingredients</h2>
+
+                @if (_recipe.Ingredients.GroupBy(i => i.GroupName ?? "").Any(g => !string.IsNullOrEmpty(g.Key)))
+                {
+                    // Grouped ingredients
+                    @foreach (var group in _recipe.Ingredients.GroupBy(i => i.GroupName ?? "").OrderBy(g => string.IsNullOrEmpty(g.Key) ? 0 : 1))
+                    {
+                        @if (!string.IsNullOrEmpty(group.Key))
+                        {
+                            <h3 class="ingredient-group-title">@group.Key</h3>
+                        }
+                        <ul class="ingredients-list">
+                            @foreach (var ingredient in group.OrderBy(i => i.OrderIndex))
+                            {
+                                <li class="ingredient-item @(ingredient.IsOptional ? "optional" : "")">
+                                    <span class="ingredient-quantity">@ingredient.Quantity @ingredient.Unit</span>
+                                    <span class="ingredient-name">@ingredient.Name</span>
+                                    @if (ingredient.IsOptional)
+                                    {
+                                        <span class="ingredient-optional-label">(optional)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(ingredient.Notes))
+                                    {
+                                        <span class="ingredient-notes">@ingredient.Notes</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+                }
+                else
+                {
+                    // Simple list
+                    <ul class="ingredients-list">
+                        @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
+                        {
+                            <li class="ingredient-item @(ingredient.IsOptional ? "optional" : "")">
+                                <span class="ingredient-quantity">@ingredient.Quantity @ingredient.Unit</span>
+                                <span class="ingredient-name">@ingredient.Name</span>
+                                @if (ingredient.IsOptional)
+                                {
+                                    <span class="ingredient-optional-label">(optional)</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            <!-- Instructions Section -->
+            <div class="instructions-section">
+                <h2>Instructions</h2>
+                <ol class="instructions-list">
+                    @foreach (var step in _recipe.Steps.OrderBy(s => s.OrderIndex))
+                    {
+                        <li class="instruction-step">
+                            <div class="step-content">
+                                <p class="step-instruction">@step.Instruction</p>
+                                @if (step.DurationMinutes.HasValue)
+                                {
+                                    <span class="step-duration">⏱️ @step.DurationMinutes min</span>
+                                }
+                                @if (!string.IsNullOrEmpty(step.Tips))
+                                {
+                                    <div class="step-tips">
+                                        <strong>💡 Tip:</strong> @step.Tips
+                                    </div>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </div>
+        </div>
+
+        <!-- Nutrition Information -->
+        @if (_recipe.Nutrition != null)
+        {
+            <div class="nutrition-section">
+                <h2>Nutrition Information</h2>
+                <p class="nutrition-serving">Per serving (@_recipe.Servings servings total)</p>
+                <div class="nutrition-grid">
+                    <div class="nutrition-item">
+                        <span class="nutrition-value">@_recipe.Nutrition.Calories</span>
+                        <span class="nutrition-label">Calories</span>
+                    </div>
+                    <div class="nutrition-item">
+                        <span class="nutrition-value">@_recipe.Nutrition.Protein g</span>
+                        <span class="nutrition-label">Protein</span>
+                    </div>
+                    <div class="nutrition-item">
+                        <span class="nutrition-value">@_recipe.Nutrition.Carbohydrates g</span>
+                        <span class="nutrition-label">Carbs</span>
+                    </div>
+                    <div class="nutrition-item">
+                        <span class="nutrition-value">@_recipe.Nutrition.Fat g</span>
+                        <span class="nutrition-label">Fat</span>
+                    </div>
+                    <div class="nutrition-item">
+                        <span class="nutrition-value">@_recipe.Nutrition.Fiber g</span>
+                        <span class="nutrition-label">Fiber</span>
+                    </div>
+                    <div class="nutrition-item">
+                        <span class="nutrition-value">@_recipe.Nutrition.Sugar g</span>
+                        <span class="nutrition-label">Sugar</span>
+                    </div>
+                    <div class="nutrition-item">
+                        <span class="nutrition-value">@_recipe.Nutrition.Sodium mg</span>
+                        <span class="nutrition-label">Sodium</span>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Tags -->
+        @if (_recipe.Tags.Any())
+        {
+            <div class="tags-section">
+                <h3>Tags</h3>
+                <div class="tags-list">
+                    @foreach (var tag in _recipe.Tags)
+                    {
+                        <span class="tag-item">@tag</span>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Ratings and Reviews -->
+        <RecipeRatingsReviews RecipeId="@RecipeId" />
+    }
+    else if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="error-container">
+            <div class="error-icon">❌</div>
+            <h2>Recipe Not Found</h2>
+            <p>@_errorMessage</p>
+            <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/recipes")">
+                Browse All Recipes
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid RecipeId { get; set; }
+
+    private RecipeDto? _recipe;
+    private bool _isLoading = true;
+    private bool _isFavorite = false;
+    private bool _isOwner = false;
+    private string? _errorMessage;
+    private Guid _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get current user ID
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userIdClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
+        {
+            _currentUserId = userId;
+        }
+
+        await LoadRecipeAsync();
+    }
+
+    private async Task LoadRecipeAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            _recipe = await RecipeApi.GetRecipeAsync(RecipeId);
+
+            if (_recipe == null)
+            {
+                _errorMessage = "Recipe not found. It may have been removed or the ID is invalid.";
+                return;
+            }
+
+            // Check if user owns this recipe
+            _isOwner = _recipe.CreatedBy == _currentUserId;
+
+            // Check if recipe is favorited
+            _isFavorite = await RecipeApi.IsFavoriteAsync(RecipeId);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load recipe: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ToggleFavorite()
+    {
+        try
+        {
+            if (_isFavorite)
+            {
+                await RecipeApi.UnfavoriteRecipeAsync(RecipeId);
+                _isFavorite = false;
+                if (_recipe != null)
+                    _recipe.FavoriteCount--;
+            }
+            else
+            {
+                await RecipeApi.FavoriteRecipeAsync(RecipeId);
+                _isFavorite = true;
+                if (_recipe != null)
+                    _recipe.FavoriteCount++;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to update favorite: {ex.Message}";
+        }
+    }
+
+    private void EditRecipe()
+    {
+        Navigation.NavigateTo($"/recipes/{RecipeId}/edit");
+    }
+
+    private async Task DeleteRecipe()
+    {
+        if (!await ConfirmDelete())
+            return;
+
+        try
+        {
+            var success = await RecipeApi.DeleteRecipeAsync(RecipeId);
+            if (success)
+            {
+                Navigation.NavigateTo("/recipes");
+            }
+            else
+            {
+                _errorMessage = "Failed to delete recipe.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to delete recipe: {ex.Message}";
+        }
+    }
+
+    private async Task<bool> ConfirmDelete()
+    {
+        // TODO: Implement proper confirmation dialog
+        // For now, using browser confirm (would need JS interop)
+        return true;
+    }
+
+    private void AddToMealPlan()
+    {
+        // TODO: Implement add to meal plan
+        Navigation.NavigateTo("/meal-planning");
+    }
+}

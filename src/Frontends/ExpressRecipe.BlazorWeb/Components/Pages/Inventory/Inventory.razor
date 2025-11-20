@@ -1,0 +1,572 @@
+@page "/inventory"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Inventory
+@using ExpressRecipe.Client.Shared.Services
+@inject IInventoryApiClient InventoryApi
+@inject NavigationManager Navigation
+
+<PageTitle>My Inventory - ExpressRecipe</PageTitle>
+
+<div class="inventory-container">
+    <div class="inventory-header">
+        <h1>🥫 My Inventory</h1>
+        <div class="header-actions">
+            <button class="btn btn-primary" @onclick="NavigateToAdd">
+                <span class="btn-icon">➕</span> Add Item
+            </button>
+        </div>
+    </div>
+
+    <p class="inventory-subtitle">
+        Track what you have in your pantry, fridge, and freezer. Get alerts for expiring items and low stock.
+    </p>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading your inventory...</p>
+        </div>
+    }
+    else if (_summary != null)
+    {
+        <!-- Summary Dashboard -->
+        <div class="summary-dashboard">
+            <div class="summary-card" @onclick="() => ApplyQuickFilter(QuickFilter.All)">
+                <div class="summary-icon">📦</div>
+                <div class="summary-value">@_summary.TotalItems</div>
+                <div class="summary-label">Total Items</div>
+            </div>
+
+            <div class="summary-card warning" @onclick="() => ApplyQuickFilter(QuickFilter.ExpiringSoon)">
+                <div class="summary-icon">⏰</div>
+                <div class="summary-value">@_summary.ExpiringSoonItems</div>
+                <div class="summary-label">Expiring Soon</div>
+            </div>
+
+            <div class="summary-card danger" @onclick="() => ApplyQuickFilter(QuickFilter.Expired)">
+                <div class="summary-icon">❌</div>
+                <div class="summary-value">@_summary.ExpiredItems</div>
+                <div class="summary-label">Expired</div>
+            </div>
+
+            <div class="summary-card info" @onclick="() => ApplyQuickFilter(QuickFilter.LowStock)">
+                <div class="summary-icon">📉</div>
+                <div class="summary-value">@_summary.LowStockItems</div>
+                <div class="summary-label">Low Stock</div>
+            </div>
+        </div>
+
+        <!-- Location Tabs -->
+        <div class="location-tabs">
+            <button class="location-tab @(_selectedLocation == "All" ? "active" : "")"
+                    @onclick="() => SelectLocation(\"All\")">
+                All Locations (@_summary.TotalItems)
+            </button>
+            @foreach (var location in _summary.ItemsByLocation.OrderByDescending(x => x.Value))
+            {
+                <button class="location-tab @(_selectedLocation == location.Key ? "active" : "")"
+                        @onclick="() => SelectLocation(location.Key)">
+                    @GetLocationIcon(location.Key) @location.Key (@location.Value)
+                </button>
+            }
+        </div>
+
+        <!-- Search and Filters -->
+        <div class="search-section">
+            <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" class="search-input" placeholder="Search inventory..."
+                       @bind="_searchTerm" @bind:event="oninput" @onkeyup="HandleSearchKeyUp" />
+                @if (!string.IsNullOrWhiteSpace(_searchTerm))
+                {
+                    <button class="clear-search-btn" @onclick="ClearSearch">✕</button>
+                }
+            </div>
+
+            <div class="filter-actions">
+                <button class="btn btn-secondary" @onclick="ToggleFilters">
+                    <span class="btn-icon">🎚️</span>
+                    @(_showFilters ? "Hide" : "Show") Filters
+                </button>
+
+                <select class="sort-select" @bind="_sortBy" @bind:after="SearchInventory">
+                    <option value="ExpirationDate">Sort by: Expiration Date</option>
+                    <option value="Name">Sort by: Name</option>
+                    <option value="PurchaseDate">Sort by: Purchase Date</option>
+                    <option value="CreatedAt">Sort by: Recently Added</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Advanced Filters (Collapsible) -->
+        @if (_showFilters)
+        {
+            <div class="filters-panel">
+                <div class="filter-group">
+                    <label>Categories</label>
+                    <div class="checkbox-group">
+                        @foreach (var category in _summary.ItemsByCategory.Keys)
+                        {
+                            <label class="checkbox-label">
+                                <input type="checkbox"
+                                       checked="@_selectedCategories.Contains(category)"
+                                       @onchange="@(e => ToggleCategory(category, (bool)e.Value!))" />
+                                <span>@category (@_summary.ItemsByCategory[category])</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div class="filter-actions-bottom">
+                    <button class="btn btn-secondary-outline" @onclick="ClearAllFilters">Clear All Filters</button>
+                    <button class="btn btn-primary" @onclick="SearchInventory">Apply Filters</button>
+                </div>
+            </div>
+        }
+
+        <!-- Inventory Items Grid -->
+        @if (_searchResult != null && _searchResult.Items.Any())
+        {
+            <div class="inventory-grid">
+                @foreach (var item in _searchResult.Items)
+                {
+                    <div class="inventory-card @GetCardStatusClass(item)">
+                        <!-- Status Badge -->
+                        @if (item.IsExpired)
+                        {
+                            <div class="status-badge expired">Expired</div>
+                        }
+                        else if (item.IsExpiringSoon)
+                        {
+                            <div class="status-badge expiring-soon">Expires Soon</div>
+                        }
+                        @if (item.IsLowStock)
+                        {
+                            <div class="status-badge low-stock">Low Stock</div>
+                        }
+
+                        <!-- Item Image -->
+                        @if (!string.IsNullOrWhiteSpace(item.ProductImageUrl))
+                        {
+                            <div class="item-image">
+                                <img src="@item.ProductImageUrl" alt="@item.Name" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="item-image placeholder">
+                                <span class="placeholder-icon">📦</span>
+                            </div>
+                        }
+
+                        <!-- Item Info -->
+                        <div class="item-info">
+                            <h3 class="item-name">@item.Name</h3>
+                            @if (!string.IsNullOrWhiteSpace(item.Brand))
+                            {
+                                <p class="item-brand">@item.Brand</p>
+                            }
+
+                            <div class="item-meta">
+                                <span class="item-quantity">@item.Quantity @item.Unit</span>
+                                <span class="item-location">@GetLocationIcon(item.Location) @item.Location</span>
+                            </div>
+
+                            @if (item.ExpirationDate.HasValue)
+                            {
+                                <div class="item-expiration @GetExpirationClass(item)">
+                                    <span class="expiration-icon">📅</span>
+                                    @if (item.IsExpired)
+                                    {
+                                        <span>Expired @item.ExpirationDate.Value.ToString("MMM dd, yyyy")</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Expires @item.ExpirationDate.Value.ToString("MMM dd, yyyy")</span>
+                                    }
+                                </div>
+                            }
+
+                            <!-- Allergen Warnings -->
+                            @if (item.ProductAllergens.Any())
+                            {
+                                <div class="allergen-warnings">
+                                    @foreach (var allergen in item.ProductAllergens)
+                                    {
+                                        <span class="allergen-tag-sm">⚠️ @allergen</span>
+                                    }
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(item.Notes))
+                            {
+                                <p class="item-notes">💬 @item.Notes</p>
+                            }
+                        </div>
+
+                        <!-- Item Actions -->
+                        <div class="item-actions">
+                            <button class="btn btn-sm btn-secondary-outline" @onclick="() => NavigateToEdit(item.Id)">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-secondary-outline" @onclick="() => ShowAdjustQuantity(item)">
+                                Adjust
+                            </button>
+                            <button class="btn btn-sm btn-danger-outline" @onclick="() => ConfirmDelete(item)">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Pagination -->
+            @if (_searchResult.TotalPages > 1)
+            {
+                <div class="pagination">
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
+                            @onclick="() => ChangePage(_currentPage - 1)">
+                        ← Previous
+                    </button>
+
+                    <span class="pagination-info">
+                        Page @_currentPage of @_searchResult.TotalPages
+                        (@_searchResult.TotalCount items)
+                    </span>
+
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _searchResult.TotalPages)"
+                            @onclick="() => ChangePage(_currentPage + 1)">
+                        Next →
+                    </button>
+                </div>
+            }
+        }
+        else if (_searchResult != null)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <h3>No Items Found</h3>
+                <p>
+                    @if (!string.IsNullOrWhiteSpace(_searchTerm))
+                    {
+                        <span>No items match your search. Try different keywords or clear filters.</span>
+                    }
+                    else
+                    {
+                        <span>Your inventory is empty. Start by adding your first item!</span>
+                    }
+                </p>
+                <button class="btn btn-primary" @onclick="NavigateToAdd">
+                    <span class="btn-icon">➕</span> Add Your First Item
+                </button>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="error-state">
+            <div class="error-icon">⚠️</div>
+            <h3>Unable to Load Inventory</h3>
+            <p>There was a problem loading your inventory. Please try again.</p>
+            <button class="btn btn-primary" @onclick="LoadInventory">Retry</button>
+        </div>
+    }
+</div>
+
+<!-- Adjust Quantity Modal -->
+@if (_showAdjustModal && _selectedItem != null)
+{
+    <div class="modal-overlay" @onclick="CloseAdjustModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Adjust Quantity: @_selectedItem.Name</h2>
+                <button class="modal-close" @onclick="CloseAdjustModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <p class="current-quantity">Current: <strong>@_selectedItem.Quantity @_selectedItem.Unit</strong></p>
+
+                <div class="form-group">
+                    <label>Adjustment Amount</label>
+                    <div class="quantity-adjustment">
+                        <button class="btn btn-secondary-outline" @onclick="() => _quantityChange -= 1">−</button>
+                        <input type="number" step="0.1" class="form-control" @bind="_quantityChange" />
+                        <button class="btn btn-secondary-outline" @onclick="() => _quantityChange += 1">+</button>
+                    </div>
+                    <span class="form-hint">Use negative numbers to decrease quantity</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Reason (optional)</label>
+                    <select class="form-control" @bind="_adjustmentReason">
+                        <option value="">Select reason...</option>
+                        <option value="Used in recipe">Used in recipe</option>
+                        <option value="Purchased more">Purchased more</option>
+                        <option value="Expired/thrown out">Expired/thrown out</option>
+                        <option value="Gave away">Gave away</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="new-quantity-preview">
+                    New quantity: <strong>@(_selectedItem.Quantity + _quantityChange) @_selectedItem.Unit</strong>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="CloseAdjustModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveQuantityAdjustment">Save Adjustment</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (_showDeleteModal && _selectedItem != null)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Delete Item?</h2>
+                <button class="modal-close" @onclick="CloseDeleteModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong>@_selectedItem.Name</strong> from your inventory?</p>
+                <p class="text-muted">This action cannot be undone.</p>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="CloseDeleteModal">Cancel</button>
+                <button class="btn btn-danger" @onclick="DeleteItem">Delete</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private enum QuickFilter { All, ExpiringSoon, Expired, LowStock }
+
+    private bool _isLoading = true;
+    private InventorySummaryDto? _summary;
+    private InventorySearchResult? _searchResult;
+
+    // Search and filters
+    private string _searchTerm = string.Empty;
+    private string _selectedLocation = "All";
+    private List<string> _selectedCategories = new();
+    private QuickFilter _currentQuickFilter = QuickFilter.All;
+    private bool _showFilters = false;
+    private string _sortBy = "ExpirationDate";
+    private int _currentPage = 1;
+    private const int PageSize = 24;
+
+    // Modals
+    private bool _showAdjustModal = false;
+    private bool _showDeleteModal = false;
+    private InventoryItemDto? _selectedItem;
+    private decimal _quantityChange = 0;
+    private string _adjustmentReason = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInventory();
+    }
+
+    private async Task LoadInventory()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _summary = await InventoryApi.GetInventorySummaryAsync();
+
+        await SearchInventory();
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task SearchInventory()
+    {
+        var request = new InventorySearchRequest
+        {
+            SearchTerm = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
+            Locations = _selectedLocation == "All" ? null : new List<string> { _selectedLocation },
+            Categories = _selectedCategories.Any() ? _selectedCategories : null,
+            Page = _currentPage,
+            PageSize = PageSize,
+            SortBy = _sortBy,
+            SortDescending = _sortBy == "CreatedAt"
+        };
+
+        // Apply quick filters
+        switch (_currentQuickFilter)
+        {
+            case QuickFilter.ExpiringSoon:
+                request.IsExpiringSoon = true;
+                break;
+            case QuickFilter.Expired:
+                request.IsExpired = true;
+                break;
+            case QuickFilter.LowStock:
+                request.IsLowStock = true;
+                break;
+        }
+
+        _searchResult = await InventoryApi.SearchInventoryAsync(request);
+        StateHasChanged();
+    }
+
+    private void ApplyQuickFilter(QuickFilter filter)
+    {
+        _currentQuickFilter = filter;
+        _currentPage = 1;
+        _ = SearchInventory();
+    }
+
+    private void SelectLocation(string location)
+    {
+        _selectedLocation = location;
+        _currentPage = 1;
+        _ = SearchInventory();
+    }
+
+    private void ToggleCategory(string category, bool selected)
+    {
+        if (selected)
+            _selectedCategories.Add(category);
+        else
+            _selectedCategories.Remove(category);
+    }
+
+    private void ToggleFilters()
+    {
+        _showFilters = !_showFilters;
+    }
+
+    private void ClearAllFilters()
+    {
+        _selectedCategories.Clear();
+        _currentQuickFilter = QuickFilter.All;
+        _currentPage = 1;
+        _ = SearchInventory();
+    }
+
+    private void HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _currentPage = 1;
+            _ = SearchInventory();
+        }
+    }
+
+    private void ClearSearch()
+    {
+        _searchTerm = string.Empty;
+        _currentPage = 1;
+        _ = SearchInventory();
+    }
+
+    private void ChangePage(int page)
+    {
+        _currentPage = page;
+        _ = SearchInventory();
+    }
+
+    private void NavigateToAdd()
+    {
+        Navigation.NavigateTo("/inventory/add");
+    }
+
+    private void NavigateToEdit(Guid id)
+    {
+        Navigation.NavigateTo($"/inventory/{id}/edit");
+    }
+
+    private void ShowAdjustQuantity(InventoryItemDto item)
+    {
+        _selectedItem = item;
+        _quantityChange = 0;
+        _adjustmentReason = string.Empty;
+        _showAdjustModal = true;
+    }
+
+    private void CloseAdjustModal()
+    {
+        _showAdjustModal = false;
+        _selectedItem = null;
+    }
+
+    private async Task SaveQuantityAdjustment()
+    {
+        if (_selectedItem == null) return;
+
+        var request = new AdjustInventoryQuantityRequest
+        {
+            InventoryItemId = _selectedItem.Id,
+            QuantityChange = _quantityChange,
+            Reason = string.IsNullOrWhiteSpace(_adjustmentReason) ? null : _adjustmentReason
+        };
+
+        var success = await InventoryApi.AdjustQuantityAsync(request);
+
+        if (success)
+        {
+            CloseAdjustModal();
+            await LoadInventory();
+        }
+    }
+
+    private void ConfirmDelete(InventoryItemDto item)
+    {
+        _selectedItem = item;
+        _showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        _showDeleteModal = false;
+        _selectedItem = null;
+    }
+
+    private async Task DeleteItem()
+    {
+        if (_selectedItem == null) return;
+
+        var success = await InventoryApi.DeleteInventoryItemAsync(_selectedItem.Id);
+
+        if (success)
+        {
+            CloseDeleteModal();
+            await LoadInventory();
+        }
+    }
+
+    private string GetLocationIcon(string location)
+    {
+        return location.ToLower() switch
+        {
+            "pantry" => "🏺",
+            "fridge" => "❄️",
+            "freezer" => "🧊",
+            _ => "📦"
+        };
+    }
+
+    private string GetCardStatusClass(InventoryItemDto item)
+    {
+        if (item.IsExpired) return "status-expired";
+        if (item.IsExpiringSoon) return "status-expiring-soon";
+        if (item.IsLowStock) return "status-low-stock";
+        return string.Empty;
+    }
+
+    private string GetExpirationClass(InventoryItemDto item)
+    {
+        if (item.IsExpired) return "expired";
+        if (item.IsExpiringSoon) return "expiring-soon";
+        return string.Empty;
+    }
+}

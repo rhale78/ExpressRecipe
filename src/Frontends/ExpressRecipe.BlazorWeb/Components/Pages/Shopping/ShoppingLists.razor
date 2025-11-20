@@ -1,0 +1,453 @@
+@page "/shopping"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.Client.Shared.Services
+@inject IShoppingListApiClient ShoppingApi
+@inject NavigationManager Navigation
+
+<PageTitle>Shopping Lists - ExpressRecipe</PageTitle>
+
+<div class="shopping-container">
+    <div class="shopping-header">
+        <h1>🛒 Shopping Lists</h1>
+        <div class="header-actions">
+            <button class="btn btn-primary" @onclick="CreateNewList">
+                <span class="btn-icon">➕</span> New List
+            </button>
+        </div>
+    </div>
+
+    <p class="shopping-subtitle">
+        Manage your shopping lists, add items from recipes or low-stock inventory.
+    </p>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading shopping lists...</p>
+        </div>
+    }
+    else if (_summary != null)
+    {
+        <!-- Summary Cards -->
+        <div class="summary-dashboard">
+            <div class="summary-card">
+                <div class="summary-icon">📝</div>
+                <div class="summary-value">@_summary.TotalActiveLists</div>
+                <div class="summary-label">Active Lists</div>
+            </div>
+
+            <div class="summary-card info">
+                <div class="summary-icon">🛍️</div>
+                <div class="summary-value">@_summary.TotalActiveItems</div>
+                <div class="summary-label">Items to Buy</div>
+            </div>
+
+            <div class="summary-card success">
+                <div class="summary-icon">✅</div>
+                <div class="summary-value">@_summary.CompletedItemsThisWeek</div>
+                <div class="summary-label">Completed This Week</div>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-icon">💰</div>
+                <div class="summary-value">$@_summary.EstimatedTotal.ToString("0.00")</div>
+                <div class="summary-label">Estimated Total</div>
+            </div>
+        </div>
+
+        <!-- Status Tabs -->
+        <div class="status-tabs">
+            <button class="status-tab @(_selectedStatus == "Active" ? "active" : "")"
+                    @onclick="() => SelectStatus(\"Active\")">
+                Active (@_searchResult?.Lists.Count(l => l.Status == "Active") ?? 0)
+            </button>
+            <button class="status-tab @(_selectedStatus == "Completed" ? "active" : "")"
+                    @onclick="() => SelectStatus(\"Completed\")">
+                Completed
+            </button>
+            <button class="status-tab @(_selectedStatus == "Archived" ? "active" : "")"
+                    @onclick="() => SelectStatus(\"Archived\")">
+                Archived
+            </button>
+            <button class="status-tab @(_selectedStatus == "All" ? "active" : "")"
+                    @onclick="() => SelectStatus(\"All\")">
+                All Lists
+            </button>
+        </div>
+
+        <!-- Shopping Lists Grid -->
+        @if (_searchResult != null && _searchResult.Lists.Any())
+        {
+            <div class="shopping-lists-grid">
+                @foreach (var list in _searchResult.Lists)
+                {
+                    <div class="shopping-list-card" @onclick="() => ViewList(list.Id)">
+                        <!-- Status Badge -->
+                        <div class="list-status-badge @list.Status.ToLower()">
+                            @list.Status
+                        </div>
+
+                        <!-- List Header -->
+                        <div class="list-header">
+                            <h3 class="list-name">@list.Name</h3>
+                            @if (list.ShoppingDate.HasValue)
+                            {
+                                <p class="list-date">
+                                    📅 @list.ShoppingDate.Value.ToString("MMM dd, yyyy")
+                                </p>
+                            }
+                        </div>
+
+                        <!-- List Description -->
+                        @if (!string.IsNullOrWhiteSpace(list.Description))
+                        {
+                            <p class="list-description">@list.Description</p>
+                        }
+
+                        <!-- Progress Bar -->
+                        <div class="progress-section">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" style="width: @list.CompletionPercentage%"></div>
+                            </div>
+                            <div class="progress-text">
+                                @list.CompletedItems / @list.TotalItems items
+                                (@list.CompletionPercentage.ToString("0")%)
+                            </div>
+                        </div>
+
+                        <!-- Item Summary -->
+                        @if (list.Items.Any())
+                        {
+                            <div class="item-preview">
+                                <div class="preview-items">
+                                    @foreach (var item in list.Items.Where(i => !i.IsPurchased).Take(3))
+                                    {
+                                        <div class="preview-item">
+                                            <span class="item-checkbox">☐</span>
+                                            <span class="item-name-preview">@item.Name</span>
+                                        </div>
+                                    }
+                                    @if (list.RemainingItems > 3)
+                                    {
+                                        <div class="preview-more">
+                                            + @(list.RemainingItems - 3) more items
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Card Actions -->
+                        <div class="card-actions">
+                            <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ViewList(list.Id)">
+                                View List
+                            </button>
+                            @if (list.Status == "Active")
+                            {
+                                <button class="btn btn-sm btn-success-outline" @onclick:stopPropagation="true" @onclick="() => CompleteList(list.Id)">
+                                    ✓ Complete
+                                </button>
+                            }
+                            <button class="btn btn-sm btn-danger-outline" @onclick:stopPropagation="true" @onclick="() => ConfirmDelete(list)">
+                                Delete
+                            </button>
+                        </div>
+
+                        <!-- Creation Date -->
+                        <div class="list-meta">
+                            <span class="meta-text">Created @list.CreatedAt.ToString("MMM dd, yyyy")</span>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Pagination -->
+            @if (_searchResult.TotalPages > 1)
+            {
+                <div class="pagination">
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
+                            @onclick="() => ChangePage(_currentPage - 1)">
+                        ← Previous
+                    </button>
+
+                    <span class="pagination-info">
+                        Page @_currentPage of @_searchResult.TotalPages
+                        (@_searchResult.TotalCount lists)
+                    </span>
+
+                    <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _searchResult.TotalPages)"
+                            @onclick="() => ChangePage(_currentPage + 1)">
+                        Next →
+                    </button>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📝</div>
+                <h3>No Shopping Lists</h3>
+                <p>
+                    @if (_selectedStatus == "Active")
+                    {
+                        <span>You don't have any active shopping lists. Create one to get started!</span>
+                    }
+                    else
+                    {
+                        <span>No @_selectedStatus.ToLower() shopping lists found.</span>
+                    }
+                </p>
+                <button class="btn btn-primary" @onclick="CreateNewList">
+                    <span class="btn-icon">➕</span> Create Shopping List
+                </button>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="error-state">
+            <div class="error-icon">⚠️</div>
+            <h3>Unable to Load Shopping Lists</h3>
+            <p>There was a problem loading your shopping lists. Please try again.</p>
+            <button class="btn btn-primary" @onclick="LoadShoppingLists">Retry</button>
+        </div>
+    }
+</div>
+
+<!-- Create List Modal -->
+@if (_showCreateModal)
+{
+    <div class="modal-overlay" @onclick="CloseCreateModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Create Shopping List</h2>
+                <button class="modal-close" @onclick="CloseCreateModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>List Name *</label>
+                    <input type="text" class="form-control" @bind="_newListName"
+                           placeholder="e.g., Weekly Groceries, Costco Trip" />
+                </div>
+
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="form-control" rows="3" @bind="_newListDescription"
+                              placeholder="Optional notes about this list..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Shopping Date</label>
+                    <input type="date" class="form-control"
+                           value="@(_newListDate?.ToString("yyyy-MM-dd"))"
+                           @onchange="@(e => _newListDate = string.IsNullOrEmpty(e.Value?.ToString()) ? null : DateTime.Parse(e.Value.ToString()!))" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(_createErrorMessage))
+                {
+                    <div class="alert alert-error">
+                        ⚠️ @_createErrorMessage
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="CloseCreateModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveNewList" disabled="@_isCreating">
+                    @if (_isCreating)
+                    {
+                        <span class="spinner-small"></span>
+                        <span>Creating...</span>
+                    }
+                    else
+                    {
+                        <span>Create List</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (_showDeleteModal && _selectedList != null)
+{
+    <div class="modal-overlay" @onclick="CloseDeleteModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Delete Shopping List?</h2>
+                <button class="modal-close" @onclick="CloseDeleteModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong>@_selectedList.Name</strong>?</p>
+                <p class="text-muted">This will permanently delete all @_selectedList.TotalItems items in this list. This action cannot be undone.</p>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="CloseDeleteModal">Cancel</button>
+                <button class="btn btn-danger" @onclick="DeleteList">Delete</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _isLoading = true;
+    private ShoppingSummaryDto? _summary;
+    private ShoppingListSearchResult? _searchResult;
+
+    private string _selectedStatus = "Active";
+    private int _currentPage = 1;
+    private const int PageSize = 12;
+
+    // Create modal
+    private bool _showCreateModal = false;
+    private string _newListName = string.Empty;
+    private string _newListDescription = string.Empty;
+    private DateTime? _newListDate;
+    private bool _isCreating = false;
+    private string _createErrorMessage = string.Empty;
+
+    // Delete modal
+    private bool _showDeleteModal = false;
+    private ShoppingListDto? _selectedList;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadShoppingLists();
+    }
+
+    private async Task LoadShoppingLists()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _summary = await ShoppingApi.GetShoppingSummaryAsync();
+
+        await SearchLists();
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task SearchLists()
+    {
+        var request = new ShoppingListSearchRequest
+        {
+            Status = _selectedStatus == "All" ? null : _selectedStatus,
+            Page = _currentPage,
+            PageSize = PageSize,
+            SortBy = "CreatedAt",
+            SortDescending = true
+        };
+
+        _searchResult = await ShoppingApi.SearchShoppingListsAsync(request);
+        StateHasChanged();
+    }
+
+    private void SelectStatus(string status)
+    {
+        _selectedStatus = status;
+        _currentPage = 1;
+        _ = SearchLists();
+    }
+
+    private void ChangePage(int page)
+    {
+        _currentPage = page;
+        _ = SearchLists();
+    }
+
+    private void ViewList(Guid id)
+    {
+        Navigation.NavigateTo($"/shopping/{id}");
+    }
+
+    private void CreateNewList()
+    {
+        _newListName = string.Empty;
+        _newListDescription = string.Empty;
+        _newListDate = null;
+        _createErrorMessage = string.Empty;
+        _showCreateModal = true;
+    }
+
+    private void CloseCreateModal()
+    {
+        _showCreateModal = false;
+    }
+
+    private async Task SaveNewList()
+    {
+        _createErrorMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(_newListName))
+        {
+            _createErrorMessage = "List name is required.";
+            return;
+        }
+
+        _isCreating = true;
+        StateHasChanged();
+
+        var request = new CreateShoppingListRequest
+        {
+            Name = _newListName,
+            Description = _newListDescription,
+            ShoppingDate = _newListDate
+        };
+
+        var listId = await ShoppingApi.CreateShoppingListAsync(request);
+
+        _isCreating = false;
+
+        if (listId.HasValue)
+        {
+            CloseCreateModal();
+            Navigation.NavigateTo($"/shopping/{listId.Value}");
+        }
+        else
+        {
+            _createErrorMessage = "Failed to create list. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task CompleteList(Guid id)
+    {
+        var success = await ShoppingApi.CompleteShoppingListAsync(id);
+        if (success)
+        {
+            await LoadShoppingLists();
+        }
+    }
+
+    private void ConfirmDelete(ShoppingListDto list)
+    {
+        _selectedList = list;
+        _showDeleteModal = true;
+    }
+
+    private void CloseDeleteModal()
+    {
+        _showDeleteModal = false;
+        _selectedList = null;
+    }
+
+    private async Task DeleteList()
+    {
+        if (_selectedList == null) return;
+
+        var success = await ShoppingApi.DeleteShoppingListAsync(_selectedList.Id);
+
+        if (success)
+        {
+            CloseDeleteModal();
+            await LoadShoppingLists();
+        }
+    }
+}

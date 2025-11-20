@@ -1,0 +1,352 @@
+@page "/products/scan"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Product
+@attribute [Authorize]
+@inject IProductApiClient ProductApi
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Scan Barcode - ExpressRecipe</PageTitle>
+
+<div class="barcode-scan-container">
+    <!-- Header -->
+    <div class="scan-header">
+        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/products")">
+            ← Back to Products
+        </button>
+        <h1>Barcode Scanner</h1>
+    </div>
+
+    <!-- Scanner Mode Toggle -->
+    <div class="scanner-modes">
+        <button class="mode-btn @(_scanMode == ScanMode.Camera ? "active" : "")"
+                @onclick="() => SetScanMode(ScanMode.Camera)">
+            📷 Camera
+        </button>
+        <button class="mode-btn @(_scanMode == ScanMode.Manual ? "active" : "")"
+                @onclick="() => SetScanMode(ScanMode.Manual)">
+            ⌨️ Manual Entry
+        </button>
+    </div>
+
+    <!-- Camera Scanner Mode -->
+    @if (_scanMode == ScanMode.Camera)
+    {
+        <div class="camera-scanner-section">
+            @if (!_isCameraActive)
+            {
+                <div class="camera-placeholder">
+                    <div class="camera-icon">📷</div>
+                    <h2>Camera Scanner</h2>
+                    <p>Scan product barcodes to quickly find allergen information</p>
+                    <button class="btn btn-primary btn-large" @onclick="StartCamera">
+                        Start Camera
+                    </button>
+                    <div class="camera-note">
+                        <p>⚠️ Your browser will ask for camera permission</p>
+                        <p>📱 Works best on mobile devices</p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="camera-view">
+                    <div class="camera-frame">
+                        <video id="barcode-scanner" autoplay playsinline></video>
+                        <div class="scan-overlay">
+                            <div class="scan-line"></div>
+                        </div>
+                    </div>
+                    <div class="camera-controls">
+                        <button class="btn btn-outline" @onclick="StopCamera">
+                            Stop Camera
+                        </button>
+                        @if (_isScanning)
+                        {
+                            <div class="scanning-indicator">
+                                <div class="spinner-small"></div>
+                                <span>Scanning...</span>
+                            </div>
+                        }
+                    </div>
+                    <p class="camera-instructions">
+                        Position the barcode within the frame above
+                    </p>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Manual Entry Mode -->
+    @if (_scanMode == ScanMode.Manual)
+    {
+        <div class="manual-entry-section">
+            <div class="manual-entry-card">
+                <h2>Enter UPC Code</h2>
+                <p>Manually enter the UPC barcode number (usually 12 digits)</p>
+
+                <div class="upc-input-group">
+                    <input type="text"
+                           class="upc-input"
+                           placeholder="Enter UPC code (e.g., 012345678905)"
+                           @bind="_manualUpc"
+                           @bind:event="oninput"
+                           @onkeypress="HandleUpcKeyPress"
+                           maxlength="14"
+                           inputmode="numeric"
+                           pattern="[0-9]*" />
+                    <button class="btn btn-primary"
+                            @onclick="SearchByManualUpc"
+                            disabled="@(string.IsNullOrWhiteSpace(_manualUpc) || _isSearching)">
+                        @if (_isSearching)
+                        {
+                            <span class="spinner-small"></span>
+                            <span>Searching...</span>
+                        }
+                        else
+                        {
+                            <span>🔍 Search</span>
+                        }
+                    </button>
+                </div>
+
+                <div class="upc-examples">
+                    <p class="examples-label">Example UPC codes:</p>
+                    <div class="example-codes">
+                        <button class="example-code" @onclick="() => SetExampleUpc("012345678905")">
+                            012345678905
+                        </button>
+                        <button class="example-code" @onclick="() => SetExampleUpc("041220576463")">
+                            041220576463
+                        </button>
+                        <button class="example-code" @onclick="() => SetExampleUpc("070038320425")">
+                            070038320425
+                        </button>
+                    </div>
+                    <p class="examples-note">Click an example to try it</p>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Search Results -->
+    @if (_scannedProduct != null)
+    {
+        <div class="scan-result-section">
+            <div class="result-header">
+                <h2>✅ Product Found!</h2>
+            </div>
+
+            <div class="scanned-product-card">
+                <div class="scanned-product-image">
+                    @if (!string.IsNullOrEmpty(_scannedProduct.ImageUrl))
+                    {
+                        <img src="@_scannedProduct.ImageUrl" alt="@_scannedProduct.Name" />
+                    }
+                    else
+                    {
+                        <div class="scanned-image-placeholder">📦</div>
+                    }
+                </div>
+
+                <div class="scanned-product-info">
+                    <h3>@_scannedProduct.Name</h3>
+                    <p class="scanned-brand">@_scannedProduct.Brand</p>
+                    <p class="scanned-upc">UPC: @_scannedProduct.UPC</p>
+
+                    <!-- Allergen Alert -->
+                    @if (_scannedProduct.Allergens.Any())
+                    {
+                        <div class="allergen-alert">
+                            <h4>⚠️ Allergen Warning</h4>
+                            <div class="allergen-tags">
+                                @foreach (var allergen in _scannedProduct.Allergens)
+                                {
+                                    <span class="allergen-tag-alert">@allergen</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="allergen-safe">
+                            <h4>✅ No Major Allergens Detected</h4>
+                        </div>
+                    }
+
+                    <div class="scanned-actions">
+                        <button class="btn btn-primary" @onclick="() => ViewProductDetails(_scannedProduct.Id)">
+                            View Full Details
+                        </button>
+                        <button class="btn btn-outline" @onclick="ScanAnother">
+                            Scan Another Product
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Error Message -->
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-error">
+            <strong>Error:</strong> @_errorMessage
+            <button class="alert-close" @onclick="() => _errorMessage = null">×</button>
+        </div>
+    }
+
+    <!-- Not Found Message -->
+    @if (_showNotFound)
+    {
+        <div class="not-found-section">
+            <div class="not-found-icon">🔍</div>
+            <h2>Product Not Found</h2>
+            <p>We couldn't find a product with UPC: <strong>@_lastScannedUpc</strong></p>
+            <p>This product may not be in our database yet.</p>
+            <div class="not-found-actions">
+                <button class="btn btn-primary" @onclick="ScanAnother">
+                    Try Another Scan
+                </button>
+                <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/products")">
+                    Browse All Products
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private enum ScanMode { Camera, Manual }
+
+    private ScanMode _scanMode = ScanMode.Manual; // Default to manual for easier testing
+    private bool _isCameraActive = false;
+    private bool _isScanning = false;
+    private bool _isSearching = false;
+    private string _manualUpc = string.Empty;
+    private string? _lastScannedUpc;
+    private ProductDto? _scannedProduct;
+    private bool _showNotFound = false;
+    private string? _errorMessage;
+
+    private void SetScanMode(ScanMode mode)
+    {
+        if (_isCameraActive && mode != ScanMode.Camera)
+        {
+            StopCamera();
+        }
+        _scanMode = mode;
+        ClearResults();
+    }
+
+    private async Task StartCamera()
+    {
+        try
+        {
+            // TODO: Implement JavaScript interop for camera access and barcode scanning
+            // This would use a library like QuaggaJS or ZXing
+            // await JS.InvokeVoidAsync("startBarcodeScanner", DotNetObjectReference.Create(this));
+            _isCameraActive = true;
+            _errorMessage = "Camera barcode scanning will be implemented with JavaScript interop (QuaggaJS/ZXing)";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to start camera: {ex.Message}";
+        }
+    }
+
+    private async Task StopCamera()
+    {
+        try
+        {
+            // TODO: Implement JavaScript interop to stop camera
+            // await JS.InvokeVoidAsync("stopBarcodeScanner");
+            _isCameraActive = false;
+            _isScanning = false;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to stop camera: {ex.Message}";
+        }
+    }
+
+    // This would be called from JavaScript when a barcode is detected
+    [JSInvokable]
+    public async Task OnBarcodeDetected(string upc)
+    {
+        _isScanning = true;
+        StateHasChanged();
+
+        await SearchByUpc(upc);
+
+        _isScanning = false;
+        StateHasChanged();
+    }
+
+    private void SetExampleUpc(string upc)
+    {
+        _manualUpc = upc;
+    }
+
+    private async Task HandleUpcKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_manualUpc))
+        {
+            await SearchByManualUpc();
+        }
+    }
+
+    private async Task SearchByManualUpc()
+    {
+        if (string.IsNullOrWhiteSpace(_manualUpc))
+            return;
+
+        await SearchByUpc(_manualUpc);
+    }
+
+    private async Task SearchByUpc(string upc)
+    {
+        _isSearching = true;
+        _errorMessage = null;
+        _showNotFound = false;
+        _lastScannedUpc = upc;
+
+        try
+        {
+            _scannedProduct = await ProductApi.GetProductByUpcAsync(upc);
+
+            if (_scannedProduct == null)
+            {
+                _showNotFound = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to search for product: {ex.Message}";
+        }
+        finally
+        {
+            _isSearching = false;
+        }
+    }
+
+    private void ScanAnother()
+    {
+        ClearResults();
+        _manualUpc = string.Empty;
+    }
+
+    private void ClearResults()
+    {
+        _scannedProduct = null;
+        _showNotFound = false;
+        _errorMessage = null;
+        _lastScannedUpc = null;
+    }
+
+    private void ViewProductDetails(Guid productId)
+    {
+        Navigation.NavigateTo($"/products/{productId}");
+    }
+}

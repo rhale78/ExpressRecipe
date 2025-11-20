@@ -1,0 +1,510 @@
+@page "/meal-planning"
+@rendermode InteractiveAuto
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Services
+@inject IMealPlanApiClient MealPlanApi
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+
+<PageTitle>Meal Planning - ExpressRecipe</PageTitle>
+
+<div class="meal-planning-container">
+    <div class="planning-header">
+        <h1>📅 Meal Planning</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" @onclick="CreateQuickPlan">
+                ⚡ Quick Plan
+            </button>
+            <button class="btn btn-primary" @onclick="CreateMealPlan">
+                ➕ New Plan
+            </button>
+        </div>
+    </div>
+
+    <p class="planning-subtitle">
+        Plan your meals for the week and generate shopping lists automatically.
+    </p>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading meal plans...</p>
+        </div>
+    }
+    else if (_summary != null)
+    {
+        <!-- Summary Cards -->
+        <div class="summary-dashboard">
+            <div class="summary-card">
+                <div class="summary-icon">📋</div>
+                <div class="summary-value">@_summary.TotalActivePlans</div>
+                <div class="summary-label">Active Plans</div>
+            </div>
+
+            <div class="summary-card info">
+                <div class="summary-icon">🍽️</div>
+                <div class="summary-value">@_summary.MealsThisWeek</div>
+                <div class="summary-label">Meals This Week</div>
+            </div>
+
+            <div class="summary-card success">
+                <div class="summary-icon">✅</div>
+                <div class="summary-value">@_summary.PreparedThisWeek</div>
+                <div class="summary-label">Prepared This Week</div>
+            </div>
+
+            <div class="summary-card">
+                <div class="summary-icon">⏱️</div>
+                <div class="summary-value">@_summary.TotalUpcomingMeals</div>
+                <div class="summary-label">Upcoming Meals</div>
+            </div>
+        </div>
+
+        <!-- Week Navigation -->
+        <div class="week-navigation">
+            <button class="nav-btn" @onclick="PreviousWeek">← Previous Week</button>
+            <h2 class="week-title">
+                @_currentWeekStart.ToString("MMM dd") - @_currentWeekStart.AddDays(6).ToString("MMM dd, yyyy")
+            </h2>
+            <button class="nav-btn" @onclick="NextWeek">Next Week →</button>
+        </div>
+
+        <!-- Weekly Calendar -->
+        @if (_weekView != null && _weekView.Days.Any())
+        {
+            <div class="week-calendar">
+                @foreach (var day in _weekView.Days)
+                {
+                    <div class="day-column @(day.Date.Date == DateTime.Today ? "today" : "")">
+                        <!-- Day Header -->
+                        <div class="day-header">
+                            <div class="day-name">@day.Date.ToString("ddd")</div>
+                            <div class="day-date">@day.Date.ToString("MMM dd")</div>
+                            @if (day.IsComplete && day.TotalMeals > 0)
+                            {
+                                <div class="day-complete-badge">✓</div>
+                            }
+                        </div>
+
+                        <!-- Meals for the day -->
+                        <div class="day-meals">
+                            @if (day.Meals.Any())
+                            {
+                                @foreach (var meal in day.Meals.OrderBy(m => GetMealTypeOrder(m.MealType)))
+                                {
+                                    <div class="meal-card @(meal.IsPrepared ? "prepared" : "") @GetMealTypeClass(meal.MealType)"
+                                         @onclick="() => ViewMeal(meal)">
+                                        <div class="meal-type-badge">@GetMealTypeIcon(meal.MealType)</div>
+
+                                        <div class="meal-info">
+                                            <h4 class="meal-name">
+                                                @if (meal.RecipeId.HasValue)
+                                                {
+                                                    @meal.RecipeName
+                                                }
+                                                else
+                                                {
+                                                    @meal.CustomMealName
+                                                }
+                                            </h4>
+
+                                            @if (meal.Servings > 0)
+                                            {
+                                                <span class="meal-servings">👥 @meal.Servings servings</span>
+                                            }
+
+                                            @if (meal.RecipePrepTime.HasValue || meal.RecipeCookTime.HasValue)
+                                            {
+                                                <span class="meal-time">
+                                                    ⏱️ @((meal.RecipePrepTime ?? 0) + (meal.RecipeCookTime ?? 0)) min
+                                                </span>
+                                            }
+
+                                            @if (meal.RecipeAllergens.Any())
+                                            {
+                                                <div class="meal-allergens">
+                                                    @foreach (var allergen in meal.RecipeAllergens.Take(2))
+                                                    {
+                                                        <span class="allergen-tag-xs">⚠️ @allergen</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+
+                                        @if (meal.IsPrepared)
+                                        {
+                                            <div class="prepared-checkmark">✓</div>
+                                        }
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="empty-day">
+                                    <p>No meals planned</p>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Add Meal Button -->
+                        <button class="add-meal-btn" @onclick="() => ShowAddMealModal(day.Date)">
+                            ➕ Add Meal
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <!-- Actions for Current Plan -->
+            @if (_currentActivePlan != null)
+            {
+                <div class="plan-actions">
+                    <button class="btn btn-primary" @onclick="GenerateShoppingList">
+                        🛒 Generate Shopping List
+                    </button>
+                    <button class="btn btn-secondary" @onclick="ViewNutritionSummary">
+                        📊 Nutrition Summary
+                    </button>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📅</div>
+                <h3>No Meal Plan for This Week</h3>
+                <p>Create a meal plan to start organizing your weekly meals.</p>
+                <button class="btn btn-primary" @onclick="CreateMealPlan">
+                    ➕ Create Meal Plan
+                </button>
+            </div>
+        }
+    }
+</div>
+
+<!-- Add/Edit Meal Modal -->
+@if (_showAddMealModal)
+{
+    <div class="modal-overlay" @onclick="CloseAddMealModal">
+        <div class="modal-content large" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Add Meal - @_selectedDate.ToString("MMM dd, yyyy")</h2>
+                <button class="modal-close" @onclick="CloseAddMealModal">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Meal Type *</label>
+                    <select class="form-control" @bind="_newMealEntry.MealType">
+                        <option value="Breakfast">🍳 Breakfast</option>
+                        <option value="Lunch">🥗 Lunch</option>
+                        <option value="Dinner">🍽️ Dinner</option>
+                        <option value="Snack">🍿 Snack</option>
+                    </select>
+                </div>
+
+                <!-- Recipe Search -->
+                <div class="form-group">
+                    <label>Search Recipes</label>
+                    <div class="recipe-search-bar">
+                        <input type="text" class="form-control" placeholder="Search safe recipes..."
+                               @bind="_recipeSearchTerm" @bind:event="oninput" />
+                        <button class="btn btn-secondary" @onclick="SearchRecipes">Search</button>
+                    </div>
+
+                    @if (_recipeSearchResults?.Any() == true)
+                    {
+                        <div class="recipe-search-results">
+                            @foreach (var recipe in _recipeSearchResults.Take(5))
+                            {
+                                <div class="recipe-result-card" @onclick="() => SelectRecipe(recipe)">
+                                    <strong>@recipe.Title</strong>
+                                    <span class="text-muted">⏱️ @recipe.TotalTimeMinutes min</span>
+                                    <button class="btn btn-sm btn-primary">Select</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="divider-small">OR</div>
+
+                <!-- Custom Meal -->
+                <div class="form-group">
+                    <label>Custom Meal Name</label>
+                    <input type="text" class="form-control" @bind="_newMealEntry.CustomMealName"
+                           placeholder="e.g., Leftovers, Takeout" />
+                </div>
+
+                <div class="form-group">
+                    <label>Servings</label>
+                    <input type="number" class="form-control" @bind="_newMealEntry.Servings" min="1" />
+                </div>
+
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea class="form-control" rows="2" @bind="_newMealEntry.Notes"></textarea>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_addMealError))
+                {
+                    <div class="alert alert-error">@_addMealError</div>
+                }
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="CloseAddMealModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveMeal">Add Meal</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _isLoading = true;
+    private MealPlanSummaryDto? _summary;
+    private MealPlanWeekView? _weekView;
+    private MealPlanDto? _currentActivePlan;
+    private DateTime _currentWeekStart;
+
+    // Add meal modal
+    private bool _showAddMealModal = false;
+    private DateTime _selectedDate;
+    private AddMealPlanEntryRequest _newMealEntry = new();
+    private string _addMealError = string.Empty;
+    private string _recipeSearchTerm = string.Empty;
+    private List<RecipeDto>? _recipeSearchResults;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _currentWeekStart = GetWeekStart(DateTime.Today);
+        await LoadMealPlanning();
+    }
+
+    private DateTime GetWeekStart(DateTime date)
+    {
+        // Get Sunday of the week
+        var diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        return date.AddDays(-1 * diff).Date;
+    }
+
+    private async Task LoadMealPlanning()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _summary = await MealPlanApi.GetMealPlanSummaryAsync();
+        _weekView = await MealPlanApi.GetWeekViewAsync(_currentWeekStart);
+
+        // Get current active plan for actions
+        var plansResult = await MealPlanApi.SearchMealPlansAsync(new MealPlanSearchRequest
+        {
+            Status = "Active",
+            Page = 1,
+            PageSize = 1
+        });
+        _currentActivePlan = plansResult?.Plans.FirstOrDefault();
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task PreviousWeek()
+    {
+        _currentWeekStart = _currentWeekStart.AddDays(-7);
+        await LoadWeekView();
+    }
+
+    private async Task NextWeek()
+    {
+        _currentWeekStart = _currentWeekStart.AddDays(7);
+        await LoadWeekView();
+    }
+
+    private async Task LoadWeekView()
+    {
+        _weekView = await MealPlanApi.GetWeekViewAsync(_currentWeekStart);
+        StateHasChanged();
+    }
+
+    private void ShowAddMealModal(DateTime date)
+    {
+        _selectedDate = date;
+        _newMealEntry = new AddMealPlanEntryRequest
+        {
+            MealPlanId = _currentActivePlan?.Id ?? Guid.Empty,
+            Date = date,
+            MealType = "Dinner",
+            Servings = 4
+        };
+        _recipeSearchResults = null;
+        _addMealError = string.Empty;
+        _showAddMealModal = true;
+    }
+
+    private void CloseAddMealModal()
+    {
+        _showAddMealModal = false;
+    }
+
+    private async Task SearchRecipes()
+    {
+        if (string.IsNullOrWhiteSpace(_recipeSearchTerm))
+            return;
+
+        var request = new RecipeSearchRequest
+        {
+            SearchTerm = _recipeSearchTerm,
+            Page = 1,
+            PageSize = 10
+        };
+
+        var result = await RecipeApi.SearchRecipesAsync(request);
+        _recipeSearchResults = result?.Recipes ?? new();
+        StateHasChanged();
+    }
+
+    private void SelectRecipe(RecipeDto recipe)
+    {
+        _newMealEntry.RecipeId = recipe.Id;
+        _newMealEntry.CustomMealName = null;
+        _recipeSearchResults = null;
+        _recipeSearchTerm = string.Empty;
+    }
+
+    private async Task SaveMeal()
+    {
+        _addMealError = string.Empty;
+
+        if (_currentActivePlan == null)
+        {
+            _addMealError = "Please create a meal plan first.";
+            return;
+        }
+
+        if (!_newMealEntry.RecipeId.HasValue && string.IsNullOrWhiteSpace(_newMealEntry.CustomMealName))
+        {
+            _addMealError = "Please select a recipe or enter a custom meal name.";
+            return;
+        }
+
+        _newMealEntry.MealPlanId = _currentActivePlan.Id;
+
+        var entryId = await MealPlanApi.AddMealEntryAsync(_newMealEntry);
+
+        if (entryId.HasValue)
+        {
+            CloseAddMealModal();
+            await LoadMealPlanning();
+        }
+        else
+        {
+            _addMealError = "Failed to add meal. Please try again.";
+        }
+    }
+
+    private void ViewMeal(MealPlanEntryDto meal)
+    {
+        // Mark as prepared/unprepared
+        var request = new MarkMealPreparedRequest
+        {
+            EntryId = meal.Id,
+            IsPrepared = !meal.IsPrepared
+        };
+
+        _ = MarkMealPreparedAsync(request);
+    }
+
+    private async Task MarkMealPreparedAsync(MarkMealPreparedRequest request)
+    {
+        var success = await MealPlanApi.MarkMealPreparedAsync(request);
+        if (success)
+        {
+            await LoadMealPlanning();
+        }
+    }
+
+    private void CreateMealPlan()
+    {
+        Navigation.NavigateTo("/meal-planning/create");
+    }
+
+    private void CreateQuickPlan()
+    {
+        // Create a quick 7-day plan
+        var request = new QuickMealPlanRequest
+        {
+            StartDate = _currentWeekStart,
+            DurationDays = 7,
+            MealTypes = new List<string> { "Dinner" },
+            DefaultServings = 4,
+            UseUserPreferences = true
+        };
+
+        _ = CreateQuickPlanAsync(request);
+    }
+
+    private async Task CreateQuickPlanAsync(QuickMealPlanRequest request)
+    {
+        var planId = await MealPlanApi.CreateQuickMealPlanAsync(request);
+        if (planId.HasValue)
+        {
+            await LoadMealPlanning();
+        }
+    }
+
+    private async Task GenerateShoppingList()
+    {
+        if (_currentActivePlan == null)
+            return;
+
+        var request = new GenerateShoppingListFromMealPlanRequest
+        {
+            MealPlanId = _currentActivePlan.Id,
+            SubtractInventory = true,
+            ShoppingListName = $"Meal Plan: {_currentActivePlan.Name}"
+        };
+
+        var listId = await MealPlanApi.GenerateShoppingListAsync(request);
+
+        if (listId.HasValue)
+        {
+            Navigation.NavigateTo($"/shopping/{listId.Value}");
+        }
+    }
+
+    private void ViewNutritionSummary()
+    {
+        // TODO: Implement nutrition summary modal
+    }
+
+    private int GetMealTypeOrder(string mealType)
+    {
+        return mealType switch
+        {
+            "Breakfast" => 0,
+            "Lunch" => 1,
+            "Dinner" => 2,
+            "Snack" => 3,
+            _ => 4
+        };
+    }
+
+    private string GetMealTypeIcon(string mealType)
+    {
+        return mealType switch
+        {
+            "Breakfast" => "🍳",
+            "Lunch" => "🥗",
+            "Dinner" => "🍽️",
+            "Snack" => "🍿",
+            _ => "🍴"
+        };
+    }
+
+    private string GetMealTypeClass(string mealType)
+    {
+        return mealType.ToLower();
+    }
+}

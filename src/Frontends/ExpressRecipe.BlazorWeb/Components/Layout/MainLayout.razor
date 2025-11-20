@@ -1,0 +1,175 @@
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+@inject IAuthService AuthService
+
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h1 class="logo">🍽️ ExpressRecipe</h1>
+        </div>
+
+        <nav class="sidebar-nav">
+            <AuthorizeView>
+                <Authorized>
+                    <a href="/dashboard" class="nav-link @GetActiveClass("/dashboard")">
+                        <span class="nav-icon">🏠</span>
+                        <span class="nav-text">Dashboard</span>
+                    </a>
+
+                    <a href="/search" class="nav-link @GetActiveClass("/search")">
+                        <span class="nav-icon">🔍</span>
+                        <span class="nav-text">Search</span>
+                    </a>
+
+                    <a href="/scanner" class="nav-link @GetActiveClass("/scanner")">
+                        <span class="nav-icon">📷</span>
+                        <span class="nav-text">Barcode Scanner</span>
+                    </a>
+
+                    <a href="/products" class="nav-link @GetActiveClass("/products")">
+                        <span class="nav-icon">📦</span>
+                        <span class="nav-text">Products</span>
+                    </a>
+
+                    <a href="/recipes" class="nav-link @GetActiveClass("/recipes")">
+                        <span class="nav-icon">🍳</span>
+                        <span class="nav-text">Recipes</span>
+                    </a>
+
+                    <a href="/inventory" class="nav-link @GetActiveClass("/inventory")">
+                        <span class="nav-icon">🥫</span>
+                        <span class="nav-text">My Inventory</span>
+                    </a>
+
+                    <a href="/shopping" class="nav-link @GetActiveClass("/shopping")">
+                        <span class="nav-icon">🛒</span>
+                        <span class="nav-text">Shopping List</span>
+                    </a>
+
+                    <a href="/meal-planning" class="nav-link @GetActiveClass("/meal-planning")">
+                        <span class="nav-icon">📅</span>
+                        <span class="nav-text">Meal Planning</span>
+                    </a>
+
+                    <div class="nav-divider"></div>
+
+                    <a href="/discover" class="nav-link @GetActiveClass("/discover")">
+                        <span class="nav-icon">🔥</span>
+                        <span class="nav-text">Discover</span>
+                    </a>
+
+                    <a href="/analytics" class="nav-link @GetActiveClass("/analytics")">
+                        <span class="nav-icon">📊</span>
+                        <span class="nav-text">Analytics</span>
+                    </a>
+
+                    <a href="/notifications" class="nav-link @GetActiveClass("/notifications")">
+                        <span class="nav-icon">🔔</span>
+                        <span class="nav-text">Notifications</span>
+                        @if (_unreadCount > 0)
+                        {
+                            <span class="notification-badge">@_unreadCount</span>
+                        }
+                    </a>
+
+                    <a href="/recalls" class="nav-link @GetActiveClass("/recalls")">
+                        <span class="nav-icon">⚠️</span>
+                        <span class="nav-text">Recall Alerts</span>
+                    </a>
+
+                    <div class="nav-divider"></div>
+
+                    <a href="/sync" class="nav-link @GetActiveClass("/sync")">
+                        <span class="nav-icon">☁️</span>
+                        <span class="nav-text">Cloud Sync</span>
+                    </a>
+
+                    <a href="/profile" class="nav-link @GetActiveClass("/profile")">
+                        <span class="nav-icon">👤</span>
+                        <span class="nav-text">My Profile</span>
+                    </a>
+
+                    <a href="/settings" class="nav-link @GetActiveClass("/settings")">
+                        <span class="nav-icon">⚙️</span>
+                        <span class="nav-text">Settings</span>
+                    </a>
+
+                    <a href="/help" class="nav-link @GetActiveClass("/help")">
+                        <span class="nav-icon">❓</span>
+                        <span class="nav-text">Help</span>
+                    </a>
+
+                    <button @onclick="HandleLogout" class="nav-link logout-btn">
+                        <span class="nav-icon">🚪</span>
+                        <span class="nav-text">Logout</span>
+                    </button>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/login" class="nav-link">
+                        <span class="nav-icon">🔐</span>
+                        <span class="nav-text">Login</span>
+                    </a>
+                    <a href="/register" class="nav-link">
+                        <span class="nav-icon">✨</span>
+                        <span class="nav-text">Register</span>
+                    </a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header class="top-bar">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="user-info">
+                        <span class="user-avatar">@GetUserInitials(context)</span>
+                        <span class="user-name">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value</span>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <div class="user-info">
+                        <a href="/login" class="btn btn-outline">Login</a>
+                        <a href="/register" class="btn btn-primary">Sign Up</a>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </header>
+
+        <main class="page-content">
+            @Body
+        </main>
+    </div>
+</div>
+
+<ToastContainer />
+
+@code {
+    private int _unreadCount = 0;
+
+    private string GetActiveClass(string path)
+    {
+        return Navigation.Uri.Contains(path, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+    }
+
+    private string GetUserInitials(AuthenticationState context)
+    {
+        var firstName = context.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? "";
+        var lastName = context.User.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value ?? "";
+
+        return $"{(firstName.Length > 0 ? firstName[0] : "")}{(lastName.Length > 0 ? lastName[0] : "")}".ToUpper();
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/login");
+    }
+
+    // TODO: Load unread notification count when NotificationService is available
+    // protected override async Task OnInitializedAsync()
+    // {
+    //     _unreadCount = await NotificationApi.GetUnreadCountAsync();
+    // }
+}

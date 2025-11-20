@@ -1,0 +1,670 @@
+@page "/recipes"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Models.User
+@attribute [Authorize]
+@inject IRecipeApiClient RecipeApi
+@inject IUserProfileApiClient UserProfileApi
+@inject NavigationManager Navigation
+
+<PageTitle>Recipes - ExpressRecipe</PageTitle>
+
+<div class="recipes-container">
+    <div class="recipes-header">
+        <h1>Recipe Collection</h1>
+        <div class="header-actions">
+            <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/recipes/import")">
+                📥 Import Recipe
+            </button>
+            <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/recipes/create")">
+                ➕ Create Recipe
+            </button>
+        </div>
+    </div>
+
+    <!-- PRIORITY: Allergen Filter Mode Selector -->
+    <div class="allergen-mode-section">
+        <div class="allergen-mode-header">
+            <h2>🛡️ Safety Filter</h2>
+            <button class="btn btn-outline btn-sm" @onclick="() => Navigation.NavigateTo("/settings")">
+                ⚙️ Manage Allergies
+            </button>
+        </div>
+
+        <p class="allergen-mode-description">
+            Choose who you're cooking for to automatically filter out unsafe recipes:
+        </p>
+
+        <div class="filter-mode-selector">
+            <button class="filter-mode-btn @(_filterMode == FilterMode.MyAllergies ? "active" : "")"
+                    @onclick="() => SetFilterMode(FilterMode.MyAllergies)">
+                <div class="mode-icon">👤</div>
+                <div class="mode-content">
+                    <h3>Just Me</h3>
+                    <p>Filter by my allergies only</p>
+                    @if (_userAllergensAndRestrictions?.UserAllergens.Any() == true)
+                    {
+                        <div class="mode-tags">
+                            @foreach (var allergen in _userAllergensAndRestrictions.UserAllergens.Take(3))
+                            {
+                                <span class="mode-tag">@allergen</span>
+                            }
+                            @if (_userAllergensAndRestrictions.UserAllergens.Count > 3)
+                            {
+                                <span class="mode-tag">+@(_userAllergensAndRestrictions.UserAllergens.Count - 3)</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="mode-empty">No allergies set</span>
+                    }
+                </div>
+            </button>
+
+            <button class="filter-mode-btn @(_filterMode == FilterMode.EntireFamily ? "active" : "")"
+                    @onclick="() => SetFilterMode(FilterMode.EntireFamily)">
+                <div class="mode-icon">👨‍👩‍👧‍👦</div>
+                <div class="mode-content">
+                    <h3>Entire Family</h3>
+                    <p>Safe for everyone in my family</p>
+                    @if (_userAllergensAndRestrictions?.AllAllergens.Any() == true)
+                    {
+                        <div class="mode-tags">
+                            @foreach (var allergen in _userAllergensAndRestrictions.AllAllergens.Take(3))
+                            {
+                                <span class="mode-tag">@allergen</span>
+                            }
+                            @if (_userAllergensAndRestrictions.AllAllergens.Count > 3)
+                            {
+                                <span class="mode-tag">+@(_userAllergensAndRestrictions.AllAllergens.Count - 3)</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="mode-empty">No family allergies set</span>
+                    }
+                </div>
+            </button>
+
+            <button class="filter-mode-btn @(_filterMode == FilterMode.Custom ? "active" : "")"
+                    @onclick="() => SetFilterMode(FilterMode.Custom)">
+                <div class="mode-icon">⚙️</div>
+                <div class="mode-content">
+                    <h3>Custom</h3>
+                    <p>Manually select allergens</p>
+                    @if (_excludedAllergens.Any(x => x.Value))
+                    {
+                        <div class="mode-tags">
+                            @foreach (var allergen in _excludedAllergens.Where(x => x.Value).Take(3))
+                            {
+                                <span class="mode-tag">@allergen.Key</span>
+                            }
+                            @if (_excludedAllergens.Count(x => x.Value) > 3)
+                            {
+                                <span class="mode-tag">+@(_excludedAllergens.Count(x => x.Value) - 3)</span>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="mode-empty">No filters selected</span>
+                    }
+                </div>
+            </button>
+        </div>
+
+        @if (_filterMode == FilterMode.MyAllergies && !_userAllergensAndRestrictions?.UserAllergens.Any() == true)
+        {
+            <div class="alert alert-warning">
+                <strong>⚠️ No allergies configured.</strong>
+                <a href="/settings" class="alert-link">Go to Settings</a> to add your allergies and dietary restrictions.
+            </div>
+        }
+        @if (_filterMode == FilterMode.EntireFamily && !_userAllergensAndRestrictions?.AllAllergens.Any() == true)
+        {
+            <div class="alert alert-warning">
+                <strong>⚠️ No family allergies configured.</strong>
+                <a href="/settings" class="alert-link">Go to Settings</a> to add family members and their allergies.
+            </div>
+        }
+    </div>
+
+    <!-- Recipe Tabs -->
+    <div class="recipe-tabs">
+        <button class="tab-btn @(_activeTab == "all" ? "active" : "")" @onclick="() => SetActiveTab("all")">
+            🍽️ All Recipes (@_totalCount)
+        </button>
+        <button class="tab-btn @(_activeTab == "my" ? "active" : "")" @onclick="() => SetActiveTab("my")">
+            📝 My Recipes
+        </button>
+        <button class="tab-btn @(_activeTab == "favorites" ? "active" : "")" @onclick="() => SetActiveTab("favorites")">
+            ⭐ Favorites
+        </button>
+    </div>
+
+    <!-- Search and Additional Filters -->
+    <div class="search-section">
+        <div class="search-bar">
+            <input type="text"
+                   class="search-input"
+                   placeholder="Search recipes by name, ingredients, or tags..."
+                   @bind="_searchTerm"
+                   @bind:event="oninput"
+                   @onkeypress="HandleSearchKeyPress" />
+            <button class="btn btn-primary" @onclick="SearchRecipes">
+                🔍 Search
+            </button>
+        </div>
+
+        <!-- Collapsible Advanced Filters -->
+        <div class="advanced-filters-section">
+            <button class="advanced-filters-toggle" @onclick="() => _showAdvancedFilters = !_showAdvancedFilters">
+                @if (_showAdvancedFilters)
+                {
+                    <span>▼ Hide Additional Filters</span>
+                }
+                else
+                {
+                    <span>▶ Show Additional Filters</span>
+                }
+            </button>
+
+            @if (_showAdvancedFilters)
+            {
+                <!-- Filters Row -->
+                <div class="filters-row">
+                    <div class="filter-group">
+                        <label>Difficulty</label>
+                        <select class="filter-select" @bind="_difficultyFilter">
+                            <option value="">Any</option>
+                            <option value="Easy">Easy</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Hard">Hard</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Max Prep Time</label>
+                        <select class="filter-select" @bind="_maxPrepTime">
+                            <option value="0">Any</option>
+                            <option value="15">15 min</option>
+                            <option value="30">30 min</option>
+                            <option value="45">45 min</option>
+                            <option value="60">1 hour</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Max Cook Time</label>
+                        <select class="filter-select" @bind="_maxCookTime">
+                            <option value="0">Any</option>
+                            <option value="30">30 min</option>
+                            <option value="60">1 hour</option>
+                            <option value="120">2 hours</option>
+                            <option value="240">4 hours</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Sort By</label>
+                        <select class="filter-select" @bind="_sortBy">
+                            <option value="CreatedAt">Newest First</option>
+                            <option value="ViewCount">Most Popular</option>
+                            <option value="FavoriteCount">Most Favorited</option>
+                            <option value="Title">Alphabetical</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dietary Preferences -->
+                <div class="dietary-filters">
+                    <label class="filter-section-label">Dietary Preferences (Optional)</label>
+                    <div class="dietary-checkboxes">
+                        @foreach (var diet in _dietaryOptions)
+                        {
+                            <label class="dietary-checkbox">
+                                <input type="checkbox"
+                                       @bind="_selectedDietary[diet]" />
+                                <span>@diet</span>
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <!-- Custom Allergen Selection (only shown in Custom mode) -->
+                @if (_filterMode == FilterMode.Custom)
+                {
+                    <div class="allergen-filters">
+                        <label class="filter-section-label">Manually Exclude Allergens</label>
+                        <div class="allergen-checkboxes">
+                            @foreach (var allergen in _commonAllergens)
+                            {
+                                <label class="allergen-checkbox">
+                                    <input type="checkbox"
+                                           @bind="_excludedAllergens[allergen]" />
+                                    <span>@allergen</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="filter-actions">
+            <button class="btn btn-outline" @onclick="ClearFilters">Clear All Filters</button>
+            <button class="btn btn-primary" @onclick="SearchRecipes">Apply Filters</button>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading recipes...</p>
+        </div>
+    }
+    else if (_searchResult != null)
+    {
+        <!-- Results Summary -->
+        <div class="results-summary">
+            <p>
+                Showing @_searchResult.Recipes.Count of @_searchResult.TotalCount.ToString("N0") recipes
+                @if (_filterMode != FilterMode.Custom)
+                {
+                    <span class="filter-indicator">
+                        (Filtered for @(_filterMode == FilterMode.MyAllergies ? "your" : "family") safety)
+                    </span>
+                }
+            </p>
+        </div>
+
+        <!-- Recipe Grid -->
+        @if (_searchResult.Recipes.Any())
+        {
+            <div class="recipes-grid">
+                @foreach (var recipe in _searchResult.Recipes)
+                {
+                    <div class="recipe-card" @onclick="() => ViewRecipe(recipe.Id)">
+                        <div class="recipe-image">
+                            @if (!string.IsNullOrEmpty(recipe.ImageUrl))
+                            {
+                                <img src="@recipe.ImageUrl" alt="@recipe.Title" />
+                            }
+                            else
+                            {
+                                <div class="recipe-image-placeholder">🍽️</div>
+                            }
+                            <div class="recipe-difficulty-badge @recipe.Difficulty.ToLower()">
+                                @recipe.Difficulty
+                            </div>
+                        </div>
+
+                        <div class="recipe-info">
+                            <h3 class="recipe-title">@recipe.Title</h3>
+                            <p class="recipe-description">@TruncateDescription(recipe.Description, 100)</p>
+
+                            <div class="recipe-meta">
+                                <span class="meta-item">
+                                    <span class="meta-icon">⏱️</span>
+                                    @recipe.TotalTimeMinutes min
+                                </span>
+                                <span class="meta-item">
+                                    <span class="meta-icon">🍴</span>
+                                    @recipe.Servings servings
+                                </span>
+                                @if (recipe.FavoriteCount > 0)
+                                {
+                                    <span class="meta-item">
+                                        <span class="meta-icon">⭐</span>
+                                        @recipe.FavoriteCount
+                                    </span>
+                                }
+                            </div>
+
+                            @if (recipe.Tags.Any())
+                            {
+                                <div class="recipe-tags">
+                                    @foreach (var tag in recipe.Tags.Take(3))
+                                    {
+                                        <span class="recipe-tag">@tag</span>
+                                    }
+                                    @if (recipe.Tags.Count > 3)
+                                    {
+                                        <span class="recipe-tag">+@(recipe.Tags.Count - 3)</span>
+                                    }
+                                </div>
+                            }
+
+                            @if (recipe.DietaryInfo.Any())
+                            {
+                                <div class="dietary-badges">
+                                    @foreach (var diet in recipe.DietaryInfo.Take(3))
+                                    {
+                                        <span class="dietary-badge">@diet</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="recipe-footer">
+                            <button class="btn-link" @onclick:stopPropagation="true" @onclick="() => ViewRecipe(recipe.Id)">
+                                View Recipe →
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Pagination -->
+            @if (_searchResult.TotalPages > 1)
+            {
+                <div class="pagination">
+                    <button class="btn btn-outline"
+                            @onclick="() => ChangePage(_currentPage - 1)"
+                            disabled="@(_currentPage <= 1)">
+                        ← Previous
+                    </button>
+
+                    <div class="page-numbers">
+                        @for (int i = Math.Max(1, _currentPage - 2); i <= Math.Min(_searchResult.TotalPages, _currentPage + 2); i++)
+                        {
+                            var page = i;
+                            <button class="page-number @(page == _currentPage ? "active" : "")"
+                                    @onclick="() => ChangePage(page)">
+                                @page
+                            </button>
+                        }
+                    </div>
+
+                    <button class="btn btn-outline"
+                            @onclick="() => ChangePage(_currentPage + 1)"
+                            disabled="@(_currentPage >= _searchResult.TotalPages)">
+                        Next →
+                    </button>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <h2>No safe recipes found</h2>
+                <p>No recipes match your current allergen and dietary filters.</p>
+                <div class="empty-actions">
+                    <button class="btn btn-outline" @onclick="ClearFilters">Clear All Filters</button>
+                    <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/recipes/create")">
+                        Create Custom Recipe
+                    </button>
+                </div>
+            </div>
+        }
+    }
+
+    <!-- Error Message -->
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-error">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+</div>
+
+@code {
+    private enum FilterMode { MyAllergies, EntireFamily, Custom }
+
+    private FilterMode _filterMode = FilterMode.EntireFamily; // Default to safest option
+    private string _activeTab = "all";
+    private string _searchTerm = string.Empty;
+    private string _difficultyFilter = string.Empty;
+    private int _maxPrepTime = 0;
+    private int _maxCookTime = 0;
+    private string _sortBy = "CreatedAt";
+    private bool _showAdvancedFilters = false;
+
+    private Dictionary<string, bool> _selectedDietary = new();
+    private Dictionary<string, bool> _excludedAllergens = new();
+
+    private readonly string[] _dietaryOptions = new[]
+    {
+        "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
+        "Keto", "Paleo", "Low-Carb", "Low-Fat"
+    };
+
+    private readonly string[] _commonAllergens = new[]
+    {
+        "Dairy", "Eggs", "Fish", "Shellfish", "Tree Nuts",
+        "Peanuts", "Wheat", "Soy", "Sesame"
+    };
+
+    private AllergensAndRestrictionsDto? _userAllergensAndRestrictions;
+    private RecipeSearchResult? _searchResult;
+    private int _currentPage = 1;
+    private int _totalCount = 0;
+    private const int _pageSize = 12;
+    private bool _isLoading = false;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize dietary checkboxes
+        foreach (var diet in _dietaryOptions)
+        {
+            _selectedDietary[diet] = false;
+        }
+
+        // Initialize allergen checkboxes
+        foreach (var allergen in _commonAllergens)
+        {
+            _excludedAllergens[allergen] = false;
+        }
+
+        // Load user/family allergens and restrictions
+        await LoadUserAllergensAsync();
+
+        // Load initial recipes with family filter by default
+        await SearchRecipes();
+    }
+
+    private async Task LoadUserAllergensAsync()
+    {
+        try
+        {
+            _userAllergensAndRestrictions = await UserProfileApi.GetAllergensAndRestrictionsAsync();
+        }
+        catch (Exception ex)
+        {
+            // Silently fail - user may not have profile set up yet
+            _userAllergensAndRestrictions = new AllergensAndRestrictionsDto();
+        }
+    }
+
+    private async Task SetFilterMode(FilterMode mode)
+    {
+        _filterMode = mode;
+        _currentPage = 1;
+        await SearchRecipes();
+    }
+
+    private async Task SetActiveTab(string tab)
+    {
+        _activeTab = tab;
+        _currentPage = 1;
+        await LoadRecipesForTab();
+    }
+
+    private async Task LoadRecipesForTab()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            if (_activeTab == "my")
+            {
+                var recipes = await RecipeApi.GetMyRecipesAsync(_currentPage, _pageSize);
+                _searchResult = new RecipeSearchResult
+                {
+                    Recipes = recipes ?? new(),
+                    TotalCount = recipes?.Count ?? 0,
+                    Page = _currentPage,
+                    PageSize = _pageSize
+                };
+            }
+            else if (_activeTab == "favorites")
+            {
+                var recipes = await RecipeApi.GetFavoriteRecipesAsync(_currentPage, _pageSize);
+                _searchResult = new RecipeSearchResult
+                {
+                    Recipes = recipes ?? new(),
+                    TotalCount = recipes?.Count ?? 0,
+                    Page = _currentPage,
+                    PageSize = _pageSize
+                };
+            }
+            else
+            {
+                await SearchRecipes();
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load recipes: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SearchRecipes()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            // Determine which allergens to exclude based on filter mode
+            List<string> allergensToExclude = _filterMode switch
+            {
+                FilterMode.MyAllergies => _userAllergensAndRestrictions?.UserAllergens ?? new(),
+                FilterMode.EntireFamily => _userAllergensAndRestrictions?.AllAllergens ?? new(),
+                FilterMode.Custom => _excludedAllergens.Where(x => x.Value).Select(x => x.Key).ToList(),
+                _ => new()
+            };
+
+            // Determine which foods/ingredients to exclude (disliked foods - preferences, not allergies)
+            List<string> ingredientsToExclude = _filterMode switch
+            {
+                FilterMode.MyAllergies => _userAllergensAndRestrictions?.UserDislikedFoods ?? new(),
+                FilterMode.EntireFamily => _userAllergensAndRestrictions?.AllDislikedFoods ?? new(),
+                FilterMode.Custom => new(), // Custom mode only uses manual allergen selection
+                _ => new()
+            };
+
+            // Also apply dietary restrictions from user profile (optional enhancement to dietary filters)
+            var dietaryFilters = _selectedDietary.Where(x => x.Value).Select(x => x.Key).ToList();
+            if (_filterMode != FilterMode.Custom && _userAllergensAndRestrictions != null)
+            {
+                // Add user's dietary preferences to the filter
+                var userDietary = _filterMode == FilterMode.MyAllergies
+                    ? _userAllergensAndRestrictions.UserDietaryRestrictions
+                    : _userAllergensAndRestrictions.AllDietaryRestrictions;
+
+                dietaryFilters = dietaryFilters.Concat(userDietary).Distinct().ToList();
+            }
+
+            var request = new RecipeSearchRequest
+            {
+                SearchTerm = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
+                Difficulty = string.IsNullOrWhiteSpace(_difficultyFilter) ? null : _difficultyFilter,
+                MaxPrepTime = _maxPrepTime > 0 ? _maxPrepTime : null,
+                MaxCookTime = _maxCookTime > 0 ? _maxCookTime : null,
+                DietaryInfo = dietaryFilters.Any() ? dietaryFilters : null,
+                ExcludeAllergens = allergensToExclude.Any() ? allergensToExclude : null,
+                ExcludeIngredients = ingredientsToExclude.Any() ? ingredientsToExclude : null,
+                Page = _currentPage,
+                PageSize = _pageSize,
+                SortBy = _sortBy,
+                SortDescending = _sortBy != "Title"
+            };
+
+            _searchResult = await RecipeApi.SearchRecipesAsync(request);
+            _totalCount = _searchResult?.TotalCount ?? 0;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to search recipes: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _currentPage = 1;
+            await SearchRecipes();
+        }
+    }
+
+    private async Task ChangePage(int newPage)
+    {
+        if (newPage < 1 || (_searchResult != null && newPage > _searchResult.TotalPages))
+            return;
+
+        _currentPage = newPage;
+
+        if (_activeTab == "all")
+        {
+            await SearchRecipes();
+        }
+        else
+        {
+            await LoadRecipesForTab();
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = string.Empty;
+        _difficultyFilter = string.Empty;
+        _maxPrepTime = 0;
+        _maxCookTime = 0;
+        _sortBy = "CreatedAt";
+        _filterMode = FilterMode.EntireFamily; // Reset to safest default
+
+        foreach (var key in _selectedDietary.Keys.ToList())
+        {
+            _selectedDietary[key] = false;
+        }
+
+        foreach (var key in _excludedAllergens.Keys.ToList())
+        {
+            _excludedAllergens[key] = false;
+        }
+
+        _currentPage = 1;
+        await SearchRecipes();
+    }
+
+    private void ViewRecipe(Guid recipeId)
+    {
+        Navigation.NavigateTo($"/recipes/{recipeId}");
+    }
+
+    private string TruncateDescription(string description, int maxLength)
+    {
+        if (string.IsNullOrEmpty(description) || description.Length <= maxLength)
+            return description;
+
+        return description.Substring(0, maxLength) + "...";
+    }
+}

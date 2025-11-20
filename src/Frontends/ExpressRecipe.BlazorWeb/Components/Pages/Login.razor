@@ -1,0 +1,103 @@
+@page "/login"
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Auth
+@inject IAuthService AuthService
+@inject CustomAuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Login - ExpressRecipe</PageTitle>
+
+<div class="login-container">
+    <div class="login-card">
+        <h2>Welcome Back</h2>
+        <p class="subtitle">Sign in to your ExpressRecipe account</p>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-error">
+                @_errorMessage
+            </div>
+        }
+
+        <EditForm Model="@_loginRequest" OnValidSubmit="@HandleLogin" FormName="loginForm">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <InputText id="email" @bind-Value="_loginRequest.Email" class="form-control" placeholder="you@example.com" />
+                <ValidationMessage For="@(() => _loginRequest.Email)" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <InputText id="password" type="password" @bind-Value="_loginRequest.Password" class="form-control" placeholder="Enter your password" />
+                <ValidationMessage For="@(() => _loginRequest.Password)" />
+            </div>
+
+            <div class="form-group-checkbox">
+                <InputCheckbox id="remember" @bind-Value="_loginRequest.RememberMe" />
+                <label for="remember">Remember me</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary" disabled="@_isLoading">
+                @if (_isLoading)
+                {
+                    <span class="spinner"></span>
+                    <span>Signing in...</span>
+                }
+                else
+                {
+                    <span>Sign In</span>
+                }
+            </button>
+        </EditForm>
+
+        <div class="login-footer">
+            <p>Don't have an account? <a href="/register">Sign up</a></p>
+        </div>
+    </div>
+</div>
+
+@code {
+    private LoginRequest _loginRequest = new();
+    private string? _errorMessage;
+    private bool _isLoading;
+
+    private async Task HandleLogin()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var result = await AuthService.LoginAsync(_loginRequest);
+
+            if (result != null)
+            {
+                // Update authentication state
+                await AuthStateProvider.MarkUserAsAuthenticated(
+                    result.Email,
+                    result.FirstName,
+                    result.LastName,
+                    result.UserId
+                );
+
+                // Navigate to dashboard
+                Navigation.NavigateTo("/dashboard");
+            }
+            else
+            {
+                _errorMessage = "Invalid email or password. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

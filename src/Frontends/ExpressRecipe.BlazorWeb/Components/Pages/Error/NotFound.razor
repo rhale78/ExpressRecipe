@@ -1,0 +1,45 @@
+@page "/404"
+@page "/not-found"
+
+<PageTitle>Page Not Found - ExpressRecipe</PageTitle>
+
+<div class="error-container">
+    <div class="error-content">
+        <div class="error-code">404</div>
+        <h1>Page Not Found</h1>
+        <p class="error-message">
+            Oops! The page you're looking for doesn't exist or has been moved.
+        </p>
+
+        <div class="error-actions">
+            <button class="btn btn-primary" @onclick='() => Navigation.NavigateTo("/")'>
+                🏠 Go to Homepage
+            </button>
+            <button class="btn btn-secondary-outline" @onclick='() => Navigation.NavigateTo("/help")'>
+                ❓ Get Help
+            </button>
+        </div>
+
+        <div class="helpful-links">
+            <h3>You might be looking for:</h3>
+            <ul>
+                <li><a href="/dashboard">📊 Dashboard</a></li>
+                <li><a href="/recipes">🍳 Recipes</a></li>
+                <li><a href="/inventory">📦 Inventory</a></li>
+                <li><a href="/shopping-lists">🛒 Shopping Lists</a></li>
+                <li><a href="/meal-plans">📅 Meal Plans</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="error-illustration">
+        <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="100" cy="100" r="80" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2"/>
+            <text x="100" y="120" text-anchor="middle" font-size="60" fill="#6c757d">🔍</text>
+        </svg>
+    </div>
+</div>
+
+@code {
+    @inject NavigationManager Navigation
+}

@@ -1,0 +1,380 @@
+@page "/scanner"
+@using ExpressRecipe.Client.Shared.Services
+@inject IScannerApiClient ScannerClient
+@inject IInventoryApiClient InventoryClient
+@inject IShoppingListApiClient ShoppingClient
+@inject IToastService ToastService
+@rendermode InteractiveServer
+
+<PageTitle>Barcode Scanner - ExpressRecipe</PageTitle>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="display-5 fw-bold mb-4">
+                <i class="bi bi-upc-scan me-2"></i>Barcode Scanner
+            </h1>
+            <p class="lead text-muted mb-4">
+                Scan product barcodes to check for allergens and get detailed product information
+            </p>
+
+            <!-- Barcode Input -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-9">
+                            <label for="barcodeInput" class="form-label">Enter Barcode</label>
+                            <input
+                                type="text"
+                                class="form-control form-control-lg"
+                                id="barcodeInput"
+                                @bind="barcodeInput"
+                                @onkeypress="HandleKeyPress"
+                                placeholder="Type or scan barcode (UPC-A, EAN-13)"
+                                disabled="@isScanning">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button
+                                class="btn btn-primary btn-lg w-100"
+                                @onclick="ScanBarcode"
+                                disabled="@(isScanning || string.IsNullOrWhiteSpace(barcodeInput))">
+                                @if (isScanning)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-search me-2"></i>
+                                }
+                                Scan
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scan Result -->
+            @if (scanResult != null)
+            {
+                <div class="card mb-4">
+                    <div class="card-body">
+                        @if (scanResult.Found)
+                        {
+                            <!-- Product Found -->
+                            <div class="d-flex align-items-start mb-3">
+                                @if (!string.IsNullOrEmpty(scanResult.Product?.ImageUrl))
+                                {
+                                    <img src="@scanResult.Product.ImageUrl" alt="@scanResult.Product.Name" class="rounded me-3" style="width: 80px; height: 80px; object-fit: cover;">
+                                }
+                                <div>
+                                    <h4 class="mb-1">@scanResult.Product?.Name</h4>
+                                    <p class="text-muted mb-0">@scanResult.Product?.Brand</p>
+                                    <small class="text-muted">Barcode: @scanResult.Barcode (@scanResult.Format)</small>
+                                </div>
+                            </div>
+
+                            <!-- Allergen Alerts -->
+                            @if (scanResult.AllergenAlerts.Any())
+                            {
+                                <div class="alert alert-warning mb-3">
+                                    <h5 class="alert-heading">
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Allergen Alerts
+                                    </h5>
+                                    @foreach (var alert in scanResult.AllergenAlerts)
+                                    {
+                                        <div class="mb-2">
+                                            <strong>@alert.Allergen:</strong> @alert.Message
+                                            @if (alert.ContainsTrace)
+                                            {
+                                                <span class="badge bg-warning text-dark ms-2">May contain traces</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="alert alert-success mb-3">
+                                    <i class="bi bi-check-circle-fill me-2"></i>
+                                    No allergen alerts based on your profile
+                                </div>
+                            }
+
+                            <!-- Ingredients -->
+                            @if (scanResult.Product?.Ingredients.Any() == true)
+                            {
+                                <div class="mb-3">
+                                    <h6 class="fw-bold">Ingredients</h6>
+                                    <p class="text-muted small">@string.Join(", ", scanResult.Product.Ingredients)</p>
+                                </div>
+                            }
+
+                            <!-- Allergens -->
+                            @if (scanResult.Product?.Allergens.Any() == true)
+                            {
+                                <div class="mb-3">
+                                    <h6 class="fw-bold">Contains Allergens</h6>
+                                    <div>
+                                        @foreach (var allergen in scanResult.Product.Allergens)
+                                        {
+                                            <span class="badge bg-secondary me-2">@allergen</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Nutrition -->
+                            @if (scanResult.Product?.Nutrition != null)
+                            {
+                                <div class="mb-3">
+                                    <h6 class="fw-bold">Nutrition Information</h6>
+                                    <div class="row g-2">
+                                        <div class="col-6 col-md-4">
+                                            <small class="text-muted">Calories</small>
+                                            <div class="fw-bold">@scanResult.Product.Nutrition.Calories</div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <small class="text-muted">Protein</small>
+                                            <div class="fw-bold">@scanResult.Product.Nutrition.Protein g</div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <small class="text-muted">Carbs</small>
+                                            <div class="fw-bold">@scanResult.Product.Nutrition.Carbohydrates g</div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <small class="text-muted">Fat</small>
+                                            <div class="fw-bold">@scanResult.Product.Nutrition.Fat g</div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <small class="text-muted">Fiber</small>
+                                            <div class="fw-bold">@scanResult.Product.Nutrition.Fiber g</div>
+                                        </div>
+                                        <div class="col-6 col-md-4">
+                                            <small class="text-muted">Sugar</small>
+                                            <div class="fw-bold">@scanResult.Product.Nutrition.Sugar g</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-success" @onclick="AddToInventory">
+                                    <i class="bi bi-plus-circle me-2"></i>Add to Inventory
+                                </button>
+                                <button class="btn btn-outline-primary" @onclick="AddToShoppingList">
+                                    <i class="bi bi-cart-plus me-2"></i>Add to Shopping List
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Product Not Found -->
+                            <div class="text-center py-4">
+                                <i class="bi bi-question-circle text-muted" style="font-size: 3rem;"></i>
+                                <h5 class="mt-3">Product Not Found</h5>
+                                <p class="text-muted">Barcode @scanResult.Barcode is not in our database</p>
+                                <button class="btn btn-primary" @onclick="() => ShowReportMissing(scanResult.Barcode)">
+                                    <i class="bi bi-flag me-2"></i>Report Missing Product
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Scan History -->
+            @if (scanHistory.Any())
+            {
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Scans</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        @foreach (var item in scanHistory.Take(5))
+                        {
+                            <div class="list-group-item list-group-item-action" @onclick="() => QuickScan(item.Barcode)" style="cursor: pointer;">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>@item.ProductName</strong>
+                                        <br>
+                                        <small class="text-muted">@item.Barcode • @item.ScannedAt.ToShortDateString()</small>
+                                    </div>
+                                    @if (item.HadAllergenAlert)
+                                    {
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-exclamation-triangle-fill"></i>
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private string barcodeInput = "";
+    private bool isScanning = false;
+    private BarcodeScanResult? scanResult = null;
+    private List<ScanHistoryItem> scanHistory = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadScanHistory();
+    }
+
+    private async Task LoadScanHistory()
+    {
+        try
+        {
+            scanHistory = await ScannerClient.GetScanHistoryAsync(10);
+        }
+        catch (Exception ex)
+        {
+            // Silently fail - history is optional
+            Console.WriteLine($"Failed to load scan history: {ex.Message}");
+        }
+    }
+
+    private async Task ScanBarcode()
+    {
+        if (string.IsNullOrWhiteSpace(barcodeInput))
+            return;
+
+        isScanning = true;
+        scanResult = null;
+
+        try
+        {
+            scanResult = await ScannerClient.ScanBarcodeAsync(barcodeInput.Trim());
+
+            if (scanResult != null)
+            {
+                if (scanResult.Found)
+                {
+                    if (scanResult.AllergenAlerts.Any())
+                    {
+                        ToastService.ShowWarning("Allergen Alert!", $"This product contains allergens you're sensitive to");
+                    }
+                    else
+                    {
+                        ToastService.ShowSuccess("Product Found", scanResult.Product?.Name ?? "Unknown");
+                    }
+
+                    await LoadScanHistory();
+                }
+                else
+                {
+                    ToastService.ShowWarning("Not Found", "Product not in database");
+                }
+            }
+            else
+            {
+                ToastService.ShowError("Scan Failed", "Unable to scan barcode");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to scan: {ex.Message}");
+        }
+        finally
+        {
+            isScanning = false;
+        }
+    }
+
+    private async Task QuickScan(string barcode)
+    {
+        barcodeInput = barcode;
+        await ScanBarcode();
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ScanBarcode();
+        }
+    }
+
+    private void ShowReportMissing(string barcode)
+    {
+        // TODO: Implement report missing product dialog
+        ToastService.ShowInfo("Coming Soon", "Report missing product feature");
+    }
+
+    private async Task AddToInventory()
+    {
+        if (scanResult?.Product == null)
+            return;
+
+        try
+        {
+            var request = new
+            {
+                ProductName = scanResult.Product.Name,
+                Brand = scanResult.Product.Brand,
+                Quantity = 1,
+                Unit = "unit",
+                ExpirationDate = (DateTime?)null,
+                Location = "Pantry",
+                Barcode = scanResult.Barcode
+            };
+
+            // Add to inventory via API
+            var success = await InventoryClient.AddItemAsync(request.ProductName, request.Brand, request.Quantity, request.Unit);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to inventory");
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to add item to inventory");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to add to inventory: {ex.Message}");
+        }
+    }
+
+    private async Task AddToShoppingList()
+    {
+        if (scanResult?.Product == null)
+            return;
+
+        try
+        {
+            var request = new
+            {
+                ProductName = scanResult.Product.Name,
+                Brand = scanResult.Product.Brand,
+                Quantity = 1,
+                Unit = "unit",
+                Category = scanResult.Product.Category ?? "General",
+                Priority = "Medium",
+                Barcode = scanResult.Barcode
+            };
+
+            // Add to shopping list via API
+            var success = await ShoppingClient.AddItemAsync(request.ProductName, request.Brand, request.Quantity, request.Unit);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to shopping list");
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to add item to shopping list");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to add to shopping list: {ex.Message}");
+        }
+    }
+}

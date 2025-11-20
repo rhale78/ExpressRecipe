@@ -1,0 +1,608 @@
+@page "/sync"
+@using ExpressRecipe.Client.Shared.Services
+@inject ISyncApiClient SyncClient
+@inject IToastService ToastService
+@rendermode InteractiveServer
+
+<PageTitle>Cloud Sync - ExpressRecipe</PageTitle>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-10 mx-auto">
+            <h1 class="display-5 fw-bold mb-4">
+                <i class="bi bi-cloud-arrow-up-fill me-2"></i>Cloud Sync
+            </h1>
+            <p class="lead text-muted mb-4">
+                Synchronize your data across all devices with cloud backup
+            </p>
+
+            <!-- Sync Status Card -->
+            <div class="card mb-4 @(syncStatus?.IsEnabled == true ? "border-success" : "border-secondary")">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="card-title mb-1">
+                                Sync Status
+                                @if (syncStatus?.IsEnabled == true)
+                                {
+                                    <span class="badge bg-success ms-2">Enabled</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary ms-2">Disabled</span>
+                                }
+                            </h5>
+                            <p class="text-muted small mb-0">@(syncStatus?.Status ?? "Unknown")</p>
+                        </div>
+                        <div class="text-end">
+                            @if (syncStatus?.IsOnline == true)
+                            {
+                                <span class="badge bg-success">
+                                    <i class="bi bi-wifi"></i> Online
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-wifi-off"></i> Offline
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <div class="text-center p-3 bg-light rounded">
+                                <div class="h4 mb-1">@(syncStatus?.PendingChanges ?? 0)</div>
+                                <small class="text-muted">Pending Changes</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center p-3 bg-light rounded">
+                                <div class="h4 mb-1">@(syncStatus?.ConflictsCount ?? 0)</div>
+                                <small class="text-muted">Conflicts</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-center p-3 bg-light rounded">
+                                <div class="h6 mb-1">
+                                    @if (syncStatus?.LastSyncTime != null)
+                                    {
+                                        @syncStatus.LastSyncTime.Value.ToLocalTime().ToString("MMM dd, yyyy HH:mm")
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">Never</span>
+                                    }
+                                </div>
+                                <small class="text-muted">Last Sync</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(syncStatus?.ErrorMessage))
+                    {
+                        <div class="alert alert-danger mb-3">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>@syncStatus.ErrorMessage
+                        </div>
+                    }
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        @if (syncStatus?.IsEnabled == true)
+                        {
+                            <button class="btn btn-primary" @onclick="TriggerSync" disabled="@isSyncing">
+                                @if (isSyncing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-repeat me-2"></i>
+                                }
+                                Sync Now
+                            </button>
+                            <button class="btn btn-outline-secondary" @onclick="DisableSync">
+                                <i class="bi bi-pause-circle me-2"></i>Disable Sync
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-success" @onclick="EnableSync">
+                                <i class="bi bi-play-circle me-2"></i>Enable Sync
+                            </button>
+                        }
+                        <button class="btn btn-outline-danger" @onclick="ShowResetConfirmation">
+                            <i class="bi bi-trash me-2"></i>Reset Sync
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sync Conflicts -->
+            @if (conflicts.Any())
+            {
+                <div class="card mb-4 border-warning">
+                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>Sync Conflicts (@conflicts.Count)
+                        </h5>
+                        <button class="btn btn-sm btn-dark" @onclick="() => ResolveAllConflicts(\"UseServer\")">
+                            <i class="bi bi-cloud-download me-1"></i>Use Server for All
+                        </button>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        @foreach (var conflict in conflicts)
+                        {
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <h6 class="mb-1">@conflict.EntityType - @conflict.Field</h6>
+                                        <small class="text-muted">Entity ID: @conflict.EntityId.ToString().Substring(0, 8)...</small>
+                                    </div>
+                                    <span class="badge bg-warning text-dark">@conflict.ConflictResolution</span>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-body p-2">
+                                                <small class="text-muted d-block mb-1">
+                                                    <i class="bi bi-phone"></i> Local
+                                                    (@conflict.LocalModifiedAt.ToLocalTime().ToString("MMM dd HH:mm"))
+                                                </small>
+                                                <div class="font-monospace small">@(conflict.LocalValue ?? "null")</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card bg-light">
+                                            <div class="card-body p-2">
+                                                <small class="text-muted d-block mb-1">
+                                                    <i class="bi bi-cloud"></i> Server
+                                                    (@conflict.ServerModifiedAt.ToLocalTime().ToString("MMM dd HH:mm"))
+                                                </small>
+                                                <div class="font-monospace small">@(conflict.ServerValue ?? "null")</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button class="btn btn-outline-primary" @onclick="() => ResolveConflict(conflict.Id, \"UseLocal\")">
+                                        <i class="bi bi-phone me-1"></i>Use Local
+                                    </button>
+                                    <button class="btn btn-outline-success" @onclick="() => ResolveConflict(conflict.Id, \"UseServer\")">
+                                        <i class="bi bi-cloud me-1"></i>Use Server
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Sync Queue -->
+            @if (syncQueue.Any())
+            {
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Sync Queue (@syncQueue.Count pending)</h5>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="ClearQueue">
+                            <i class="bi bi-trash"></i> Clear Queue
+                        </button>
+                    </div>
+                    <div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                        @foreach (var item in syncQueue.Take(20))
+                        {
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>@item.EntityType</strong>
+                                        <span class="badge bg-secondary ms-2">@item.Operation</span>
+                                        <br>
+                                        <small class="text-muted">
+                                            Queued: @item.QueuedAt.ToLocalTime().ToString("MMM dd HH:mm")
+                                            @if (item.RetryCount > 0)
+                                            {
+                                                <span class="badge bg-warning text-dark ms-2">Retried @item.RetryCount times</span>
+                                            }
+                                        </small>
+                                    </div>
+                                    @if (item.IsSynced)
+                                    {
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle-fill"></i> Synced
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock-fill"></i> Pending
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Sync Settings -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Sync Settings</h5>
+                </div>
+                <div class="card-body">
+                    @if (syncSettings != null)
+                    {
+                        <div class="mb-3">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="autoSync" @bind="syncSettings.AutoSync">
+                                <label class="form-check-label" for="autoSync">
+                                    <strong>Auto Sync</strong>
+                                    <br><small class="text-muted">Automatically sync changes in the background</small>
+                                </label>
+                            </div>
+
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="wifiOnly" @bind="syncSettings.SyncOnWifiOnly">
+                                <label class="form-check-label" for="wifiOnly">
+                                    <strong>Wi-Fi Only</strong>
+                                    <br><small class="text-muted">Only sync when connected to Wi-Fi</small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="syncInterval" class="form-label">Sync Interval (minutes)</label>
+                            <input type="number" class="form-control" id="syncInterval" @bind="syncSettings.SyncIntervalMinutes" min="5" max="1440">
+                            <small class="text-muted">How often to automatically sync (5-1440 minutes)</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <h6>Data to Sync</h6>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="syncProducts" @bind="syncSettings.SyncProducts">
+                                        <label class="form-check-label" for="syncProducts">Products</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="syncRecipes" @bind="syncSettings.SyncRecipes">
+                                        <label class="form-check-label" for="syncRecipes">Recipes</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="syncInventory" @bind="syncSettings.SyncInventory">
+                                        <label class="form-check-label" for="syncInventory">Inventory</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="syncShopping" @bind="syncSettings.SyncShoppingLists">
+                                        <label class="form-check-label" for="syncShopping">Shopping Lists</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="syncMealPlans" @bind="syncSettings.SyncMealPlans">
+                                        <label class="form-check-label" for="syncMealPlans">Meal Plans</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="syncProfile" @bind="syncSettings.SyncUserProfile">
+                                        <label class="form-check-label" for="syncProfile">User Profile</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" @onclick="SaveSettings" disabled="@isSaving">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-save me-2"></i>
+                            }
+                            Save Settings
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <!-- Sync Info -->
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="bi bi-info-circle me-2"></i>About Cloud Sync
+                    </h6>
+                    <p class="card-text small mb-2">
+                        Cloud Sync allows you to backup your data and keep it synchronized across all your devices.
+                        When enabled, changes you make on one device will automatically appear on your other devices.
+                    </p>
+                    <ul class="small mb-0">
+                        <li>Your data is encrypted during transmission and storage</li>
+                        <li>Sync works in the background when you're online</li>
+                        <li>Conflicts are automatically detected and can be resolved manually</li>
+                        <li>You can disable sync at any time - your local data remains safe</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Confirmation Modal (Bootstrap modal would be added with JS) -->
+@if (showResetConfirmation)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Reset Sync?
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showResetConfirmation = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to reset sync?</p>
+                    <p class="text-danger mb-0">
+                        <strong>Warning:</strong> This will clear all sync history and pending changes.
+                        Your local data will remain, but unsynced changes will be lost.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => showResetConfirmation = false">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-danger" @onclick="ResetSync">
+                        <i class="bi bi-trash me-2"></i>Reset Sync
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private SyncStatus? syncStatus = null;
+    private SyncSettings? syncSettings = null;
+    private List<SyncConflict> conflicts = new();
+    private List<SyncQueueItem> syncQueue = new();
+
+    private bool isSyncing = false;
+    private bool isSaving = false;
+    private bool showResetConfirmation = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var tasks = new[]
+            {
+                Task.Run(async () => syncStatus = await SyncClient.GetSyncStatusAsync()),
+                Task.Run(async () => syncSettings = await SyncClient.GetSyncSettingsAsync()),
+                Task.Run(async () => conflicts = await SyncClient.GetConflictsAsync()),
+                Task.Run(async () => syncQueue = await SyncClient.GetSyncQueueAsync())
+            };
+
+            await Task.WhenAll(tasks);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to load sync data: {ex.Message}");
+        }
+    }
+
+    private async Task TriggerSync()
+    {
+        isSyncing = true;
+
+        try
+        {
+            var result = await SyncClient.TriggerSyncAsync();
+
+            if (result.Success)
+            {
+                ToastService.ShowSuccess("Sync Complete", $"Synced {result.ItemsSynced} items");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Sync Failed", result.ErrorMessage ?? "Unknown error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+        finally
+        {
+            isSyncing = false;
+        }
+    }
+
+    private async Task EnableSync()
+    {
+        try
+        {
+            var success = await SyncClient.EnableSyncAsync();
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Enabled", "Cloud sync has been enabled");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to enable sync");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task DisableSync()
+    {
+        try
+        {
+            var success = await SyncClient.DisableSyncAsync();
+
+            if (success)
+            {
+                ToastService.ShowInfo("Disabled", "Cloud sync has been disabled");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to disable sync");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task ResetSync()
+    {
+        showResetConfirmation = false;
+
+        try
+        {
+            var success = await SyncClient.ResetSyncAsync();
+
+            if (success)
+            {
+                ToastService.ShowWarning("Reset", "Sync has been reset");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to reset sync");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private void ShowResetConfirmation()
+    {
+        showResetConfirmation = true;
+    }
+
+    private async Task ResolveConflict(Guid conflictId, string resolution)
+    {
+        try
+        {
+            var success = await SyncClient.ResolveConflictAsync(new ConflictResolutionRequest
+            {
+                ConflictId = conflictId,
+                Resolution = resolution
+            });
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Resolved", $"Conflict resolved using {resolution}");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to resolve conflict");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task ResolveAllConflicts(string resolution)
+    {
+        try
+        {
+            var success = await SyncClient.ResolveAllConflictsAsync(resolution);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Resolved", $"All conflicts resolved using {resolution}");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to resolve conflicts");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task ClearQueue()
+    {
+        try
+        {
+            var success = await SyncClient.ClearSyncQueueAsync();
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Cleared", "Sync queue has been cleared");
+                await LoadData();
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to clear queue");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        if (syncSettings == null)
+            return;
+
+        isSaving = true;
+
+        try
+        {
+            var success = await SyncClient.UpdateSyncSettingsAsync(syncSettings);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Saved", "Sync settings updated");
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to save settings");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", ex.Message);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

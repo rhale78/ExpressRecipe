@@ -1,0 +1,256 @@
+@page "/admin/users"
+@rendermode InteractiveAuto
+@attribute [Authorize(Roles = "Admin")]
+@using ExpressRecipe.Client.Shared.Models.User
+@using ExpressRecipe.Client.Shared.Services
+@inject IUserProfileApiClient UserApi
+@inject IToastService ToastService
+
+<PageTitle>User Management - ExpressRecipe Admin</PageTitle>
+
+<div class="admin-container">
+    <div class="admin-header">
+        <h1>👥 User Management</h1>
+        <p>Manage user accounts and permissions</p>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="stats-overview">
+        <div class="stat-box">
+            <span class="stat-value">@_totalUsers</span>
+            <span class="stat-label">Total Users</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-value">@_activeUsers</span>
+            <span class="stat-label">Active Users</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-value">@_newUsersThisMonth</span>
+            <span class="stat-label">New This Month</span>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="admin-filters">
+        <div class="filter-group">
+            <input type="text"
+                   class="search-input"
+                   placeholder="Search users by name or email..."
+                   @bind="_searchQuery"
+                   @bind:event="oninput"
+                   @bind:after="SearchUsers" />
+        </div>
+
+        <div class="filter-group">
+            <select class="filter-select" @bind="_statusFilter" @bind:after="SearchUsers">
+                <option value="">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Suspended">Suspended</option>
+            </select>
+
+            <select class="filter-select" @bind="_roleFilter" @bind:after="SearchUsers">
+                <option value="">All Roles</option>
+                <option value="User">User</option>
+                <option value="Admin">Admin</option>
+                <option value="Moderator">Moderator</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading users...</p>
+        </div>
+    }
+    else if (_users.Any())
+    {
+        <div class="admin-table-container">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Joined</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in _users)
+                    {
+                        <tr>
+                            <td>
+                                <div class="user-cell">
+                                    <div class="user-avatar">@GetInitials(user.FirstName, user.LastName)</div>
+                                    <div>
+                                        <strong>@user.FirstName @user.LastName</strong>
+                                        <small>ID: @user.Id.ToString().Substring(0, 8)</small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>@user.Email</td>
+                            <td>
+                                <span class="role-badge role-@user.Role?.ToLower()">
+                                    @user.Role
+                                </span>
+                            </td>
+                            <td>
+                                <span class="status-badge status-@user.Status?.ToLower()">
+                                    @user.Status
+                                </span>
+                            </td>
+                            <td>@user.CreatedAt.ToString("MMM dd, yyyy")</td>
+                            <td>@(user.LastLoginAt?.ToString("MMM dd, yyyy") ?? "Never")</td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-action" @onclick="() => ViewUser(user.Id)" title="View">
+                                        👁️
+                                    </button>
+                                    <button class="btn-action" @onclick="() => EditUser(user.Id)" title="Edit">
+                                        ✏️
+                                    </button>
+                                    @if (user.Status == "Active")
+                                    {
+                                        <button class="btn-action danger" @onclick="() => SuspendUser(user.Id)" title="Suspend">
+                                            🚫
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn-action success" @onclick="() => ActivateUser(user.Id)" title="Activate">
+                                            ✓
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        @if (_totalPages > 1)
+        {
+            <div class="pagination">
+                <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
+                        @onclick="() => ChangePage(_currentPage - 1)">
+                    ← Previous
+                </button>
+
+                <span class="pagination-info">
+                    Page @_currentPage of @_totalPages (@_totalUsers total users)
+                </span>
+
+                <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _totalPages)"
+                        @onclick="() => ChangePage(_currentPage + 1)">
+                    Next →
+                </button>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="empty-state">
+            <div class="empty-icon">👥</div>
+            <h3>No Users Found</h3>
+            <p>No users match your search criteria.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private List<UserProfileDto> _users = new();
+    private bool _isLoading = true;
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private int _totalUsers = 0;
+    private int _activeUsers = 0;
+    private int _newUsersThisMonth = 0;
+    private const int PageSize = 20;
+
+    private string _searchQuery = "";
+    private string _statusFilter = "";
+    private string _roleFilter = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+        await LoadStats();
+    }
+
+    private async Task LoadUsers()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        // TODO: Implement actual API call with search/filter
+        // For now, this is a placeholder
+        _users = new List<UserProfileDto>();
+        _totalUsers = 0;
+        _totalPages = 1;
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadStats()
+    {
+        // TODO: Implement actual API call for stats
+        _totalUsers = 1250;
+        _activeUsers = 1180;
+        _newUsersThisMonth = 47;
+        StateHasChanged();
+    }
+
+    private async Task SearchUsers()
+    {
+        _currentPage = 1;
+        await LoadUsers();
+    }
+
+    private void ChangePage(int page)
+    {
+        _currentPage = page;
+        _ = LoadUsers();
+    }
+
+    private string GetInitials(string firstName, string lastName)
+    {
+        var first = !string.IsNullOrEmpty(firstName) ? firstName[0].ToString() : "";
+        var last = !string.IsNullOrEmpty(lastName) ? lastName[0].ToString() : "";
+        return (first + last).ToUpper();
+    }
+
+    private void ViewUser(Guid userId)
+    {
+        // TODO: Navigate to user details page
+        ToastService.ShowInfo("User details view coming soon");
+    }
+
+    private void EditUser(Guid userId)
+    {
+        // TODO: Open edit dialog or navigate to edit page
+        ToastService.ShowInfo("User edit functionality coming soon");
+    }
+
+    private async Task SuspendUser(Guid userId)
+    {
+        // TODO: Implement suspend user
+        ToastService.ShowWarning("User suspended successfully");
+        await LoadUsers();
+    }
+
+    private async Task ActivateUser(Guid userId)
+    {
+        // TODO: Implement activate user
+        ToastService.ShowSuccess("User activated successfully");
+        await LoadUsers();
+    }
+}

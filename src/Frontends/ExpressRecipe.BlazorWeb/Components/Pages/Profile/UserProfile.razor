@@ -1,0 +1,298 @@
+@page "/profile"
+@using ExpressRecipe.Client.Shared.Services
+@inject IUserProfileApiClient UserProfileClient
+@inject IToastService ToastService
+@rendermode InteractiveServer
+
+<PageTitle>My Profile - ExpressRecipe</PageTitle>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-10 mx-auto">
+            <h1 class="display-5 fw-bold mb-4">
+                <i class="bi bi-person-circle me-2"></i>My Profile
+            </h1>
+
+            @if (isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Loading profile...</p>
+                </div>
+            }
+            else if (profile != null)
+            {
+                <!-- Basic Information -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Basic Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="firstName" class="form-label">First Name</label>
+                                <input type="text" class="form-control" id="firstName" @bind="profile.FirstName">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="lastName" class="form-label">Last Name</label>
+                                <input type="text" class="form-control" id="lastName" @bind="profile.LastName">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="email" class="form-label">Email</label>
+                                <input type="email" class="form-control" id="email" @bind="profile.Email" disabled>
+                                <small class="text-muted">Email cannot be changed</small>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="phone" class="form-label">Phone (Optional)</label>
+                                <input type="tel" class="form-control" id="phone" @bind="profile.Phone">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dietary Preferences -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Dietary Preferences</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Dietary Restrictions</label>
+                            <div class="row g-2">
+                                @foreach (var restriction in availableRestrictions)
+                                {
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="@restriction"
+                                                   checked="@profile.DietaryRestrictions.Contains(restriction)"
+                                                   @onchange="@(e => ToggleRestriction(restriction, (bool)e.Value!))">
+                                            <label class="form-check-label" for="@restriction">
+                                                @restriction
+                                            </label>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Major Allergen Groups (Quick Select)</label>
+                            <div class="row g-2">
+                                @foreach (var allergen in availableAllergens)
+                                {
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="@allergen"
+                                                   checked="@profile.Allergens.Contains(allergen)"
+                                                   @onchange="@(e => ToggleAllergen(allergen, (bool)e.Value!))">
+                                            <label class="form-check-label" for="@allergen">
+                                                @allergen
+                                            </label>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <small class="text-muted d-block mt-1">
+                                Select major allergen groups. For specific ingredients, use the detailed list below.
+                            </small>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Custom Ingredients to Avoid -->
+                        <div class="mb-3">
+                            <IngredientTagInput
+                                Ingredients="@profile.IngredientsToAvoid"
+                                IngredientsChanged="@((list) => profile.IngredientsToAvoid = list)"
+                                Label="Specific Ingredients to Avoid"
+                                Placeholder="Type ingredient name (e.g., annatto, strawberries, gelatin, palm oil)"
+                                HelpText="Add individual ingredients you need to avoid due to allergies, religious beliefs, or personal preferences. Press Enter or click Add."
+                                ShowCommonOptions="true" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="calorieGoal" class="form-label">Daily Calorie Goal (Optional)</label>
+                            <input type="number" class="form-control" id="calorieGoal" @bind="profile.DailyCalorieGoal" min="0" max="10000">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notification Preferences -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Notification Preferences</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="emailNotif" @bind="emailNotifications">
+                            <label class="form-check-label" for="emailNotif">
+                                Email Notifications
+                            </label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="recallNotif" @bind="recallNotifications">
+                            <label class="form-check-label" for="recallNotif">
+                                Recall Alerts
+                            </label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="expirationNotif" @bind="expirationNotifications">
+                            <label class="form-check-label" for="expirationNotif">
+                                Expiration Reminders
+                            </label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="priceAlerts" @bind="priceAlertNotifications">
+                            <label class="form-check-label" for="priceAlerts">
+                                Price Alerts
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" @onclick="SaveProfile" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-save me-2"></i>
+                        }
+                        Save Changes
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="LoadProfile">
+                        <i class="bi bi-arrow-clockwise me-2"></i>Reset
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private UserProfileDto? profile;
+    private bool isLoading = true;
+    private bool isSaving = false;
+
+    // Notification preferences
+    private bool emailNotifications = true;
+    private bool recallNotifications = true;
+    private bool expirationNotifications = true;
+    private bool priceAlertNotifications = false;
+
+    // Available options
+    private List<string> availableRestrictions = new()
+    {
+        "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
+        "Kosher", "Halal", "Low-Carb", "Keto", "Paleo"
+    };
+
+    private List<string> availableAllergens = new()
+    {
+        "Milk", "Eggs", "Fish", "Shellfish", "Tree Nuts", "Peanuts",
+        "Wheat", "Soybeans", "Sesame", "Mustard", "Celery", "Lupin"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProfile();
+    }
+
+    private async Task LoadProfile()
+    {
+        isLoading = true;
+
+        try
+        {
+            profile = await UserProfileClient.GetCurrentUserProfileAsync();
+
+            if (profile != null)
+            {
+                // Load notification preferences (would come from API in production)
+                emailNotifications = true;
+                recallNotifications = true;
+                expirationNotifications = true;
+                priceAlertNotifications = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to load profile: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveProfile()
+    {
+        if (profile == null)
+            return;
+
+        isSaving = true;
+
+        try
+        {
+            var success = await UserProfileClient.UpdateProfileAsync(profile);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Saved", "Profile updated successfully");
+            }
+            else
+            {
+                ToastService.ShowError("Error", "Failed to update profile");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError("Error", $"Failed to save profile: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ToggleRestriction(string restriction, bool isChecked)
+    {
+        if (profile == null)
+            return;
+
+        if (isChecked)
+        {
+            if (!profile.DietaryRestrictions.Contains(restriction))
+            {
+                profile.DietaryRestrictions.Add(restriction);
+            }
+        }
+        else
+        {
+            profile.DietaryRestrictions.Remove(restriction);
+        }
+    }
+
+    private void ToggleAllergen(string allergen, bool isChecked)
+    {
+        if (profile == null)
+            return;
+
+        if (isChecked)
+        {
+            if (!profile.Allergens.Contains(allergen))
+            {
+                profile.Allergens.Add(allergen);
+            }
+        }
+        else
+        {
+            profile.Allergens.Remove(allergen);
+        }
+    }
+}

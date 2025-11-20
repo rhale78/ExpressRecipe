@@ -1,0 +1,97 @@
+@using ExpressRecipe.Client.Shared.Models.Analytics
+
+<div class="report-section">
+    <div class="report-header">
+        <h2>💰 Spending Report</h2>
+        <div class="report-summary">
+            <span class="summary-item">
+                <strong>@Report.TotalSpent.ToString("C")</strong> total spent
+            </span>
+            <span class="summary-item">
+                <strong>@Report.TotalTransactions</strong> transactions
+            </span>
+            <span class="summary-item">
+                <strong>@Report.AverageTransactionAmount.ToString("C")</strong> avg per transaction
+            </span>
+        </div>
+    </div>
+
+    <!-- Spending Trend Chart -->
+    <div class="chart-container">
+        <h3>Spending Trend</h3>
+        <div class="simple-chart">
+            @foreach (var point in Report.DataPoints.OrderBy(p => p.Date))
+            {
+                var heightPercent = Report.DataPoints.Max(p => p.Amount) > 0
+                    ? (point.Amount / Report.DataPoints.Max(p => p.Amount)) * 100
+                    : 0;
+
+                <div class="chart-bar" style="height: @heightPercent%" title="@point.Label: @point.Amount.ToString("C")">
+                    <span class="bar-label">@point.Label</span>
+                    <span class="bar-value">@point.Amount.ToString("C")</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Top Products -->
+    @if (Report.TopProducts.Any())
+    {
+        <div class="data-table-container">
+            <h3>Top Products by Spending</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Brand</th>
+                        <th>Purchases</th>
+                        <th>Total Spent</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var product in Report.TopProducts.Take(10))
+                    {
+                        <tr>
+                            <td>@product.ProductName</td>
+                            <td>@product.Brand</td>
+                            <td>@product.PurchaseCount</td>
+                            <td class="amount">@product.TotalSpent.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <!-- Top Stores -->
+    @if (Report.TopStores.Any())
+    {
+        <div class="data-table-container">
+            <h3>Top Stores by Spending</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Store</th>
+                        <th>Transactions</th>
+                        <th>Total Spent</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var store in Report.TopStores.Take(10))
+                    {
+                        <tr>
+                            <td>@store.StoreName</td>
+                            <td>@store.TransactionCount</td>
+                            <td class="amount">@store.TotalSpent.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public SpendingReportDto Report { get; set; } = new();
+}

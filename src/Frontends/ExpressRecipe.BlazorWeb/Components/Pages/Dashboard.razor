@@ -1,0 +1,142 @@
+@page "/dashboard"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize]
+
+<PageTitle>Dashboard - ExpressRecipe</PageTitle>
+
+<div class="dashboard">
+    <div class="dashboard-header">
+        <h1>Welcome back, <AuthorizeView><Authorized>@context.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value</Authorized></AuthorizeView>!</h1>
+        <p class="subtitle">Here's what's happening with your dietary management</p>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Quick Stats -->
+        <div class="stat-card">
+            <div class="stat-icon">🍽️</div>
+            <div class="stat-content">
+                <h3>@_recipeCount</h3>
+                <p>Saved Recipes</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">📦</div>
+            <div class="stat-content">
+                <h3>@_inventoryCount</h3>
+                <p>Items in Inventory</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">🛒</div>
+            <div class="stat-content">
+                <h3>@_shoppingListCount</h3>
+                <p>Shopping List Items</p>
+            </div>
+        </div>
+
+        <div class="stat-card stat-alert">
+            <div class="stat-icon">⚠️</div>
+            <div class="stat-content">
+                <h3>@_expiringCount</h3>
+                <p>Items Expiring Soon</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <h2>Quick Actions</h2>
+        <div class="action-grid">
+            <a href="/products/scan" class="action-card">
+                <div class="action-icon">📷</div>
+                <h3>Scan Product</h3>
+                <p>Scan barcode to check for allergens</p>
+            </a>
+
+            <a href="/recipes/search" class="action-card">
+                <div class="action-icon">🔍</div>
+                <h3>Find Recipes</h3>
+                <p>Discover recipes that match your diet</p>
+            </a>
+
+            <a href="/inventory" class="action-card">
+                <div class="action-icon">📋</div>
+                <h3>Manage Inventory</h3>
+                <p>Track what's in your pantry</p>
+            </a>
+
+            <a href="/shopping" class="action-card">
+                <div class="action-icon">🛍️</div>
+                <h3>Shopping List</h3>
+                <p>Plan your next grocery trip</p>
+            </a>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="recent-activity">
+        <h2>Recent Activity</h2>
+        @if (_recentActivity.Any())
+        {
+            <div class="activity-list">
+                @foreach (var activity in _recentActivity)
+                {
+                    <div class="activity-item">
+                        <div class="activity-icon">@activity.Icon</div>
+                        <div class="activity-content">
+                            <p class="activity-text">@activity.Text</p>
+                            <small class="activity-time">@activity.Time</small>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="empty-state">No recent activity. Start by scanning a product or browsing recipes!</p>
+        }
+    </div>
+</div>
+
+@code {
+    private int _recipeCount = 0;
+    private int _inventoryCount = 0;
+    private int _shoppingListCount = 0;
+    private int _expiringCount = 0;
+    private List<ActivityItem> _recentActivity = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Load actual data from APIs
+        await LoadDashboardDataAsync();
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        // Simulated data - replace with actual API calls
+        await Task.Delay(100);
+
+        _recipeCount = 42;
+        _inventoryCount = 87;
+        _shoppingListCount = 15;
+        _expiringCount = 3;
+
+        _recentActivity = new List<ActivityItem>
+        {
+            new ActivityItem { Icon = "✅", Text = "Added 'Organic Milk' to inventory", Time = "2 hours ago" },
+            new ActivityItem { Icon = "🍳", Text = "Saved 'Gluten-Free Pancakes' recipe", Time = "5 hours ago" },
+            new ActivityItem { Icon = "🛒", Text = "Completed shopping for 12 items", Time = "Yesterday" },
+            new ActivityItem { Icon = "⚠️", Text = "Recall alert: Check your yogurt brands", Time = "2 days ago" },
+        };
+    }
+
+    private class ActivityItem
+    {
+        public string Icon { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public string Time { get; set; } = string.Empty;
+    }
+}

@@ -1,0 +1,280 @@
+@page "/products"
+@using Microsoft.AspNetCore.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Product
+@attribute [Authorize]
+@inject IProductApiClient ProductApi
+@inject NavigationManager Navigation
+
+<PageTitle>Products - ExpressRecipe</PageTitle>
+
+<div class="products-container">
+    <div class="products-header">
+        <h1>Product Database</h1>
+        <div class="header-actions">
+            <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/products/scan")">
+                📷 Scan Barcode
+            </button>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="search-section">
+        <div class="search-bar">
+            <input type="text"
+                   class="search-input"
+                   placeholder="Search products by name, brand, or UPC..."
+                   @bind="_searchTerm"
+                   @bind:event="oninput"
+                   @onkeypress="HandleSearchKeyPress" />
+            <button class="btn btn-primary" @onclick="SearchProducts">
+                🔍 Search
+            </button>
+        </div>
+
+        <!-- Filters Row -->
+        <div class="filters-row">
+            <div class="filter-group">
+                <label>Brand</label>
+                <input type="text"
+                       class="filter-input"
+                       placeholder="Filter by brand"
+                       @bind="_brandFilter" />
+            </div>
+
+            <div class="filter-group">
+                <label>Allergens to Exclude</label>
+                <div class="allergen-checkboxes">
+                    @foreach (var allergen in _commonAllergens)
+                    {
+                        <label class="allergen-checkbox">
+                            <input type="checkbox"
+                                   @bind="_excludedAllergens[allergen]" />
+                            <span>@allergen</span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <div class="filter-actions">
+                <button class="btn btn-outline" @onclick="ClearFilters">Clear Filters</button>
+                <button class="btn btn-primary" @onclick="SearchProducts">Apply Filters</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Searching products...</p>
+        </div>
+    }
+    else if (_searchResult != null)
+    {
+        <!-- Results Summary -->
+        <div class="results-summary">
+            <p>
+                Showing @_searchResult.Products.Count of @_searchResult.TotalCount.ToString("N0") products
+                @if (!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_brandFilter) || _excludedAllergens.Any(x => x.Value))
+                {
+                    <span class="filter-indicator">(filtered)</span>
+                }
+            </p>
+        </div>
+
+        <!-- Product Grid -->
+        @if (_searchResult.Products.Any())
+        {
+            <div class="products-grid">
+                @foreach (var product in _searchResult.Products)
+                {
+                    <div class="product-card" @onclick="() => ViewProduct(product.Id)">
+                        <div class="product-image">
+                            @if (!string.IsNullOrEmpty(product.ImageUrl))
+                            {
+                                <img src="@product.ImageUrl" alt="@product.Name" />
+                            }
+                            else
+                            {
+                                <div class="product-image-placeholder">📦</div>
+                            }
+                        </div>
+
+                        <div class="product-info">
+                            <h3 class="product-name">@product.Name</h3>
+                            <p class="product-brand">@product.Brand</p>
+
+                            @if (!string.IsNullOrEmpty(product.UPC))
+                            {
+                                <p class="product-upc">UPC: @product.UPC</p>
+                            }
+
+                            @if (product.Allergens.Any())
+                            {
+                                <div class="product-allergens">
+                                    <span class="allergen-label">⚠️ Allergens:</span>
+                                    <div class="allergen-tags">
+                                        @foreach (var allergen in product.Allergens.Take(3))
+                                        {
+                                            <span class="allergen-tag">@allergen</span>
+                                        }
+                                        @if (product.Allergens.Count > 3)
+                                        {
+                                            <span class="allergen-tag">+@(product.Allergens.Count - 3) more</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="product-actions">
+                            <button class="btn-link" @onclick:stopPropagation="true" @onclick="() => ViewProduct(product.Id)">
+                                View Details →
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Pagination -->
+            @if (_searchResult.TotalPages > 1)
+            {
+                <div class="pagination">
+                    <button class="btn btn-outline"
+                            @onclick="() => ChangePage(_currentPage - 1)"
+                            disabled="@(_currentPage <= 1)">
+                        ← Previous
+                    </button>
+
+                    <div class="page-numbers">
+                        @for (int i = Math.Max(1, _currentPage - 2); i <= Math.Min(_searchResult.TotalPages, _currentPage + 2); i++)
+                        {
+                            var page = i;
+                            <button class="page-number @(page == _currentPage ? "active" : "")"
+                                    @onclick="() => ChangePage(page)">
+                                @page
+                            </button>
+                        }
+                    </div>
+
+                    <button class="btn btn-outline"
+                            @onclick="() => ChangePage(_currentPage + 1)"
+                            disabled="@(_currentPage >= _searchResult.TotalPages)">
+                        Next →
+                    </button>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <h2>No products found</h2>
+                <p>Try adjusting your search filters or browse all products.</p>
+                <button class="btn btn-primary" @onclick="ClearFilters">Clear All Filters</button>
+            </div>
+        }
+    }
+
+    <!-- Error Message -->
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-error">
+            <strong>Error:</strong> @_errorMessage
+        </div>
+    }
+</div>
+
+@code {
+    private string _searchTerm = string.Empty;
+    private string _brandFilter = string.Empty;
+    private Dictionary<string, bool> _excludedAllergens = new();
+    private readonly string[] _commonAllergens = new[]
+    {
+        "Dairy", "Eggs", "Fish", "Shellfish", "Tree Nuts",
+        "Peanuts", "Wheat", "Soy", "Sesame"
+    };
+
+    private ProductSearchResult? _searchResult;
+    private int _currentPage = 1;
+    private const int _pageSize = 24;
+    private bool _isLoading = false;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize allergen checkboxes
+        foreach (var allergen in _commonAllergens)
+        {
+            _excludedAllergens[allergen] = false;
+        }
+
+        // Load initial products
+        await SearchProducts();
+    }
+
+    private async Task SearchProducts()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+
+        try
+        {
+            var request = new ProductSearchRequest
+            {
+                SearchTerm = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
+                Brand = string.IsNullOrWhiteSpace(_brandFilter) ? null : _brandFilter,
+                Allergens = _excludedAllergens.Where(x => x.Value).Select(x => x.Key).ToList(),
+                Page = _currentPage,
+                PageSize = _pageSize
+            };
+
+            _searchResult = await ProductApi.SearchProductsAsync(request);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to search products: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _currentPage = 1;
+            await SearchProducts();
+        }
+    }
+
+    private async Task ChangePage(int newPage)
+    {
+        if (newPage < 1 || (_searchResult != null && newPage > _searchResult.TotalPages))
+            return;
+
+        _currentPage = newPage;
+        await SearchProducts();
+    }
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = string.Empty;
+        _brandFilter = string.Empty;
+        foreach (var key in _excludedAllergens.Keys.ToList())
+        {
+            _excludedAllergens[key] = false;
+        }
+        _currentPage = 1;
+        await SearchProducts();
+    }
+
+    private void ViewProduct(Guid productId)
+    {
+        Navigation.NavigateTo($"/products/{productId}");
+    }
+}

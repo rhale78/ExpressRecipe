@@ -1,0 +1,105 @@
+@implements IDisposable
+@using ExpressRecipe.Client.Shared.Services
+@inject IToastService ToastService
+
+<div class="toast-container">
+    @foreach (var toast in _toasts.OrderByDescending(t => t.CreatedAt))
+    {
+        <div class="toast toast-@toast.Type.ToString().ToLower() @(toast.IsRemoving ? "removing" : "")">
+            <div class="toast-header">
+                <span class="toast-icon">@GetIcon(toast.Type)</span>
+                <strong class="toast-title">@toast.Title</strong>
+                <button class="toast-close" @onclick="() => RemoveToast(toast.Id)">×</button>
+            </div>
+            <div class="toast-body">
+                @toast.Message
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<ToastMessageWithState> _toasts = new();
+    private Dictionary<string, System.Timers.Timer> _timers = new();
+
+    protected override void OnInitialized()
+    {
+        ToastService.OnShow += ShowToast;
+    }
+
+    private void ShowToast(ToastMessage message)
+    {
+        var toastWithState = new ToastMessageWithState
+        {
+            Id = message.Id,
+            Type = message.Type,
+            Title = message.Title,
+            Message = message.Message,
+            DurationMs = message.DurationMs,
+            CreatedAt = message.CreatedAt
+        };
+
+        _toasts.Add(toastWithState);
+        StateHasChanged();
+
+        // Auto-remove after duration
+        var timer = new System.Timers.Timer(message.DurationMs);
+        timer.Elapsed += (s, e) => RemoveToast(message.Id);
+        timer.AutoReset = false;
+        timer.Start();
+
+        _timers[message.Id] = timer;
+    }
+
+    private void RemoveToast(string id)
+    {
+        var toast = _toasts.FirstOrDefault(t => t.Id == id);
+        if (toast != null)
+        {
+            toast.IsRemoving = true;
+            StateHasChanged();
+
+            // Wait for animation to complete before actually removing
+            Task.Delay(300).ContinueWith(_ =>
+            {
+                InvokeAsync(() =>
+                {
+                    _toasts.Remove(toast);
+                    if (_timers.ContainsKey(id))
+                    {
+                        _timers[id].Dispose();
+                        _timers.Remove(id);
+                    }
+                    StateHasChanged();
+                });
+            });
+        }
+    }
+
+    private string GetIcon(ToastType type)
+    {
+        return type switch
+        {
+            ToastType.Success => "✓",
+            ToastType.Error => "✕",
+            ToastType.Warning => "⚠",
+            ToastType.Info => "ℹ",
+            _ => "•"
+        };
+    }
+
+    public void Dispose()
+    {
+        ToastService.OnShow -= ShowToast;
+        foreach (var timer in _timers.Values)
+        {
+            timer.Dispose();
+        }
+        _timers.Clear();
+    }
+
+    private class ToastMessageWithState : ToastMessage
+    {
+        public bool IsRemoving { get; set; }
+    }
+}

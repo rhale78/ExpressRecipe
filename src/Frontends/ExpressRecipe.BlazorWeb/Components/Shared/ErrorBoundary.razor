@@ -1,0 +1,59 @@
+@using Microsoft.AspNetCore.Components.Web
+@inherits ErrorBoundary
+
+<CascadingValue Value="this">
+    @ChildContent
+</CascadingValue>
+
+@if (CurrentException != null)
+{
+    <div class="alert alert-danger m-4" role="alert">
+        <h4 class="alert-heading">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            Something went wrong
+        </h4>
+        <p class="mb-3">An error occurred while processing your request.</p>
+
+        @if (ShowDetails)
+        {
+            <hr>
+            <div class="mb-2">
+                <strong>Error Type:</strong> @CurrentException.GetType().Name
+            </div>
+            <div class="mb-2">
+                <strong>Message:</strong> @CurrentException.Message
+            </div>
+            @if (!string.IsNullOrEmpty(CurrentException.StackTrace))
+            {
+                <details class="mt-2">
+                    <summary class="text-muted" style="cursor: pointer;">Stack Trace</summary>
+                    <pre class="mt-2 p-2 bg-light rounded"><code>@CurrentException.StackTrace</code></pre>
+                </details>
+            }
+        }
+
+        <div class="mt-3">
+            <button class="btn btn-primary" @onclick="Recover">
+                <i class="bi bi-arrow-clockwise me-2"></i>Try Again
+            </button>
+            <button class="btn btn-outline-secondary ms-2" @onclick="() => ShowDetails = !ShowDetails">
+                <i class="bi bi-@(ShowDetails ? "eye-slash" : "eye") me-2"></i>
+                @(ShowDetails ? "Hide" : "Show") Details
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private bool ShowDetails { get; set; } = false;
+
+    protected override Task OnErrorAsync(Exception exception)
+    {
+        // Log error to console or logging service
+        Console.Error.WriteLine($"Error boundary caught exception: {exception}");
+        return base.OnErrorAsync(exception);
+    }
+}

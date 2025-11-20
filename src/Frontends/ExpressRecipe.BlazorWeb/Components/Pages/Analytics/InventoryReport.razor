@@ -1,0 +1,126 @@
+@using ExpressRecipe.Client.Shared.Models.Analytics
+
+<div class="report-section">
+    <div class="report-header">
+        <h2>📦 Inventory Report</h2>
+        <div class="report-summary">
+            <span class="summary-item">
+                <strong>@Report.CurrentStock</strong> current items
+            </span>
+            <span class="summary-item">
+                <strong>@Report.ItemsAdded</strong> items added
+            </span>
+            <span class="summary-item">
+                <strong>@Report.ItemsConsumed</strong> items consumed
+            </span>
+            <span class="summary-item">
+                <strong>@Report.ItemsExpired</strong> items expired
+            </span>
+        </div>
+    </div>
+
+    <!-- Turnover Rate -->
+    <div class="metric-highlight">
+        <h3>Inventory Turnover Rate</h3>
+        <div class="turnover-value">
+            <span class="large-number">@Report.TurnoverRate.ToString("F2")</span>
+            <small>times per period</small>
+        </div>
+        <p class="metric-description">
+            @if (Report.TurnoverRate > 2)
+            {
+                <span class="status-good">✓ Healthy turnover - items are being used efficiently</span>
+            }
+            else if (Report.TurnoverRate > 1)
+            {
+                <span class="status-okay">⚠️ Moderate turnover - consider monitoring slow-moving items</span>
+            }
+            else
+            {
+                <span class="status-poor">⚠️ Low turnover - items may be staying too long</span>
+            }
+        </p>
+    </div>
+
+    <!-- Inventory Trend -->
+    <div class="chart-container">
+        <h3>Inventory Level Trend</h3>
+        <div class="simple-chart">
+            @foreach (var point in Report.TrendData.OrderBy(t => t.Date))
+            {
+                var heightPercent = Report.TrendData.Max(t => t.TotalItems) > 0
+                    ? ((double)point.TotalItems / Report.TrendData.Max(t => t.TotalItems)) * 100
+                    : 0;
+
+                <div class="chart-bar" style="height: @heightPercent%"
+                     title="@point.Date.ToString("MMM dd"): @point.TotalItems items (+@point.AddedItems, -@point.RemovedItems)">
+                    <span class="bar-label">@point.Date.ToString("MMM dd")</span>
+                    <span class="bar-value">@point.TotalItems</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Most Consumed Products -->
+    @if (Report.MostConsumedProducts.Any())
+    {
+        <div class="data-table-container">
+            <h3>Most Consumed Products</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Brand</th>
+                        <th>Category</th>
+                        <th>Times Consumed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var product in Report.MostConsumedProducts.Take(10))
+                    {
+                        <tr>
+                            <td>@product.ProductName</td>
+                            <td>@product.Brand</td>
+                            <td>@product.Category</td>
+                            <td class="count">@product.ConsumedCount</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <!-- Most Wasted Products -->
+    @if (Report.MostWastedProducts.Any())
+    {
+        <div class="data-table-container">
+            <h3>⚠️ Most Wasted Products</h3>
+            <table class="data-table waste-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Brand</th>
+                        <th>Times Expired</th>
+                        <th>Estimated Value Lost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var product in Report.MostWastedProducts.Take(10))
+                    {
+                        <tr class="waste-row">
+                            <td>@product.ProductName</td>
+                            <td>@product.Brand</td>
+                            <td class="count">@product.ExpiredCount</td>
+                            <td class="amount waste-amount">@product.EstimatedValue.ToString("C")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public InventoryReportDto Report { get; set; } = new();
+}
