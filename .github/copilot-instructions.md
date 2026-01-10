@@ -95,14 +95,18 @@ GET    /api/products/search   - Search products
 
 1. **NEVER use Entity Framework** - Use ADO.NET with the custom `SqlHelper` base class
 2. **Always use the `SqlHelper` base class** for data access - provides `ExecuteScalarAsync`, `ExecuteNonQueryAsync`, `ExecuteReaderAsync`, `ExecuteTransactionAsync`
-3. **Always use parameterized queries** to prevent SQL injection
+3. **Always use parameterized queries** to prevent SQL injection - use `CreateParameter(name, value)` helper
 4. **Always filter soft-deleted records** with `WHERE IsDeleted = 0`
 5. **Always use transactions** for multi-statement operations
+6. **Deadlock handling is automatic** - SqlHelper includes built-in retry logic with exponential backoff
+7. **Use helper methods for safe reading** - SqlHelper provides `GetGuid()`, `GetString()`, `GetInt32()`, etc. that handle nulls and column names
 
 Example:
 ```csharp
 public class ProductRepository : SqlHelper
 {
+    public ProductRepository(string connectionString) : base(connectionString) { }
+
     public async Task<Product?> GetByIdAsync(Guid id)
     {
         const string sql = @"
@@ -114,18 +118,32 @@ public class ProductRepository : SqlHelper
             sql,
             reader => new Product
             {
-                Id = reader.GetGuid(0),
-                Name = reader.GetString(1),
-                Brand = reader.GetString(2),
-                UPC = reader.GetString(3)
+                Id = GetGuid(reader, "Id"),
+                Name = GetString(reader, "Name"),
+                Brand = GetString(reader, "Brand"),
+                UPC = GetString(reader, "UPC")
             },
-            new SqlParameter("@Id", id)
+            CreateParameter("@Id", id)
         );
 
         return products.FirstOrDefault();
     }
 }
 ```
+
+**SqlHelper provides helper methods for safe data reading:**
+- `GetGuid(reader, "ColumnName")` - Get Guid by column name
+- `GetGuidNullable(reader, "ColumnName")` - Get nullable Guid
+- `GetString(reader, "ColumnName")` - Get string (nullable)
+- `GetInt32(reader, "ColumnName")` - Get int
+- `GetIntNullable(reader, "ColumnName")` - Get nullable int
+- `GetBoolean(reader, "ColumnName")` - Get bool
+- `GetBool(reader, "ColumnName")` - Get nullable bool
+- `GetDateTime(reader, "ColumnName")` - Get DateTime
+- `GetDateTimeNullable(reader, "ColumnName")` - Get nullable DateTime
+- `GetDecimal(reader, "ColumnName")` - Get decimal
+- `GetDecimalNullable(reader, "ColumnName")` - Get nullable decimal
+- `CreateParameter(name, value)` - Create SQL parameter safely
 
 ### Architecture Patterns
 
