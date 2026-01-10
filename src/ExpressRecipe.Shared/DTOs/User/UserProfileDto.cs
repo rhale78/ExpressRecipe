@@ -120,19 +120,51 @@ public class UpdateUserProfileRequest
 
 public class CreateFamilyMemberRequest
 {
+    [Required]
+    [StringLength(100)]
     public string Name { get; set; } = string.Empty;
-    public string Relationship { get; set; } = string.Empty;
+    
+    [StringLength(50)]
+    public string? Relationship { get; set; }
+    
     public DateTime? DateOfBirth { get; set; }
     public List<string> Allergens { get; set; } = new();
     public List<string> IngredientsToAvoid { get; set; } = new();
     public List<string> DietaryRestrictions { get; set; } = new();
     public List<string> DislikedFoods { get; set; } = new();
+    
+    [StringLength(2000)]
     public string? Notes { get; set; }
+    
+    [StringLength(50)]
+    public string UserRole { get; set; } = "Member"; // Admin, Member, Guest
+    
+    public bool IsGuest { get; set; }
+}
+
+public class CreateFamilyMemberWithAccountRequest : CreateFamilyMemberRequest
+{
+    [Required]
+    [EmailAddress]
+    [StringLength(256)]
+    public string Email { get; set; } = string.Empty;
+    
+    [Required]
+    [StringLength(100, MinimumLength = 8)]
+    public string Password { get; set; } = string.Empty;
+    
+    public bool SendWelcomeEmail { get; set; } = true;
 }
 
 public class UpdateFamilyMemberRequest : CreateFamilyMemberRequest
 {
     public new DateTime? DateOfBirth { get; set; }
+}
+
+public class DismissGuestRequest
+{
+    [StringLength(500)]
+    public string? Reason { get; set; }
 }
 
 public class AllergensAndRestrictionsDto
