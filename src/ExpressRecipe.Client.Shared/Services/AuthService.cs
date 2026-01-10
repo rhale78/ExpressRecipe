@@ -68,34 +68,81 @@ public class AuthService : IAuthService
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/auth/register", request);
+            Console.WriteLine($"=== REGISTRATION DEBUG ===");
+            Console.WriteLine($"HttpClient BaseAddress: {_httpClient.BaseAddress}");
+            Console.WriteLine($"Client RegisterAsync called with: Email={request.Email}, FirstName={request.FirstName}, LastName={request.LastName}, PasswordLength={request.Password?.Length ?? 0}");
+            
+            // Map to API DTO - use exact property names to match API
+            var apiRequest = new
+            {
+                email = request.Email,
+                password = request.Password,
+                confirmPassword = request.Password,
+                firstName = request.FirstName,
+                lastName = request.LastName
+            };
+
+            var jsonPayload = System.Text.Json.JsonSerializer.Serialize(apiRequest);
+            Console.WriteLine($"Sending JSON with camelCase: {jsonPayload}");
+            Console.WriteLine($"Full URL: {_httpClient.BaseAddress}api/auth/register");
+
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/register", apiRequest);
+
+            Console.WriteLine($"Response status: {response.StatusCode}");
+            Console.WriteLine($"Response reason: {response.ReasonPhrase}");
 
             if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Registration failed: {response.StatusCode} - {errorContent}");
+                return null;
+            }
+
+            // API returns AuthResponse with nested User
+            var responseContent = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"Response content: {responseContent}");
+            
+            var apiResponse = await response.Content.ReadFromJsonAsync<JsonElement>();
+            
+            if (apiResponse.ValueKind == JsonValueKind.Undefined)
             {
                 return null;
             }
 
-            var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>();
+            var accessToken = apiResponse.GetProperty("accessToken").GetString() ?? "";
+            var refreshToken = apiResponse.GetProperty("refreshToken").GetString() ?? "";
+            var expiresAt = apiResponse.GetProperty("expiresAt").GetDateTime();
+            var user = apiResponse.GetProperty("user");
 
-            if (tokenResponse != null)
+            var tokenResponse = new TokenResponse
             {
-                await _tokenProvider.SetTokensAsync(tokenResponse.AccessToken, tokenResponse.RefreshToken);
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                ExpiresAt = expiresAt,
+                UserId = user.GetProperty("id").GetGuid(),
+                Email = user.GetProperty("email").GetString() ?? "",
+                FirstName = request.FirstName, // Use from request since API doesn't return it
+                LastName = request.LastName
+            };
 
-                _currentUser = new UserProfile
-                {
-                    UserId = tokenResponse.UserId,
-                    Email = tokenResponse.Email,
-                    FirstName = tokenResponse.FirstName,
-                    LastName = tokenResponse.LastName
-                };
+            await _tokenProvider.SetTokensAsync(tokenResponse.AccessToken, tokenResponse.RefreshToken);
 
-                AuthenticationStateChanged?.Invoke(this, true);
-            }
+            _currentUser = new UserProfile
+            {
+                UserId = tokenResponse.UserId,
+                Email = tokenResponse.Email,
+                FirstName = tokenResponse.FirstName,
+                LastName = tokenResponse.LastName
+            };
+
+            AuthenticationStateChanged?.Invoke(this, true);
 
             return tokenResponse;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Console.WriteLine($"Registration exception: {ex.GetType().Name} - {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
             return null;
         }
     }
@@ -139,41 +186,49 @@ public class AuthService : IAuthService
 
     public async Task LogoutAsync()
     {
+        Console.WriteLine("[AuthService] LogoutAsync started");
         try
         {
             var token = await _tokenProvider.GetAccessTokenAsync();
+            Console.WriteLine($"[AuthService] Token retrieved: {(string.IsNullOrEmpty(token) ? "NULL/EMPTY" : "EXISTS")}");
 
             if (!string.IsNullOrEmpty(token))
             {
                 _httpClient.DefaultRequestHeaders.Authorization =
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
-                await _httpClient.PostAsync("/api/auth/logout", null);
+                Console.WriteLine("[AuthService] Calling API logout endpoint");
+                var response = await _httpClient.PostAsync("/api/auth/logout", null);
+                Console.WriteLine($"[AuthService] API logout response: {response.StatusCode}");
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore logout errors
+            Console.WriteLine($"[AuthService] Logout API call error (ignoring): {ex.Message}");
         }
         finally
         {
+            Console.WriteLine("[AuthService] Clearing tokens");
             await _tokenProvider.ClearTokensAsync();
+
+            Console.WriteLine("[AuthService] Clearing current user");
             _currentUser = null;
+
+            Console.WriteLine("[AuthService] Firing AuthenticationStateChanged event");
             AuthenticationStateChanged?.Invoke(this, false);
+
+            Console.WriteLine("[AuthService] LogoutAsync completed");
         }
     }
 
     public async Task<UserProfile?> GetCurrentUserAsync()
     {
-        if (_currentUser != null)
-        {
-            return _currentUser;
-        }
-
+        // Always check token validity, even if we have a cached user
         var token = await _tokenProvider.GetAccessTokenAsync();
 
         if (string.IsNullOrEmpty(token))
         {
+            _currentUser = null;
             return null;
         }
 
@@ -198,18 +253,41 @@ public class AuthService : IAuthService
                 return null;
             }
 
+            // Check expiration
+            if (claims.TryGetValue("exp", out var expElement) && expElement.TryGetInt64(out var exp))
+            {
+                var expirationTime = DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime;
+                // Add a small buffer (e.g., 10 seconds) to account for clock skew
+                if (expirationTime <= DateTime.UtcNow.AddSeconds(10))
+                {
+                    Console.WriteLine($"[AuthService] Token expired at {expirationTime}. Attempting refresh...");
+                    var refreshed = await RefreshTokenAsync();
+                    if (refreshed)
+                    {
+                        // Recursively call to get the new user from the new token
+                        return await GetCurrentUserAsync();
+                    }
+                    else
+                    {
+                        Console.WriteLine("[AuthService] Token refresh failed.");
+                        return null;
+                    }
+                }
+            }
+
             _currentUser = new UserProfile
             {
-                UserId = Guid.Parse(claims["sub"].GetString() ?? Guid.Empty.ToString()),
-                Email = claims["email"].GetString() ?? string.Empty,
-                FirstName = claims["given_name"].GetString() ?? string.Empty,
-                LastName = claims["family_name"].GetString() ?? string.Empty
+                UserId = Guid.Parse(claims.TryGetValue("sub", out var sub) ? sub.GetString() ?? Guid.Empty.ToString() : Guid.Empty.ToString()),
+                Email = claims.TryGetValue("email", out var email) ? email.GetString() ?? string.Empty : string.Empty,
+                FirstName = claims.TryGetValue("given_name", out var givenName) ? givenName.GetString() ?? string.Empty : string.Empty,
+                LastName = claims.TryGetValue("family_name", out var familyName) ? familyName.GetString() ?? string.Empty : string.Empty
             };
 
             return _currentUser;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"[AuthService] Error parsing token: {ex.Message}");
             return null;
         }
     }

@@ -9,6 +9,14 @@ public class UserProfileDto
     public string? Phone { get; set; }
     public string FullName => $"{FirstName} {LastName}";
 
+    // Health & Physical Info
+    public DateTime? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public decimal? HeightCm { get; set; }
+    public decimal? WeightKg { get; set; }
+    public string? ActivityLevel { get; set; }
+    public string? CookingSkillLevel { get; set; }
+
     // User's personal dietary restrictions
     public List<string> Allergens { get; set; } = new(); // Major allergen groups (Milk, Eggs, etc.)
     public List<string> IngredientsToAvoid { get; set; } = new(); // Specific ingredients (annatto, gelatin, strawberries, etc.)
@@ -42,6 +50,15 @@ public class UpdateUserProfileRequest
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string? Phone { get; set; }
+    
+    // Health & Physical Info
+    public DateTime? DateOfBirth { get; set; }
+    public string? Gender { get; set; }
+    public decimal? HeightCm { get; set; }
+    public decimal? WeightKg { get; set; }
+    public string? ActivityLevel { get; set; }
+    public string? CookingSkillLevel { get; set; }
+    
     public List<string> Allergens { get; set; } = new();
     public List<string> IngredientsToAvoid { get; set; } = new();
     public List<string> DietaryRestrictions { get; set; } = new();

@@ -1,5 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
+using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace ExpressRecipe.ProductService.Data;
 
@@ -42,25 +44,25 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
         if (request.RestaurantId.HasValue)
         {
             whereClauses.Add("mi.RestaurantId = @RestaurantId");
-            parameters.Add(CreateParameter("@RestaurantId", request.RestaurantId.Value));
+            parameters.Add((SqlParameter)CreateParameter("@RestaurantId", request.RestaurantId.Value));
         }
 
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {
             whereClauses.Add("(mi.Name LIKE @SearchTerm OR mi.Description LIKE @SearchTerm)");
-            parameters.Add(CreateParameter("@SearchTerm", $"%{request.SearchTerm}%"));
+            parameters.Add((SqlParameter)CreateParameter("@SearchTerm", $"%{request.SearchTerm}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Category))
         {
             whereClauses.Add("mi.Category = @Category");
-            parameters.Add(CreateParameter("@Category", request.Category));
+            parameters.Add((SqlParameter)CreateParameter("@Category", request.Category));
         }
 
         if (request.IsAvailable.HasValue)
         {
             whereClauses.Add("mi.IsAvailable = @IsAvailable");
-            parameters.Add(CreateParameter("@IsAvailable", request.IsAvailable.Value));
+            parameters.Add((SqlParameter)CreateParameter("@IsAvailable", request.IsAvailable.Value));
         }
 
         var sql = $@"
@@ -127,7 +129,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             CreateParameter("@Currency", request.Currency ?? "USD"),
             CreateParameter("@ServingSize", request.ServingSize),
             CreateParameter("@ServingUnit", request.ServingUnit),
-            CreateParameter("@IsAvailable", request.IsAvailable ?? true),
+            CreateParameter("@IsAvailable", request.IsAvailable),
             CreateParameter("@CreatedBy", createdBy));
 
         return id;
@@ -159,7 +161,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             CreateParameter("@Currency", request.Currency ?? "USD"),
             CreateParameter("@ServingSize", request.ServingSize),
             CreateParameter("@ServingUnit", request.ServingUnit),
-            CreateParameter("@IsAvailable", request.IsAvailable ?? true),
+            CreateParameter("@IsAvailable", request.IsAvailable),
             CreateParameter("@UpdatedBy", updatedBy));
 
         return rowsAffected > 0;
@@ -212,7 +214,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             {
                 Id = GetGuid(reader, "Id"),
                 MenuItemId = GetGuid(reader, "MenuItemId"),
-                IngredientId = GetGuid(reader, "IngredientId"),
+                IngredientId = GetGuidNullable(reader, "IngredientId") ?? Guid.Empty,
                 IngredientName = GetString(reader, "IngredientName") ?? string.Empty,
                 IngredientCategory = GetString(reader, "IngredientCategory"),
                 OrderIndex = GetInt(reader, "OrderIndex") ?? 0,
@@ -276,20 +278,20 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             reader => new MenuItemNutritionDto
             {
                 MenuItemId = GetGuid(reader, "MenuItemId"),
-                Calories = GetDecimal(reader, "Calories"),
-                TotalFat = GetDecimal(reader, "TotalFat"),
-                SaturatedFat = GetDecimal(reader, "SaturatedFat"),
-                TransFat = GetDecimal(reader, "TransFat"),
-                Cholesterol = GetDecimal(reader, "Cholesterol"),
-                Sodium = GetDecimal(reader, "Sodium"),
-                TotalCarbohydrates = GetDecimal(reader, "TotalCarbohydrates"),
-                DietaryFiber = GetDecimal(reader, "DietaryFiber"),
-                Sugars = GetDecimal(reader, "Sugars"),
-                Protein = GetDecimal(reader, "Protein"),
-                VitaminD = GetDecimal(reader, "VitaminD"),
-                Calcium = GetDecimal(reader, "Calcium"),
-                Iron = GetDecimal(reader, "Iron"),
-                Potassium = GetDecimal(reader, "Potassium")
+                Calories = GetDecimalNullable(reader, "Calories"),
+                TotalFat = GetDecimalNullable(reader, "TotalFat"),
+                SaturatedFat = GetDecimalNullable(reader, "SaturatedFat"),
+                TransFat = GetDecimalNullable(reader, "TransFat"),
+                Cholesterol = GetDecimalNullable(reader, "Cholesterol"),
+                Sodium = GetDecimalNullable(reader, "Sodium"),
+                TotalCarbohydrates = GetDecimalNullable(reader, "TotalCarbohydrates"),
+                DietaryFiber = GetDecimalNullable(reader, "DietaryFiber"),
+                Sugars = GetDecimalNullable(reader, "Sugars"),
+                Protein = GetDecimalNullable(reader, "Protein"),
+                VitaminD = GetDecimalNullable(reader, "VitaminD"),
+                Calcium = GetDecimalNullable(reader, "Calcium"),
+                Iron = GetDecimalNullable(reader, "Iron"),
+                Potassium = GetDecimalNullable(reader, "Potassium")
             },
             CreateParameter("@MenuItemId", menuItemId));
 
@@ -404,8 +406,8 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
                 WouldOrderAgain = GetBool(reader, "WouldOrderAgain"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
-                UpdatedAt = GetDateTime(reader, "UpdatedAt")
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@MenuItemId", menuItemId));
     }
@@ -426,8 +428,8 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
                 WouldOrderAgain = GetBool(reader, "WouldOrderAgain"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
-                UpdatedAt = GetDateTime(reader, "UpdatedAt")
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@MenuItemId", menuItemId),
             CreateParameter("@UserId", userId));
@@ -504,13 +506,13 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             Name = GetString(reader, "Name") ?? string.Empty,
             Description = GetString(reader, "Description"),
             Category = GetString(reader, "Category"),
-            Price = GetDecimal(reader, "Price"),
+            Price = GetDecimalNullable(reader, "Price"),
             Currency = GetString(reader, "Currency") ?? "USD",
-            ServingSize = GetDecimal(reader, "ServingSize"),
+            ServingSize = GetNullableString(reader, "ServingSize"),
             ServingUnit = GetString(reader, "ServingUnit"),
             IsAvailable = GetBool(reader, "IsAvailable") ?? true,
-            CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
-            UpdatedAt = GetDateTime(reader, "UpdatedAt")
+            CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
         };
     }
 }

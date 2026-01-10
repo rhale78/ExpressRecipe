@@ -1,23 +1,28 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ExpressRecipe.Client.Shared.Services;
+using ExpressRecipe.Client.Shared.Models.Recipe;
 using ExpressRecipe.MAUI.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
+using IToastService = ExpressRecipe.MAUI.Services.IToastService;
 
 namespace ExpressRecipe.MAUI.ViewModels;
 
 public partial class RecipesViewModel : ObservableObject
 {
     private readonly IRecipeApiClient _recipeClient;
-    private readonly IToastService _toastService;
+    private readonly ExpressRecipe.MAUI.Services.IToastService _toastService;
     private readonly INavigationService _navigationService;
     private readonly ILogger<RecipesViewModel> _logger;
 
     [ObservableProperty]
-    private ObservableCollection<RecipeItemViewModel> _recipes = new();
+    private ObservableCollection<RecipeDto> _recipes = new();
 
     [ObservableProperty]
-    private ObservableCollection<RecipeItemViewModel> _filteredRecipes = new();
+    private ObservableCollection<RecipeDto> _filteredRecipes = new();
 
     [ObservableProperty]
     private bool _isLoading;
@@ -42,7 +47,7 @@ public partial class RecipesViewModel : ObservableObject
 
     public RecipesViewModel(
         IRecipeApiClient recipeClient,
-        IToastService toastService,
+        ExpressRecipe.MAUI.Services.IToastService toastService,
         INavigationService navigationService,
         ILogger<RecipesViewModel> logger)
     {
@@ -64,25 +69,18 @@ public partial class RecipesViewModel : ObservableObject
         {
             IsLoading = true;
 
-            var apiRecipes = await _recipeClient.GetAllRecipesAsync();
-            if (apiRecipes != null)
+            var searchResult = await _recipeClient.SearchRecipesAsync(new RecipeSearchRequest
+            {
+                PageSize = 100,
+                Page = 1
+            });
+
+            if (searchResult?.Results != null)
             {
                 Recipes.Clear();
-                foreach (var recipe in apiRecipes)
+                foreach (var recipe in searchResult.Results)
                 {
-                    Recipes.Add(new RecipeItemViewModel
-                    {
-                        Id = recipe.Id,
-                        Name = recipe.Name ?? "Unknown Recipe",
-                        Description = recipe.Description ?? "",
-                        PrepTime = recipe.PrepTime ?? 0,
-                        CookTime = recipe.CookTime ?? 0,
-                        Servings = recipe.Servings ?? 4,
-                        DietaryTags = recipe.DietaryTags ?? new List<string>(),
-                        IsSafe = recipe.IsSafe ?? true,
-                        Rating = recipe.AverageRating ?? 0,
-                        ImageUrl = recipe.ImageUrl
-                    });
+                    Recipes.Add(recipe);
                 }
 
                 ApplyFilters();
@@ -108,7 +106,7 @@ public partial class RecipesViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ViewRecipeAsync(RecipeItemViewModel recipe)
+    private async Task ViewRecipeAsync(RecipeDto recipe)
     {
         await _navigationService.NavigateToAsync("recipedetail", new Dictionary<string, object>
         {
@@ -148,17 +146,17 @@ public partial class RecipesViewModel : ObservableObject
 
         var filtered = Recipes.AsEnumerable();
 
-        // Safe filter
+        // Safe filter (check if recipe has no allergens)
         if (ShowSafeOnly)
         {
-            filtered = filtered.Where(r => r.IsSafe);
+            filtered = filtered.Where(r => r.Allergens == null || !r.Allergens.Any());
         }
 
         // Search filter
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
             filtered = filtered.Where(r =>
-                r.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                r.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
                 r.Description.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -166,7 +164,7 @@ public partial class RecipesViewModel : ObservableObject
         if (SelectedDietaryFilters.Any())
         {
             filtered = filtered.Where(r =>
-                SelectedDietaryFilters.All(f => r.DietaryTags.Contains(f)));
+                SelectedDietaryFilters.All(f => r.DietaryInfo.Contains(f)));
         }
 
         foreach (var recipe in filtered)
@@ -176,65 +174,26 @@ public partial class RecipesViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task SaveFavoriteAsync(RecipeItemViewModel recipe)
+    private async Task SaveFavoriteAsync(RecipeDto recipe)
     {
         try
         {
-            recipe.IsFavorite = !recipe.IsFavorite;
-            // await _recipeClient.ToggleFavoriteAsync(recipe.Id);
-            await _toastService.ShowSuccessToast(recipe.IsFavorite ? "Added to favorites" : "Removed from favorites");
+            var isFavorite = await _recipeClient.IsFavoriteAsync(recipe.Id);
+            if (isFavorite)
+            {
+                await _recipeClient.UnfavoriteRecipeAsync(recipe.Id);
+                await _toastService.ShowSuccessToast("Removed from favorites");
+            }
+            else
+            {
+                await _recipeClient.FavoriteRecipeAsync(recipe.Id);
+                await _toastService.ShowSuccessToast("Added to favorites");
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error saving favorite");
+            await _toastService.ShowErrorToast("Error updating favorite");
         }
     }
-}
-
-public partial class RecipeItemViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private Guid _id;
-
-    [ObservableProperty]
-    private string _name = string.Empty;
-
-    [ObservableProperty]
-    private string _description = string.Empty;
-
-    [ObservableProperty]
-    private int _prepTime;
-
-    [ObservableProperty]
-    private int _cookTime;
-
-    [ObservableProperty]
-    private int _servings;
-
-    [ObservableProperty]
-    private List<string> _dietaryTags = new();
-
-    [ObservableProperty]
-    private bool _isSafe;
-
-    [ObservableProperty]
-    private bool _isFavorite;
-
-    [ObservableProperty]
-    private double _rating;
-
-    [ObservableProperty]
-    private string? _imageUrl;
-
-    public int TotalTime => PrepTime + CookTime;
-
-    public string TimeText => $"{TotalTime} min";
-
-    public string SafetyBadgeText => IsSafe ? "✓ Safe" : "⚠ Check Ingredients";
-
-    public Color SafetyBadgeColor => IsSafe ? Colors.Green : Colors.Orange;
-
-    public string DietaryTagsText => string.Join(", ", DietaryTags);
-
-    public string RatingText => Rating > 0 ? $"⭐ {Rating:F1}" : "No ratings";
 }

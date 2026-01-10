@@ -1,5 +1,5 @@
 @page "/inventory"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Inventory
 @using ExpressRecipe.Client.Shared.Services
 @inject IInventoryApiClient InventoryApi
@@ -32,25 +32,25 @@
     {
         <!-- Summary Dashboard -->
         <div class="summary-dashboard">
-            <div class="summary-card" @onclick="() => ApplyQuickFilter(QuickFilter.All)">
+            <div class="summary-card" @onclick="() => HandleApplyQuickFilter(QuickFilter.All)">
                 <div class="summary-icon">📦</div>
                 <div class="summary-value">@_summary.TotalItems</div>
                 <div class="summary-label">Total Items</div>
             </div>
 
-            <div class="summary-card warning" @onclick="() => ApplyQuickFilter(QuickFilter.ExpiringSoon)">
+            <div class="summary-card warning" @onclick="() => HandleApplyQuickFilter(QuickFilter.ExpiringSoon)">
                 <div class="summary-icon">⏰</div>
                 <div class="summary-value">@_summary.ExpiringSoonItems</div>
                 <div class="summary-label">Expiring Soon</div>
             </div>
 
-            <div class="summary-card danger" @onclick="() => ApplyQuickFilter(QuickFilter.Expired)">
+            <div class="summary-card danger" @onclick="() => HandleApplyQuickFilter(QuickFilter.Expired)">
                 <div class="summary-icon">❌</div>
                 <div class="summary-value">@_summary.ExpiredItems</div>
                 <div class="summary-label">Expired</div>
             </div>
 
-            <div class="summary-card info" @onclick="() => ApplyQuickFilter(QuickFilter.LowStock)">
+            <div class="summary-card info" @onclick="() => HandleApplyQuickFilter(QuickFilter.LowStock)">
                 <div class="summary-icon">📉</div>
                 <div class="summary-value">@_summary.LowStockItems</div>
                 <div class="summary-label">Low Stock</div>
@@ -60,13 +60,13 @@
         <!-- Location Tabs -->
         <div class="location-tabs">
             <button class="location-tab @(_selectedLocation == "All" ? "active" : "")"
-                    @onclick="() => SelectLocation(\"All\")">
+                    @onclick="@(() => HandleSelectLocation("All"))">
                 All Locations (@_summary.TotalItems)
             </button>
             @foreach (var location in _summary.ItemsByLocation.OrderByDescending(x => x.Value))
             {
                 <button class="location-tab @(_selectedLocation == location.Key ? "active" : "")"
-                        @onclick="() => SelectLocation(location.Key)">
+                        @onclick="() => HandleSelectLocation(location.Key)">
                     @GetLocationIcon(location.Key) @location.Key (@location.Value)
                 </button>
             }
@@ -207,13 +207,13 @@
 
                         <!-- Item Actions -->
                         <div class="item-actions">
-                            <button class="btn btn-sm btn-secondary-outline" @onclick="() => NavigateToEdit(item.Id)">
+                            <button class="btn btn-sm btn-secondary-outline" @onclick="() => HandleNavigateToEdit(item.Id)">
                                 Edit
                             </button>
-                            <button class="btn btn-sm btn-secondary-outline" @onclick="() => ShowAdjustQuantity(item)">
+                            <button class="btn btn-sm btn-secondary-outline" @onclick="() => HandleShowAdjustQuantity(item)">
                                 Adjust
                             </button>
-                            <button class="btn btn-sm btn-danger-outline" @onclick="() => ConfirmDelete(item)">
+                            <button class="btn btn-sm btn-danger-outline" @onclick="() => HandleConfirmDelete(item)">
                                 Delete
                             </button>
                         </div>
@@ -226,7 +226,7 @@
             {
                 <div class="pagination">
                     <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
-                            @onclick="() => ChangePage(_currentPage - 1)">
+                            @onclick="() => HandleChangePage(_currentPage - 1)">
                         ← Previous
                     </button>
 
@@ -236,7 +236,7 @@
                     </span>
 
                     <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _searchResult.TotalPages)"
-                            @onclick="() => ChangePage(_currentPage + 1)">
+                            @onclick="() => HandleChangePage(_currentPage + 1)">
                         Next →
                     </button>
                 </div>
@@ -418,14 +418,14 @@
         StateHasChanged();
     }
 
-    private void ApplyQuickFilter(QuickFilter filter)
+    private void HandleApplyQuickFilter(QuickFilter filter)
     {
         _currentQuickFilter = filter;
         _currentPage = 1;
         _ = SearchInventory();
     }
 
-    private void SelectLocation(string location)
+    private void HandleSelectLocation(string location)
     {
         _selectedLocation = location;
         _currentPage = 1;
@@ -469,7 +469,7 @@
         _ = SearchInventory();
     }
 
-    private void ChangePage(int page)
+    private void HandleChangePage(int page)
     {
         _currentPage = page;
         _ = SearchInventory();
@@ -480,12 +480,12 @@
         Navigation.NavigateTo("/inventory/add");
     }
 
-    private void NavigateToEdit(Guid id)
+    private void HandleNavigateToEdit(Guid id)
     {
         Navigation.NavigateTo($"/inventory/{id}/edit");
     }
 
-    private void ShowAdjustQuantity(InventoryItemDto item)
+    private void HandleShowAdjustQuantity(InventoryItemDto item)
     {
         _selectedItem = item;
         _quantityChange = 0;
@@ -519,7 +519,7 @@
         }
     }
 
-    private void ConfirmDelete(InventoryItemDto item)
+    private void HandleConfirmDelete(InventoryItemDto item)
     {
         _selectedItem = item;
         _showDeleteModal = true;

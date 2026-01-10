@@ -3,8 +3,16 @@ using ExpressRecipe.RecipeService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 
 namespace ExpressRecipe.RecipeService.Controllers;
+
+public class FlagCommentRequest
+{
+    [Required]
+    [StringLength(500, MinimumLength = 10)]
+    public string Reason { get; set; } = string.Empty;
+}
 
 [ApiController]
 [Route("api/[controller]")]

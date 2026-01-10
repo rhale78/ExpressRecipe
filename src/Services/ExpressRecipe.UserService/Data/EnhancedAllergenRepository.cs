@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Data;
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.User;
 using Microsoft.Data.SqlClient;
@@ -117,7 +122,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 DiagnosedBy = GetString(reader, "DiagnosedBy"),
                 DiagnosisDate = GetDateTime(reader, "DiagnosisDate"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             new SqlParameter("@UserId", userId));
@@ -159,7 +164,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 DiagnosedBy = GetString(reader, "DiagnosedBy"),
                 DiagnosisDate = GetDateTime(reader, "DiagnosisDate"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             new SqlParameter("@Id", id));
@@ -284,7 +289,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 DiagnosedBy = GetString(reader, "DiagnosedBy"),
                 DiagnosisDate = GetDateTime(reader, "DiagnosisDate"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             new SqlParameter("@UserId", userId));
@@ -326,7 +331,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 DiagnosedBy = GetString(reader, "DiagnosedBy"),
                 DiagnosisDate = GetDateTime(reader, "DiagnosisDate"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             new SqlParameter("@Id", id));
@@ -448,7 +453,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 UserId = GetGuid(reader, "UserId"),
                 UserAllergenId = GetGuidNullable(reader, "UserAllergenId"),
                 UserIngredientAllergyId = GetGuidNullable(reader, "UserIngredientAllergyId"),
-                IncidentDate = GetDateTime(reader, "IncidentDate") ?? DateTime.UtcNow,
+                IncidentDate = GetNullableDateTime(reader, "IncidentDate") ?? DateTime.UtcNow,
                 TriggerSource = GetString(reader, "TriggerSource"),
                 TriggerProductId = GetGuidNullable(reader, "TriggerProductId"),
                 TriggerRecipeId = GetGuidNullable(reader, "TriggerRecipeId"),
@@ -459,7 +464,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 HospitalVisit = GetBoolean(reader, "HospitalVisit"),
                 Treatment = GetString(reader, "Treatment"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@UserId", userId),
             new SqlParameter("@Limit", limit));
@@ -491,7 +496,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 UserId = GetGuid(reader, "UserId"),
                 UserAllergenId = GetGuidNullable(reader, "UserAllergenId"),
                 UserIngredientAllergyId = GetGuidNullable(reader, "UserIngredientAllergyId"),
-                IncidentDate = GetDateTime(reader, "IncidentDate") ?? DateTime.UtcNow,
+                IncidentDate = GetNullableDateTime(reader, "IncidentDate") ?? DateTime.UtcNow,
                 TriggerSource = GetString(reader, "TriggerSource"),
                 TriggerProductId = GetGuidNullable(reader, "TriggerProductId"),
                 TriggerRecipeId = GetGuidNullable(reader, "TriggerRecipeId"),
@@ -502,7 +507,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                 HospitalVisit = GetBoolean(reader, "HospitalVisit"),
                 Treatment = GetString(reader, "Treatment"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@Id", id));
 
@@ -752,3 +757,4 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
         }
     }
 }
+

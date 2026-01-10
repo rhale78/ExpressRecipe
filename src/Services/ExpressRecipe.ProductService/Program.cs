@@ -10,18 +10,27 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load layered configuration (global + env + local)
+builder.AddLayeredConfiguration(args);
+
 // Add Aspire service defaults
 builder.AddServiceDefaults();
 
 // Add database connection
 builder.AddSqlServerClient("productdb");
 
-// Add Redis for caching
-builder.AddRedisClient("redis");
+// Add Redis for distributed caching
+builder.AddRedisClient("cache");
+
+// Add hybrid caching (memory + Redis)
+builder.AddHybridCache();
+
+// Register hybrid cache service
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -32,8 +41,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
+            ValidIssuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService",
+            ValidAudience = jwtSettings["Audience"] ?? "ExpressRecipe.API",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
             ClockSkew = TimeSpan.Zero
         };
@@ -45,16 +54,50 @@ builder.Services.AddAuthorization();
 var connectionString = builder.Configuration.GetConnectionString("productdb")
     ?? throw new InvalidOperationException("Database connection string 'productdb' not found");
 
-builder.Services.AddScoped<IProductRepository>(sp => new ProductRepository(connectionString));
-builder.Services.AddScoped<IIngredientRepository>(sp => new IngredientRepository(connectionString));
+builder.Services.AddScoped<IProductImageRepository>(sp => 
+    new ProductImageRepository(connectionString, sp.GetRequiredService<ILogger<ProductImageRepository>>()));
+builder.Services.AddScoped<IProductRepository>(sp => 
+{
+    var cache = sp.GetRequiredService<HybridCacheService>();
+    var logger = sp.GetRequiredService<ILogger<ProductRepository>>();
+    return new ProductRepository(connectionString, sp.GetRequiredService<IProductImageRepository>(), cache, logger);
+});
+builder.Services.AddScoped<IIngredientRepository>(sp =>
+{
+    var cache = sp.GetRequiredService<HybridCacheService>();
+    var logger = sp.GetRequiredService<ILogger<IngredientRepository>>();
+    return new IngredientRepository(connectionString, cache, logger);
+});
 builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
 builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
 builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
 builder.Services.AddScoped<IStoreRepository>(sp => new StoreRepository(connectionString));
 builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connectionString));
+builder.Services.AddScoped<IProductStagingRepository>(sp => new ProductStagingRepository(connectionString));
+builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(connectionString));
 
-// Register ingredient parser service
-builder.Services.AddScoped<IIngredientParser, IngredientParser>();
+// Register parsers
+builder.Services.AddScoped<IIngredientParser, IngredientParser>(); // For parsing individual ingredient components
+builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>(); // For parsing full ingredient lists
+
+// Register OpenFoodFacts import service
+builder.Services.AddHttpClient<OpenFoodFactsImportService>();
+builder.Services.AddScoped<OpenFoodFactsImportService>(sp => 
+{
+    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(OpenFoodFactsImportService));
+    var productRepo = sp.GetRequiredService<IProductRepository>();
+    var stagingRepo = sp.GetRequiredService<IProductStagingRepository>();
+    var imageRepo = sp.GetRequiredService<IProductImageRepository>();
+    var logger = sp.GetRequiredService<ILogger<OpenFoodFactsImportService>>();
+    var ingredientParser = sp.GetRequiredService<IIngredientListParser>();
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    return new OpenFoodFactsImportService(httpClient, productRepo, stagingRepo, imageRepo, logger, ingredientParser, configuration);
+});
+builder.Services.AddScoped<USDAFoodDataImportService>();
+
+// Register background workers
+builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductDataImportWorker>();
+builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductProcessingWorker>();
 
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
@@ -75,36 +118,9 @@ builder.Services.AddSingleton<EventPublisher>();
 builder.Services.AddControllers();
 
 // Add API documentation
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "ExpressRecipe Product API", Version = "v1" });
-
-    // Add JWT authentication to Swagger
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme.",
-        Name = "Authorization",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-    {
-        {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
+// TODO: Re-add Swagger after resolving OpenApi 2.0 compatibility
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddSwaggerGen();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -120,6 +136,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Run database management (drop db/tables if configured)
+await app.RunDatabaseManagementAsync("ProductService", "productdb");
+
 // Run database migrations
 var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
 if (!Directory.Exists(migrationsPath))
@@ -134,8 +153,9 @@ app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // TODO: Re-enable after resolving OpenApi 2.0 compatibility
+    // app.UseSwagger();
+    // app.UseSwaggerUI();
 }
 
 app.UseCors();

@@ -1,6 +1,7 @@
 @page "/register"
-@using ExpressRecipe.Client.Shared.Services
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Auth
+@using ExpressRecipe.Client.Shared.Services
 @using System.ComponentModel.DataAnnotations
 @inject IAuthService AuthService
 @inject CustomAuthenticationStateProvider AuthStateProvider
@@ -80,10 +81,10 @@
 </div>
 
 @code {
-    private RegisterRequest _registerRequest = new();
-    private string _confirmPassword = string.Empty;
-    private string? _errorMessage;
-    private bool _isLoading;
+private ExpressRecipe.Client.Shared.Models.Auth.RegisterRequest _registerRequest = new();
+private string _confirmPassword = string.Empty;
+private string? _errorMessage;
+private bool _isLoading;
 
     private async Task HandleRegister()
     {
@@ -98,6 +99,9 @@
 
         try
         {
+            // Debug: Log what we're sending
+            Console.WriteLine($"Sending registration: Email={_registerRequest.Email}, FirstName={_registerRequest.FirstName}, LastName={_registerRequest.LastName}, PasswordLength={_registerRequest.Password?.Length ?? 0}");
+
             var result = await AuthService.RegisterAsync(_registerRequest);
 
             if (result != null)
@@ -110,17 +114,24 @@
                     result.UserId
                 );
 
-                // Navigate to dashboard
-                Navigation.NavigateTo("/dashboard");
+                // Force reload to ensure authentication state is fully initialized
+                Navigation.NavigateTo("/dashboard", forceLoad: true);
             }
             else
             {
-                _errorMessage = "Registration failed. Email may already be in use.";
+                _errorMessage = "Registration failed. Please try again.";
             }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Display specific error from API
+            Console.WriteLine($"Registration InvalidOperationException: {ex.Message}");
+            _errorMessage = ex.Message;
         }
         catch (Exception ex)
         {
-            _errorMessage = $"An error occurred: {ex.Message}";
+            Console.WriteLine($"Registration Exception: {ex.GetType().Name} - {ex.Message}");
+            _errorMessage = $"Registration error: {ex.Message}";
         }
         finally
         {
@@ -128,3 +139,4 @@
         }
     }
 }
+

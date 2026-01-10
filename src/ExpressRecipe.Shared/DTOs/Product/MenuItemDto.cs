@@ -13,6 +13,9 @@ public class MenuItemDto
     public decimal? Price { get; set; }
     public string Currency { get; set; } = "USD";
     public string? ServingSize { get; set; }
+    public string? ServingUnit { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public string? ImageUrl { get; set; }
     public bool IsAvailable { get; set; }
     public bool IsSeasonalItem { get; set; }
@@ -34,6 +37,7 @@ public class MenuItemIngredientDto
 
     // Raw ingredient string from menu (e.g., for complex ingredient descriptions)
     public string? IngredientListString { get; set; }
+    public string? IngredientCategory { get; set; }
 }
 
 public class MenuItemNutritionDto
@@ -47,10 +51,15 @@ public class MenuItemNutritionDto
     public decimal? Cholesterol { get; set; }
     public decimal? Sodium { get; set; }
     public decimal? TotalCarbohydrate { get; set; }
+    public decimal? TotalCarbohydrates { get; set; }
     public decimal? DietaryFiber { get; set; }
     public decimal? Sugars { get; set; }
     public decimal? Protein { get; set; }
     public string? AdditionalNutrients { get; set; }
+    public decimal? VitaminD { get; set; }
+    public decimal? Calcium { get; set; }
+    public decimal? Iron { get; set; }
+    public decimal? Potassium { get; set; }
 }
 
 public class CreateMenuItemRequest
@@ -83,6 +92,9 @@ public class CreateMenuItemRequest
     public bool IsAvailable { get; set; } = true;
     public bool IsSeasonalItem { get; set; }
 
+    [StringLength(50)]
+    public string? ServingUnit { get; set; }
+
     public List<Guid> IngredientIds { get; set; } = new();
 }
 
@@ -112,6 +124,9 @@ public class UpdateMenuItemRequest
 
     public bool IsAvailable { get; set; }
     public bool IsSeasonalItem { get; set; }
+
+    [StringLength(50)]
+    public string? ServingUnit { get; set; }
 }
 
 public class MenuItemSearchRequest
@@ -121,6 +136,8 @@ public class MenuItemSearchRequest
     public string? Category { get; set; }
     public decimal? MaxPrice { get; set; }
     public bool? OnlyAvailable { get; set; } = true;
+    // legacy alias
+    public bool? IsAvailable { get => OnlyAvailable; set => OnlyAvailable = value; }
     public bool? OnlyApproved { get; set; } = true;
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 20;
@@ -138,6 +155,7 @@ public class UserMenuItemRatingDto
     public string? Review { get; set; }
     public bool? WouldOrderAgain { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }
 
 public class RateMenuItemRequest

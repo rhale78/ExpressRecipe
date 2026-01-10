@@ -1,11 +1,16 @@
+using ExpressRecipe.Data.Common;
 using ExpressRecipe.NotificationService.Data;
 using ExpressRecipe.NotificationService.Hubs;
 using ExpressRecipe.NotificationService.Services;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load layered configuration (global + env + local)
+builder.AddLayeredConfiguration(args);
 
 // Add Aspire service defaults (telemetry, health checks, service discovery)
 builder.AddServiceDefaults();
@@ -29,6 +34,9 @@ builder.Services.AddAuthorization();
 var connectionString = builder.Configuration.GetConnectionString("notificationdb")
     ?? throw new InvalidOperationException("Database connection string 'notificationdb' not found");
 
+// Add memory cache for rate limiting
+builder.Services.AddMemoryCache();
+
 // Register SignalR for real-time notifications
 builder.Services.AddSignalR();
 
@@ -46,34 +54,42 @@ builder.Services.AddScoped<INotificationRepository>(sp =>
     return new NotificationRepository(connectionString, logger, broadcastService);
 });
 
-// Register RabbitMQ for event subscription
-builder.Services.AddSingleton<IConnectionFactory>(sp =>
+// Conditionally register RabbitMQ for event subscription
+var rabbitEnabled = builder.Configuration.GetValue<bool?>("RabbitMQ:Enabled")
+    ?? !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]) ||
+       !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:ConnectionString"]) ||
+       !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"));
+
+if (rabbitEnabled)
 {
-    return new ConnectionFactory
+    builder.Services.AddSingleton<IConnectionFactory>(sp =>
     {
-        HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
-        Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
-        UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
-        Password = builder.Configuration["RabbitMQ:Password"] ?? "guest",
-        DispatchConsumersAsync = true
-    };
-});
+        var uri = builder.Configuration["RabbitMQ:ConnectionString"]
+                  ?? builder.Configuration.GetConnectionString("messaging"); // Aspire provides this when referenced
 
-// Register event publisher
-builder.Services.AddSingleton<EventPublisher>();
+        if (!string.IsNullOrWhiteSpace(uri))
+        {
+            return new ConnectionFactory { Uri = new Uri(uri) };
+        }
 
-// Register event subscriber as background service
-builder.Services.AddHostedService<NotificationEventSubscriber>();
+        return new ConnectionFactory
+        {
+            HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
+            Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+            UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+            Password = builder.Configuration["RabbitMQ:Password"] ?? "guest"
+        };
+    });
+
+    // Register event publisher
+    builder.Services.AddSingleton<EventPublisher>();
+
+    // Register event subscriber as background service
+    builder.Services.AddHostedService<NotificationEventSubscriber>();
+}
 
 // Add controllers
 builder.Services.AddControllers();
-
-// Add Swagger
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.NotificationService API", Version = "v1" });
-});
 
 // CORS with SignalR support
 builder.Services.AddCors(options =>
@@ -89,30 +105,25 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Run migrations on startup
-using (var scope = app.Services.CreateScope())
+// Run database management (drop db/tables if configured)
+await app.RunDatabaseManagementAsync("NotificationService", "notificationdb");
+
+// Run migrations using shared MigrationRunner
+var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+if (!Directory.Exists(migrationsPath))
 {
-    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    
-    try
-    {
-        var migrator = new DatabaseMigrator(connectionString, logger);
-        await migrator.MigrateAsync();
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Failed to run database migrations");
-    }
+    migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
 }
+var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // app.UseSwagger();
+    // app.UseSwaggerUI();
 }
 
 app.UseCors("AllowAll");

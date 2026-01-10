@@ -1,19 +1,21 @@
 @page "/recipes/{RecipeId:guid}"
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
 @using System.Security.Claims
-@attribute [Authorize]
 @inject IRecipeApiClient RecipeApi
 @inject NavigationManager Navigation
-@inject AuthenticationStateProvider AuthStateProvider
+@inject CustomAuthenticationStateProvider AuthStateProvider
 
 <PageTitle>@(_recipe?.Title ?? "Recipe Details") - ExpressRecipe</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="recipe-details-container">
     <!-- Back Button -->
     <div class="navigation-bar">
-        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/recipes")">
+        <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/recipes")'>
             ← Back to Recipes
         </button>
     </div>
@@ -287,12 +289,20 @@
             <div class="error-icon">❌</div>
             <h2>Recipe Not Found</h2>
             <p>@_errorMessage</p>
-            <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/recipes")">
+            <button class="btn btn-primary" @onclick="@(() => Navigation.NavigateTo("/recipes"))">
                 Browse All Recipes
             </button>
         </div>
     }
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to access this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     [Parameter]

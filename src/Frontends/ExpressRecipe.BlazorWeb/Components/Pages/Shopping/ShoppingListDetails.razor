@@ -1,5 +1,5 @@
 @page "/shopping/{id:guid}"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Shopping
 @using ExpressRecipe.Client.Shared.Models.Product
 @using ExpressRecipe.Client.Shared.Models.Recipe
@@ -88,15 +88,9 @@
         <div class="items-container">
             @if (_list.Items.Any())
             {
-                <!-- Group by category -->
-                @{
-                    var itemsByCategory = _list.Items
-                        .GroupBy(i => i.Category ?? "Other")
-                        .OrderBy(g => g.Key);
-
-                    var remainingItems = _list.Items.Where(i => !i.IsPurchased).ToList();
-                    var completedItems = _list.Items.Where(i => i.IsPurchased).ToList();
-                }
+                @* Group by category and filter items *@
+                var remainingItems = _list.Items.Where(i => !i.IsPurchased).ToList();
+                var completedItems = _list.Items.Where(i => i.IsPurchased).ToList();
 
                 <!-- Remaining Items -->
                 @if (remainingItems.Any())
@@ -256,14 +250,14 @@
                     @if (_productSearchResults?.Any() == true)
                     {
                         <div class="product-search-results">
-                            @foreach (var product in _productSearchResults.Take(5))
-                            {
-                                <div class="product-result-card-small" @onclick="() => SelectProduct(product)">
-                                    <strong>@product.Name</strong>
-                                    <span class="text-muted">@product.Brand</span>
-                                    <button class="btn btn-sm btn-primary">Select</button>
-                                </div>
-                            }
+                                @foreach (var product in _productSearchResults.Take(5))
+                                {
+                                    <div class="product-result-card-small" @onclick="() => SelectProduct(product)">
+                                        <strong>@product.Name</strong>
+                                        <span class="text-muted">@product.Brand</span>
+                                        <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => SelectProduct(product)">Select</button>
+                                    </div>
+                                }
                         </div>
                     }
                 </div>
@@ -553,7 +547,7 @@
         _newItem.ProductId = product.Id;
         _newItem.Name = product.Name;
         _newItem.Brand = product.Brand;
-        _newItem.Category = product.Category;
+        // _newItem.Category = product.Category;
         _productSearchResults = null;
         _productSearchTerm = string.Empty;
     }

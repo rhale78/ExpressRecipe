@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+
 namespace ExpressRecipe.Client.Shared.Services;
 
 /// <summary>
@@ -111,7 +113,7 @@ public class AdminApiClient : IAdminApiClient
     private async Task<HttpClient> CreateClientAsync(string serviceName)
     {
         var client = _httpClientFactory.CreateClient(serviceName);
-        var token = await _tokenProvider.GetTokenAsync();
+        var token = await _tokenProvider.GetAccessTokenAsync();
 
         if (!string.IsNullOrEmpty(token))
         {

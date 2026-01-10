@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Builder;
+using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
@@ -50,12 +52,15 @@ public class RateLimitingMiddleware
                 context.Response.StatusCode = 429; // Too Many Requests
                 context.Response.Headers["Retry-After"] = _options.WindowSeconds.ToString();
 
-                await context.Response.WriteAsJsonAsync(new
+                context.Response.ContentType = "application/json";
+                var payload = new
                 {
                     error = "Rate limit exceeded",
                     retryAfter = _options.WindowSeconds,
                     limit = _options.MaxRequestsPerWindow
-                });
+                };
+
+                await context.Response.WriteAsync(JsonSerializer.Serialize(payload));
 
                 return;
             }

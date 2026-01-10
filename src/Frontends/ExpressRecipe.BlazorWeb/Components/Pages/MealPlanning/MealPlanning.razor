@@ -1,5 +1,5 @@
 @page "/meal-planning"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.MealPlanning
 @using ExpressRecipe.Client.Shared.Models.Recipe
 @using ExpressRecipe.Client.Shared.Services
@@ -95,7 +95,7 @@
                                 @foreach (var meal in day.Meals.OrderBy(m => GetMealTypeOrder(m.MealType)))
                                 {
                                     <div class="meal-card @(meal.IsPrepared ? "prepared" : "") @GetMealTypeClass(meal.MealType)"
-                                         @onclick="() => ViewMeal(meal)">
+                                         @onclick="HandleViewMeal">
                                         <div class="meal-type-badge">@GetMealTypeIcon(meal.MealType)</div>
 
                                         <div class="meal-info">
@@ -149,7 +149,7 @@
                         </div>
 
                         <!-- Add Meal Button -->
-                        <button class="add-meal-btn" @onclick="() => ShowAddMealModal(day.Date)">
+                        <button class="add-meal-btn" @onclick="HandleShowAddMealModal">
                             ➕ Add Meal
                         </button>
                     </div>
@@ -218,7 +218,7 @@
                         <div class="recipe-search-results">
                             @foreach (var recipe in _recipeSearchResults.Take(5))
                             {
-                                <div class="recipe-result-card" @onclick="() => SelectRecipe(recipe)">
+                                <div class="recipe-result-card" @onclick="HandleSelectRecipe">
                                     <strong>@recipe.Title</strong>
                                     <span class="text-muted">⏱️ @recipe.TotalTimeMinutes min</span>
                                     <button class="btn btn-sm btn-primary">Select</button>
@@ -506,5 +506,27 @@
     private string GetMealTypeClass(string mealType)
     {
         return mealType.ToLower();
+    }
+
+    // Event Handlers
+    private void HandleViewMeal()
+    {
+        // TODO: Get the meal ID from the clicked item
+        // For now, this is a placeholder that would need the meal context
+        // In production, you'd pass the meal ID as a parameter or use a lambda
+    }
+
+    private void HandleShowAddMealModal()
+    {
+        // TODO: Show add meal modal
+        // For now, navigate to create meal plan or show inline form
+        Navigation.NavigateTo("/meal-planning/create");
+    }
+
+    private void HandleSelectRecipe()
+    {
+        // TODO: Get the recipe ID from the clicked item
+        // For now, this is a placeholder that would need the recipe context
+        // In production, you'd pass the recipe ID as a parameter or use a lambda
     }
 }

@@ -1,4 +1,5 @@
 using Blazored.LocalStorage;
+using Microsoft.JSInterop;
 
 namespace ExpressRecipe.Client.Shared.Services;
 
@@ -19,23 +20,101 @@ public class LocalStorageTokenProvider : ITokenProvider
 
     public async Task<string?> GetAccessTokenAsync()
     {
-        return await _localStorage.GetItemAsStringAsync(AccessTokenKey);
+        try
+        {
+            var token = await _localStorage.GetItemAsStringAsync(AccessTokenKey);
+            // Remove quotes if present (Blazored.LocalStorage adds them)
+            var cleanToken = token?.Trim('"');
+            Console.WriteLine($"[TokenProvider] GetAccessToken: {(string.IsNullOrEmpty(cleanToken) ? "NULL/EMPTY" : $"Found ({cleanToken.Length} chars)")}");
+            return cleanToken;
+        }
+        catch (JSException ex)
+        {
+            // JavaScript interop not available during prerendering
+            Console.WriteLine($"[TokenProvider] GetAccessToken failed: JSException - {ex.Message}");
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            // JavaScript interop not available during prerendering
+            Console.WriteLine($"[TokenProvider] GetAccessToken failed: InvalidOperationException - {ex.Message}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TokenProvider] GetAccessToken failed: {ex.GetType().Name} - {ex.Message}");
+            return null;
+        }
     }
 
     public async Task<string?> GetRefreshTokenAsync()
     {
-        return await _localStorage.GetItemAsStringAsync(RefreshTokenKey);
+        try
+        {
+            var token = await _localStorage.GetItemAsStringAsync(RefreshTokenKey);
+            // Remove quotes if present (Blazored.LocalStorage adds them)
+            return token?.Trim('"');
+        }
+        catch (JSException)
+        {
+            // JavaScript interop not available during prerendering
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            // JavaScript interop not available during prerendering
+            return null;
+        }
     }
 
     public async Task SetTokensAsync(string accessToken, string refreshToken)
     {
-        await _localStorage.SetItemAsStringAsync(AccessTokenKey, accessToken);
-        await _localStorage.SetItemAsStringAsync(RefreshTokenKey, refreshToken);
+        try
+        {
+            Console.WriteLine($"[TokenProvider] SetTokens: AccessToken length={accessToken?.Length ?? 0}");
+            await _localStorage.SetItemAsStringAsync(AccessTokenKey, accessToken);
+            await _localStorage.SetItemAsStringAsync(RefreshTokenKey, refreshToken);
+            Console.WriteLine($"[TokenProvider] Tokens saved successfully");
+        }
+        catch (JSException ex)
+        {
+            Console.WriteLine($"[TokenProvider] SetTokens failed: JSException - {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[TokenProvider] SetTokens failed: InvalidOperationException - {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TokenProvider] SetTokens failed: {ex.GetType().Name} - {ex.Message}");
+        }
     }
 
     public async Task ClearTokensAsync()
     {
-        await _localStorage.RemoveItemAsync(AccessTokenKey);
-        await _localStorage.RemoveItemAsync(RefreshTokenKey);
+        try
+        {
+            Console.WriteLine("[TokenProvider] Removing access token");
+            await _localStorage.RemoveItemAsync(AccessTokenKey);
+            Console.WriteLine("[TokenProvider] Access token removed");
+
+            Console.WriteLine("[TokenProvider] Removing refresh token");
+            await _localStorage.RemoveItemAsync(RefreshTokenKey);
+            Console.WriteLine("[TokenProvider] Refresh token removed");
+
+            Console.WriteLine("[TokenProvider] Tokens cleared successfully");
+        }
+        catch (JSException ex)
+        {
+            Console.WriteLine($"[TokenProvider] ClearTokens JSException: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[TokenProvider] ClearTokens InvalidOperationException: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TokenProvider] ClearTokens unexpected error: {ex.GetType().Name} - {ex.Message}");
+        }
     }
 }

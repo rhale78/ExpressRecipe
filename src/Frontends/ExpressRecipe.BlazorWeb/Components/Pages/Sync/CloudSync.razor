@@ -126,7 +126,7 @@
                         <h5 class="mb-0">
                             <i class="bi bi-exclamation-triangle-fill me-2"></i>Sync Conflicts (@conflicts.Count)
                         </h5>
-                        <button class="btn btn-sm btn-dark" @onclick="() => ResolveAllConflicts(\"UseServer\")">
+                        <button class="btn btn-sm btn-dark" @onclick="@(() => HandleResolveAllConflicts("Server"))">
                             <i class="bi bi-cloud-download me-1"></i>Use Server for All
                         </button>
                     </div>
@@ -168,10 +168,10 @@
                                 </div>
 
                                 <div class="btn-group btn-group-sm" role="group">
-                                    <button class="btn btn-outline-primary" @onclick="() => ResolveConflict(conflict.Id, \"UseLocal\")">
+                                    <button class="btn btn-outline-primary" @onclick="@(() => HandleResolveConflict(conflict.Id, "Local"))">
                                         <i class="bi bi-phone me-1"></i>Use Local
                                     </button>
-                                    <button class="btn btn-outline-success" @onclick="() => ResolveConflict(conflict.Id, \"UseServer\")">
+                                    <button class="btn btn-outline-success" @onclick="@(() => HandleResolveConflict(conflict.Id, "Server"))">
                                         <i class="bi bi-cloud me-1"></i>Use Server
                                     </button>
                                 </div>
@@ -389,15 +389,17 @@
     {
         try
         {
-            var tasks = new[]
-            {
-                Task.Run(async () => syncStatus = await SyncClient.GetSyncStatusAsync()),
-                Task.Run(async () => syncSettings = await SyncClient.GetSyncSettingsAsync()),
-                Task.Run(async () => conflicts = await SyncClient.GetConflictsAsync()),
-                Task.Run(async () => syncQueue = await SyncClient.GetSyncQueueAsync())
-            };
+            var statusTask = SyncClient.GetSyncStatusAsync();
+            var settingsTask = SyncClient.GetSyncSettingsAsync();
+            var conflictsTask = SyncClient.GetConflictsAsync();
+            var queueTask = SyncClient.GetSyncQueueAsync();
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(statusTask, settingsTask, conflictsTask, queueTask);
+
+            syncStatus = statusTask.Result;
+            syncSettings = settingsTask.Result;
+            conflicts = conflictsTask.Result;
+            syncQueue = queueTask.Result;
         }
         catch (Exception ex)
         {
@@ -506,7 +508,7 @@
         showResetConfirmation = true;
     }
 
-    private async Task ResolveConflict(Guid conflictId, string resolution)
+    private async Task HandleResolveConflict(Guid conflictId, string resolution)
     {
         try
         {
@@ -532,7 +534,7 @@
         }
     }
 
-    private async Task ResolveAllConflicts(string resolution)
+    private async Task HandleResolveAllConflicts(string resolution)
     {
         try
         {

@@ -58,15 +58,15 @@
 
     <!-- FAQ Sections -->
     <div class="faq-sections">
-        @foreach (var section in _filteredSections)
+        @foreach (var faqSection in _filteredSections)
         {
-            <div class="faq-section" id="@section.Id">
-                <h2>@section.Icon @section.Title</h2>
+            <div class="faq-section" id="@faqSection.Id">
+                <h2>@faqSection.Icon @faqSection.Title</h2>
                 <div class="faq-items">
-                    @foreach (var item in section.Items)
+                    @foreach (var item in faqSection.Items)
                     {
                         <div class="faq-item">
-                            <button class="faq-question" @onclick="() => ToggleQuestion(item.Id)">
+                            <button class="faq-question" @onclick="@(() => ToggleQuestion(item.Id))">
                                 <span>@item.Question</span>
                                 <span class="toggle-icon">@(item.IsExpanded ? "−" : "+")</span>
                             </button>
@@ -131,18 +131,18 @@
         {
             var query = _searchQuery.ToLowerInvariant();
             _filteredSections = _allSections
-                .Select(section => new FaqSection
+                .Select(faqSection => new FaqSection
                 {
-                    Id = section.Id,
-                    Title = section.Title,
-                    Icon = section.Icon,
-                    Items = section.Items
+                    Id = faqSection.Id,
+                    Title = faqSection.Title,
+                    Icon = faqSection.Icon,
+                    Items = faqSection.Items
                         .Where(item =>
                             item.Question.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                             item.Answer.Contains(query, StringComparison.OrdinalIgnoreCase))
                         .ToList()
                 })
-                .Where(section => section.Items.Any())
+                .Where(faqSection => faqSection.Items.Any())
                 .ToList();
         }
         StateHasChanged();

@@ -28,15 +28,17 @@ public class CouponRepository : SqlHelper, ICouponRepository
     {
         const string sql = @"
             SELECT c.Id, c.Code, c.Description, c.CouponType, c.DiscountType, c.DiscountAmount,
-                   c.DiscountPercentage, c.MinimumPurchaseAmount, c.MaximumDiscount,
-                   c.BuyQuantity, c.GetQuantity, c.RequiredProductId, c.FreeProductId,
-                   c.CategoryRestriction, c.BrandRestriction, c.StoreId, c.ManufacturerId,
-                   c.CanBeDoubled, c.MaxItemsAllowed, c.UseLimitPerUser, c.TotalUseLimit,
-                   c.UsedCount, c.StartDate, c.ExpirationDate, c.ImageUrl, c.BarcodeValue,
-                   c.CouponUrl, c.IsActive, c.CreatedAt,
-                   s.Name AS StoreName
+                   c.MinimumPurchaseAmount, c.MinimumQuantity, c.MaximumQuantity,
+                   c.MaxUsesPerUser, c.ProductId, c.StoreId, c.ManufacturerName,
+                   c.ImageUrl, c.SourceUrl, c.CanBeDoubled, c.CanBeCombined,
+                   c.RequiresLoyaltyCard, c.StartDate, c.ExpirationDate, c.IsActive,
+                   c.SubmittedBy, c.IsApproved, c.ApprovedBy, c.ApprovedAt,
+                   c.RejectionReason, c.CreatedAt, c.UpdatedAt,
+                   s.ChainName AS StoreName,
+                   p.Name AS ProductName
             FROM Coupon c
             LEFT JOIN Store s ON c.StoreId = s.Id
+            LEFT JOIN Product p ON c.ProductId = p.Id
             WHERE c.Id = @Id AND c.IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
@@ -51,15 +53,17 @@ public class CouponRepository : SqlHelper, ICouponRepository
     {
         var sql = @"
             SELECT c.Id, c.Code, c.Description, c.CouponType, c.DiscountType, c.DiscountAmount,
-                   c.DiscountPercentage, c.MinimumPurchaseAmount, c.MaximumDiscount,
-                   c.BuyQuantity, c.GetQuantity, c.RequiredProductId, c.FreeProductId,
-                   c.CategoryRestriction, c.BrandRestriction, c.StoreId, c.ManufacturerId,
-                   c.CanBeDoubled, c.MaxItemsAllowed, c.UseLimitPerUser, c.TotalUseLimit,
-                   c.UsedCount, c.StartDate, c.ExpirationDate, c.ImageUrl, c.BarcodeValue,
-                   c.CouponUrl, c.IsActive, c.CreatedAt,
-                   s.Name AS StoreName
+                   c.MinimumPurchaseAmount, c.MinimumQuantity, c.MaximumQuantity,
+                   c.MaxUsesPerUser, c.ProductId, c.StoreId, c.ManufacturerName,
+                   c.ImageUrl, c.SourceUrl, c.CanBeDoubled, c.CanBeCombined,
+                   c.RequiresLoyaltyCard, c.StartDate, c.ExpirationDate, c.IsActive,
+                   c.SubmittedBy, c.IsApproved, c.ApprovedBy, c.ApprovedAt,
+                   c.RejectionReason, c.CreatedAt, c.UpdatedAt,
+                   s.ChainName AS StoreName,
+                   p.Name AS ProductName
             FROM Coupon c
             LEFT JOIN Store s ON c.StoreId = s.Id
+            LEFT JOIN Product p ON c.ProductId = p.Id
             WHERE c.IsDeleted = 0";
 
         var parameters = new List<SqlParameter>();
@@ -84,13 +88,41 @@ public class CouponRepository : SqlHelper, ICouponRepository
 
         if (request.ProductId.HasValue)
         {
-            sql += " AND (c.RequiredProductId = @ProductId OR c.FreeProductId = @ProductId OR c.RequiredProductId IS NULL)";
+            sql += " AND (c.ProductId = @ProductId OR c.ProductId IS NULL)";
             parameters.Add(new SqlParameter("@ProductId", request.ProductId.Value));
         }
 
-        if (request.ActiveOnly)
+        if (!string.IsNullOrWhiteSpace(request.ManufacturerName))
         {
-            sql += " AND c.IsActive = 1 AND (c.ExpirationDate IS NULL OR c.ExpirationDate >= GETUTCDATE())";
+            sql += " AND c.ManufacturerName LIKE @ManufacturerName";
+            parameters.Add(new SqlParameter("@ManufacturerName", $"%{request.ManufacturerName}%"));
+        }
+
+        if (request.CanBeDoubled.HasValue)
+        {
+            sql += " AND c.CanBeDoubled = @CanBeDoubled";
+            parameters.Add(new SqlParameter("@CanBeDoubled", request.CanBeDoubled.Value));
+        }
+
+        if (request.RequiresLoyaltyCard.HasValue)
+        {
+            sql += " AND c.RequiresLoyaltyCard = @RequiresLoyaltyCard";
+            parameters.Add(new SqlParameter("@RequiresLoyaltyCard", request.RequiresLoyaltyCard.Value));
+        }
+
+        if (request.OnlyActive)
+        {
+            sql += " AND c.IsActive = 1";
+        }
+
+        if (request.OnlyApproved)
+        {
+            sql += " AND c.IsApproved = 1";
+        }
+
+        if (request.OnlyNotExpired)
+        {
+            sql += " AND (c.ExpirationDate IS NULL OR c.ExpirationDate >= GETUTCDATE())";
         }
 
         sql += " ORDER BY c.ExpirationDate, c.Description";
@@ -107,19 +139,17 @@ public class CouponRepository : SqlHelper, ICouponRepository
 
         const string sql = @"
             INSERT INTO Coupon (Id, Code, Description, CouponType, DiscountType, DiscountAmount,
-                              DiscountPercentage, MinimumPurchaseAmount, MaximumDiscount,
-                              BuyQuantity, GetQuantity, RequiredProductId, FreeProductId,
-                              CategoryRestriction, BrandRestriction, StoreId, ManufacturerId,
-                              CanBeDoubled, MaxItemsAllowed, UseLimitPerUser, TotalUseLimit,
-                              UsedCount, StartDate, ExpirationDate, ImageUrl, BarcodeValue,
-                              CouponUrl, IsActive, CreatedAt, CreatedBy)
+                              MinimumPurchaseAmount, MinimumQuantity, MaximumQuantity,
+                              MaxUsesPerUser, ProductId, StoreId, ManufacturerName,
+                              ImageUrl, SourceUrl, CanBeDoubled, CanBeCombined,
+                              RequiresLoyaltyCard, StartDate, ExpirationDate, IsActive,
+                              SubmittedBy, IsApproved, CreatedAt, IsDeleted)
             VALUES (@Id, @Code, @Description, @CouponType, @DiscountType, @DiscountAmount,
-                    @DiscountPercentage, @MinimumPurchaseAmount, @MaximumDiscount,
-                    @BuyQuantity, @GetQuantity, @RequiredProductId, @FreeProductId,
-                    @CategoryRestriction, @BrandRestriction, @StoreId, @ManufacturerId,
-                    @CanBeDoubled, @MaxItemsAllowed, @UseLimitPerUser, @TotalUseLimit,
-                    0, @StartDate, @ExpirationDate, @ImageUrl, @BarcodeValue,
-                    @CouponUrl, @IsActive, GETUTCDATE(), @CreatedBy)";
+                    @MinimumPurchaseAmount, @MinimumQuantity, @MaximumQuantity,
+                    @MaxUsesPerUser, @ProductId, @StoreId, @ManufacturerName,
+                    @ImageUrl, @SourceUrl, @CanBeDoubled, @CanBeCombined,
+                    @RequiresLoyaltyCard, @StartDate, @ExpirationDate, 1,
+                    @CreatedBy, 0, GETUTCDATE(), 0)";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
@@ -128,27 +158,20 @@ public class CouponRepository : SqlHelper, ICouponRepository
             new SqlParameter("@CouponType", request.CouponType),
             new SqlParameter("@DiscountType", request.DiscountType),
             new SqlParameter("@DiscountAmount", (object?)request.DiscountAmount ?? DBNull.Value),
-            new SqlParameter("@DiscountPercentage", (object?)request.DiscountPercentage ?? DBNull.Value),
             new SqlParameter("@MinimumPurchaseAmount", (object?)request.MinimumPurchaseAmount ?? DBNull.Value),
-            new SqlParameter("@MaximumDiscount", (object?)request.MaximumDiscount ?? DBNull.Value),
-            new SqlParameter("@BuyQuantity", (object?)request.BuyQuantity ?? DBNull.Value),
-            new SqlParameter("@GetQuantity", (object?)request.GetQuantity ?? DBNull.Value),
-            new SqlParameter("@RequiredProductId", (object?)request.RequiredProductId ?? DBNull.Value),
-            new SqlParameter("@FreeProductId", (object?)request.FreeProductId ?? DBNull.Value),
-            new SqlParameter("@CategoryRestriction", (object?)request.CategoryRestriction ?? DBNull.Value),
-            new SqlParameter("@BrandRestriction", (object?)request.BrandRestriction ?? DBNull.Value),
+            new SqlParameter("@MinimumQuantity", (object?)request.MinimumQuantity ?? DBNull.Value),
+            new SqlParameter("@MaximumQuantity", (object?)request.MaximumQuantity ?? DBNull.Value),
+            new SqlParameter("@MaxUsesPerUser", (object?)request.MaxUsesPerUser ?? DBNull.Value),
+            new SqlParameter("@ProductId", (object?)request.ProductId ?? DBNull.Value),
             new SqlParameter("@StoreId", (object?)request.StoreId ?? DBNull.Value),
-            new SqlParameter("@ManufacturerId", (object?)request.ManufacturerId ?? DBNull.Value),
+            new SqlParameter("@ManufacturerName", (object?)request.ManufacturerName ?? DBNull.Value),
+            new SqlParameter("@ImageUrl", (object?)request.ImageUrl ?? DBNull.Value),
+            new SqlParameter("@SourceUrl", (object?)request.SourceUrl ?? DBNull.Value),
             new SqlParameter("@CanBeDoubled", request.CanBeDoubled),
-            new SqlParameter("@MaxItemsAllowed", (object?)request.MaxItemsAllowed ?? DBNull.Value),
-            new SqlParameter("@UseLimitPerUser", (object?)request.UseLimitPerUser ?? DBNull.Value),
-            new SqlParameter("@TotalUseLimit", (object?)request.TotalUseLimit ?? DBNull.Value),
+            new SqlParameter("@CanBeCombined", request.CanBeCombined),
+            new SqlParameter("@RequiresLoyaltyCard", request.RequiresLoyaltyCard),
             new SqlParameter("@StartDate", (object?)request.StartDate ?? DBNull.Value),
             new SqlParameter("@ExpirationDate", (object?)request.ExpirationDate ?? DBNull.Value),
-            new SqlParameter("@ImageUrl", (object?)request.ImageUrl ?? DBNull.Value),
-            new SqlParameter("@BarcodeValue", (object?)request.BarcodeValue ?? DBNull.Value),
-            new SqlParameter("@CouponUrl", (object?)request.CouponUrl ?? DBNull.Value),
-            new SqlParameter("@IsActive", request.IsActive),
             new SqlParameter("@CreatedBy", (object?)createdBy ?? DBNull.Value));
 
         return id;
@@ -160,9 +183,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
             UPDATE Coupon
             SET Description = @Description,
                 DiscountAmount = @DiscountAmount,
-                DiscountPercentage = @DiscountPercentage,
                 MinimumPurchaseAmount = @MinimumPurchaseAmount,
-                MaximumDiscount = @MaximumDiscount,
                 ExpirationDate = @ExpirationDate,
                 ImageUrl = @ImageUrl,
                 IsActive = @IsActive,
@@ -174,9 +195,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
             new SqlParameter("@Id", id),
             new SqlParameter("@Description", request.Description),
             new SqlParameter("@DiscountAmount", (object?)request.DiscountAmount ?? DBNull.Value),
-            new SqlParameter("@DiscountPercentage", (object?)request.DiscountPercentage ?? DBNull.Value),
             new SqlParameter("@MinimumPurchaseAmount", (object?)request.MinimumPurchaseAmount ?? DBNull.Value),
-            new SqlParameter("@MaximumDiscount", (object?)request.MaximumDiscount ?? DBNull.Value),
             new SqlParameter("@ExpirationDate", (object?)request.ExpirationDate ?? DBNull.Value),
             new SqlParameter("@ImageUrl", (object?)request.ImageUrl ?? DBNull.Value),
             new SqlParameter("@IsActive", request.IsActive),
@@ -205,19 +224,18 @@ public class CouponRepository : SqlHelper, ICouponRepository
     {
         var sql = @"
             SELECT uc.Id, uc.UserId, uc.CouponId, uc.ClippedAt, uc.UsedAt,
-                   uc.PurchaseId, uc.IsUsed, uc.ExpiresAt,
-                   c.Description AS CouponDescription,
-                   c.DiscountType, c.DiscountAmount, c.DiscountPercentage
+                   uc.UsedAtStoreId, uc.SavedAmount, uc.Notes,
+                   s.ChainName AS UsedAtStoreName
             FROM UserCoupon uc
-            INNER JOIN Coupon c ON uc.CouponId = c.Id
+            LEFT JOIN Store s ON uc.UsedAtStoreId = s.Id
             WHERE uc.UserId = @UserId";
 
         if (activeOnly)
         {
-            sql += " AND uc.IsUsed = 0 AND (uc.ExpiresAt IS NULL OR uc.ExpiresAt >= GETUTCDATE())";
+            sql += " AND uc.UsedAt IS NULL";
         }
 
-        sql += " ORDER BY uc.ExpiresAt, uc.ClippedAt DESC";
+        sql += " ORDER BY uc.ClippedAt DESC";
 
         return await ExecuteReaderAsync(
             sql,
@@ -226,15 +244,12 @@ public class CouponRepository : SqlHelper, ICouponRepository
                 Id = GetGuid(reader, "Id"),
                 UserId = GetGuid(reader, "UserId"),
                 CouponId = GetGuid(reader, "CouponId"),
-                CouponDescription = GetString(reader, "CouponDescription"),
-                DiscountType = GetString(reader, "DiscountType"),
-                DiscountAmount = GetDecimalNullable(reader, "DiscountAmount"),
-                DiscountPercentage = GetDecimalNullable(reader, "DiscountPercentage"),
-                ClippedAt = GetDateTime(reader, "ClippedAt") ?? DateTime.UtcNow,
+                ClippedAt = GetNullableDateTime(reader, "ClippedAt") ?? DateTime.UtcNow,
                 UsedAt = GetDateTime(reader, "UsedAt"),
-                PurchaseId = GetGuidNullable(reader, "PurchaseId"),
-                IsUsed = GetBoolean(reader, "IsUsed"),
-                ExpiresAt = GetDateTime(reader, "ExpiresAt")
+                UsedAtStoreId = GetGuidNullable(reader, "UsedAtStoreId"),
+                UsedAtStoreName = GetString(reader, "UsedAtStoreName"),
+                SavedAmount = GetDecimalNullable(reader, "SavedAmount"),
+                Notes = GetString(reader, "Notes")
             },
             new SqlParameter("@UserId", userId));
     }
@@ -244,14 +259,14 @@ public class CouponRepository : SqlHelper, ICouponRepository
         var id = Guid.NewGuid();
 
         const string sql = @"
-            INSERT INTO UserCoupon (Id, UserId, CouponId, ClippedAt, IsUsed, ExpiresAt)
-            VALUES (@Id, @UserId, @CouponId, GETUTCDATE(), 0, @ExpiresAt)";
+            INSERT INTO UserCoupon (Id, UserId, CouponId, ClippedAt, Notes)
+            VALUES (@Id, @UserId, @CouponId, GETUTCDATE(), @Notes)";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
             new SqlParameter("@UserId", userId),
             new SqlParameter("@CouponId", request.CouponId),
-            new SqlParameter("@ExpiresAt", (object?)request.ExpiresAt ?? DBNull.Value));
+            new SqlParameter("@Notes", (object?)request.Notes ?? DBNull.Value));
 
         return id;
     }
@@ -260,31 +275,20 @@ public class CouponRepository : SqlHelper, ICouponRepository
     {
         const string sql = @"
             UPDATE UserCoupon
-            SET IsUsed = 1,
-                UsedAt = GETUTCDATE(),
-                PurchaseId = @PurchaseId
-            WHERE Id = @UserCouponId
+            SET UsedAt = GETUTCDATE(),
+                UsedAtStoreId = @StoreId,
+                SavedAmount = @SavedAmount,
+                Notes = @Notes
+            WHERE CouponId = @CouponId
               AND UserId = @UserId
-              AND IsUsed = 0";
+              AND UsedAt IS NULL";
 
         var rowsAffected = await ExecuteNonQueryAsync(sql,
-            new SqlParameter("@UserCouponId", request.UserCouponId),
+            new SqlParameter("@CouponId", request.CouponId),
             new SqlParameter("@UserId", userId),
-            new SqlParameter("@PurchaseId", (object?)request.PurchaseId ?? DBNull.Value));
-
-        // Increment usage count on the coupon
-        if (rowsAffected > 0)
-        {
-            const string updateCouponSql = @"
-                UPDATE Coupon
-                SET UsedCount = UsedCount + 1
-                FROM Coupon c
-                INNER JOIN UserCoupon uc ON c.Id = uc.CouponId
-                WHERE uc.Id = @UserCouponId";
-
-            await ExecuteNonQueryAsync(updateCouponSql,
-                new SqlParameter("@UserCouponId", request.UserCouponId));
-        }
+            new SqlParameter("@StoreId", request.StoreId),
+            new SqlParameter("@SavedAmount", request.SavedAmount),
+            new SqlParameter("@Notes", (object?)request.Notes ?? DBNull.Value));
 
         return rowsAffected > 0;
     }
@@ -293,19 +297,22 @@ public class CouponRepository : SqlHelper, ICouponRepository
     {
         var sql = @"
             SELECT c.Id, c.Code, c.Description, c.CouponType, c.DiscountType, c.DiscountAmount,
-                   c.DiscountPercentage, c.MinimumPurchaseAmount, c.MaximumDiscount,
-                   c.BuyQuantity, c.GetQuantity, c.RequiredProductId, c.FreeProductId,
-                   c.CategoryRestriction, c.BrandRestriction, c.StoreId, c.ManufacturerId,
-                   c.CanBeDoubled, c.MaxItemsAllowed, c.UseLimitPerUser, c.TotalUseLimit,
-                   c.UsedCount, c.StartDate, c.ExpirationDate, c.ImageUrl, c.BarcodeValue,
-                   c.CouponUrl, c.IsActive, c.CreatedAt,
-                   s.Name AS StoreName
+                   c.MinimumPurchaseAmount, c.MinimumQuantity, c.MaximumQuantity,
+                   c.MaxUsesPerUser, c.ProductId, c.StoreId, c.ManufacturerName,
+                   c.ImageUrl, c.SourceUrl, c.CanBeDoubled, c.CanBeCombined,
+                   c.RequiresLoyaltyCard, c.StartDate, c.ExpirationDate, c.IsActive,
+                   c.SubmittedBy, c.IsApproved, c.ApprovedBy, c.ApprovedAt,
+                   c.RejectionReason, c.CreatedAt, c.UpdatedAt,
+                   s.ChainName AS StoreName,
+                   p.Name AS ProductName
             FROM Coupon c
             LEFT JOIN Store s ON c.StoreId = s.Id
+            LEFT JOIN Product p ON c.ProductId = p.Id
             WHERE c.IsDeleted = 0
               AND c.IsActive = 1
+              AND c.IsApproved = 1
               AND (c.ExpirationDate IS NULL OR c.ExpirationDate >= GETUTCDATE())
-              AND (c.RequiredProductId = @ProductId OR c.FreeProductId = @ProductId OR c.RequiredProductId IS NULL)";
+              AND (c.ProductId = @ProductId OR c.ProductId IS NULL)";
 
         var parameters = new List<SqlParameter>
         {
@@ -318,7 +325,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
             parameters.Add(new SqlParameter("@StoreId", storeId.Value));
         }
 
-        sql += " ORDER BY c.DiscountAmount DESC, c.DiscountPercentage DESC";
+        sql += " ORDER BY c.DiscountAmount DESC";
 
         return await ExecuteReaderAsync(
             sql,
@@ -336,30 +343,31 @@ public class CouponRepository : SqlHelper, ICouponRepository
             CouponType = GetString(reader, "CouponType") ?? string.Empty,
             DiscountType = GetString(reader, "DiscountType") ?? string.Empty,
             DiscountAmount = GetDecimalNullable(reader, "DiscountAmount"),
-            DiscountPercentage = GetDecimalNullable(reader, "DiscountPercentage"),
             MinimumPurchaseAmount = GetDecimalNullable(reader, "MinimumPurchaseAmount"),
-            MaximumDiscount = GetDecimalNullable(reader, "MaximumDiscount"),
-            BuyQuantity = GetIntNullable(reader, "BuyQuantity"),
-            GetQuantity = GetIntNullable(reader, "GetQuantity"),
-            RequiredProductId = GetGuidNullable(reader, "RequiredProductId"),
-            FreeProductId = GetGuidNullable(reader, "FreeProductId"),
-            CategoryRestriction = GetString(reader, "CategoryRestriction"),
-            BrandRestriction = GetString(reader, "BrandRestriction"),
+            MinimumQuantity = GetIntNullable(reader, "MinimumQuantity"),
+            MaximumQuantity = GetIntNullable(reader, "MaximumQuantity"),
+            MaxUsesPerUser = GetIntNullable(reader, "MaxUsesPerUser"),
+            ProductId = GetGuidNullable(reader, "ProductId"),
+            ProductName = GetString(reader, "ProductName"),
             StoreId = GetGuidNullable(reader, "StoreId"),
             StoreName = GetString(reader, "StoreName"),
-            ManufacturerId = GetGuidNullable(reader, "ManufacturerId"),
+            ManufacturerName = GetString(reader, "ManufacturerName"),
+            ImageUrl = GetString(reader, "ImageUrl"),
+            SourceUrl = GetString(reader, "SourceUrl"),
             CanBeDoubled = GetBoolean(reader, "CanBeDoubled"),
-            MaxItemsAllowed = GetIntNullable(reader, "MaxItemsAllowed"),
-            UseLimitPerUser = GetIntNullable(reader, "UseLimitPerUser"),
-            TotalUseLimit = GetIntNullable(reader, "TotalUseLimit"),
-            UsedCount = GetInt(reader, "UsedCount"),
+            CanBeCombined = GetBoolean(reader, "CanBeCombined"),
+            RequiresLoyaltyCard = GetBoolean(reader, "RequiresLoyaltyCard"),
             StartDate = GetDateTime(reader, "StartDate"),
             ExpirationDate = GetDateTime(reader, "ExpirationDate"),
-            ImageUrl = GetString(reader, "ImageUrl"),
-            BarcodeValue = GetString(reader, "BarcodeValue"),
-            CouponUrl = GetString(reader, "CouponUrl"),
             IsActive = GetBoolean(reader, "IsActive"),
-            CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+            SubmittedBy = GetGuid(reader, "SubmittedBy"),
+            IsApproved = GetBoolean(reader, "IsApproved"),
+            ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
+            ApprovedAt = GetDateTime(reader, "ApprovedAt"),
+            RejectionReason = GetString(reader, "RejectionReason"),
+            CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            UpdatedAt = GetDateTime(reader, "UpdatedAt")
         };
     }
 }
+

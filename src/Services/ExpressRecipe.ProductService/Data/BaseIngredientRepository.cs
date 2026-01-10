@@ -33,7 +33,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
     public async Task<List<BaseIngredientDto>> SearchAsync(BaseIngredientSearchRequest request)
     {
         var whereClauses = new List<string> { "IsDeleted = 0" };
-        var parameters = new List<SqlParameter>();
+        var parameters = new List<Microsoft.Data.SqlClient.SqlParameter>();
 
         if (request.OnlyApproved)
         {
@@ -43,25 +43,25 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {
             whereClauses.Add("(Name LIKE @SearchTerm OR CommonNames LIKE @SearchTerm OR Description LIKE @SearchTerm)");
-            parameters.Add(CreateParameter("@SearchTerm", $"%{request.SearchTerm}%"));
+            parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter("@SearchTerm", $"%{request.SearchTerm}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Category))
         {
             whereClauses.Add("Category = @Category");
-            parameters.Add(CreateParameter("@Category", request.Category));
+            parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter("@Category", request.Category));
         }
 
         if (request.IsAllergen.HasValue)
         {
             whereClauses.Add("IsAllergen = @IsAllergen");
-            parameters.Add(CreateParameter("@IsAllergen", request.IsAllergen.Value));
+            parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter("@IsAllergen", request.IsAllergen.Value));
         }
 
         if (request.IsAdditive.HasValue)
         {
             whereClauses.Add("IsAdditive = @IsAdditive");
-            parameters.Add(CreateParameter("@IsAdditive", request.IsAdditive.Value));
+            parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter("@IsAdditive", request.IsAdditive.Value));
         }
 
         var sql = $@"
@@ -393,7 +393,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
 
     #endregion
 
-    private BaseIngredientDto MapBaseIngredientDto(IDataReader reader)
+    private BaseIngredientDto MapBaseIngredientDto(System.Data.IDataRecord reader)
     {
         return new BaseIngredientDto
         {
@@ -414,7 +414,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             ApprovedAt = GetDateTime(reader, "ApprovedAt"),
             RejectionReason = GetString(reader, "RejectionReason"),
             SubmittedBy = GetGuid(reader, "SubmittedBy"),
-            CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
             UpdatedAt = GetDateTime(reader, "UpdatedAt")
         };
     }

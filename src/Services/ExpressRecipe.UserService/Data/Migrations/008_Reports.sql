@@ -94,7 +94,7 @@ CREATE TABLE ReportHistory (
     Status NVARCHAR(50) NOT NULL DEFAULT 'Completed', -- Pending, Completed, Failed
     ErrorMessage NVARCHAR(MAX) NULL,
     CONSTRAINT FK_ReportHistory_ReportType FOREIGN KEY (ReportTypeId)
-        REFERENCES ReportType(Id) ON DELETE CASCADE,
+        REFERENCES ReportType(Id) ON DELETE NO ACTION,
     CONSTRAINT FK_ReportHistory_SavedReport FOREIGN KEY (SavedReportId)
         REFERENCES SavedReport(Id) ON DELETE SET NULL
 );

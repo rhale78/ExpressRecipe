@@ -45,7 +45,6 @@ public class MealMasterParser : RecipeParserBase
         var recipe = new ParsedRecipe();
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        var currentSection = "header";
         var ingredientOrder = 0;
         var stepNumber = 0;
         string? currentIngredientSection = null;
@@ -108,7 +107,6 @@ public class MealMasterParser : RecipeParserBase
             // Everything else is likely instructions
             else if (line.Length > 20 && !line.Contains(":"))
             {
-                currentSection = "instructions";
                 recipe.Instructions.Add(new ParsedInstruction
                 {
                     StepNumber = ++stepNumber,

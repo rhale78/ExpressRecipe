@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!-- Disable XML documentation file generation to avoid OpenAPI source generator issues in .NET 10 -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Disable emitting compiler generated files to avoid CS0200 error in OpenAPI generator -->
+    <EmitCompilerGeneratedFiles>false</EmitCompilerGeneratedFiles>
+    <NoWarn>$(NoWarn);OPENAPI001</NoWarn>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+  </ItemGroup>
+</Project>

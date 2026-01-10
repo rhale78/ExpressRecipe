@@ -1,5 +1,5 @@
 @page "/dashboard"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.User
 @using ExpressRecipe.Client.Shared.Models.Inventory
 @using ExpressRecipe.Client.Shared.Models.Shopping
@@ -35,7 +35,7 @@
 
         <!-- Quick Stats Cards -->
         <div class="stats-grid">
-            <div class="stat-card" @onclick="() => Navigation.NavigateTo("/inventory")">
+            <div class="stat-card" @onclick='() => Navigation.NavigateTo("/inventory")'>
                 <div class="stat-icon">🥫</div>
                 <div class="stat-content">
                     <div class="stat-value">@(_inventorySummary?.TotalItems ?? 0)</div>
@@ -43,7 +43,7 @@
                 </div>
             </div>
 
-            <div class="stat-card warning" @onclick="() => Navigation.NavigateTo("/inventory")">
+            <div class="stat-card warning" @onclick='() => Navigation.NavigateTo("/inventory")'>
                 <div class="stat-icon">⏰</div>
                 <div class="stat-content">
                     <div class="stat-value">@(_inventorySummary?.ExpiringSoonItems ?? 0)</div>
@@ -51,7 +51,7 @@
                 </div>
             </div>
 
-            <div class="stat-card" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+            <div class="stat-card" @onclick='() => Navigation.NavigateTo("/meal-planning")'>
                 <div class="stat-icon">🍽️</div>
                 <div class="stat-content">
                     <div class="stat-value">@(_mealPlanSummary?.MealsThisWeek ?? 0)</div>
@@ -59,7 +59,7 @@
                 </div>
             </div>
 
-            <div class="stat-card" @onclick="() => Navigation.NavigateTo("/shopping")">
+            <div class="stat-card" @onclick='() => Navigation.NavigateTo("/shopping")'>
                 <div class="stat-icon">🛒</div>
                 <div class="stat-content">
                     <div class="stat-value">@(_shoppingSummary?.TotalActiveItems ?? 0)</div>
@@ -108,7 +108,7 @@
 
                     <div class="allergen-summary-footer">
                         <span>All recipes and meal plans are filtered for family safety</span>
-                        <button class="btn-link" @onclick="() => Navigation.NavigateTo("/settings")">
+                        <button class="btn-link" @onclick='() => Navigation.NavigateTo("/settings")'>
                             Manage →
                         </button>
                     </div>
@@ -124,7 +124,7 @@
                 <div class="widget">
                     <div class="widget-header">
                         <h3>📅 Upcoming Meals</h3>
-                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+                        <button class="btn-sm btn-secondary" @onclick='() => Navigation.NavigateTo("/meal-planning")'>
                             View All →
                         </button>
                     </div>
@@ -153,7 +153,7 @@
                         {
                             <div class="widget-empty">
                                 <p>No meals planned yet</p>
-                                <button class="btn btn-primary-sm" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+                                <button class="btn btn-primary-sm" @onclick='() => Navigation.NavigateTo("/meal-planning")'>
                                     Plan Meals
                                 </button>
                             </div>
@@ -165,7 +165,7 @@
                 <div class="widget">
                     <div class="widget-header">
                         <h3>⏰ Expiring Soon</h3>
-                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/inventory")">
+                        <button class="btn-sm btn-secondary" @onclick='() => Navigation.NavigateTo("/inventory")'>
                             View All →
                         </button>
                     </div>
@@ -219,7 +219,7 @@
                 <div class="widget">
                     <div class="widget-header">
                         <h3>🛒 Shopping Lists</h3>
-                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/shopping")">
+                        <button class="btn-sm btn-secondary" @onclick='() => Navigation.NavigateTo("/shopping")'>
                             View All →
                         </button>
                     </div>
@@ -229,7 +229,7 @@
                         {
                             @foreach (var list in _activeShoppingLists.Take(3))
                             {
-                                <div class="shopping-list-item" @onclick="() => Navigation.NavigateTo($"/shopping/{list.Id}")">
+                                <div class="shopping-list-item" @onclick='() => Navigation.NavigateTo($"/shopping/{list.Id}")'>
                                     <div class="list-info">
                                         <strong>@list.Name</strong>
                                         <div class="list-progress-small">
@@ -248,7 +248,7 @@
                         {
                             <div class="widget-empty">
                                 <p>No active shopping lists</p>
-                                <button class="btn btn-primary-sm" @onclick="() => Navigation.NavigateTo("/shopping")">
+                            <button class="btn btn-primary-sm" @onclick='() => Navigation.NavigateTo("/shopping")'>
                                     Create List
                                 </button>
                             </div>
@@ -264,22 +264,22 @@
 
                     <div class="widget-content">
                         <div class="quick-actions-grid">
-                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/products/scan")">
+                            <button class="quick-action-btn" @onclick='() => Navigation.NavigateTo("/products/scan")'>
                                 <span class="action-icon">📷</span>
                                 <span class="action-label">Scan Product</span>
                             </button>
 
-                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/recipes")">
+                            <button class="quick-action-btn" @onclick='() => Navigation.NavigateTo("/recipes")'>
                                 <span class="action-icon">🍳</span>
                                 <span class="action-label">Find Recipe</span>
                             </button>
 
-                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/inventory/add")">
+                            <button class="quick-action-btn" @onclick='() => Navigation.NavigateTo("/inventory/add")'>
                                 <span class="action-icon">➕</span>
                                 <span class="action-label">Add to Inventory</span>
                             </button>
 
-                            <button class="quick-action-btn" @onclick="() => Navigation.NavigateTo("/meal-planning")">
+                            <button class="quick-action-btn" @onclick='() => Navigation.NavigateTo("/meal-planning")'>
                                 <span class="action-icon">📅</span>
                                 <span class="action-label">Plan Meals</span>
                             </button>
@@ -291,7 +291,7 @@
                 <div class="widget">
                     <div class="widget-header">
                         <h3>💡 Recipe Suggestions</h3>
-                        <button class="btn-sm btn-secondary" @onclick="() => Navigation.NavigateTo("/recipes")">
+                        <button class="btn-sm btn-secondary" @onclick='() => Navigation.NavigateTo("/recipes")'>
                             Browse All →
                         </button>
                     </div>
@@ -301,7 +301,7 @@
                         {
                             @foreach (var recipe in _suggestedRecipes.Take(3))
                             {
-                                <div class="recipe-suggestion-item" @onclick="() => Navigation.NavigateTo($"/recipes/{recipe.Id}")">
+                                <div class="recipe-suggestion-item" @onclick='() => Navigation.NavigateTo($"/recipes/{recipe.Id}")'>
                                     @if (!string.IsNullOrWhiteSpace(recipe.ImageUrl))
                                     {
                                         <img src="@recipe.ImageUrl" alt="@recipe.Title" class="recipe-thumb" />
@@ -343,9 +343,12 @@
     private List<ShoppingListDto>? _activeShoppingLists;
     private List<RecipeDto>? _suggestedRecipes;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadDashboard();
+        if (firstRender)
+        {
+            await LoadDashboard();
+        }
     }
 
     private async Task LoadDashboard()
@@ -353,76 +356,145 @@
         _isLoading = true;
         StateHasChanged();
 
-        // Get user name
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var firstName = authState.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
-        if (!string.IsNullOrEmpty(firstName))
+        try
         {
-            _userName = firstName;
-        }
-
-        // Load all data in parallel for performance
-        var profileTask = UserProfileApi.GetUserProfileAsync();
-        var inventorySummaryTask = InventoryApi.GetInventorySummaryAsync();
-        var shoppingSummaryTask = ShoppingApi.GetShoppingSummaryAsync();
-        var mealPlanSummaryTask = MealPlanApi.GetMealPlanSummaryAsync();
-
-        await Task.WhenAll(profileTask, inventorySummaryTask, shoppingSummaryTask, mealPlanSummaryTask);
-
-        _userProfile = profileTask.Result;
-        _inventorySummary = inventorySummaryTask.Result;
-        _shoppingSummary = shoppingSummaryTask.Result;
-        _mealPlanSummary = mealPlanSummaryTask.Result;
-
-        // Load upcoming meals
-        var weekView = await MealPlanApi.GetWeekViewAsync(DateTime.Today);
-        if (weekView != null)
-        {
-            _upcomingMeals = weekView.Days
-                .Where(d => d.Date >= DateTime.Today)
-                .SelectMany(d => d.Meals)
-                .Where(m => !m.IsPrepared)
-                .OrderBy(m => m.Date)
-                .ToList();
-        }
-
-        // Load expiring items
-        var inventoryResult = await InventoryApi.SearchInventoryAsync(new InventorySearchRequest
-        {
-            IsExpiringSoon = true,
-            Page = 1,
-            PageSize = 10,
-            SortBy = "ExpirationDate",
-            SortDescending = false
-        });
-        _expiringItems = inventoryResult?.Items ?? new();
-
-        // Load active shopping lists
-        var shoppingResult = await ShoppingApi.SearchShoppingListsAsync(new ShoppingListSearchRequest
-        {
-            Status = "Active",
-            Page = 1,
-            PageSize = 5
-        });
-        _activeShoppingLists = shoppingResult?.Lists ?? new();
-
-        // Load recipe suggestions (filtered by user allergens)
-        if (_userProfile != null)
-        {
-            var allergensDto = await UserProfileApi.GetAllergensAndRestrictionsAsync();
-            var recipeResult = await RecipeApi.SearchRecipesAsync(new RecipeSearchRequest
+            // First, try to get name from auth state (fastest and always available)
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var firstName = authState.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+            if (!string.IsNullOrEmpty(firstName))
             {
-                ExcludeAllergens = allergensDto?.AllAllergens,
-                ExcludeIngredients = allergensDto?.AllDislikedFoods,
-                Page = 1,
-                PageSize = 10,
-                SortBy = "ViewCount"
-            });
-            _suggestedRecipes = recipeResult?.Recipes ?? new();
-        }
+                _userName = firstName;
+            }
 
-        _isLoading = false;
-        StateHasChanged();
+            // Try to load user profile to get additional details
+            try
+            {
+                _userProfile = await UserProfileApi.GetProfileAsync();
+                if (_userProfile != null && !string.IsNullOrEmpty(_userProfile.FirstName))
+                {
+                    _userName = _userProfile.FirstName;
+                }
+            }
+            catch (ApiException ex) when (ex.Message.Contains("not found"))
+            {
+                // User profile doesn't exist yet (newly registered user) - this is okay
+                Console.WriteLine("User profile not found - new user");
+                _userProfile = null;
+            }
+
+            // Load all data in parallel for performance, with graceful error handling
+            try
+            {
+                _inventorySummary = await InventoryApi.GetInventorySummaryAsync();
+            }
+            catch
+            {
+                _inventorySummary = null;
+            }
+
+            try
+            {
+                _shoppingSummary = await ShoppingApi.GetShoppingSummaryAsync();
+            }
+            catch
+            {
+                _shoppingSummary = null;
+            }
+
+            try
+            {
+                _mealPlanSummary = await MealPlanApi.GetMealPlanSummaryAsync();
+            }
+            catch
+            {
+                _mealPlanSummary = null;
+            }
+
+            // Load upcoming meals
+            try
+            {
+                var weekView = await MealPlanApi.GetWeekViewAsync(DateTime.Today);
+                if (weekView != null)
+                {
+                    _upcomingMeals = weekView.Days
+                        .Where(d => d.Date >= DateTime.Today)
+                        .SelectMany(d => d.Meals)
+                        .Where(m => !m.IsPrepared)
+                        .OrderBy(m => m.Date)
+                        .ToList();
+                }
+            }
+            catch
+            {
+                _upcomingMeals = null;
+            }
+
+            // Load expiring items
+            try
+            {
+                var inventoryResult = await InventoryApi.SearchInventoryAsync(new InventorySearchRequest
+                {
+                    IsExpiringSoon = true,
+                    Page = 1,
+                    PageSize = 10,
+                    SortBy = "ExpirationDate",
+                    SortDescending = false
+                });
+                _expiringItems = inventoryResult?.Items ?? new();
+            }
+            catch
+            {
+                _expiringItems = null;
+            }
+
+            // Load active shopping lists
+            try
+            {
+                var shoppingResult = await ShoppingApi.SearchShoppingListsAsync(new ShoppingListSearchRequest
+                {
+                    Status = "Active",
+                    Page = 1,
+                    PageSize = 5
+                });
+                _activeShoppingLists = shoppingResult?.Lists ?? new();
+            }
+            catch
+            {
+                _activeShoppingLists = null;
+            }
+
+            // Load recipe suggestions (filtered by user allergens)
+            if (_userProfile != null)
+            {
+                try
+                {
+                    var allergensDto = await UserProfileApi.GetAllergensAndRestrictionsAsync();
+                    var recipeResult = await RecipeApi.SearchRecipesAsync(new RecipeSearchRequest
+                    {
+                        ExcludeAllergens = allergensDto?.AllAllergens,
+                        ExcludeIngredients = allergensDto?.AllDislikedFoods,
+                        Page = 1,
+                        PageSize = 10,
+                        SortBy = "ViewCount"
+                    });
+                    _suggestedRecipes = recipeResult?.Recipes ?? new();
+                }
+                catch
+                {
+                    _suggestedRecipes = null;
+                }
+            }
+
+            _isLoading = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            // Handle any unexpected errors
+            Console.WriteLine($"Error loading dashboard: {ex.Message}");
+            _isLoading = false;
+            StateHasChanged();
+        }
     }
 
     private string GetMealTypeIcon(string mealType)

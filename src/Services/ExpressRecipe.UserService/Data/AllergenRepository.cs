@@ -89,11 +89,11 @@ public class AllergenRepository : SqlHelper, IAllergenRepository
     {
         const string sql = @"
             SELECT ua.Id, ua.UserId, ua.AllergenId, a.Name as AllergenName,
-                   ua.Severity, ua.Notes, ua.DiagnosedDate, ua.VerifiedByDoctor
+                   ua.SeverityLevel, ua.Notes, ua.DiagnosisDate, ua.RequiresEpiPen
             FROM UserAllergen ua
             INNER JOIN Allergen a ON ua.AllergenId = a.Id
             WHERE ua.UserId = @UserId AND ua.IsDeleted = 0 AND a.IsDeleted = 0
-            ORDER BY ua.Severity DESC, a.Name";
+            ORDER BY ua.SeverityLevel DESC, a.Name";
 
         return await ExecuteReaderAsync(
             sql,
@@ -103,10 +103,10 @@ public class AllergenRepository : SqlHelper, IAllergenRepository
                 UserId = GetGuid(reader, "UserId"),
                 AllergenId = GetGuid(reader, "AllergenId"),
                 AllergenName = GetString(reader, "AllergenName") ?? string.Empty,
-                Severity = GetString(reader, "Severity") ?? string.Empty,
+                SeverityLevel = GetString(reader, "SeverityLevel") ?? string.Empty,
                 Notes = GetString(reader, "Notes"),
-                DiagnosedDate = GetDateTime(reader, "DiagnosedDate"),
-                VerifiedByDoctor = GetBoolean(reader, "VerifiedByDoctor")
+                DiagnosisDate = GetDateTime(reader, "DiagnosisDate"),
+                RequiresEpiPen = GetBoolean(reader, "RequiresEpiPen")
             },
             CreateParameter("@UserId", userId));
     }
@@ -115,12 +115,12 @@ public class AllergenRepository : SqlHelper, IAllergenRepository
     {
         const string sql = @"
             INSERT INTO UserAllergen (
-                Id, UserId, AllergenId, Severity, Notes,
-                DiagnosedDate, VerifiedByDoctor, CreatedBy, CreatedAt
+                Id, UserId, AllergenId, SeverityLevel, Notes,
+                DiagnosisDate, RequiresEpiPen, CreatedBy, CreatedAt
             )
             VALUES (
-                @Id, @UserId, @AllergenId, @Severity, @Notes,
-                @DiagnosedDate, @VerifiedByDoctor, @CreatedBy, GETUTCDATE()
+                @Id, @UserId, @AllergenId, @SeverityLevel, @Notes,
+                @DiagnosisDate, @RequiresEpiPen, @CreatedBy, GETUTCDATE()
             )";
 
         var userAllergenId = Guid.NewGuid();
@@ -130,10 +130,10 @@ public class AllergenRepository : SqlHelper, IAllergenRepository
             CreateParameter("@Id", userAllergenId),
             CreateParameter("@UserId", userId),
             CreateParameter("@AllergenId", request.AllergenId),
-            CreateParameter("@Severity", request.Severity),
+            CreateParameter("@SeverityLevel", request.SeverityLevel),
             CreateParameter("@Notes", request.Notes),
-            CreateParameter("@DiagnosedDate", request.DiagnosedDate),
-            CreateParameter("@VerifiedByDoctor", request.VerifiedByDoctor),
+            CreateParameter("@DiagnosisDate", request.DiagnosisDate),
+            CreateParameter("@RequiresEpiPen", request.RequiresEpiPen),
             CreateParameter("@CreatedBy", createdBy));
 
         return userAllergenId;
@@ -143,10 +143,10 @@ public class AllergenRepository : SqlHelper, IAllergenRepository
     {
         const string sql = @"
             UPDATE UserAllergen
-            SET Severity = @Severity,
+            SET SeverityLevel = @SeverityLevel,
                 Notes = @Notes,
-                DiagnosedDate = @DiagnosedDate,
-                VerifiedByDoctor = @VerifiedByDoctor,
+                DiagnosisDate = @DiagnosisDate,
+                RequiresEpiPen = @RequiresEpiPen,
                 UpdatedBy = @UpdatedBy,
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND IsDeleted = 0";
@@ -154,10 +154,10 @@ public class AllergenRepository : SqlHelper, IAllergenRepository
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
             CreateParameter("@Id", userAllergenId),
-            CreateParameter("@Severity", request.Severity),
+            CreateParameter("@SeverityLevel", request.SeverityLevel),
             CreateParameter("@Notes", request.Notes),
-            CreateParameter("@DiagnosedDate", request.DiagnosedDate),
-            CreateParameter("@VerifiedByDoctor", request.VerifiedByDoctor),
+            CreateParameter("@DiagnosisDate", request.DiagnosisDate),
+            CreateParameter("@RequiresEpiPen", request.RequiresEpiPen),
             CreateParameter("@UpdatedBy", updatedBy));
 
         return rowsAffected > 0;

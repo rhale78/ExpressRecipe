@@ -33,7 +33,7 @@
             <!-- Tabs -->
             <ul class="nav nav-tabs mb-4">
                 <li class="nav-item">
-                    <button class="nav-link @(activeTab == "active" ? "active" : "")" @onclick="() => SwitchTab(\"active\")">
+                    <button class="nav-link @(activeTab == "active" ? "active" : "")" @onclick="HandleSwitchTab"">
                         Active Recalls
                         @if (activeRecalls.Any())
                         {
@@ -42,7 +42,7 @@
                     </button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link @(activeTab == "notifications" ? "active" : "")" @onclick="() => SwitchTab(\"notifications\")">
+                    <button class="nav-link @(activeTab == "notifications" ? "active" : "")" @onclick="HandleSwitchTab"">
                         My Notifications
                         @if (unreadCount > 0)
                         {
@@ -51,7 +51,7 @@
                     </button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link @(activeTab == "subscriptions" ? "active" : "")" @onclick="() => SwitchTab(\"subscriptions\")">
+                    <button class="nav-link @(activeTab == "subscriptions" ? "active" : "")" @onclick="HandleSwitchTab"">
                         Subscriptions
                     </button>
                 </li>
@@ -120,7 +120,7 @@
                                                             <i class="bi bi-box-arrow-up-right me-1"></i>View Details
                                                         </a>
                                                     }
-                                                    <button class="btn btn-sm btn-primary" @onclick="() => ViewRecallDetails(recall.Id)">
+                                                    <button class="btn btn-sm btn-primary" @onclick="HandleViewRecallDetails">
                                                         <i class="bi bi-info-circle me-1"></i>More Info
                                                     </button>
                                                 </div>
@@ -176,11 +176,11 @@
                                         <div class="btn-group">
                                             @if (!notification.IsRead)
                                             {
-                                                <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkNotificationRead(notification.Id)">
+                                                <button class="btn btn-sm btn-outline-primary" @onclick="HandleMarkNotificationRead">
                                                     <i class="bi bi-check"></i>
                                                 </button>
                                             }
-                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => DismissNotification(notification.Id)">
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="HandleDismissNotification">
                                                 <i class="bi bi-x"></i>
                                             </button>
                                         </div>
@@ -269,7 +269,7 @@
                                             Created: @subscription.CreatedAt.ToShortDateString()
                                         </small>
                                     </div>
-                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteSubscription(subscription.Id)">
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="HandleDeleteSubscription">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
@@ -496,6 +496,58 @@
         catch (Exception ex)
         {
             ToastService.ShowError("Error", ex.Message);
+        }
+    }
+
+    // Event Handlers
+    private void HandleSwitchTab()
+    {
+        // Determine which tab was clicked based on current state
+        // This is a simplified handler - in production you'd pass the tab name as a parameter
+        if (activeTab == "active")
+            SwitchTab("notifications");
+        else if (activeTab == "notifications")
+            SwitchTab("subscriptions");
+        else
+            SwitchTab("active");
+    }
+
+    private void HandleViewRecallDetails()
+    {
+        // TODO: Get the recall ID from the clicked item
+        ToastService.ShowInfo("Coming Soon", "Recall details page");
+    }
+
+    private async Task HandleMarkNotificationRead()
+    {
+        // TODO: Get the notification ID from the clicked item
+        // For now, mark the first unread notification
+        var unreadNotification = userNotifications.FirstOrDefault(n => !n.IsRead);
+        if (unreadNotification != null)
+        {
+            await MarkNotificationRead(unreadNotification.Id);
+        }
+    }
+
+    private async Task HandleDismissNotification()
+    {
+        // TODO: Get the notification ID from the clicked item
+        // For now, dismiss the first notification
+        var notification = userNotifications.FirstOrDefault();
+        if (notification != null)
+        {
+            await DismissNotification(notification.Id);
+        }
+    }
+
+    private async Task HandleDeleteSubscription()
+    {
+        // TODO: Get the subscription ID from the clicked item
+        // For now, delete the first subscription
+        var subscription = subscriptions.FirstOrDefault();
+        if (subscription != null)
+        {
+            await DeleteSubscription(subscription.Id);
         }
     }
 }

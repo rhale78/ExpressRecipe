@@ -1,0 +1,1116 @@
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+@using ExpressRecipe.Client.Shared.Models.User
+@using ExpressRecipe.Client.Shared.Services
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IUserProfileApiClient UserProfileClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="unified-dietary-filter">
+    <!-- DEBUG BANNER - VERSION TRACKING -->
+    <div style="background-color: red; color: white; padding: 1rem; text-align: center; font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem;">
+        ⚠️ VERSION 14 - UNIFIED GROUP BOX & ? REPOSITIONING ⚠️
+    </div>
+
+    <!-- Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; border-radius: 0.75rem 0.75rem 0 0;">
+        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 600; color: #111827;">🍽️ Dietary Filters</h3>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; user-select: none;">
+                <input type="checkbox" style="width: 1.25rem; height: 1.25rem; cursor: pointer;"
+                       checked="@_restrictionsEnabled"
+                       @onchange="ToggleRestrictions" />
+                <span style="font-size: 0.875rem; font-weight: 500; color: @(_restrictionsEnabled ? "#111827" : "#9ca3af");">
+                    @(_restrictionsEnabled ? "✅ Restrictions Active" : "⭕ Restrictions Disabled")
+                </span>
+            </label>
+            @if (!_isExpanded)
+            {
+                <button style="background-color: #2563eb; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;" @onclick="ToggleExpanded">
+                    ▼ Expand (@_activeFilters.Count filters)
+                </button>
+            }
+            else
+            {
+                <button style="background-color: #2563eb; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s;" @onclick="ToggleExpanded">
+                    ▲ Collapse
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (_isExpanded)
+    {
+        <div class="filter-content">
+            <!-- Who are you filtering for? -->
+            <div class="filter-section">
+                <h4>👥 Who are you filtering for?</h4>
+                <div class="family-selection">
+                    <label class="family-option">
+                        <input type="radio" name="filterTarget" value="me"
+                               checked="@(_filterTarget == FilterTarget.Me)"
+                               @onchange="() => SetFilterTarget(FilterTarget.Me)" />
+                        <span>🙋 Just Me</span>
+                    </label>
+
+                    @if (_familyMembers.Any())
+                    {
+                        @foreach (var member in _familyMembers)
+                        {
+                            <label class="family-option">
+                                <input type="checkbox"
+                                       checked="@_selectedFamilyMemberIds.Contains(member.Id)"
+                                       @onchange="() => ToggleFamilyMember(member.Id)" />
+                                <span>👨‍👩‍👧‍👦 @member.Name (@member.Relationship)</span>
+                            </label>
+                        }
+
+                        <label class="family-option">
+                            <input type="radio" name="filterTarget" value="everyone"
+                                   checked="@(_filterTarget == FilterTarget.Everyone)"
+                                   @onchange="() => SetFilterTarget(FilterTarget.Everyone)" />
+                            <span>👨‍👩‍👧‍👦 Entire Family</span>
+                        </label>
+                    }
+
+                    <label class="family-option">
+                        <input type="radio" name="filterTarget" value="custom"
+                               checked="@(_filterTarget == FilterTarget.Custom)"
+                               @onchange="() => SetFilterTarget(FilterTarget.Custom)" />
+                        <span>✏️ Custom Selection</span>
+                    </label>
+                </div>
+            </div>
+
+            <hr class="section-divider" />
+
+            <!-- Dietary Restrictions Group -->
+            <div style="border: 2px solid #2563eb; border-radius: 0.75rem; padding: 1rem; background-color: white; opacity: @(_restrictionsEnabled ? "1" : "0.5"); pointer-events: @(_restrictionsEnabled ? "auto" : "none");">
+                <h4 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600; color: #2563eb; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>🛡️</span>
+                    <span>Dietary Restrictions</span>
+                    @if (!_restrictionsEnabled)
+                    {
+                        <span style="font-size: 0.875rem; color: #9ca3af; font-weight: 400;">(Disabled - Enable checkbox above to activate)</span>
+                    }
+                </h4>
+
+                <!-- Religious Restrictions -->
+                <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; margin-bottom: 1rem; overflow: visible;">
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; cursor: pointer; transition: background-color 0.2s ease; border-radius: 0.5rem; user-select: none; background-color: @(_religiousHover ? "#f3f4f6" : "#f9fafb");"
+                         @onclick="() => _religiousExpanded = !_religiousExpanded"
+                         @onmouseover="@(() => _religiousHover = true)"
+                         @onmouseout="@(() => _religiousHover = false)">
+                        <span style="font-size: 1.5rem;">🕌</span>
+                        <span style="font-weight: 600; font-size: 1rem; color: #111827;">Religious Restrictions</span>
+                        <span style="position: relative; background-color: #2563eb; border: 2px solid #1e40af; color: white; border-radius: 50%; width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: help; font-size: 0.75rem; font-weight: 700; margin-right: auto;"
+                              title="Religious dietary laws help you follow your faith's guidelines. Hover over each option for specific details."
+                              @onclick:stopPropagation="true">?</span>
+                        <span style="color: #6b7280; font-size: 0.875rem; font-weight: 500;">@(_religiousExpanded ? "Click to collapse" : "Click to expand")</span>
+                        <span style="color: #6b7280; font-size: 1.25rem; font-weight: bold;">@(_religiousExpanded ? "▼" : "▶")</span>
+                    </div>
+                @if (_religiousExpanded)
+                {
+                    <div style="padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; background-color: white;">
+                        @foreach (var item in _religiousRestrictions)
+                        {
+                            <label style="display: flex; align-items: center; gap: 0.625rem; padding: 0.75rem 1rem; background-color: #2563eb; border: 2px solid #1e40af; border-radius: 0.5rem; cursor: pointer; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); transition: all 0.2s ease;"
+                                   title="@item.Description">
+                                <input type="checkbox"
+                                       style="cursor: pointer; width: 1.125rem; height: 1.125rem; accent-color: white;"
+                                       checked="@_activeFilters.Contains(item.Name)"
+                                       @onchange="() => ToggleFilter(item.Name)" />
+                                <span style="font-size: 0.875rem; color: white; user-select: none; font-weight: 500;">@item.Name</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Diet/Belief Restrictions -->
+            <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; margin-bottom: 1rem; overflow: visible;">
+                <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; cursor: pointer; transition: background-color 0.2s ease; border-radius: 0.5rem; user-select: none; background-color: @(_dietHover ? "#f3f4f6" : "#f9fafb");"
+                     @onclick="() => _dietExpanded = !_dietExpanded"
+                     @onmouseover="@(() => _dietHover = true)"
+                     @onmouseout="@(() => _dietHover = false)">
+                    <span style="font-size: 1.5rem;">🌱</span>
+                    <span style="font-weight: 600; font-size: 1rem; color: #111827;">Diet & Belief Restrictions</span>
+                    <span style="position: relative; background-color: #2563eb; border: 2px solid #1e40af; color: white; border-radius: 50%; width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: help; font-size: 0.75rem; font-weight: 700; margin-right: auto;"
+                          title="Lifestyle-based dietary choices. Selecting these will exclude products containing prohibited ingredients."
+                          @onclick:stopPropagation="true">?</span>
+                    <span style="color: #6b7280; font-size: 0.875rem; font-weight: 500;">@(_dietExpanded ? "Click to collapse" : "Click to expand")</span>
+                    <span style="color: #6b7280; font-size: 1.25rem; font-weight: bold;">@(_dietExpanded ? "▼" : "▶")</span>
+                </div>
+                @if (_dietExpanded)
+                {
+                    <div style="padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; background-color: white;">
+                        @foreach (var item in _dietRestrictions)
+                        {
+                            <label style="display: flex; align-items: center; gap: 0.625rem; padding: 0.75rem 1rem; background-color: #2563eb; border: 2px solid #1e40af; border-radius: 0.5rem; cursor: pointer; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); transition: all 0.2s ease;"
+                                   title="@item.Description">
+                                <input type="checkbox"
+                                       style="cursor: pointer; width: 1.125rem; height: 1.125rem; accent-color: white;"
+                                       checked="@_activeFilters.Contains(item.Name)"
+                                       @onchange="() => ToggleFilter(item.Name)" />
+                                <span style="font-size: 0.875rem; color: white; user-select: none; font-weight: 500;">@item.Name</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Common Allergens -->
+            <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; margin-bottom: 1rem; overflow: visible;">
+                <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; cursor: pointer; transition: background-color 0.2s ease; border-radius: 0.5rem; user-select: none; background-color: @(_allergenHover ? "#f3f4f6" : "#f9fafb");"
+                     @onclick="() => _allergenExpanded = !_allergenExpanded"
+                     @onmouseover="@(() => _allergenHover = true)"
+                     @onmouseout="@(() => _allergenHover = false)">
+                    <span style="font-size: 1.5rem;">⚠️</span>
+                    <span style="font-weight: 600; font-size: 1rem; color: #111827;">Common Allergens</span>
+                    <span style="position: relative; background-color: #2563eb; border: 2px solid #1e40af; color: white; border-radius: 50%; width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: help; font-size: 0.75rem; font-weight: 700; margin-right: auto;"
+                          title="Major food allergens recognized by FDA and health organizations. Products containing these will be filtered out."
+                          @onclick:stopPropagation="true">?</span>
+                    <span style="color: #6b7280; font-size: 0.875rem; font-weight: 500;">@(_allergenExpanded ? "Click to collapse" : "Click to expand")</span>
+                    <span style="color: #6b7280; font-size: 1.25rem; font-weight: bold;">@(_allergenExpanded ? "▼" : "▶")</span>
+                </div>
+                @if (_allergenExpanded)
+                {
+                    <div style="padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; background-color: white;">
+                        @foreach (var item in _allergenRestrictions)
+                        {
+                            <label style="display: flex; align-items: center; gap: 0.625rem; padding: 0.75rem 1rem; background-color: #2563eb; border: 2px solid #1e40af; border-radius: 0.5rem; cursor: pointer; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); transition: all 0.2s ease;"
+                                   title="@item.Description">
+                                <input type="checkbox"
+                                       style="cursor: pointer; width: 1.125rem; height: 1.125rem; accent-color: white;"
+                                       checked="@_activeFilters.Contains(item.Name)"
+                                       @onchange="() => ToggleFilter(item.Name)" />
+                                <span style="font-size: 0.875rem; color: white; user-select: none; font-weight: 500;">@item.Name</span>
+                            </label>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Custom Individual Restrictions -->
+            <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; margin-bottom: 1rem; overflow: visible;">
+                <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem; cursor: pointer; transition: background-color 0.2s ease; border-radius: 0.5rem; user-select: none; background-color: @(_customHover ? "#f3f4f6" : "#f9fafb");"
+                     @onclick="() => _customExpanded = !_customExpanded"
+                     @onmouseover="@(() => _customHover = true)"
+                     @onmouseout="@(() => _customHover = false)">
+                    <span style="font-size: 1.5rem;">➕</span>
+                    <span style="font-weight: 600; font-size: 1rem; color: #111827;">Custom Restrictions</span>
+                    <span style="position: relative; background-color: #2563eb; border: 2px solid #1e40af; color: white; border-radius: 50%; width: 1.5rem; height: 1.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: help; font-size: 0.75rem; font-weight: 700; margin-right: auto;"
+                          title="Add any specific ingredients your family avoids. Type to search, or enter multiple separated by commas."
+                          @onclick:stopPropagation="true">?</span>
+                    <span style="color: #6b7280; font-size: 0.875rem; font-weight: 500;">@(_customExpanded ? "Click to collapse" : "Click to expand")</span>
+                    <span style="color: #6b7280; font-size: 1.25rem; font-weight: bold;">@(_customExpanded ? "▼" : "▶")</span>
+                </div>
+                @if (_customExpanded)
+                {
+                    <div style="padding: 1rem; border-top: 1px solid #e5e7eb; background-color: white; border-radius: 0 0 0.5rem 0.5rem;">
+                        <p style="margin: 0 0 0.75rem 0; font-size: 0.875rem; color: #6b7280; display: flex; align-items: center; gap: 0.5rem;">💡 Add ingredients to avoid (comma-separated or one at a time)</p>
+                        <div style="position: relative; margin-bottom: 1rem;">
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text"
+                                       style="flex: 1; padding: 0.625rem 1rem; border: 1px solid #d1d5db; border-radius: 0.5rem; font-size: 0.9375rem; transition: border-color 0.2s, box-shadow 0.2s;"
+                                       placeholder="Type ingredient(s) to avoid: annatto, palm oil, MSG..."
+                                       @bind="_customInput"
+                                       @bind:event="oninput"
+                                       @bind:after="OnCustomInputChanged"
+                                       @onkeydown="HandleAutocompleteKeyDown"
+                                       @onkeydown:preventDefault="@_preventTabDefault"
+                                       @onpaste="HandlePaste"
+                                       @onfocus="() => _showAutocomplete = true" />
+                                <button style="background-color: #2563eb; color: white; border: none; padding: 0 1.25rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s;" @onclick="AddCustomRestriction">+ Add</button>
+                            </div>
+
+                            <!-- Autocomplete Dropdown -->
+                            @if (_showAutocomplete && _filteredIngredients.Any() && !string.IsNullOrWhiteSpace(_customInput))
+                            {
+                                <div style="position: absolute; top: 100%; left: 0; right: 0; background-color: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); z-index: 20; margin-top: 0.25rem; max-height: 250px; overflow-y: auto;">
+                                    <div style="padding: 0.5rem 1rem; font-size: 0.75rem; font-weight: 600; color: #6b7280; background-color: #f9fafb; border-bottom: 1px solid #f3f4f6; text-transform: uppercase;">Suggestions (↓↑ arrows to navigate, Tab/Enter to select):</div>
+                                    @for (int i = 0; i < Math.Min(_filteredIngredients.Count, 8); i++)
+                                    {
+                                        var ingredient = _filteredIngredients[i];
+                                        var isSelected = i == _selectedAutocompleteIndex;
+                                        <button style="display: block; width: 100%; text-align: left; padding: 0.625rem 1rem; background: @(isSelected ? "#eff6ff" : "none"); border: none; cursor: pointer; font-size: 0.9375rem; color: @(isSelected ? "#1e40af" : "#374151"); transition: background-color 0.15s;" @onclick="() => SelectIngredient(ingredient)"
+                                                onmouseover="this.style.backgroundColor='#eff6ff'; this.style.color='#1e40af';"
+                                                onmouseout="this.style.backgroundColor='@(isSelected ? "#eff6ff" : "")'; this.style.color='@(isSelected ? "#1e40af" : "#374151")';">
+                                            <span>@ingredient</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        @if (_userCustomRestrictions.Any())
+                        {
+                            <div style="margin-top: 1rem;">
+                                <small style="color: #6b7280; font-size: 0.875rem;">From your profile:</small>
+                                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.5rem;">
+                                    @foreach (var item in _userCustomRestrictions)
+                                    {
+                                        <label style="display: flex; align-items: center; gap: 0.625rem; padding: 0.75rem 1rem; background-color: #2563eb; border: 2px solid #1e40af; border-radius: 0.5rem; cursor: pointer; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); transition: all 0.2s ease;">
+                                            <input type="checkbox"
+                                                   style="cursor: pointer; width: 1.125rem; height: 1.125rem; accent-color: white;"
+                                                   checked="@_activeFilters.Contains(item)"
+                                                   @onchange="() => ToggleFilter(item)" />
+                                            <span style="font-size: 0.875rem; color: white; user-select: none; font-weight: 500;">@item</span>
+                                        </label>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Active Filters Summary -->
+            @if (_activeFilters.Any())
+            {
+                <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 2px solid #2563eb;">
+                    <h4 style="margin: 0 0 1rem 0; font-size: 1rem; font-weight: 600; color: #2563eb;">Active Filters (@_activeFilters.Count)</h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                        @foreach (var filter in _activeFilters)
+                        {
+                            <span style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background-color: #2563eb; border: 1px solid #1e40af; border-radius: 9999px; color: white; font-size: 0.875rem; font-weight: 500;">
+                                @filter
+                                <button style="background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; border-radius: 50%; width: 1.25rem; height: 1.25rem;" @onclick="() => RemoveFilter(filter)">✖</button>
+                            </span>
+                        }
+                    </div>
+                    <button style="background-color: #ef4444; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; cursor: pointer;" @onclick="ClearAllFilters">Clear All</button>
+                </div>
+            }
+            </div> <!-- End Complete Dietary Filters Group -->
+        </div>
+    }
+</div>
+
+<!-- Custom Save Dialog -->
+@if (_showSaveDialog)
+{
+    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 9999;" @onclick="() => _showSaveDialog = false">
+        <div style="background: white; border-radius: 1rem; padding: 2rem; max-width: 500px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);" @onclick:stopPropagation="true">
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <span style="font-size: 2.5rem;">💾</span>
+                <h3 style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #111827;">Save Dietary Filters?</h3>
+            </div>
+
+            <p style="color: #6b7280; margin-bottom: 2rem; line-height: 1.6;">
+                You have unsaved dietary filter changes. Would you like to save them to your profile before leaving?
+            </p>
+
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button style="background-color: #f3f4f6; color: #374151; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s;"
+                        @onclick="DontSaveAndContinue"
+                        onmouseover="this.style.backgroundColor='#e5e7eb'"
+                        onmouseout="this.style.backgroundColor='#f3f4f6'">
+                    Don't Save
+                </button>
+                <button style="background-color: #2563eb; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s;"
+                        @onclick="SaveAndContinue"
+                        onmouseover="this.style.backgroundColor='#1d4ed8'"
+                        onmouseout="this.style.backgroundColor='#2563eb'">
+                    Save & Continue
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public EventCallback<List<string>> OnFiltersChanged { get; set; }
+
+    [Parameter]
+    public List<string> InitialFilters { get; set; } = new();
+
+    [Parameter]
+    public bool AutoLoadUserProfile { get; set; } = true;
+
+    // State
+    private bool _isExpanded = true;
+    private bool _restrictionsEnabled = true; // Toggle to enable/disable all restrictions
+    private bool _religiousExpanded = false;
+    private bool _dietExpanded = false;
+    private bool _allergenExpanded = true; // Allergens expanded by default
+    private bool _customExpanded = false;
+
+    // Hover states for collapsible sections
+    private bool _religiousHover = false;
+    private bool _dietHover = false;
+    private bool _allergenHover = false;
+    private bool _customHover = false;
+
+    private FilterTarget _filterTarget = FilterTarget.Me;
+    private HashSet<Guid> _selectedFamilyMemberIds = new();
+    private List<string> _activeFilters = new();
+    private List<string> _initialFilters = new(); // Track initial state for comparison
+    private string _customInput = string.Empty;
+
+    private IDisposable? _locationChangingRegistration;
+    private bool _showSaveDialog = false;
+    private string _pendingNavigationUrl = string.Empty;
+
+    // Autocomplete
+    private bool _showAutocomplete = false;
+    private List<string> _filteredIngredients = new();
+    private int _selectedAutocompleteIndex = -1;
+    private bool _preventTabDefault = false; // Only prevent Tab when autocomplete is active
+
+    // User data
+    private UserProfileDto? _userProfile;
+    private List<FamilyMemberDto> _familyMembers = new();
+    private List<string> _userCustomRestrictions = new();
+
+    // Filter definitions
+    private readonly List<FilterDefinition> _religiousRestrictions = new()
+    {
+        new("Kosher", "Jewish dietary laws - no pork, shellfish, or mixing meat and dairy"),
+        new("Halal", "Islamic dietary laws - no pork, alcohol, or non-halal meat"),
+        new("No Pork", "Excludes pork and pork-derived products"),
+        new("No Beef", "Excludes beef and beef-derived products"),
+        new("No Alcohol", "Excludes alcohol and alcohol-containing ingredients"),
+        new("Jain", "No root vegetables, onions, garlic, or animal products")
+    };
+
+    private readonly List<FilterDefinition> _dietRestrictions = new()
+    {
+        new("Vegan", "No animal products (meat, dairy, eggs, honey)"),
+        new("Vegetarian", "No meat or fish, but dairy and eggs allowed"),
+        new("Pescatarian", "Vegetarian plus fish/seafood allowed"),
+        new("Plant-Based", "Focuses on whole plant foods, minimal animal products"),
+        new("Whole30", "No grains, dairy, legumes, sugar, or processed foods"),
+        new("Paleo", "No grains, dairy, legumes, or processed foods"),
+        new("Keto", "Very low carb, high fat diet"),
+        new("Low-Carb", "Reduced carbohydrate intake"),
+        new("Raw", "Uncooked, unprocessed plant foods")
+    };
+
+    private readonly List<FilterDefinition> _allergenRestrictions = new()
+    {
+        new("Gluten", "Wheat, barley, rye, and related proteins"),
+        new("Dairy", "Milk and milk-derived products"),
+        new("Eggs", "Eggs and egg-derived products"),
+        new("Fish", "All fish species"),
+        new("Shellfish", "Crustaceans and mollusks"),
+        new("Tree Nuts", "Almonds, cashews, walnuts, etc."),
+        new("Peanuts", "Peanuts and peanut-derived products"),
+        new("Wheat", "Wheat and wheat-derived products"),
+        new("Soy", "Soybeans and soy-derived products"),
+        new("Sesame", "Sesame seeds and sesame oil"),
+        new("Corn", "Corn and corn-derived products"),
+        new("Sulfites", "Sulfur dioxide and sulfite preservatives"),
+        new("Mustard", "Mustard seeds and mustard products")
+    };
+
+    // Dietary/Religious restriction to ingredient mapping
+    private readonly Dictionary<string, List<string>> _restrictionMapping = new()
+    {
+        ["Vegan"] = new() { "Meat", "Beef", "Pork", "Chicken", "Turkey", "Lamb", "Fish", "Shellfish", "Dairy", "Milk", "Cheese", "Butter", "Cream", "Yogurt", "Eggs", "Egg Whites", "Egg Yolks", "Honey", "Gelatin", "Whey", "Casein", "Rennet", "Albumin", "Anchovies", "Anchovy" },
+        ["Vegetarian"] = new() { "Meat", "Beef", "Pork", "Chicken", "Turkey", "Lamb", "Fish", "Shellfish", "Gelatin", "Anchovies", "Anchovy", "Fish Sauce" },
+        ["Pescatarian"] = new() { "Meat", "Beef", "Pork", "Chicken", "Turkey", "Lamb", "Gelatin (Pork)", "Gelatin (Beef)" },
+        ["Kosher"] = new() { "Pork", "Bacon", "Ham", "Shellfish", "Shrimp", "Crab", "Lobster", "Clams", "Oysters", "Scallops", "Gelatin (Pork)" },
+        ["Halal"] = new() { "Pork", "Bacon", "Ham", "Alcohol", "Beer", "Wine", "Cooking Wine", "Rum Extract", "Vanilla Extract", "Gelatin (Pork)" },
+        ["No Pork"] = new() { "Pork", "Bacon", "Ham", "Gelatin (Pork)" },
+        ["No Beef"] = new() { "Beef", "Gelatin (Beef)" },
+        ["No Alcohol"] = new() { "Alcohol", "Beer", "Wine", "Cooking Wine", "Red Wine", "White Wine", "Rum Extract", "Vanilla Extract", "Wine Vinegar", "Malt Vinegar" },
+        ["Jain"] = new() { "Meat", "Fish", "Eggs", "Root Vegetables", "Potatoes", "Onion", "Garlic", "Carrots", "Beets", "Radishes", "Turnips", "Ginger", "Yams", "Sweet Potatoes" },
+        ["Paleo"] = new() { "Grains", "Wheat", "Rice", "Oats", "Barley", "Corn", "Dairy", "Milk", "Cheese", "Legumes", "Beans", "Peanuts", "Soy", "Tofu", "Sugar", "Processed Foods" },
+        ["Keto"] = new() { "Sugar", "High Fructose Corn Syrup", "Grains", "Wheat", "Rice", "Oats", "Corn", "Bread", "Pasta", "Potatoes", "Sweet Potatoes" },
+        ["Whole30"] = new() { "Grains", "Wheat", "Rice", "Dairy", "Legumes", "Beans", "Peanuts", "Soy", "Sugar", "Alcohol", "Processed Foods", "Additives" },
+        ["Plant-Based"] = new() { "Meat", "Beef", "Pork", "Chicken", "Fish", "Shellfish", "Dairy", "Eggs" },
+        ["Low-Carb"] = new() { "Sugar", "High Fructose Corn Syrup", "Grains", "Wheat", "Rice", "Bread", "Pasta", "Potatoes" },
+        ["Raw"] = new() { "Cooked Foods", "Processed Foods", "Pasteurized Dairy" }
+    };
+
+    // Common ingredients/additives for autocomplete
+    private readonly List<string> _commonIngredients = new()
+    {
+        // Additives & Preservatives
+        "Annatto", "Aspartame", "Benzoates", "BHA", "BHT", "Carrageenan",
+        "Gelatin", "High Fructose Corn Syrup", "MSG", "Monosodium Glutamate",
+        "Nitrates", "Nitrites", "Palm Oil", "Polysorbate", "Propylene Glycol",
+        "Red Dye 40", "Sodium Benzoate", "Sucralose", "TBHQ", "Xanthan Gum",
+        "Yellow 5", "Yellow 6", "Tartrazine", "Carmine", "Cochineal",
+
+        // Sweeteners
+        "Acesulfame K", "Erythritol", "Maltitol", "Saccharin", "Stevia",
+        "Sugar Alcohols", "Sorbitol", "Xylitol", "Monk Fruit",
+
+        // Oils & Fats
+        "Canola Oil", "Coconut Oil", "Cottonseed Oil", "Hydrogenated Oil",
+        "Partially Hydrogenated Oil", "Safflower Oil", "Sunflower Oil",
+        "Trans Fats", "Vegetable Oil", "Soybean Oil",
+
+        // Grains & Starches
+        "Barley", "Buckwheat", "Corn Starch", "Malt", "Oats", "Rice",
+        "Rye", "Semolina", "Spelt", "Tapioca", "Wheat Flour",
+
+        // Proteins & Derivatives
+        "Albumin", "Casein", "Collagen", "Hydrolyzed Protein", "Lactose",
+        "Rennet", "Whey", "Whey Protein", "Egg Whites", "Egg Yolks",
+
+        // Vegetables & Aromatics
+        "Artichokes", "Arugula", "Asparagus", "Avocado", "Bell Peppers", "Beets",
+        "Bok Choy", "Broccoli", "Brussels Sprouts", "Cabbage", "Carrots", "Cauliflower",
+        "Celery", "Chard", "Collard Greens", "Corn", "Cucumbers", "Eggplant",
+        "Endive", "Fennel", "Garlic", "Green Beans", "Jicama", "Kale",
+        "Leeks", "Lettuce", "Mushrooms", "Mustard Greens", "Nightshades", "Okra",
+        "Onion", "Parsnips", "Peas", "Peppers", "Pickles", "Potatoes",
+        "Pumpkin", "Radicchio", "Radishes", "Rutabaga", "Scallions", "Shallots",
+        "Snap Peas", "Spinach", "Squash", "Sweet Potatoes", "Tomatoes", "Turnips",
+        "Watercress", "Yams", "Zucchini", "Root Vegetables",
+
+        // Fruits & Derivatives
+        "Apples", "Apricots", "Avocados", "Bananas", "Blackberries", "Blueberries",
+        "Cantaloupe", "Cherries", "Citric Acid", "Citrus", "Coconut", "Cranberries",
+        "Dates", "Dragonfruit", "Figs", "Grapefruit", "Grapes", "Guava",
+        "Honeydew", "Kiwi", "Lemon", "Lime", "Mango", "Nectarines",
+        "Olives", "Orange", "Papaya", "Passion Fruit", "Peaches", "Pears",
+        "Persimmons", "Pineapple", "Plums", "Pomegranate", "Prunes", "Raisins",
+        "Raspberries", "Strawberries", "Tangerines", "Watermelon",
+
+        // Nuts & Seeds (specific)
+        "Almonds", "Brazil Nuts", "Cashews", "Chia Seeds", "Flax Seeds",
+        "Hazelnuts", "Hemp Seeds", "Macadamia Nuts", "Pecans", "Pine Nuts",
+        "Pistachios", "Poppy Seeds", "Pumpkin Seeds", "Sunflower Seeds",
+        "Walnuts",
+
+        // Seafood (specific)
+        "Anchovy", "Clams", "Cod", "Crab", "Lobster", "Oysters", "Salmon",
+        "Sardines", "Scallops", "Shrimp", "Tilapia", "Tuna",
+
+        // Meat & Poultry
+        "Bacon", "Beef", "Chicken", "Duck", "Lamb", "Pork", "Turkey",
+        "Veal", "Venison", "Gelatin (Pork)", "Gelatin (Beef)",
+
+        // Dairy (specific)
+        "Butter", "Buttermilk", "Cheese", "Cream", "Ghee", "Ice Cream",
+        "Milk Powder", "Sour Cream", "Yogurt", "Kefir",
+
+        // Legumes
+        "Black Beans", "Chickpeas", "Kidney Beans", "Lentils", "Lima Beans",
+        "Peanut Butter", "Pinto Beans", "Soybeans", "Tofu", "Tempeh",
+
+        // Condiments & Sauces
+        "Fish Sauce", "Horseradish", "Ketchup", "Mayonnaise", "Ranch Dressing",
+        "Soy Sauce", "Sriracha", "Tamari", "Teriyaki", "Vinegar",
+        "Worcestershire Sauce",
+
+        // Spices & Herbs
+        "Basil", "Bay Leaf", "Cayenne", "Chili Powder", "Cilantro", "Cinnamon",
+        "Cloves", "Coriander", "Cumin", "Curry", "Dill", "Fennel", "Ginger",
+        "Mint", "Nutmeg", "Oregano", "Paprika", "Parsley", "Rosemary",
+        "Sage", "Thyme", "Turmeric", "Vanilla",
+
+        // Alcohol & Derivatives
+        "Alcohol", "Beer", "Cooking Wine", "Malt Vinegar", "Red Wine",
+        "Rum Extract", "Vanilla Extract", "White Wine", "Wine Vinegar",
+
+        // Caffeine
+        "Caffeine", "Coffee", "Green Tea", "Black Tea", "Chocolate",
+        "Cocoa", "Energy Drinks",
+
+        // Other Common
+        "Artificial Flavors", "Artificial Colors", "Bleached Flour",
+        "Brominated Vegetable Oil", "Caramel Color", "Dextrose", "Fructose",
+        "Glucose", "Honey", "Lecithin", "Maltodextrin", "Modified Food Starch",
+        "Natural Flavors", "Pectin", "Starch", "Yeast", "Yeast Extract"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load restrictions enabled state from localStorage
+        try
+        {
+            var enabledStr = await JS.InvokeAsync<string>("localStorage.getItem", "dietaryRestrictionsEnabled");
+            if (!string.IsNullOrEmpty(enabledStr))
+            {
+                _restrictionsEnabled = bool.Parse(enabledStr);
+            }
+        }
+        catch { /* Ignore localStorage errors */ }
+
+        // Load cached filters from localStorage (preserves across navigation)
+        try
+        {
+            var cachedFiltersJson = await JS.InvokeAsync<string>("localStorage.getItem", "dietaryFiltersCache");
+            if (!string.IsNullOrEmpty(cachedFiltersJson))
+            {
+                var cachedFilters = System.Text.Json.JsonSerializer.Deserialize<List<string>>(cachedFiltersJson);
+                if (cachedFilters != null && cachedFilters.Any())
+                {
+                    _activeFilters = cachedFilters;
+                }
+            }
+        }
+        catch { /* Ignore cache errors */ }
+
+        if (AutoLoadUserProfile)
+        {
+            await LoadUserProfile();
+        }
+
+        if (InitialFilters.Any())
+        {
+            _activeFilters = new List<string>(InitialFilters);
+        }
+
+        // Save initial state for change tracking
+        _initialFilters = new List<string>(_activeFilters);
+
+        // Register navigation guard to prompt save on exit
+        _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (!HasUnsavedChanges())
+            return;
+
+        // Don't prompt when navigating within product pages (e.g., to product details)
+        var targetPath = context.TargetLocation;
+        var isProductNavigation = targetPath.Contains("/products/", StringComparison.OrdinalIgnoreCase) ||
+                                  targetPath.Contains("/product-details", StringComparison.OrdinalIgnoreCase);
+
+        if (isProductNavigation)
+        {
+            // Allow navigation to product pages without prompting
+            return;
+        }
+
+        // Show custom save dialog
+        _showSaveDialog = true;
+        context.PreventNavigation();
+
+        // Store the target location for later
+        _pendingNavigationUrl = targetPath;
+        StateHasChanged();
+    }
+
+    private bool HasUnsavedChanges()
+    {
+        // Check if current filters differ from initial filters
+        if (_activeFilters.Count != _initialFilters.Count)
+            return true;
+
+        return _activeFilters.Except(_initialFilters).Any() || _initialFilters.Except(_activeFilters).Any();
+    }
+
+    private async Task SaveFiltersToProfile()
+    {
+        try
+        {
+            // TODO: Implement API call to save filters to user profile
+            // await UserProfileClient.UpdateDietaryFiltersAsync(_activeFilters);
+
+            // Update initial filters to match current (now saved)
+            _initialFilters = new List<string>(_activeFilters);
+
+            Console.WriteLine($"[UnifiedDietaryFilter] Saved {_activeFilters.Count} filters to profile");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UnifiedDietaryFilter] Error saving filters: {ex.Message}");
+        }
+    }
+
+    private async Task SaveAndContinue()
+    {
+        _showSaveDialog = false;
+        await SaveFiltersToProfile();
+
+        // Navigate to the pending URL
+        if (!string.IsNullOrEmpty(_pendingNavigationUrl))
+        {
+            Navigation.NavigateTo(_pendingNavigationUrl);
+        }
+    }
+
+    private void DontSaveAndContinue()
+    {
+        _showSaveDialog = false;
+
+        // Navigate to the pending URL without saving
+        if (!string.IsNullOrEmpty(_pendingNavigationUrl))
+        {
+            Navigation.NavigateTo(_pendingNavigationUrl);
+        }
+    }
+
+    public void Dispose()
+    {
+        _locationChangingRegistration?.Dispose();
+    }
+
+    private async Task OnCustomInputChanged()
+    {
+        // Check if user just typed a comma - auto-add the item before the comma
+        if (_customInput.EndsWith(",") || _customInput.EndsWith(", "))
+        {
+            await ProcessCommaInput();
+        }
+        else
+        {
+            _showAutocomplete = true;
+            _selectedAutocompleteIndex = -1; // Reset selection when typing
+            UpdateAutocompleteFiltering();
+            _preventTabDefault = false; // Don't prevent default while typing - only when navigating with arrows
+        }
+    }
+
+    private async Task ProcessCommaInput()
+    {
+        // Extract all comma-separated items
+        var items = _customInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .ToList();
+
+        if (!items.Any())
+        {
+            _showAutocomplete = false;
+            return;
+        }
+
+        // Add all items except the last empty one (after the trailing comma)
+        foreach (var item in items)
+        {
+            var restriction = char.ToUpper(item[0]) + item.Substring(1).ToLower();
+            if (!_activeFilters.Any(f => f.Equals(restriction, StringComparison.OrdinalIgnoreCase)))
+            {
+                _activeFilters.Add(restriction);
+            }
+        }
+
+        await NotifyChange();
+
+        // Keep the comma in the input for continuing to type, but close autocomplete
+        _showAutocomplete = false;
+        _filteredIngredients.Clear();
+        _selectedAutocompleteIndex = -1;
+        _preventTabDefault = false;
+    }
+
+    private async Task HandlePaste(ClipboardEventArgs e)
+    {
+        // Wait a moment for the paste to complete, then process
+        await Task.Delay(50);
+
+        // Check if pasted content contains commas - if so, auto-parse
+        if (_customInput.Contains(','))
+        {
+            var items = _customInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToList();
+
+            foreach (var item in items)
+            {
+                var restriction = char.ToUpper(item[0]) + item.Substring(1).ToLower();
+                if (!_activeFilters.Any(f => f.Equals(restriction, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _activeFilters.Add(restriction);
+                }
+            }
+
+            await NotifyChange();
+
+            // Clear the input after paste processing
+            _customInput = string.Empty;
+            _showAutocomplete = false;
+            _filteredIngredients.Clear();
+        }
+    }
+
+    private async Task HandleAutocompleteKeyDown(KeyboardEventArgs e)
+    {
+        if (!_showAutocomplete || !_filteredIngredients.Any())
+        {
+            _preventTabDefault = false; // Allow normal Tab behavior when no dropdown
+            // If dropdown not showing, handle Enter to add custom input
+            if (e.Key == "Enter")
+            {
+                await AddCustomRestriction();
+            }
+            return;
+        }
+
+        var maxIndex = Math.Min(_filteredIngredients.Count, 8) - 1;
+
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                // Entering navigation mode - prevent Tab from leaving input
+                if (_selectedAutocompleteIndex < 0)
+                {
+                    _selectedAutocompleteIndex = 0; // Start at first item
+                }
+                else
+                {
+                    _selectedAutocompleteIndex = _selectedAutocompleteIndex < maxIndex
+                        ? _selectedAutocompleteIndex + 1
+                        : 0; // Wrap to top
+                }
+                _preventTabDefault = true; // Now in navigation mode - prevent Tab from moving focus
+                break;
+
+            case "ArrowUp":
+                // Entering or continuing navigation mode
+                if (_selectedAutocompleteIndex < 0)
+                {
+                    _selectedAutocompleteIndex = maxIndex; // Start at last item
+                }
+                else
+                {
+                    _selectedAutocompleteIndex = _selectedAutocompleteIndex > 0
+                        ? _selectedAutocompleteIndex - 1
+                        : maxIndex; // Wrap to bottom
+                }
+                _preventTabDefault = true; // Now in navigation mode - prevent Tab from moving focus
+                break;
+
+            case "Tab":
+            case "Enter":
+                if (_selectedAutocompleteIndex >= 0 && _selectedAutocompleteIndex <= maxIndex)
+                {
+                    // Select the highlighted suggestion
+                    await SelectIngredient(_filteredIngredients[_selectedAutocompleteIndex]);
+                    _preventTabDefault = false; // Exit navigation mode
+                }
+                else if (e.Key == "Enter")
+                {
+                    // Enter without navigation adds custom input
+                    await AddCustomRestriction();
+                }
+                // Tab without navigation does nothing - allows normal Tab behavior to next control
+                break;
+
+            case "Escape":
+                _showAutocomplete = false;
+                _selectedAutocompleteIndex = -1;
+                _filteredIngredients.Clear();
+                _preventTabDefault = false; // Exit navigation mode
+                break;
+        }
+    }
+
+    private void UpdateAutocompleteFiltering()
+    {
+        if (string.IsNullOrWhiteSpace(_customInput))
+        {
+            _filteredIngredients.Clear();
+            _showAutocomplete = false;
+            return;
+        }
+
+        // Get the last item being typed (for comma-separated input)
+        var items = _customInput.Split(',');
+        var currentItem = items.LastOrDefault()?.Trim() ?? "";
+
+        if (string.IsNullOrWhiteSpace(currentItem))
+        {
+            _filteredIngredients.Clear();
+            return;
+        }
+
+        _filteredIngredients = _commonIngredients
+            .Where(i => i.Contains(currentItem, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(i => i.StartsWith(currentItem, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(i => i)
+            .ToList();
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                // TODO: Uncomment when API is ready
+                // _userProfile = await UserProfileClient.GetMyProfileAsync();
+                // _familyMembers = _userProfile?.FamilyMembers ?? new();
+
+                // Load user's allergens and custom restrictions
+                // _userCustomRestrictions = _userProfile?.IngredientsToAvoid ?? new();
+
+                // Auto-add user's allergens to active filters
+                // if (_filterTarget == FilterTarget.Me && _userProfile != null)
+                // {
+                //     foreach (var allergen in _userProfile.Allergens)
+                //     {
+                //         if (!_activeFilters.Contains(allergen))
+                //         {
+                //             _activeFilters.Add(allergen);
+                //         }
+                //     }
+                //     await NotifyChange();
+                // }
+
+                // Placeholder for testing
+                _userProfile = new UserProfileDto { UserId = Guid.NewGuid(), Email = user.Identity.Name ?? "" };
+                _familyMembers = new List<FamilyMemberDto>();
+                _userCustomRestrictions = new List<string>();
+            }
+        }
+        catch (Exception)
+        {
+            // Silently fail - user can still use filters manually
+        }
+    }
+
+    private void ToggleExpanded()
+    {
+        _isExpanded = !_isExpanded;
+    }
+
+    private async Task ToggleRestrictions()
+    {
+        _restrictionsEnabled = !_restrictionsEnabled;
+
+        // Save to localStorage
+        await JS.InvokeVoidAsync("localStorage.setItem", "dietaryRestrictionsEnabled", _restrictionsEnabled.ToString());
+
+        // Notify change - send empty filters if disabled
+        await NotifyChange();
+    }
+
+    private async Task SetFilterTarget(FilterTarget target)
+    {
+        _filterTarget = target;
+        _selectedFamilyMemberIds.Clear();
+        await RecalculateFilters();
+    }
+
+    private async Task ToggleFamilyMember(Guid memberId)
+    {
+        _filterTarget = FilterTarget.Custom;
+
+        if (_selectedFamilyMemberIds.Contains(memberId))
+        {
+            _selectedFamilyMemberIds.Remove(memberId);
+        }
+        else
+        {
+            _selectedFamilyMemberIds.Add(memberId);
+        }
+
+        await RecalculateFilters();
+    }
+
+    private async Task RecalculateFilters()
+    {
+        _activeFilters.Clear();
+
+        if (_userProfile == null) return;
+
+        switch (_filterTarget)
+        {
+            case FilterTarget.Me:
+                // Add user's allergens and dietary restrictions
+                if (_userProfile.Allergens != null)
+                    _activeFilters.AddRange(_userProfile.Allergens);
+                if (_userProfile.DietaryRestrictions != null)
+                    _activeFilters.AddRange(_userProfile.DietaryRestrictions);
+                if (_userProfile.IngredientsToAvoid != null)
+                    _activeFilters.AddRange(_userProfile.IngredientsToAvoid);
+                break;
+
+            case FilterTarget.Everyone:
+                // Add all family members' restrictions
+                if (_userProfile.Allergens != null)
+                    _activeFilters.AddRange(_userProfile.Allergens);
+                if (_userProfile.DietaryRestrictions != null)
+                    _activeFilters.AddRange(_userProfile.DietaryRestrictions);
+                if (_userProfile.IngredientsToAvoid != null)
+                    _activeFilters.AddRange(_userProfile.IngredientsToAvoid);
+
+                foreach (var member in _familyMembers)
+                {
+                    if (member.Allergens != null)
+                        _activeFilters.AddRange(member.Allergens);
+                    if (member.DietaryRestrictions != null)
+                        _activeFilters.AddRange(member.DietaryRestrictions);
+                    if (member.IngredientsToAvoid != null)
+                        _activeFilters.AddRange(member.IngredientsToAvoid);
+                }
+                break;
+
+            case FilterTarget.Custom:
+                // Add selected family members' restrictions
+                foreach (var memberId in _selectedFamilyMemberIds)
+                {
+                    var member = _familyMembers.FirstOrDefault(m => m.Id == memberId);
+                    if (member != null)
+                    {
+                        if (member.Allergens != null)
+                            _activeFilters.AddRange(member.Allergens);
+                        if (member.DietaryRestrictions != null)
+                            _activeFilters.AddRange(member.DietaryRestrictions);
+                        if (member.IngredientsToAvoid != null)
+                            _activeFilters.AddRange(member.IngredientsToAvoid);
+                    }
+                }
+                break;
+        }
+
+        // Remove duplicates
+        _activeFilters = _activeFilters.Distinct().ToList();
+
+        await NotifyChange();
+    }
+
+    private async Task ToggleFilter(string filterName)
+    {
+        if (_activeFilters.Contains(filterName))
+        {
+            // Remove the filter
+            _activeFilters.Remove(filterName);
+
+            // Also remove any mapped ingredients if this was a dietary/religious restriction
+            if (_restrictionMapping.ContainsKey(filterName))
+            {
+                var mappedIngredients = _restrictionMapping[filterName];
+                foreach (var ingredient in mappedIngredients)
+                {
+                    _activeFilters.Remove(ingredient);
+                }
+            }
+        }
+        else
+        {
+            // Add the filter
+            _activeFilters.Add(filterName);
+
+            // If this is a dietary/religious restriction, also add all mapped ingredients
+            if (_restrictionMapping.ContainsKey(filterName))
+            {
+                var mappedIngredients = _restrictionMapping[filterName];
+                foreach (var ingredient in mappedIngredients)
+                {
+                    if (!_activeFilters.Contains(ingredient))
+                    {
+                        _activeFilters.Add(ingredient);
+                    }
+                }
+            }
+        }
+
+        await NotifyChange();
+    }
+
+    private async Task RemoveFilter(string filterName)
+    {
+        _activeFilters.Remove(filterName);
+        await NotifyChange();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        _activeFilters.Clear();
+        _filterTarget = FilterTarget.Custom;
+        _selectedFamilyMemberIds.Clear();
+        await NotifyChange();
+    }
+
+    private async Task HandleCustomInputKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddCustomRestriction();
+        }
+    }
+
+    private async Task AddCustomRestriction()
+    {
+        if (string.IsNullOrWhiteSpace(_customInput))
+            return;
+
+        // Split by comma to support comma-separated input
+        var items = _customInput.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var addedCount = 0;
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item))
+                continue;
+
+            // Capitalize first letter
+            var restriction = char.ToUpper(item[0]) + item.Substring(1).ToLower();
+
+            // Check for duplicates (case-insensitive)
+            if (!_activeFilters.Any(f => f.Equals(restriction, StringComparison.OrdinalIgnoreCase)))
+            {
+                _activeFilters.Add(restriction);
+                addedCount++;
+            }
+        }
+
+        if (addedCount > 0)
+        {
+            await NotifyChange();
+        }
+
+        _customInput = string.Empty;
+        _showAutocomplete = false;
+        _filteredIngredients.Clear();
+    }
+
+    private async Task SelectIngredient(string ingredient)
+    {
+        // Add the selected ingredient directly to active filters
+        if (!_activeFilters.Contains(ingredient))
+        {
+            _activeFilters.Add(ingredient);
+            await NotifyChange();
+        }
+
+        // Handle comma-separated input: replace the last incomplete item with the selected ingredient
+        if (_customInput.Contains(','))
+        {
+            var items = _customInput.Split(',').Select(s => s.Trim()).ToList();
+            items[items.Count - 1] = ingredient; // Replace last item with selected ingredient
+            _customInput = string.Join(", ", items) + ", "; // Keep comma for continuing to add more
+        }
+        else
+        {
+            // Single item - clear and allow adding more
+            _customInput = ingredient + ", ";
+        }
+
+        _showAutocomplete = false;
+        _filteredIngredients.Clear();
+        _selectedAutocompleteIndex = -1;
+        _preventTabDefault = false; // Re-enable normal Tab behavior
+    }
+
+    private async Task NotifyChange()
+    {
+        // Cache filters to localStorage for persistence across navigation
+        try
+        {
+            var filtersJson = System.Text.Json.JsonSerializer.Serialize(_activeFilters);
+            await JS.InvokeVoidAsync("localStorage.setItem", "dietaryFiltersCache", filtersJson);
+        }
+        catch { /* Ignore localStorage errors */ }
+
+        // Send empty list if restrictions are disabled, otherwise send active filters
+        var filtersToSend = _restrictionsEnabled ? _activeFilters : new List<string>();
+        await OnFiltersChanged.InvokeAsync(filtersToSend);
+    }
+
+    private enum FilterTarget
+    {
+        Me,
+        Everyone,
+        Custom
+    }
+
+    private record FilterDefinition(string Name, string Description);
+}

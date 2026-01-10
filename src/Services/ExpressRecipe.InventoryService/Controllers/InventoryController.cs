@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using ExpressRecipe.InventoryService.Data;
 
 namespace ExpressRecipe.InventoryService.Controllers;
 
@@ -150,7 +151,7 @@ public class InventoryController : ControllerBase
         var userId = GetUserId();
         _logger.LogInformation("Getting usage history for item {ItemId}", id);
 
-        var history = await _repository.GetItemHistoryAsync(id, limit);
+        var history = await _repository.GetUsageHistoryAsync(id, limit);
         return Ok(history);
     }
 }

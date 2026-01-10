@@ -90,11 +90,32 @@ public class RecipeCommentDto
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }
     public DateTime CreatedAt { get; set; }
-    public int LikeCount { get; set; }
-    public bool UserHasLiked { get; set; }
 
-    // Navigation properties
+    // Extended / compatibility fields
+    public int LikeCount { get; set; }
+    public int LikesCount { get; set; }
+    public int DislikesCount { get; set; }
+    public bool UserHasLiked { get; set; }
+    public int? Rating { get; set; }
+    public bool IsFlagged { get; set; }
+    public string? FlagReason { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+
     public List<RecipeCommentDto>? Replies { get; set; }
+}
+
+public class CreateRecipeCommentRequest
+{
+    public Guid RecipeId { get; set; }
+    public Guid? ParentCommentId { get; set; }
+    public string CommentText { get; set; } = string.Empty;
+    public int? Rating { get; set; }
+}
+
+public class UpdateRecipeCommentRequest
+{
+    public string CommentText { get; set; } = string.Empty;
+    public int? Rating { get; set; }
 }
 
 public class ProductCommentDto
@@ -112,8 +133,6 @@ public class ProductCommentDto
     public DateTime CreatedAt { get; set; }
     public int LikeCount { get; set; }
     public bool UserHasLiked { get; set; }
-
-    // Navigation properties
     public List<ProductCommentDto>? Replies { get; set; }
 }
 
@@ -132,8 +151,6 @@ public class RestaurantCommentDto
     public DateTime CreatedAt { get; set; }
     public int LikeCount { get; set; }
     public bool UserHasLiked { get; set; }
-
-    // Navigation properties
     public List<RestaurantCommentDto>? Replies { get; set; }
 }
 
@@ -151,48 +168,6 @@ public class IngredientCommentDto
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }
     public DateTime CreatedAt { get; set; }
-    public int LikeCount { get; set; }
-    public bool UserHasLiked { get; set; }
-
-    // Navigation properties
-    public List<IngredientCommentDto>? Replies { get; set; }
-}
-
-public class CreateCommentRequest
-{
-    [Required]
-    public Guid EntityId { get; set; }
-
-    public Guid? ParentCommentId { get; set; }
-
-    [Required]
-    [StringLength(5000)]
-    public string CommentText { get; set; } = string.Empty;
-}
-
-public class UpdateCommentRequest
-{
-    [Required]
-    [StringLength(5000)]
-    public string CommentText { get; set; } = string.Empty;
-}
-
-public class CommentLikeDto
-{
-    public Guid Id { get; set; }
-    public string CommentType { get; set; } = string.Empty; // Recipe, Product, Restaurant, Ingredient
-    public Guid CommentId { get; set; }
-    public Guid UserId { get; set; }
-    public DateTime CreatedAt { get; set; }
-}
-
-public class LikeCommentRequest
-{
-    [Required]
-    public string CommentType { get; set; } = string.Empty;
-
-    [Required]
-    public Guid CommentId { get; set; }
 }
 
 // Family Scores
@@ -306,6 +281,9 @@ public class LogActivityRequest
 
     [StringLength(50)]
     public string? DeviceType { get; set; }
+
+    [StringLength(50)]
+    public string? IPAddress { get; set; }
 }
 
 public class UserActivitySummaryDto

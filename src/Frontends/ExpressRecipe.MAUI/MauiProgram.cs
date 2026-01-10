@@ -6,7 +6,12 @@ using ExpressRecipe.MAUI.Services.Camera;
 using ExpressRecipe.MAUI.ViewModels;
 using ExpressRecipe.MAUI.Views;
 using FFImageLoading.Maui;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Hosting;
+using Microsoft.Maui.Storage;
 using ZXing.Net.Maui.Controls;
 
 namespace ExpressRecipe.MAUI;
@@ -34,7 +39,7 @@ public static class MauiProgram
 #endif
 
         // Register core services
-        ConfigureServices(builder.Services, builder.Configuration);
+        ConfigureServices(builder.Services, (IConfiguration)builder.Configuration);
 
         // Register views and view models
         RegisterViewsAndViewModels(builder.Services);
@@ -104,13 +109,30 @@ public static class MauiProgram
             client.BaseAddress = new Uri($"{apiBaseUrl}/scanner");
         });
 
+        // Configure Ollama HttpClient with proper settings
+        var ollamaUrl = configuration["Ollama:BaseUrl"] ?? "http://localhost:11434";
+        services.AddHttpClient("Ollama", client =>
+        {
+            client.BaseAddress = new Uri(ollamaUrl);
+            client.Timeout = TimeSpan.FromMinutes(2); // AI inference can take time
+        })
+        .ConfigurePrimaryHttpMessageHandler(() =>
+        {
+            return new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+                PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+                MaxConnectionsPerServer = 5
+            };
+        });
+
         // MAUI-specific services
         services.AddSingleton<IBarcodeService, BarcodeService>();
         services.AddSingleton<ICameraService, CameraService>();
         services.AddSingleton<IProductRecognitionService, ProductRecognitionService>();
         services.AddSingleton<IOllamaService, OllamaService>();
         services.AddSingleton<ICloudAIService, CloudAIService>();
-        services.AddSingleton<IToastService, ToastService>();
+        services.AddSingleton<ExpressRecipe.MAUI.Services.IToastService, ExpressRecipe.MAUI.Services.ToastService>();
         services.AddSingleton<INavigationService, NavigationService>();
 
         // SignalR Hubs

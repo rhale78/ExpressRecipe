@@ -86,6 +86,48 @@ public class UserProfileController : ControllerBase
     }
 
     /// <summary>
+    /// Create a new user profile (service-to-service call, no auth required)
+    /// </summary>
+    [HttpPost("system/create")]
+    [AllowAnonymous]
+    public async Task<ActionResult<UserProfileDto>> CreateForNewUser([FromBody] CreateUserProfileForNewUserRequest request)
+    {
+        try
+        {
+            _logger.LogInformation("Creating profile for new user {UserId} via system call", request.UserId);
+
+            // Check if profile already exists
+            if (await _repository.UserProfileExistsAsync(request.UserId))
+            {
+                _logger.LogWarning("Profile already exists for user {UserId}", request.UserId);
+                var existing = await _repository.GetByUserIdAsync(request.UserId);
+                return Ok(existing);
+            }
+
+            // Create basic profile
+            var createRequest = new CreateUserProfileRequest
+            {
+                UserId = request.UserId,
+                FirstName = request.FirstName,
+                LastName = request.LastName,
+                Email = request.Email
+            };
+
+            var profileId = await _repository.CreateAsync(createRequest, request.UserId);
+            var profile = await _repository.GetByUserIdAsync(request.UserId);
+
+            _logger.LogInformation("User profile created for new user {UserId}", request.UserId);
+
+            return Ok(profile);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user profile for new user {UserId}", request.UserId);
+            return StatusCode(500, new { message = $"Error creating profile: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
     /// Create a new user profile
     /// </summary>
     [HttpPost]

@@ -102,7 +102,7 @@ public class RecipeImportService
                 {
                     // Check for duplicates
                     var duplicate = await _recipeRepository.FindDuplicateRecipeAsync(parsedRecipe.Name, userId);
-                    if (duplicate != null)
+                    if (duplicate is not null)
                     {
                         _logger.LogWarning("Skipping duplicate recipe: {RecipeName}", parsedRecipe.Name);
                         result.FailureCount++;

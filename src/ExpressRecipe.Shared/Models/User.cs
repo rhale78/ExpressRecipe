@@ -6,12 +6,12 @@ namespace ExpressRecipe.Shared.Models;
 public class User : BaseEntity
 {
     public string Email { get; set; } = string.Empty;
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
     public bool EmailConfirmed { get; set; }
     public string? PhoneNumber { get; set; }
     public bool PhoneNumberConfirmed { get; set; }
     public bool TwoFactorEnabled { get; set; }
-    public DateTime? LockoutEnd { get; set; }
-    public bool LockoutEnabled { get; set; } = true;
     public int AccessFailedCount { get; set; }
 }
 

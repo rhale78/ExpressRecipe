@@ -1,0 +1,108 @@
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@inject NavigationManager Navigation
+@inject IAuthService AuthService
+
+<AuthorizeView>
+    <Authorized>
+        <div class="user-info">
+            <button class="user-menu-button" @onclick="ToggleUserMenu">
+                <span class="user-avatar">@GetUserInitials(context)</span>
+                <span class="user-name">@GetUserName(context)</span>
+                <span class="dropdown-arrow">▼</span>
+            </button>
+
+            @if (_showUserMenu)
+            {
+                <div class="user-dropdown-menu">
+                    <a href="/profile" class="dropdown-item" @onclick="CloseUserMenu">
+                        <span class="dropdown-icon">👤</span>
+                        My Profile
+                    </a>
+                    <a href="/settings" class="dropdown-item" @onclick="CloseUserMenu">
+                        <span class="dropdown-icon">⚙️</span>
+                        Settings
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <button @onclick="HandleLogout" class="dropdown-item logout-item">
+                        <span class="dropdown-icon">🚪</span>
+                        Logout
+                    </button>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="user-info">
+            <a href="/login" class="btn btn-outline">Login</a>
+            <a href="/register" class="btn btn-primary">Sign Up</a>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _showUserMenu = false;
+
+    private string GetUserName(AuthenticationState context)
+    {
+        var firstName = context.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+        var lastName = context.User.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value;
+        var fullName = context.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+
+        if (!string.IsNullOrEmpty(firstName) && !string.IsNullOrEmpty(lastName))
+        {
+            return $"{firstName} {lastName}";
+        }
+        else if (!string.IsNullOrEmpty(fullName))
+        {
+            return fullName;
+        }
+
+        return "User";
+    }
+
+    private string GetUserInitials(AuthenticationState context)
+    {
+        var firstName = context.User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? "";
+        var lastName = context.User.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value ?? "";
+
+        if (string.IsNullOrEmpty(firstName) && string.IsNullOrEmpty(lastName))
+        {
+            return "U";
+        }
+
+        return $"{(firstName.Length > 0 ? firstName[0] : "")}{(lastName.Length > 0 ? lastName[0] : "")}".ToUpper();
+    }
+
+    private void ToggleUserMenu()
+    {
+        _showUserMenu = !_showUserMenu;
+    }
+
+    private void CloseUserMenu()
+    {
+        _showUserMenu = false;
+    }
+
+    private async Task HandleLogout()
+    {
+        try
+        {
+            Console.WriteLine("[UserInfoBar] HandleLogout called - button click detected!");
+            _showUserMenu = false;
+
+            Console.WriteLine("[UserInfoBar] Calling AuthService.LogoutAsync");
+            await AuthService.LogoutAsync();
+            Console.WriteLine("[UserInfoBar] AuthService.LogoutAsync completed");
+
+            Console.WriteLine("[UserInfoBar] Navigating to /login with forceLoad");
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UserInfoBar] Logout failed: {ex.Message}");
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+    }
+}

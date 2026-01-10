@@ -24,9 +24,9 @@ public class UserRepository : SqlHelper, IUserRepository
     public async Task<User?> GetByIdAsync(Guid id)
     {
         const string sql = @"
-            SELECT Id, Email, EmailConfirmed, PhoneNumber, PhoneNumberConfirmed,
-                   TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount,
-                   CreatedAt, UpdatedAt, IsDeleted
+            SELECT Id, Email, FirstName, LastName, EmailVerified, IsActive,
+                   PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled,
+                   AccessFailedCount, CreatedAt, UpdatedAt, IsDeleted, LastLoginAt
             FROM [User]
             WHERE Id = @Id AND IsDeleted = 0";
 
@@ -39,9 +39,9 @@ public class UserRepository : SqlHelper, IUserRepository
     public async Task<User?> GetByEmailAsync(string email)
     {
         const string sql = @"
-            SELECT Id, Email, EmailConfirmed, PhoneNumber, PhoneNumberConfirmed,
-                   TwoFactorEnabled, LockoutEnd, LockoutEnabled, AccessFailedCount,
-                   CreatedAt, UpdatedAt, IsDeleted
+            SELECT Id, Email, FirstName, LastName, EmailVerified, IsActive,
+                   PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled,
+                   AccessFailedCount, CreatedAt, UpdatedAt, IsDeleted, LastLoginAt
             FROM [User]
             WHERE Email = @Email AND IsDeleted = 0";
 
@@ -54,12 +54,12 @@ public class UserRepository : SqlHelper, IUserRepository
     public async Task<Guid> CreateAsync(User user, string passwordHash)
     {
         const string sql = @"
-            INSERT INTO [User] (Id, Email, EmailConfirmed, PasswordHash, SecurityStamp,
-                               PhoneNumber, PhoneNumberConfirmed, TwoFactorEnabled,
-                               LockoutEnabled, AccessFailedCount, CreatedAt, IsDeleted)
-            VALUES (@Id, @Email, @EmailConfirmed, @PasswordHash, @SecurityStamp,
-                   @PhoneNumber, @PhoneNumberConfirmed, @TwoFactorEnabled,
-                   @LockoutEnabled, @AccessFailedCount, @CreatedAt, 0);
+            INSERT INTO [User] (Id, Email, PasswordHash, FirstName, LastName,
+                               EmailVerified, IsActive, PhoneNumber, PhoneNumberConfirmed,
+                               TwoFactorEnabled, AccessFailedCount, CreatedAt, IsDeleted)
+            VALUES (@Id, @Email, @PasswordHash, @FirstName, @LastName,
+                   @EmailVerified, @IsActive, @PhoneNumber, @PhoneNumberConfirmed,
+                   @TwoFactorEnabled, @AccessFailedCount, @CreatedAt, 0);
             SELECT @Id";
 
         var userId = Guid.NewGuid();
@@ -68,13 +68,14 @@ public class UserRepository : SqlHelper, IUserRepository
             sql,
             CreateParameter("@Id", userId),
             CreateParameter("@Email", user.Email),
-            CreateParameter("@EmailConfirmed", user.EmailConfirmed),
             CreateParameter("@PasswordHash", passwordHash),
-            CreateParameter("@SecurityStamp", Guid.NewGuid().ToString()),
+            CreateParameter("@FirstName", user.FirstName ?? string.Empty),
+            CreateParameter("@LastName", user.LastName ?? string.Empty),
+            CreateParameter("@EmailVerified", user.EmailConfirmed), // Map EmailConfirmed to EmailVerified
+            CreateParameter("@IsActive", true),
             CreateParameter("@PhoneNumber", user.PhoneNumber),
             CreateParameter("@PhoneNumberConfirmed", user.PhoneNumberConfirmed),
             CreateParameter("@TwoFactorEnabled", user.TwoFactorEnabled),
-            CreateParameter("@LockoutEnabled", user.LockoutEnabled),
             CreateParameter("@AccessFailedCount", user.AccessFailedCount),
             CreateParameter("@CreatedAt", DateTime.UtcNow));
 
@@ -86,12 +87,13 @@ public class UserRepository : SqlHelper, IUserRepository
         const string sql = @"
             UPDATE [User]
             SET Email = @Email,
-                EmailConfirmed = @EmailConfirmed,
+                FirstName = @FirstName,
+                LastName = @LastName,
+                EmailVerified = @EmailVerified,
+                IsActive = @IsActive,
                 PhoneNumber = @PhoneNumber,
                 PhoneNumberConfirmed = @PhoneNumberConfirmed,
                 TwoFactorEnabled = @TwoFactorEnabled,
-                LockoutEnd = @LockoutEnd,
-                LockoutEnabled = @LockoutEnabled,
                 AccessFailedCount = @AccessFailedCount,
                 UpdatedAt = @UpdatedAt
             WHERE Id = @Id";
@@ -100,12 +102,13 @@ public class UserRepository : SqlHelper, IUserRepository
             sql,
             CreateParameter("@Id", user.Id),
             CreateParameter("@Email", user.Email),
-            CreateParameter("@EmailConfirmed", user.EmailConfirmed),
+            CreateParameter("@FirstName", user.FirstName ?? string.Empty),
+            CreateParameter("@LastName", user.LastName ?? string.Empty),
+            CreateParameter("@EmailVerified", user.EmailConfirmed),
+            CreateParameter("@IsActive", true),
             CreateParameter("@PhoneNumber", user.PhoneNumber),
             CreateParameter("@PhoneNumberConfirmed", user.PhoneNumberConfirmed),
             CreateParameter("@TwoFactorEnabled", user.TwoFactorEnabled),
-            CreateParameter("@LockoutEnd", user.LockoutEnd),
-            CreateParameter("@LockoutEnabled", user.LockoutEnabled),
             CreateParameter("@AccessFailedCount", user.AccessFailedCount),
             CreateParameter("@UpdatedAt", DateTime.UtcNow));
     }
@@ -158,12 +161,12 @@ public class UserRepository : SqlHelper, IUserRepository
         {
             Id = GetGuid(reader, "Id"),
             Email = GetString(reader, "Email"),
-            EmailConfirmed = GetBoolean(reader, "EmailConfirmed"),
+            FirstName = GetNullableString(reader, "FirstName"),
+            LastName = GetNullableString(reader, "LastName"),
+            EmailConfirmed = GetBoolean(reader, "EmailVerified"), // Map EmailVerified to EmailConfirmed
             PhoneNumber = GetNullableString(reader, "PhoneNumber"),
             PhoneNumberConfirmed = GetBoolean(reader, "PhoneNumberConfirmed"),
             TwoFactorEnabled = GetBoolean(reader, "TwoFactorEnabled"),
-            LockoutEnd = GetNullableDateTime(reader, "LockoutEnd"),
-            LockoutEnabled = GetBoolean(reader, "LockoutEnabled"),
             AccessFailedCount = GetInt32(reader, "AccessFailedCount"),
             CreatedAt = GetDateTime(reader, "CreatedAt"),
             UpdatedAt = GetNullableDateTime(reader, "UpdatedAt"),

@@ -214,7 +214,7 @@ public class RecipeCollectionsController : ControllerBase
 
             return Ok(new { id = itemId, message = "Recipe added to collection" });
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
             return Forbid();
         }

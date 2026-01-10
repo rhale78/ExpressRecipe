@@ -36,14 +36,14 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
                 UserId = GetGuid(reader, "UserId"),
                 FirstName = GetString(reader, "FirstName"),
                 LastName = GetString(reader, "LastName"),
-                DateOfBirth = GetDateTime(reader, "DateOfBirth"),
+                DateOfBirth = GetNullableDateTime(reader, "DateOfBirth"),
                 Gender = GetString(reader, "Gender"),
-                HeightCm = GetDecimal(reader, "HeightCm"),
-                WeightKg = GetDecimal(reader, "WeightKg"),
+                HeightCm = GetNullableDecimal(reader, "HeightCm"),
+                WeightKg = GetNullableDecimal(reader, "WeightKg"),
                 ActivityLevel = GetString(reader, "ActivityLevel"),
                 CookingSkillLevel = GetString(reader, "CookingSkillLevel"),
                 SubscriptionTier = GetString(reader, "SubscriptionTier") ?? "Free",
-                SubscriptionExpiresAt = GetDateTime(reader, "SubscriptionExpiresAt")
+                SubscriptionExpiresAt = GetNullableDateTime(reader, "SubscriptionExpiresAt")
             },
             CreateParameter("@UserId", userId));
 

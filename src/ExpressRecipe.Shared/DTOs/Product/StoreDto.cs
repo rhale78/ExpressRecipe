@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace ExpressRecipe.Shared.DTOs.Product;
@@ -6,6 +7,8 @@ public class StoreDto
 {
     public Guid Id { get; set; }
     public string ChainName { get; set; } = string.Empty;
+    // Backwards-compatible Name property used by some repositories
+    public string Name { get => StoreName ?? ChainName; set => StoreName = value; }
     public string? StoreName { get; set; }
     public string? StoreNumber { get; set; }
     public string? Address { get; set; }
@@ -16,14 +19,21 @@ public class StoreDto
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public string? Phone { get; set; }
+    public string? Hours { get; set; }
+    public bool AcceptsStoreCoupons { get; set; }
+    public bool AcceptsDigitalCoupons { get; set; }
+    public string? CouponPolicy { get; set; }
+    public decimal? MaxCouponDoubleValue { get; set; }
     public string? Email { get; set; }
     public string? Website { get; set; }
-    public string? StoreHours { get; set; } // JSON
+    public string? StoreHours { get; set; }
     public bool HasPharmacy { get; set; }
     public bool HasDeli { get; set; }
     public bool HasBakery { get; set; }
     public bool AcceptsManufacturerCoupons { get; set; }
     public bool AllowsCouponDoubling { get; set; }
+    // Backwards-compatible alias used in older code
+    public bool DoublesManufacturerCoupons { get => AllowsCouponDoubling; set => AllowsCouponDoubling = value; }
     public decimal? CouponDoublingLimit { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -79,16 +89,47 @@ public class CreateStoreRequest
     public bool HasPharmacy { get; set; }
     public bool HasDeli { get; set; }
     public bool HasBakery { get; set; }
-    public bool AcceptsManufacturerCoupons { get; set; } = true;
+    public bool AcceptsManufacturerCoupons { get; set; }
     public bool AllowsCouponDoubling { get; set; }
 
     [Range(0, 100)]
     public decimal? CouponDoublingLimit { get; set; }
+
+    // Additional coupon/store fields expected by repositories
+    public string? Name { get; set; }
+    public bool AcceptsStoreCoupons { get; set; }
+    public bool AcceptsDigitalCoupons { get; set; }
+    public bool DoublesManufacturerCoupons { get; set; }
+    public decimal? MaxCouponDoubleValue { get; set; }
+    public string? CouponPolicy { get; set; }
+    public string? Hours { get; set; }
+    public bool IsActive { get; set; } = true;
 }
 
-public class UpdateStoreRequest : CreateStoreRequest
+public class UpdateStoreRequest
 {
-    public bool IsActive { get; set; } = true;
+    // Allow updating all store fields
+    public string? ChainName { get; set; }
+    public string? StoreNumber { get; set; }
+    public string? Name { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? ZipCode { get; set; }
+    public string? Country { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Website { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+    public bool AcceptsManufacturerCoupons { get; set; }
+    public bool AcceptsStoreCoupons { get; set; }
+    public bool AcceptsDigitalCoupons { get; set; }
+    public bool DoublesManufacturerCoupons { get; set; }
+    public decimal? MaxCouponDoubleValue { get; set; }
+    public string? CouponPolicy { get; set; }
+    public string? Hours { get; set; }
+    public bool IsActive { get; set; }
 }
 
 public class StoreSearchRequest
@@ -105,7 +146,9 @@ public class StoreSearchRequest
     public bool? HasDeli { get; set; }
     public bool? HasBakery { get; set; }
     public bool? AllowsCouponDoubling { get; set; }
+    // Backwards-compatible alias
     public bool OnlyActive { get; set; } = true;
+    public bool ActiveOnly { get => OnlyActive; set => OnlyActive = value; }
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }

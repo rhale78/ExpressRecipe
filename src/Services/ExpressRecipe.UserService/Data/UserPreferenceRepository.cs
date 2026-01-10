@@ -41,7 +41,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     public async Task<List<UserPreferredCuisineDto>> GetUserPreferredCuisinesAsync(Guid userId)
     {
         const string sql = @"
-            SELECT upc.UserId, upc.CuisineId, upc.PreferenceLevel, upc.Notes,
+            SELECT upc.UserId, upc.CuisineId, upc.PreferenceLevel,
                    c.Name AS CuisineName, c.Description AS CuisineDescription
             FROM UserPreferredCuisine upc
             INNER JOIN Cuisine c ON upc.CuisineId = c.Id
@@ -55,9 +55,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
                 UserId = GetGuid(reader, "UserId"),
                 CuisineId = GetGuid(reader, "CuisineId"),
                 CuisineName = GetString(reader, "CuisineName") ?? string.Empty,
-                CuisineDescription = GetString(reader, "CuisineDescription"),
-                PreferenceLevel = GetInt(reader, "PreferenceLevel") ?? 3,
-                Notes = GetString(reader, "Notes")
+                PreferenceLevel = GetInt(reader, "PreferenceLevel") ?? 3
             },
             CreateParameter("@UserId", userId));
     }
@@ -65,8 +63,8 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     public async Task<Guid> AddPreferredCuisineAsync(Guid userId, AddUserPreferredCuisineRequest request)
     {
         const string sql = @"
-            INSERT INTO UserPreferredCuisine (Id, UserId, CuisineId, PreferenceLevel, Notes)
-            VALUES (@Id, @UserId, @CuisineId, @PreferenceLevel, @Notes)";
+            INSERT INTO UserPreferredCuisine (Id, UserId, CuisineId, PreferenceLevel)
+            VALUES (@Id, @UserId, @CuisineId, @PreferenceLevel)";
 
         var id = Guid.NewGuid();
 
@@ -75,8 +73,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
             CreateParameter("@Id", id),
             CreateParameter("@UserId", userId),
             CreateParameter("@CuisineId", request.CuisineId),
-            CreateParameter("@PreferenceLevel", request.PreferenceLevel),
-            CreateParameter("@Notes", request.Notes));
+            CreateParameter("@PreferenceLevel", request.PreferenceLevel));
 
         return id;
     }
@@ -85,16 +82,14 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     {
         const string sql = @"
             UPDATE UserPreferredCuisine
-            SET PreferenceLevel = @PreferenceLevel,
-                Notes = @Notes
+            SET PreferenceLevel = @PreferenceLevel
             WHERE UserId = @UserId AND CuisineId = @CuisineId";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
             CreateParameter("@UserId", userId),
             CreateParameter("@CuisineId", cuisineId),
-            CreateParameter("@PreferenceLevel", request.PreferenceLevel),
-            CreateParameter("@Notes", request.Notes));
+            CreateParameter("@PreferenceLevel", request.PreferenceLevel));
 
         return rowsAffected > 0;
     }
@@ -120,7 +115,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     public async Task<List<UserHealthGoalDto>> GetUserHealthGoalsAsync(Guid userId)
     {
         const string sql = @"
-            SELECT uhg.UserId, uhg.HealthGoalId, uhg.Priority, uhg.Notes, uhg.TargetDate,
+            SELECT uhg.UserId, uhg.HealthGoalId, uhg.Priority, uhg.Notes,
                    hg.Name AS GoalName, hg.Description AS GoalDescription, hg.Category AS GoalCategory
             FROM UserHealthGoal uhg
             INNER JOIN HealthGoal hg ON uhg.HealthGoalId = hg.Id
@@ -133,12 +128,10 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
             {
                 UserId = GetGuid(reader, "UserId"),
                 HealthGoalId = GetGuid(reader, "HealthGoalId"),
-                GoalName = GetString(reader, "GoalName") ?? string.Empty,
-                GoalDescription = GetString(reader, "GoalDescription"),
-                GoalCategory = GetString(reader, "GoalCategory"),
+                HealthGoalName = GetString(reader, "GoalName") ?? string.Empty,
+                Category = GetString(reader, "GoalCategory"),
                 Priority = GetInt(reader, "Priority") ?? 3,
-                Notes = GetString(reader, "Notes"),
-                TargetDate = GetDateTime(reader, "TargetDate")
+                Notes = GetString(reader, "Notes")
             },
             CreateParameter("@UserId", userId));
     }
@@ -146,8 +139,8 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     public async Task<Guid> AddHealthGoalAsync(Guid userId, AddUserHealthGoalRequest request)
     {
         const string sql = @"
-            INSERT INTO UserHealthGoal (Id, UserId, HealthGoalId, Priority, Notes, TargetDate)
-            VALUES (@Id, @UserId, @HealthGoalId, @Priority, @Notes, @TargetDate)";
+            INSERT INTO UserHealthGoal (Id, UserId, HealthGoalId, Priority, Notes)
+            VALUES (@Id, @UserId, @HealthGoalId, @Priority, @Notes)";
 
         var id = Guid.NewGuid();
 
@@ -157,8 +150,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
             CreateParameter("@UserId", userId),
             CreateParameter("@HealthGoalId", request.HealthGoalId),
             CreateParameter("@Priority", request.Priority),
-            CreateParameter("@Notes", request.Notes),
-            CreateParameter("@TargetDate", request.TargetDate));
+            CreateParameter("@Notes", request.Notes));
 
         return id;
     }
@@ -168,8 +160,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
         const string sql = @"
             UPDATE UserHealthGoal
             SET Priority = @Priority,
-                Notes = @Notes,
-                TargetDate = @TargetDate
+                Notes = @Notes
             WHERE UserId = @UserId AND HealthGoalId = @HealthGoalId";
 
         var rowsAffected = await ExecuteNonQueryAsync(
@@ -177,8 +168,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
             CreateParameter("@UserId", userId),
             CreateParameter("@HealthGoalId", goalId),
             CreateParameter("@Priority", request.Priority),
-            CreateParameter("@Notes", request.Notes),
-            CreateParameter("@TargetDate", request.TargetDate));
+            CreateParameter("@Notes", request.Notes));
 
         return rowsAffected > 0;
     }
@@ -279,10 +269,10 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     public async Task<List<UserDislikedIngredientDto>> GetUserDislikedIngredientsAsync(Guid userId)
     {
         const string sql = @"
-            SELECT UserId, IngredientId, Severity, Reason
+            SELECT UserId, IngredientId, Reason
             FROM UserDislikedIngredient
             WHERE UserId = @UserId
-            ORDER BY Severity DESC, IngredientId";
+            ORDER BY IngredientId";
 
         return await ExecuteReaderAsync(
             sql,
@@ -290,7 +280,6 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
             {
                 UserId = GetGuid(reader, "UserId"),
                 IngredientId = GetGuid(reader, "IngredientId"),
-                Severity = GetInt(reader, "Severity"),
                 Reason = GetString(reader, "Reason")
             },
             CreateParameter("@UserId", userId));
@@ -299,8 +288,8 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     public async Task<Guid> AddDislikedIngredientAsync(Guid userId, AddUserDislikedIngredientRequest request)
     {
         const string sql = @"
-            INSERT INTO UserDislikedIngredient (Id, UserId, IngredientId, Severity, Reason)
-            VALUES (@Id, @UserId, @IngredientId, @Severity, @Reason)";
+            INSERT INTO UserDislikedIngredient (Id, UserId, IngredientId, Reason, Notes)
+            VALUES (@Id, @UserId, @IngredientId, @Reason, @Notes)";
 
         var id = Guid.NewGuid();
 
@@ -309,8 +298,8 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
             CreateParameter("@Id", id),
             CreateParameter("@UserId", userId),
             CreateParameter("@IngredientId", request.IngredientId),
-            CreateParameter("@Severity", request.Severity),
-            CreateParameter("@Reason", request.Reason));
+            CreateParameter("@Reason", request.Reason),
+            CreateParameter("@Notes", request.Notes));
 
         return id;
     }
@@ -319,16 +308,16 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
     {
         const string sql = @"
             UPDATE UserDislikedIngredient
-            SET Severity = @Severity,
-                Reason = @Reason
+            SET Reason = @Reason,
+                Notes = @Notes
             WHERE UserId = @UserId AND IngredientId = @IngredientId";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
             CreateParameter("@UserId", userId),
             CreateParameter("@IngredientId", ingredientId),
-            CreateParameter("@Severity", request.Severity),
-            CreateParameter("@Reason", request.Reason));
+            CreateParameter("@Reason", request.Reason),
+            CreateParameter("@Notes", request.Notes));
 
         return rowsAffected > 0;
     }

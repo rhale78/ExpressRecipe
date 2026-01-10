@@ -90,6 +90,8 @@ public class AdminController : ControllerBase
 
     /// <summary>
     /// Start USDA FSIS recall database import
+    /// NOTE: USDA no longer provides a public API. This endpoint returns an informational message.
+    /// Use /api/admin/import/meat-poultry-recalls instead for actual meat/poultry recall imports.
     /// </summary>
     [HttpPost("import/usda-recalls")]
     public async Task<ActionResult<ImportStatusDto>> ImportUSDARecalls()
@@ -105,7 +107,7 @@ public class AdminController : ControllerBase
 
         _importJobs[importId] = jobStatus;
 
-        _logger.LogInformation("Starting USDA recall import job {ImportId}", importId);
+        _logger.LogInformation("Starting USDA recall import job {ImportId} (will return error - no API available)", importId);
 
         // Run import in background
         _ = Task.Run(async () =>
@@ -113,6 +115,56 @@ public class AdminController : ControllerBase
             try
             {
                 var result = await _fdaImportService.ImportUSDARecallsAsync();
+
+                jobStatus.Status = result.ErrorMessage != null ? "Failed" : "Completed";
+                jobStatus.CompletedAt = DateTime.UtcNow;
+                jobStatus.TotalRecords = result.TotalProcessed;
+                jobStatus.ProcessedRecords = result.TotalProcessed;
+                jobStatus.SuccessCount = result.SuccessCount;
+                jobStatus.ErrorCount = result.FailureCount;
+                jobStatus.ErrorMessage = result.ErrorMessage;
+
+                _logger.LogWarning("USDA recall import {ImportId} completed with message: {Message}",
+                    importId, result.ErrorMessage ?? "No data source available");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "USDA recall import {ImportId} failed", importId);
+                jobStatus.Status = "Failed";
+                jobStatus.CompletedAt = DateTime.UtcNow;
+                jobStatus.ErrorMessage = ex.Message;
+            }
+        });
+
+        return Ok(MapToDto(jobStatus));
+    }
+
+    /// <summary>
+    /// Import meat/poultry recalls from FDA API (includes USDA-regulated products)
+    /// This is the recommended method for importing meat, poultry, and egg product recalls.
+    /// </summary>
+    [HttpPost("import/meat-poultry-recalls")]
+    public async Task<ActionResult<ImportStatusDto>> ImportMeatPoultryRecalls([FromQuery] int limit = 50)
+    {
+        var importId = Guid.NewGuid();
+        var jobStatus = new ImportJobStatus
+        {
+            ImportId = importId,
+            Source = "USDA-MEAT",
+            Status = "InProgress",
+            StartedAt = DateTime.UtcNow
+        };
+
+        _importJobs[importId] = jobStatus;
+
+        _logger.LogInformation("Starting meat/poultry recall import job {ImportId}", importId);
+
+        // Run import in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await _fdaImportService.ImportMeatPoultryRecallsFromFDAAsync(limit);
 
                 jobStatus.Status = "Completed";
                 jobStatus.CompletedAt = DateTime.UtcNow;
@@ -122,12 +174,12 @@ public class AdminController : ControllerBase
                 jobStatus.ErrorCount = result.FailureCount;
                 jobStatus.ErrorMessage = result.ErrorMessage;
 
-                _logger.LogInformation("USDA recall import {ImportId} completed: {Success} successful, {Failed} failed",
+                _logger.LogInformation("Meat/poultry recall import {ImportId} completed: {Success} successful, {Failed} failed",
                     importId, result.SuccessCount, result.FailureCount);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "USDA recall import {ImportId} failed", importId);
+                _logger.LogError(ex, "Meat/poultry recall import {ImportId} failed", importId);
                 jobStatus.Status = "Failed";
                 jobStatus.CompletedAt = DateTime.UtcNow;
                 jobStatus.ErrorMessage = ex.Message;

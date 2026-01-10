@@ -91,6 +91,129 @@ body {
     color: #e74c3c;
 }
 
+/* UnifiedDietaryFilter Styles */
+.unified-dietary-filter .filter-option {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.75rem 1rem;
+    background-color: #2563eb !important;
+    border: 2px solid #1e40af !important;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.unified-dietary-filter .filter-option:hover {
+    background-color: #1d4ed8 !important;
+    border-color: #1e3a8a !important;
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+    transform: translateY(-1px);
+}
+
+.unified-dietary-filter .filter-option span {
+    font-size: 0.875rem;
+    color: white !important;
+    user-select: none;
+    font-weight: 500;
+}
+
+.unified-dietary-filter .filter-option input[type="checkbox"] {
+    cursor: pointer;
+    width: 1.125rem;
+    height: 1.125rem;
+    accent-color: white;
+}
+
+.unified-dietary-filter .btn-info {
+    position: relative;
+    background-color: #2563eb;
+    border: 2px solid #1e40af;
+    color: white;
+    border-radius: 50%;
+    width: 1.75rem;
+    height: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    font-size: 0.875rem;
+    font-weight: 700;
+    transition: all 0.2s;
+}
+
+.unified-dietary-filter .btn-info:hover {
+    background-color: #1d4ed8;
+    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.4);
+    transform: scale(1.1);
+}
+
+.unified-dietary-filter .btn-info::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #1f2937;
+    color: white;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    width: max-content;
+    max-width: 320px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 9999;
+    pointer-events: none;
+    text-align: left;
+    font-weight: normal;
+}
+
+.unified-dietary-filter .btn-info::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 8px solid transparent;
+    border-top-color: #1f2937;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 9999;
+}
+
+.unified-dietary-filter .btn-info:hover::after,
+.unified-dietary-filter .btn-info:hover::before {
+    opacity: 1;
+    visibility: visible;
+}
+
+.unified-dietary-filter .category-options {
+    padding: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    background-color: white;
+}
+
+.unified-dietary-filter .filter-category {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    overflow: visible;
+}
+
+.unified-dietary-filter {
+    overflow: visible !important;
+}
+
 /* Buttons */
 .btn {
     padding: 0.75rem 1.5rem;

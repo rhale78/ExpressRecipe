@@ -11,20 +11,41 @@ CREATE TABLE AllergenReactionType (
     RequiresEpiPen BIT NOT NULL DEFAULT 0,
     CONSTRAINT UQ_AllergenReactionType_Name UNIQUE (Name)
 );
+GO
 
 -- Seed common reaction types
-INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) VALUES
-('Hives', 'Itchy, raised welts on the skin', 'Mild', 0),
-('Itching', 'Generalized itching or tingling sensation', 'Mild', 0),
-('Swelling', 'Swelling of face, lips, tongue, or throat', 'Moderate', 0),
-('Respiratory Issues', 'Difficulty breathing, wheezing, or shortness of breath', 'Severe', 1),
-('Anaphylaxis', 'Severe, life-threatening allergic reaction', 'Life-Threatening', 1),
-('Digestive Issues', 'Nausea, vomiting, diarrhea, or abdominal pain', 'Mild', 0),
-('Eczema Flare', 'Worsening of existing eczema or skin inflammation', 'Mild', 0),
-('Angioedema', 'Deep swelling beneath the skin', 'Moderate', 0),
-('Asthma Attack', 'Severe breathing difficulty and chest tightness', 'Severe', 1),
-('Drop in Blood Pressure', 'Sudden drop in blood pressure leading to dizziness or fainting', 'Severe', 1),
-('Oral Allergy Syndrome', 'Itching or swelling in mouth, lips, tongue, or throat', 'Mild', 0);
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Hives', 'Itchy, raised welts on the skin', 'Mild', 0);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Itching', 'Generalized itching or tingling sensation', 'Mild', 0);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Swelling', 'Swelling of face, lips, tongue, or throat', 'Moderate', 0);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Respiratory Issues', 'Difficulty breathing, wheezing, or shortness of breath', 'Severe', 1);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Anaphylaxis', 'Severe, life-threatening allergic reaction', 'Life-Threatening', 1);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Digestive Issues', 'Nausea, vomiting, diarrhea, or abdominal pain', 'Mild', 0);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Eczema Flare', 'Worsening of existing eczema or skin inflammation', 'Mild', 0);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Angioedema', 'Deep swelling beneath the skin', 'Moderate', 0);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Asthma Attack', 'Severe breathing difficulty and chest tightness', 'Severe', 1);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Drop in Blood Pressure', 'Sudden drop in blood pressure leading to dizziness or fainting', 'Severe', 1);
+
+INSERT INTO AllergenReactionType (Name, Description, SeverityLevel, RequiresEpiPen) 
+VALUES ('Oral Allergy Syndrome', 'Itching or swelling in mouth, lips, tongue, or throat', 'Mild', 0);
 GO
 
 -- Add severity and reaction tracking to UserAllergen
@@ -34,7 +55,6 @@ ALTER TABLE UserAllergen ADD OnsetTimeMinutes INT NULL; -- How quickly reaction 
 ALTER TABLE UserAllergen ADD LastReactionDate DATETIME2 NULL;
 ALTER TABLE UserAllergen ADD DiagnosedBy NVARCHAR(200) NULL; -- Doctor, Self-reported, Family history, etc.
 ALTER TABLE UserAllergen ADD DiagnosisDate DATETIME2 NULL;
-ALTER TABLE UserAllergen ADD Notes NVARCHAR(MAX) NULL; -- Additional information about the allergy
 GO
 
 -- UserAllergenReaction: Track specific reactions user experiences for each allergen
@@ -51,6 +71,7 @@ CREATE TABLE UserAllergenReaction (
         REFERENCES AllergenReactionType(Id) ON DELETE CASCADE,
     CONSTRAINT UQ_UserAllergenReaction_Allergen_Reaction UNIQUE (UserAllergenId, ReactionTypeId)
 );
+GO
 
 CREATE INDEX IX_UserAllergenReaction_UserAllergenId ON UserAllergenReaction(UserAllergenId);
 CREATE INDEX IX_UserAllergenReaction_ReactionTypeId ON UserAllergenReaction(ReactionTypeId);
@@ -78,6 +99,7 @@ CREATE TABLE UserIngredientAllergy (
     IsDeleted BIT NOT NULL DEFAULT 0,
     DeletedAt DATETIME2 NULL
 );
+GO
 
 CREATE INDEX IX_UserIngredientAllergy_UserId ON UserIngredientAllergy(UserId);
 CREATE INDEX IX_UserIngredientAllergy_IngredientId ON UserIngredientAllergy(IngredientId);
@@ -98,6 +120,7 @@ CREATE TABLE UserIngredientAllergyReaction (
         REFERENCES AllergenReactionType(Id) ON DELETE CASCADE,
     CONSTRAINT UQ_UserIngredientAllergyReaction_Allergy_Reaction UNIQUE (UserIngredientAllergyId, ReactionTypeId)
 );
+GO
 
 CREATE INDEX IX_UserIngredientAllergyReaction_AllergyId ON UserIngredientAllergyReaction(UserIngredientAllergyId);
 CREATE INDEX IX_UserIngredientAllergyReaction_ReactionTypeId ON UserIngredientAllergyReaction(ReactionTypeId);
@@ -128,6 +151,7 @@ CREATE TABLE AllergyIncident (
     CONSTRAINT FK_AllergyIncident_UserIngredientAllergy FOREIGN KEY (UserIngredientAllergyId)
         REFERENCES UserIngredientAllergy(Id) ON DELETE SET NULL
 );
+GO
 
 CREATE INDEX IX_AllergyIncident_UserId ON AllergyIncident(UserId);
 CREATE INDEX IX_AllergyIncident_IncidentDate ON AllergyIncident(IncidentDate);

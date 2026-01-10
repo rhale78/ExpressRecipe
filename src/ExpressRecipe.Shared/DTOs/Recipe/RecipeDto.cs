@@ -6,10 +6,12 @@ public class RecipeDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Title => Name; // Alias for compatibility
     public string? Description { get; set; }
     public string? Category { get; set; }
     public string? Cuisine { get; set; }
     public string? DifficultyLevel { get; set; }
+    public string Difficulty => DifficultyLevel ?? "Medium"; // Alias for compatibility
     public int? PrepTimeMinutes { get; set; }
     public int? CookTimeMinutes { get; set; }
     public int? TotalTimeMinutes { get; set; }
@@ -27,12 +29,15 @@ public class RecipeDto
     public Guid AuthorId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public int ViewCount { get; set; }
+    public int FavoriteCount { get; set; }
 
     // Navigation properties (populated on demand)
     public List<RecipeIngredientDto>? Ingredients { get; set; }
     public RecipeNutritionDto? Nutrition { get; set; }
     public List<RecipeTagDto>? Tags { get; set; }
     public List<RecipeAllergenWarningDto>? AllergenWarnings { get; set; }
+    public List<string> DietaryInfo { get; set; } = new(); // Vegetarian, Vegan, etc.
     public decimal? AverageRating { get; set; }
     public int? RatingCount { get; set; }
 }
@@ -112,6 +117,9 @@ public class CreateRecipeRequest
     [Range(0, 10000)]
     public int? CookTimeMinutes { get; set; }
 
+    [Range(0, 10000)]
+    public int? TotalTimeMinutes { get; set; }
+
     [Range(1, 100)]
     public int? Servings { get; set; }
 
@@ -132,7 +140,6 @@ public class CreateRecipeRequest
     public string? SourceUrl { get; set; }
 
     public Guid CreatedBy { get; set; }
-
     // Ingredients and tags added separately via dedicated endpoints
 }
 
@@ -185,15 +192,34 @@ public class RecipeSearchRequest
     public string? Category { get; set; }
     public string? Cuisine { get; set; }
     public string? DifficultyLevel { get; set; }
+    public List<string>? Tags { get; set; }
+    public List<string>? DietaryInfo { get; set; }
+    public List<string>? ExcludeAllergens { get; set; } // Filter out recipes with these allergens
+    public List<string>? ExcludeIngredients { get; set; } // Foods/ingredients user dislikes
+    public int? MaxPrepTime { get; set; }
+    public int? MaxCookTime { get; set; }
+    public string? Difficulty { get; set; }
     public int? MaxPrepTimeMinutes { get; set; }
     public int? MaxTotalTimeMinutes { get; set; }
     public List<Guid>? TagIds { get; set; }
-    public List<Guid>? ExcludeAllergenIds { get; set; } // Filter out recipes with these allergens
+    public List<Guid>? ExcludeAllergenIds { get; set; }
     public Guid? AuthorId { get; set; }
     public bool? OnlyPublic { get; set; } = true;
     public bool? OnlyApproved { get; set; } = true;
+    public int Page { get; set; } = 1;
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 20;
+    public string? SortBy { get; set; } = "CreatedAt";
+    public bool SortDescending { get; set; } = true;
+}
+
+public class RecipeSearchResult
+{
+    public List<RecipeDto> Recipes { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);
 }
 
 public class AddRecipeIngredientRequest

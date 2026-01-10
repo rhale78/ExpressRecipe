@@ -1,18 +1,20 @@
 @page "/products/scan"
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Product
-@attribute [Authorize]
 @inject IProductApiClient ProductApi
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>Scan Barcode - ExpressRecipe</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="barcode-scan-container">
     <!-- Header -->
     <div class="scan-header">
-        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/products")">
+        <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/products")'>
             ← Back to Products
         </button>
         <h1>Barcode Scanner</h1>
@@ -21,11 +23,11 @@
     <!-- Scanner Mode Toggle -->
     <div class="scanner-modes">
         <button class="mode-btn @(_scanMode == ScanMode.Camera ? "active" : "")"
-                @onclick="() => SetScanMode(ScanMode.Camera)">
+                @onclick='() => SetScanMode(ScanMode.Camera)'>
             📷 Camera
         </button>
         <button class="mode-btn @(_scanMode == ScanMode.Manual ? "active" : "")"
-                @onclick="() => SetScanMode(ScanMode.Manual)">
+                @onclick='() => SetScanMode(ScanMode.Manual)'>
             ⌨️ Manual Entry
         </button>
     </div>
@@ -114,13 +116,13 @@
                 <div class="upc-examples">
                     <p class="examples-label">Example UPC codes:</p>
                     <div class="example-codes">
-                        <button class="example-code" @onclick="() => SetExampleUpc("012345678905")">
+                        <button class="example-code" @onclick='() => SetExampleUpc("012345678905")'>
                             012345678905
                         </button>
-                        <button class="example-code" @onclick="() => SetExampleUpc("041220576463")">
+                        <button class="example-code" @onclick='() => SetExampleUpc("041220576463")'>
                             041220576463
                         </button>
-                        <button class="example-code" @onclick="() => SetExampleUpc("070038320425")">
+                        <button class="example-code" @onclick='() => SetExampleUpc("070038320425")'>
                             070038320425
                         </button>
                     </div>
@@ -176,7 +178,7 @@
                     }
 
                     <div class="scanned-actions">
-                        <button class="btn btn-primary" @onclick="() => ViewProductDetails(_scannedProduct.Id)">
+                        <button class="btn btn-primary" @onclick="HandleViewProductDetails">
                             View Full Details
                         </button>
                         <button class="btn btn-outline" @onclick="ScanAnother">
@@ -209,13 +211,21 @@
                 <button class="btn btn-primary" @onclick="ScanAnother">
                     Try Another Scan
                 </button>
-                <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/products")">
+                <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/products")'>
                     Browse All Products
                 </button>
             </div>
         </div>
     }
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to access this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     private enum ScanMode { Camera, Manual }
@@ -230,11 +240,11 @@
     private bool _showNotFound = false;
     private string? _errorMessage;
 
-    private void SetScanMode(ScanMode mode)
+    private async void SetScanMode(ScanMode mode)
     {
         if (_isCameraActive && mode != ScanMode.Camera)
         {
-            StopCamera();
+            await StopCamera();
         }
         _scanMode = mode;
         ClearResults();
@@ -348,5 +358,10 @@
     private void ViewProductDetails(Guid productId)
     {
         Navigation.NavigateTo($"/products/{productId}");
+    }
+
+    private void HandleViewProductDetails()
+    {
+        // TODO: Get product ID from event context
     }
 }

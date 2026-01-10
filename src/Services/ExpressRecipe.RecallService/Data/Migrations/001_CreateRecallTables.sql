@@ -31,7 +31,7 @@ CREATE TABLE RecallProduct (
     ProductName NVARCHAR(300) NOT NULL,
     Brand NVARCHAR(200) NULL,
     UPC NVARCHAR(50) NULL,
-    LotNumber NVARCHAR(100) NULL,
+    LotNumber NVARCHAR(MAX) NULL,
     ExpirationDate DATE NULL,
     DistributionArea NVARCHAR(MAX) NULL,
     

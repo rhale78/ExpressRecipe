@@ -93,13 +93,13 @@ public class GetRecipeDetailsQueryHandler : IQueryHandler<GetRecipeDetailsQuery,
             Ingredients = ingredients.Select(i => new RecipeIngredientDto
             {
                 Id = i.Id,
-                ProductId = i.ProductId,
-                Name = i.Name,
-                Quantity = i.Quantity,
-                Unit = i.Unit,
-                Notes = i.Notes,
+                ProductId = i.IngredientId, // Map IngredientId to ProductId
+                Name = i.IngredientName ?? string.Empty, // Map IngredientName to Name
+                Quantity = i.Quantity ?? 0m, // Provide default value for nullable
+                Unit = i.Unit ?? string.Empty,
+                Notes = i.PreparationNote, // Map PreparationNote to Notes
                 IsOptional = i.IsOptional,
-                SortOrder = i.SortOrder
+                SortOrder = i.OrderIndex // Map OrderIndex to SortOrder
             }).ToList(),
             Instructions = instructions.Select(i => new RecipeInstructionDto
             {

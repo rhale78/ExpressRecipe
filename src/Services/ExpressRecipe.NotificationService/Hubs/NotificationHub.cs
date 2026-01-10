@@ -8,7 +8,7 @@ namespace ExpressRecipe.NotificationService.Hubs;
 /// Allows clients to receive instant notifications without polling
 /// </summary>
 [Authorize]
-public class NotificationHub : Hub
+public class NotificationHub : Hub<INotificationClient>
 {
     private readonly ILogger<NotificationHub> _logger;
 
@@ -84,7 +84,7 @@ public class NotificationHub : Hub
             userId, notificationId);
 
         // Notify other connected clients of same user
-        await Clients.User(userId!).SendAsync("NotificationRead", notificationId);
+        await Clients.User(userId!).NotificationRead(notificationId);
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ public class NotificationHub : Hub
         _logger.LogInformation("User {UserId} marked all notifications as read", userId);
 
         // Notify other connected clients of same user
-        await Clients.User(userId!).SendAsync("AllNotificationsRead");
+        await Clients.User(userId!).AllNotificationsRead();
     }
 
     /// <summary>
@@ -104,7 +104,7 @@ public class NotificationHub : Hub
     /// </summary>
     public async Task Ping()
     {
-        await Clients.Caller.SendAsync("Pong", DateTime.UtcNow);
+        await Clients.Caller.Pong(DateTime.UtcNow);
     }
 }
 

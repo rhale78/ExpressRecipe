@@ -10,32 +10,10 @@ public class FamilyMemberDto
     public string? Relationship { get; set; }
     public DateTime? DateOfBirth { get; set; }
     public string? Notes { get; set; }
-    public List<UserAllergenDto> Allergens { get; set; } = new();
-    public List<UserDietaryRestrictionDto> DietaryRestrictions { get; set; } = new();
+    public List<string> Allergens { get; set; } = new();
+    public List<string> IngredientsToAvoid { get; set; } = new();
+    public List<string> DietaryRestrictions { get; set; } = new();
+    public List<string> DislikedFoods { get; set; } = new();
 }
 
-public class CreateFamilyMemberRequest
-{
-    [Required]
-    [StringLength(100, MinimumLength = 1)]
-    public string Name { get; set; } = string.Empty;
 
-    [StringLength(50)]
-    public string? Relationship { get; set; }
-
-    public DateTime? DateOfBirth { get; set; }
-    public string? Notes { get; set; }
-}
-
-public class UpdateFamilyMemberRequest
-{
-    [Required]
-    [StringLength(100, MinimumLength = 1)]
-    public string Name { get; set; } = string.Empty;
-
-    [StringLength(50)]
-    public string? Relationship { get; set; }
-
-    public DateTime? DateOfBirth { get; set; }
-    public string? Notes { get; set; }
-}

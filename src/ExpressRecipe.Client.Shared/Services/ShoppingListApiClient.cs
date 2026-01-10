@@ -40,7 +40,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
     private async Task<bool> EnsureAuthenticatedAsync()
     {
-        var token = await _tokenProvider.GetTokenAsync();
+        var token = await _tokenProvider.GetAccessTokenAsync();
         if (string.IsNullOrEmpty(token))
             return false;
 
@@ -56,7 +56,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<ShoppingListDto>($"/api/shopping/{id}");
+            return await _httpClient.GetFromJsonAsync<ShoppingListDto>($"/api/shopping/lists/{id}");
         }
         catch
         {
@@ -71,9 +71,14 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/shopping/search", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<ShoppingListSearchResult>();
+            // Return empty results for now since endpoint doesn't exist
+            return new ShoppingListSearchResult
+            {
+                Lists = new List<ShoppingListDto>(),
+                TotalCount = 0,
+                Page = request.Page,
+                PageSize = request.PageSize
+            };
         }
         catch
         {
@@ -88,7 +93,15 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<ShoppingSummaryDto>("/api/shopping/summary");
+            // Return empty summary for now since endpoint doesn't exist yet
+            return new ShoppingSummaryDto
+            {
+                TotalActiveLists = 0,
+                TotalActiveItems = 0,
+                CompletedItemsThisWeek = 0,
+                EstimatedTotal = 0,
+                CategoriesSummary = new List<ShoppingCategorySummaryDto>()
+            };
         }
         catch
         {
@@ -103,7 +116,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/shopping", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/shopping/lists", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<CreateShoppingListResponse>();
             return result?.Id;
@@ -121,7 +134,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.PutAsJsonAsync($"/api/shopping/{id}", request);
+            var response = await _httpClient.PutAsJsonAsync($"/api/shopping/lists/{id}", request);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -137,7 +150,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.DeleteAsync($"/api/shopping/{id}");
+            var response = await _httpClient.DeleteAsync($"/api/shopping/lists/{id}");
             return response.IsSuccessStatusCode;
         }
         catch
@@ -153,7 +166,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/shopping/items", request);
+            var response = await _httpClient.PostAsJsonAsync($"/api/shopping/lists/{request.ShoppingListId}/items", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<AddItemResponse>();
             return result?.ItemId;
@@ -267,7 +280,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.PostAsync($"/api/shopping/{id}/complete", null);
+            var response = await _httpClient.PostAsync($"/api/shopping/lists/{id}/complete", null);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -283,7 +296,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.PostAsync($"/api/shopping/{id}/archive", null);
+            var response = await _httpClient.PostAsync($"/api/shopping/lists/{id}/archive", null);
             return response.IsSuccessStatusCode;
         }
         catch

@@ -1,11 +1,13 @@
 @page "/admin/import"
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
-@attribute [Authorize]
 @inject IAdminApiClient AdminApi
 
 <PageTitle>Database Import - ExpressRecipe Admin</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="admin-container">
     <div class="admin-header">
         <h1>Database Import Management</h1>
@@ -24,8 +26,8 @@
                 <span class="stat-value">~900,000 food items</span>
             </div>
 
-            <button class="btn btn-primary" @@onclick="() => StartImport(ImportSource.USDA)" disabled="@@_isImporting">
-                @@if (_isImporting && _currentImportSource == ImportSource.USDA)
+            <button class="btn btn-primary" @onclick="@(() => StartImport(ImportSource.USDA))" disabled="@_isImporting">
+                @if (_isImporting && _currentImportSource == ImportSource.USDA)
                 {
                     <span class="spinner"></span>
                     <span>Starting...</span>
@@ -47,8 +49,8 @@
                 <span class="stat-value">Current recall alerts</span>
             </div>
 
-            <button class="btn btn-primary" @@onclick="() => StartImport(ImportSource.FDA)" disabled="@@_isImporting">
-                @@if (_isImporting && _currentImportSource == ImportSource.FDA)
+            <button class="btn btn-primary" @onclick="@(() => StartImport(ImportSource.FDA))" disabled="@_isImporting">
+                @if (_isImporting && _currentImportSource == ImportSource.FDA)
                 {
                     <span class="spinner"></span>
                     <span>Starting...</span>
@@ -70,8 +72,8 @@
                 <span class="stat-value">~2.8M products</span>
             </div>
 
-            <button class="btn btn-primary" @@onclick="() => StartImport(ImportSource.OpenFoodFacts)" disabled="@@_isImporting">
-                @@if (_isImporting && _currentImportSource == ImportSource.OpenFoodFacts)
+            <button class="btn btn-primary" @onclick="@(() => StartImport(ImportSource.OpenFoodFacts))" disabled="@_isImporting">
+                @if (_isImporting && _currentImportSource == ImportSource.OpenFoodFacts)
                 {
                     <span class="spinner"></span>
                     <span>Starting...</span>
@@ -85,24 +87,24 @@
     </div>
 
     <!-- Messages -->
-    @@if (!string.IsNullOrEmpty(_errorMessage))
+    @if (!string.IsNullOrEmpty(_errorMessage))
     {
         <div class="alert alert-error">
-            <strong>Error:</strong> @@_errorMessage
+            <strong>Error:</strong> @_errorMessage
         </div>
     }
 
-    @@if (!string.IsNullOrEmpty(_successMessage))
+    @if (!string.IsNullOrEmpty(_successMessage))
     {
         <div class="alert alert-success">
-            <strong>Success:</strong> @@_successMessage
+            <strong>Success:</strong> @_successMessage
         </div>
     }
 
     <!-- Import History -->
     <div class="import-history">
         <h2>Import History</h2>
-        @@if (_importHistory.Any())
+        @if (_importHistory.Any())
         {
             <div class="history-table">
                 <table>
@@ -116,17 +118,17 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @@foreach (var import in _importHistory.Take(10))
+                        @foreach (var import in _importHistory.Take(10))
                         {
                             <tr>
-                                <td><span class="source-badge">@@import.Source</span></td>
-                                <td><span class="status-badge status-@@import.Status.ToLower()">@@import.Status</span></td>
-                                <td>@@import.RecordsImported.ToString("N0")</td>
-                                <td>@@import.StartedAt.ToString("g")</td>
+                                <td><span class="source-badge">@import.Source</span></td>
+                                <td><span class="status-badge status-@import.Status.ToLower()">@import.Status</span></td>
+                                <td>@import.RecordsImported.ToString("N0")</td>
+                                <td>@import.StartedAt.ToString("g")</td>
                                 <td>
-                                    @@if (import.Duration.HasValue)
+                                    @if (import.Duration.HasValue)
                                     {
-                                        <span>@@FormatDuration(import.Duration.Value)</span>
+                                        <span>@FormatDuration(import.Duration.Value)</span>
                                     }
                                     else
                                     {
@@ -145,8 +147,16 @@
         }
     </div>
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to access this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
-@@code {
+@code {
     private enum ImportSource { USDA, FDA, OpenFoodFacts }
 
     private bool _isImporting;

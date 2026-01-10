@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
+using System.Text.RegularExpressions;
 
 namespace ExpressRecipe.Data.Common;
 
@@ -91,33 +92,68 @@ public class MigrationRunner
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        // Split script by GO statements (SQL Server batch separator)
-        var batches = sqlScript
-            .Split(new[] { "\nGO\n", "\nGO\r\n", "\r\nGO\r\n", "\r\nGO\n" }, StringSplitOptions.RemoveEmptyEntries)
-            .Where(batch => !string.IsNullOrWhiteSpace(batch))
+        // Robust split on GO batch separators: lines containing only 'GO' (case-insensitive)
+        var batches = Regex.Split(sqlScript, @"^\s*GO\s*$(\r?\n)?", RegexOptions.Multiline | RegexOptions.IgnoreCase)
+            .Select(b => b?.Trim())
+            .Where(b => !string.IsNullOrWhiteSpace(b))
             .ToArray();
 
-        await using var transaction = await connection.BeginTransactionAsync();
+        // Some statements (e.g., FULLTEXT operations) cannot run inside a user transaction.
+        // We'll commit any active transaction before such a batch, execute it outside a tx, then resume transactions.
+        SqlTransaction? tx = null;
         try
         {
             foreach (var batch in batches)
             {
-                if (string.IsNullOrWhiteSpace(batch))
-                    continue;
+                var requiresNonTx = Regex.IsMatch(batch!, @"\bFULLTEXT\b", RegexOptions.IgnoreCase);
 
-                await using var command = new SqlCommand(batch.Trim(), connection, (SqlTransaction)transaction);
-                command.CommandTimeout = 120; // 2 minutes for complex migrations
-                await command.ExecuteNonQueryAsync();
+                if (requiresNonTx)
+                {
+                    // Commit any active transaction before executing non-transactional batch
+                    if (tx != null)
+                    {
+                        await tx.CommitAsync();
+                        await tx.DisposeAsync();
+                        tx = null;
+                    }
+
+                    await using var nonTxCommand = new SqlCommand(batch, connection);
+                    nonTxCommand.CommandTimeout = 120; // 2 minutes for complex migrations
+                    await nonTxCommand.ExecuteNonQueryAsync();
+                }
+                else
+                {
+                    // Ensure we have a transaction for transactional batches
+                    if (tx == null)
+                    {
+                        tx = (SqlTransaction)await connection.BeginTransactionAsync();
+                    }
+                       
+                    await using var command = new SqlCommand(batch, connection, tx);
+                    command.CommandTimeout = 120; // 2 minutes for complex migrations
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+
+            // Commit any remaining transactional work before recording migration
+            if (tx != null)
+            {
+                await tx.CommitAsync();
+                await tx.DisposeAsync();
+                tx = null;
             }
 
             await RecordMigrationAsync(migrationId);
-            await transaction.CommitAsync();
 
             _logger?.LogInformation("Migration {MigrationId} applied successfully", migrationId);
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync();
+            if (tx != null)
+            {
+                await tx.RollbackAsync();
+                await tx.DisposeAsync();
+            }
             _logger?.LogError(ex, "Failed to apply migration {MigrationId}", migrationId);
             throw;
         }

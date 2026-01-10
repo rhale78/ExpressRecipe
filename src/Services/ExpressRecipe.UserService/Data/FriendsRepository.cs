@@ -67,7 +67,7 @@ public class FriendsRepository : SqlHelper, IFriendsRepository
                 FriendDisplayName = GetString(reader, "FriendDisplayName"),
                 Status = GetString(reader, "Status") ?? string.Empty,
                 RequestedBy = GetGuid(reader, "RequestedBy"),
-                RequestedAt = GetDateTime(reader, "RequestedAt") ?? DateTime.UtcNow,
+                RequestedAt = GetNullableDateTime(reader, "RequestedAt") ?? DateTime.UtcNow,
                 AcceptedAt = GetDateTime(reader, "AcceptedAt"),
                 BlockedAt = GetDateTime(reader, "BlockedAt"),
                 BlockedBy = GetGuidNullable(reader, "BlockedBy"),
@@ -99,7 +99,7 @@ public class FriendsRepository : SqlHelper, IFriendsRepository
                 FriendDisplayName = GetString(reader, "FriendDisplayName"),
                 Status = GetString(reader, "Status") ?? string.Empty,
                 RequestedBy = GetGuid(reader, "RequestedBy"),
-                RequestedAt = GetDateTime(reader, "RequestedAt") ?? DateTime.UtcNow,
+                RequestedAt = GetNullableDateTime(reader, "RequestedAt") ?? DateTime.UtcNow,
                 AcceptedAt = GetDateTime(reader, "AcceptedAt"),
                 BlockedAt = GetDateTime(reader, "BlockedAt"),
                 BlockedBy = GetGuidNullable(reader, "BlockedBy"),
@@ -334,10 +334,10 @@ public class FriendsRepository : SqlHelper, IFriendsRepository
                 InvitationCode = GetString(reader, "InvitationCode") ?? string.Empty,
                 InvitationMessage = GetString(reader, "InvitationMessage"),
                 Status = GetString(reader, "Status") ?? string.Empty,
-                SentAt = GetDateTime(reader, "SentAt") ?? DateTime.UtcNow,
+                SentAt = GetNullableDateTime(reader, "SentAt") ?? DateTime.UtcNow,
                 AcceptedAt = GetDateTime(reader, "AcceptedAt"),
                 AcceptedByUserId = GetGuidNullable(reader, "AcceptedByUserId"),
-                ExpiresAt = GetDateTime(reader, "ExpiresAt") ?? DateTime.UtcNow
+                ExpiresAt = GetNullableDateTime(reader, "ExpiresAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@InvitationCode", invitationCode));
 
@@ -399,10 +399,10 @@ public class FriendsRepository : SqlHelper, IFriendsRepository
                 InvitationCode = GetString(reader, "InvitationCode") ?? string.Empty,
                 InvitationMessage = GetString(reader, "InvitationMessage"),
                 Status = GetString(reader, "Status") ?? string.Empty,
-                SentAt = GetDateTime(reader, "SentAt") ?? DateTime.UtcNow,
+                SentAt = GetNullableDateTime(reader, "SentAt") ?? DateTime.UtcNow,
                 AcceptedAt = GetDateTime(reader, "AcceptedAt"),
                 AcceptedByUserId = GetGuidNullable(reader, "AcceptedByUserId"),
-                ExpiresAt = GetDateTime(reader, "ExpiresAt") ?? DateTime.UtcNow
+                ExpiresAt = GetNullableDateTime(reader, "ExpiresAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@UserId", userId));
     }
@@ -415,3 +415,4 @@ public class FriendsRepository : SqlHelper, IFriendsRepository
             .Select(s => s[random.Next(s.Length)]).ToArray());
     }
 }
+

@@ -1,8 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ExpressRecipe.Client.Shared.Services;
+using ExpressRecipe.Client.Shared.Models.Shopping;
 using ExpressRecipe.MAUI.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Controls;
 using System.Collections.ObjectModel;
+using IToastService = ExpressRecipe.MAUI.Services.IToastService;
 
 namespace ExpressRecipe.MAUI.ViewModels;
 
@@ -14,7 +18,7 @@ public partial class ShoppingListViewModel : ObservableObject
     private readonly ILogger<ShoppingListViewModel> _logger;
 
     [ObservableProperty]
-    private ObservableCollection<ShoppingItemViewModel> _items = new();
+    private ObservableCollection<ShoppingListItemDto> _items = new();
 
     [ObservableProperty]
     private bool _isLoading;
@@ -56,20 +60,16 @@ public partial class ShoppingListViewModel : ObservableObject
 
             try
             {
-                var apiItems = await _shoppingClient.GetAllItemsAsync();
+                var searchResult = await _shoppingClient.SearchShoppingListsAsync(new ShoppingListSearchRequest { PageSize = 1 });
+                var firstList = searchResult?.Lists.FirstOrDefault();
+                var apiItems = firstList?.Items;
+
                 if (apiItems != null)
                 {
                     Items.Clear();
                     foreach (var item in apiItems)
                     {
-                        Items.Add(new ShoppingItemViewModel
-                        {
-                            Id = item.Id,
-                            ProductName = item.ProductName ?? "Unknown",
-                            Quantity = item.Quantity,
-                            IsCompleted = item.IsCompleted,
-                            Category = item.Category ?? "Other"
-                        });
+                        Items.Add(item);
                     }
                 }
             }
@@ -111,12 +111,13 @@ public partial class ShoppingListViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(result))
             return;
 
-        var item = new ShoppingItemViewModel
+        var item = new ShoppingListItemDto
         {
             Id = Guid.NewGuid(),
-            ProductName = result,
+            Name = result,
             Quantity = 1,
-            IsCompleted = false,
+            Unit = "item",
+            IsPurchased = false,
             Category = "Other"
         };
 
@@ -135,7 +136,7 @@ public partial class ShoppingListViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task DeleteItemAsync(ShoppingItemViewModel item)
+    private async Task DeleteItemAsync(ShoppingListItemDto item)
     {
         Items.Remove(item);
         UpdateProgress();
@@ -151,9 +152,9 @@ public partial class ShoppingListViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task ToggleCompletedAsync(ShoppingItemViewModel item)
+    private async Task ToggleCompletedAsync(ShoppingListItemDto item)
     {
-        item.IsCompleted = !item.IsCompleted;
+        item.IsPurchased = !item.IsPurchased;
         UpdateProgress();
 
         try
@@ -169,7 +170,7 @@ public partial class ShoppingListViewModel : ObservableObject
     [RelayCommand]
     private async Task ClearCompletedAsync()
     {
-        var completed = Items.Where(i => i.IsCompleted).ToList();
+        var completed = Items.Where(i => i.IsPurchased).ToList();
         foreach (var item in completed)
         {
             Items.Remove(item);
@@ -182,25 +183,7 @@ public partial class ShoppingListViewModel : ObservableObject
     private void UpdateProgress()
     {
         TotalItems = Items.Count;
-        CompletedItems = Items.Count(i => i.IsCompleted);
+        CompletedItems = Items.Count(i => i.IsPurchased);
         OnPropertyChanged(nameof(ProgressPercentage));
     }
-}
-
-public partial class ShoppingItemViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private Guid _id;
-
-    [ObservableProperty]
-    private string _productName = string.Empty;
-
-    [ObservableProperty]
-    private int _quantity;
-
-    [ObservableProperty]
-    private bool _isCompleted;
-
-    [ObservableProperty]
-    private string _category = string.Empty;
 }

@@ -1,3 +1,4 @@
+using ExpressRecipe.Data.Common;
 using ExpressRecipe.AIService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -5,25 +6,35 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Load layered configuration (global + env + local)
+builder.AddLayeredConfiguration(args);
 
-// Configure JWT Authentication
+// Add services to the container
+// Add controllers
+builder.Services.AddControllers();
+
+// Add Swagger
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddSwaggerGen(c =>
+// {
+//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.AIService API", Version = "v1" });
+// });
+
+// Configure JWT Authentication (use global JwtSettings)
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        var jwt = builder.Configuration.GetSection("JwtSettings");
+        var secretKey = jwt["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SecretKey"] ?? "your-secret-key-min-32-characters-long-for-production"))
+            ValidIssuer = jwt["Issuer"] ?? "ExpressRecipe.AuthService",
+            ValidAudience = jwt["Audience"] ?? "ExpressRecipe.API",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
         };
     });
 
@@ -40,8 +51,22 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Register HTTP Client for Ollama
-builder.Services.AddHttpClient<IOllamaService, OllamaService>();
+// Configure HTTP Client for Ollama with proper settings
+var ollamaUrl = builder.Configuration["Ollama:BaseUrl"] ?? "http://localhost:11434";
+builder.Services.AddHttpClient("Ollama", client =>
+{
+    client.BaseAddress = new Uri(ollamaUrl);
+    client.Timeout = TimeSpan.FromMinutes(2); // AI inference can take time
+})
+.ConfigurePrimaryHttpMessageHandler(() =>
+{
+    return new SocketsHttpHandler
+    {
+        PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+        MaxConnectionsPerServer = 5
+    };
+});
 
 // Register Ollama Service
 builder.Services.AddScoped<IOllamaService, OllamaService>();
@@ -51,14 +76,16 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
+// Configure middleware pipeline
+// app.MapDefaultEndpoints(); // If ServiceDefaults referenced
+
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // app.UseSwagger();
+    // app.UseSwaggerUI();
 }
 
-app.UseCors();
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 

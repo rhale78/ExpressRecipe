@@ -13,6 +13,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load layered configuration (global + env + local)
+builder.AddLayeredConfiguration(args);
+
 // Add Aspire service defaults
 builder.AddServiceDefaults();
 
@@ -25,9 +28,12 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(redisConnectionString));
 builder.Services.AddSingleton<CacheService>();
 
+// Add memory cache for rate limiting
+builder.Services.AddMemoryCache();
+
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -38,8 +44,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
+            ValidIssuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService",
+            ValidAudience = jwtSettings["Audience"] ?? "ExpressRecipe.API",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
             ClockSkew = TimeSpan.Zero
         };
@@ -93,36 +99,9 @@ builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloa
 builder.Services.AddControllers();
 
 // Add API documentation
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "ExpressRecipe Recipe API", Version = "v1" });
-
-    // Add JWT authentication to Swagger
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme.",
-        Name = "Authorization",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-    {
-        {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
+// TODO: Re-add Swagger after resolving OpenApi 2.0 compatibility
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddSwaggerGen();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -138,6 +117,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Run database management (drop db/tables if configured)
+await app.RunDatabaseManagementAsync("RecipeService", "recipedb");
+
 // Run database migrations
 var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
 if (!Directory.Exists(migrationsPath))
@@ -152,8 +134,9 @@ app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // TODO: Re-enable after resolving OpenApi 2.0 compatibility
+    // app.UseSwagger();
+    // app.UseSwaggerUI();
 }
 
 app.UseCors();

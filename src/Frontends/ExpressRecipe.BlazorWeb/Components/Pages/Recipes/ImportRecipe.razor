@@ -1,19 +1,21 @@
 @page "/recipes/import"
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
 @using System.Text
-@attribute [Authorize]
 @inject IRecipeApiClient RecipeApi
 @inject NavigationManager Navigation
 
 <PageTitle>Import Recipe - ExpressRecipe</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="import-recipe-container">
     <!-- Header -->
     <div class="import-header">
-        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/recipes")">
+        <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/recipes")'>
             ← Back to Recipes
         </button>
         <h1>Import Recipe</h1>
@@ -27,15 +29,15 @@
     <!-- Import Method Tabs -->
     <div class="import-tabs">
         <button class="tab-btn @(_importMode == ImportMode.File ? "active" : "")"
-                @onclick="() => SetImportMode(ImportMode.File)">
+                @onclick="() => HandleSetImportMode(ImportMode.File)">
             📁 Upload File
         </button>
         <button class="tab-btn @(_importMode == ImportMode.Paste ? "active" : "")"
-                @onclick="() => SetImportMode(ImportMode.Paste)">
+                @onclick="() => HandleSetImportMode(ImportMode.Paste)">
             📋 Paste Recipe
         </button>
         <button class="tab-btn @(_importMode == ImportMode.Url ? "active" : "")"
-                @onclick="() => SetImportMode(ImportMode.Url)">
+                @onclick="() => HandleSetImportMode(ImportMode.Url)">
             🔗 From URL
         </button>
     </div>
@@ -247,7 +249,7 @@
         }
         else
         {
-            <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/recipes")">
+            <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo("/recipes"))">
                 Cancel
             </button>
             <button class="btn btn-primary" @onclick="ProcessImport" disabled="@(!CanImport() || _isImporting)">
@@ -285,6 +287,14 @@
         </div>
     }
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to access this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     private enum ImportMode { File, Paste, Url }
@@ -309,7 +319,7 @@
     // Import result
     private ImportRecipeResponse? _importResult;
 
-    private void SetImportMode(ImportMode mode)
+    private void HandleSetImportMode(ImportMode mode)
     {
         _importMode = mode;
         ClearImport();

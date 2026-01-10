@@ -13,7 +13,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     public async Task<List<ReportTypeDto>> GetReportTypesAsync()
     {
         const string sql = @"
-            SELECT Id, Name, Description, Category, ParameterSchema, IsActive
+            SELECT Id, Name, Description, Category, IsActive
             FROM ReportType
             WHERE IsActive = 1
             ORDER BY Category, Name";
@@ -26,9 +26,6 @@ public class ReportsRepository : SqlHelper, IReportsRepository
                 ? null
                 : reader.GetString(reader.GetOrdinal("Description")),
             Category = reader.GetString(reader.GetOrdinal("Category")),
-            ParameterSchema = reader.IsDBNull(reader.GetOrdinal("ParameterSchema"))
-                ? null
-                : reader.GetString(reader.GetOrdinal("ParameterSchema")),
             IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive"))
         });
     }
@@ -36,7 +33,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     public async Task<ReportTypeDto?> GetReportTypeByIdAsync(Guid id)
     {
         const string sql = @"
-            SELECT Id, Name, Description, Category, ParameterSchema, IsActive
+            SELECT Id, Name, Description, Category, IsActive
             FROM ReportType
             WHERE Id = @Id";
 
@@ -48,9 +45,6 @@ public class ReportsRepository : SqlHelper, IReportsRepository
                 ? null
                 : reader.GetString(reader.GetOrdinal("Description")),
             Category = reader.GetString(reader.GetOrdinal("Category")),
-            ParameterSchema = reader.IsDBNull(reader.GetOrdinal("ParameterSchema"))
-                ? null
-                : reader.GetString(reader.GetOrdinal("ParameterSchema")),
             IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive"))
         }, new SqlParameter("@Id", id));
 
@@ -65,8 +59,8 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     {
         const string sql = @"
             SELECT sr.Id, sr.UserId, sr.ReportTypeId, sr.ReportName, sr.Parameters,
-                   sr.ScheduleFrequency, sr.IsScheduled, sr.LastRunAt, sr.CreatedAt,
-                   rt.Name AS ReportTypeName, rt.Category
+                   sr.Schedule, sr.LastRunAt, sr.CreatedAt,
+                   rt.Name AS ReportTypeName
             FROM SavedReport sr
             INNER JOIN ReportType rt ON sr.ReportTypeId = rt.Id
             WHERE sr.UserId = @UserId AND sr.IsDeleted = 0
@@ -81,16 +75,14 @@ public class ReportsRepository : SqlHelper, IReportsRepository
             Parameters = reader.IsDBNull(reader.GetOrdinal("Parameters"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("Parameters")),
-            ScheduleFrequency = reader.IsDBNull(reader.GetOrdinal("ScheduleFrequency"))
+            Schedule = reader.IsDBNull(reader.GetOrdinal("Schedule"))
                 ? null
-                : reader.GetString(reader.GetOrdinal("ScheduleFrequency")),
-            IsScheduled = reader.GetBoolean(reader.GetOrdinal("IsScheduled")),
+                : reader.GetString(reader.GetOrdinal("Schedule")),
             LastRunAt = reader.IsDBNull(reader.GetOrdinal("LastRunAt"))
                 ? null
                 : reader.GetDateTime(reader.GetOrdinal("LastRunAt")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            ReportTypeName = reader.GetString(reader.GetOrdinal("ReportTypeName")),
-            Category = reader.GetString(reader.GetOrdinal("Category"))
+            ReportTypeName = reader.GetString(reader.GetOrdinal("ReportTypeName"))
         }, new SqlParameter("@UserId", userId));
     }
 
@@ -98,8 +90,8 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     {
         const string sql = @"
             SELECT sr.Id, sr.UserId, sr.ReportTypeId, sr.ReportName, sr.Parameters,
-                   sr.ScheduleFrequency, sr.IsScheduled, sr.LastRunAt, sr.CreatedAt,
-                   rt.Name AS ReportTypeName, rt.Category
+                   sr.Schedule, sr.LastRunAt, sr.CreatedAt,
+                   rt.Name AS ReportTypeName
             FROM SavedReport sr
             INNER JOIN ReportType rt ON sr.ReportTypeId = rt.Id
             WHERE sr.Id = @Id AND sr.IsDeleted = 0";
@@ -113,16 +105,14 @@ public class ReportsRepository : SqlHelper, IReportsRepository
             Parameters = reader.IsDBNull(reader.GetOrdinal("Parameters"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("Parameters")),
-            ScheduleFrequency = reader.IsDBNull(reader.GetOrdinal("ScheduleFrequency"))
+            Schedule = reader.IsDBNull(reader.GetOrdinal("Schedule"))
                 ? null
-                : reader.GetString(reader.GetOrdinal("ScheduleFrequency")),
-            IsScheduled = reader.GetBoolean(reader.GetOrdinal("IsScheduled")),
+                : reader.GetString(reader.GetOrdinal("Schedule")),
             LastRunAt = reader.IsDBNull(reader.GetOrdinal("LastRunAt"))
                 ? null
                 : reader.GetDateTime(reader.GetOrdinal("LastRunAt")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            ReportTypeName = reader.GetString(reader.GetOrdinal("ReportTypeName")),
-            Category = reader.GetString(reader.GetOrdinal("Category"))
+            ReportTypeName = reader.GetString(reader.GetOrdinal("ReportTypeName"))
         }, new SqlParameter("@Id", id));
 
         return savedReports.FirstOrDefault();
@@ -134,11 +124,11 @@ public class ReportsRepository : SqlHelper, IReportsRepository
 
         const string sql = @"
             INSERT INTO SavedReport
-                (Id, UserId, ReportTypeId, ReportName, Parameters, ScheduleFrequency,
-                 IsScheduled, CreatedAt, IsDeleted)
+                (Id, UserId, ReportTypeId, ReportName, Parameters, Schedule,
+                 CreatedAt, IsDeleted)
             VALUES
-                (@Id, @UserId, @ReportTypeId, @ReportName, @Parameters, @ScheduleFrequency,
-                 @IsScheduled, GETUTCDATE(), 0)";
+                (@Id, @UserId, @ReportTypeId, @ReportName, @Parameters, @Schedule,
+                 GETUTCDATE(), 0)";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
@@ -146,8 +136,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
             new SqlParameter("@ReportTypeId", request.ReportTypeId),
             new SqlParameter("@ReportName", request.ReportName),
             new SqlParameter("@Parameters", (object?)request.Parameters ?? DBNull.Value),
-            new SqlParameter("@ScheduleFrequency", (object?)request.ScheduleFrequency ?? DBNull.Value),
-            new SqlParameter("@IsScheduled", request.IsScheduled));
+            new SqlParameter("@Schedule", (object?)request.Schedule ?? DBNull.Value));
 
         return id;
     }
@@ -158,8 +147,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
             UPDATE SavedReport
             SET ReportName = @ReportName,
                 Parameters = @Parameters,
-                ScheduleFrequency = @ScheduleFrequency,
-                IsScheduled = @IsScheduled,
+                Schedule = @Schedule,
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND UserId = @UserId AND IsDeleted = 0";
 
@@ -168,8 +156,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
             new SqlParameter("@UserId", userId),
             new SqlParameter("@ReportName", request.ReportName),
             new SqlParameter("@Parameters", (object?)request.Parameters ?? DBNull.Value),
-            new SqlParameter("@ScheduleFrequency", (object?)request.ScheduleFrequency ?? DBNull.Value),
-            new SqlParameter("@IsScheduled", request.IsScheduled));
+            new SqlParameter("@Schedule", (object?)request.Schedule ?? DBNull.Value));
 
         return rowsAffected > 0;
     }
@@ -200,7 +187,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
 
         const string sql = @"
             SELECT rh.Id, rh.UserId, rh.ReportTypeId, rh.Parameters, rh.GeneratedAt,
-                   rh.FileSize, rh.ExportFormat, rh.Status, rh.ErrorMessage,
+                   rh.FileSize, rh.Format, rh.Status, rh.ErrorMessage,
                    rt.Name AS ReportTypeName
             FROM ReportHistory rh
             INNER JOIN ReportType rt ON rh.ReportTypeId = rt.Id
@@ -221,9 +208,9 @@ public class ReportsRepository : SqlHelper, IReportsRepository
             FileSize = reader.IsDBNull(reader.GetOrdinal("FileSize"))
                 ? null
                 : reader.GetInt64(reader.GetOrdinal("FileSize")),
-            ExportFormat = reader.IsDBNull(reader.GetOrdinal("ExportFormat"))
-                ? null
-                : reader.GetString(reader.GetOrdinal("ExportFormat")),
+            Format = reader.IsDBNull(reader.GetOrdinal("Format"))
+                ? string.Empty
+                : reader.GetString(reader.GetOrdinal("Format")),
             Status = reader.GetString(reader.GetOrdinal("Status")),
             ErrorMessage = reader.IsDBNull(reader.GetOrdinal("ErrorMessage"))
                 ? null
@@ -242,10 +229,10 @@ public class ReportsRepository : SqlHelper, IReportsRepository
         const string sql = @"
             INSERT INTO ReportHistory
                 (Id, UserId, ReportTypeId, Parameters, GeneratedAt, FileSize,
-                 ExportFormat, Status, ErrorMessage)
+                 Format, Status, ErrorMessage)
             VALUES
                 (@Id, @UserId, @ReportTypeId, @Parameters, GETUTCDATE(), @FileSize,
-                 @ExportFormat, @Status, @ErrorMessage)";
+                 @Format, @Status, @ErrorMessage)";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
@@ -253,7 +240,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
             new SqlParameter("@ReportTypeId", request.ReportTypeId),
             new SqlParameter("@Parameters", (object?)request.Parameters ?? DBNull.Value),
             new SqlParameter("@FileSize", (object?)request.FileSize ?? DBNull.Value),
-            new SqlParameter("@ExportFormat", (object?)request.ExportFormat ?? DBNull.Value),
+            new SqlParameter("@Format", (object?)request.ExportFormat ?? DBNull.Value),
             new SqlParameter("@Status", request.Status),
             new SqlParameter("@ErrorMessage", (object?)request.ErrorMessage ?? DBNull.Value));
 
@@ -279,7 +266,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     public async Task<List<UserListDto>> GetUserListsAsync(Guid userId, string? listType = null)
     {
         var sql = @"
-            SELECT Id, UserId, ListName, ListType, Description, Icon,
+            SELECT Id, UserId, Name, ListType, Description,
                    IsShared, ItemCount, CreatedAt, UpdatedAt
             FROM UserList
             WHERE UserId = @UserId AND IsDeleted = 0";
@@ -298,14 +285,11 @@ public class ReportsRepository : SqlHelper, IReportsRepository
         {
             Id = reader.GetGuid(reader.GetOrdinal("Id")),
             UserId = reader.GetGuid(reader.GetOrdinal("UserId")),
-            ListName = reader.GetString(reader.GetOrdinal("ListName")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
             ListType = reader.GetString(reader.GetOrdinal("ListType")),
             Description = reader.IsDBNull(reader.GetOrdinal("Description"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("Description")),
-            Icon = reader.IsDBNull(reader.GetOrdinal("Icon"))
-                ? null
-                : reader.GetString(reader.GetOrdinal("Icon")),
             IsShared = reader.GetBoolean(reader.GetOrdinal("IsShared")),
             ItemCount = reader.GetInt32(reader.GetOrdinal("ItemCount")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
@@ -319,7 +303,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     public async Task<UserListDto?> GetListByIdAsync(Guid id, bool includeItems = true)
     {
         const string sql = @"
-            SELECT Id, UserId, ListName, ListType, Description, Icon,
+            SELECT Id, UserId, Name, ListType, Description,
                    IsShared, ItemCount, CreatedAt, UpdatedAt
             FROM UserList
             WHERE Id = @Id AND IsDeleted = 0";
@@ -328,14 +312,11 @@ public class ReportsRepository : SqlHelper, IReportsRepository
         {
             Id = reader.GetGuid(reader.GetOrdinal("Id")),
             UserId = reader.GetGuid(reader.GetOrdinal("UserId")),
-            ListName = reader.GetString(reader.GetOrdinal("ListName")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
             ListType = reader.GetString(reader.GetOrdinal("ListType")),
             Description = reader.IsDBNull(reader.GetOrdinal("Description"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("Description")),
-            Icon = reader.IsDBNull(reader.GetOrdinal("Icon"))
-                ? null
-                : reader.GetString(reader.GetOrdinal("Icon")),
             IsShared = reader.GetBoolean(reader.GetOrdinal("IsShared")),
             ItemCount = reader.GetInt32(reader.GetOrdinal("ItemCount")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
@@ -360,19 +341,19 @@ public class ReportsRepository : SqlHelper, IReportsRepository
 
         const string sql = @"
             INSERT INTO UserList
-                (Id, UserId, ListName, ListType, Description, Icon, IsShared,
+                (Id, UserId, Name, ListType, Description, IsShared,
                  ItemCount, CreatedAt, IsDeleted)
             VALUES
-                (@Id, @UserId, @ListName, @ListType, @Description, @Icon, 0,
+                (@Id, @UserId, @Name, @ListType, @Description, @IsShared,
                  0, GETUTCDATE(), 0)";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
             new SqlParameter("@UserId", userId),
-            new SqlParameter("@ListName", request.ListName),
+            new SqlParameter("@Name", request.Name),
             new SqlParameter("@ListType", request.ListType),
             new SqlParameter("@Description", (object?)request.Description ?? DBNull.Value),
-            new SqlParameter("@Icon", (object?)request.Icon ?? DBNull.Value));
+            new SqlParameter("@IsShared", request.IsShared));
 
         return id;
     }
@@ -381,18 +362,18 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     {
         const string sql = @"
             UPDATE UserList
-            SET ListName = @ListName,
+            SET Name = @Name,
                 Description = @Description,
-                Icon = @Icon,
+                IsShared = @IsShared,
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND UserId = @UserId AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
             new SqlParameter("@UserId", userId),
-            new SqlParameter("@ListName", request.ListName),
+            new SqlParameter("@Name", request.Name),
             new SqlParameter("@Description", (object?)request.Description ?? DBNull.Value),
-            new SqlParameter("@Icon", (object?)request.Icon ?? DBNull.Value));
+            new SqlParameter("@IsShared", request.IsShared));
 
         return rowsAffected > 0;
     }
@@ -420,23 +401,23 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     public async Task<List<UserListItemDto>> GetListItemsAsync(Guid listId)
     {
         const string sql = @"
-            SELECT Id, ListId, EntityType, EntityId, ItemText, Quantity,
-                   Unit, Notes, IsChecked, SortOrder, CreatedAt, UpdatedAt
+            SELECT Id, ListId, ItemType, ItemId, ItemName, Quantity,
+                   Unit, Notes, IsChecked, OrderIndex, AddedAt
             FROM UserListItem
             WHERE ListId = @ListId AND IsDeleted = 0
-            ORDER BY SortOrder, CreatedAt";
+            ORDER BY OrderIndex, AddedAt";
 
         return await ExecuteReaderAsync(sql, reader => new UserListItemDto
         {
             Id = reader.GetGuid(reader.GetOrdinal("Id")),
             ListId = reader.GetGuid(reader.GetOrdinal("ListId")),
-            EntityType = reader.IsDBNull(reader.GetOrdinal("EntityType"))
+            ItemType = reader.GetString(reader.GetOrdinal("ItemType")),
+            ItemId = reader.IsDBNull(reader.GetOrdinal("ItemId"))
                 ? null
-                : reader.GetString(reader.GetOrdinal("EntityType")),
-            EntityId = reader.IsDBNull(reader.GetOrdinal("EntityId"))
+                : reader.GetGuid(reader.GetOrdinal("ItemId")),
+            ItemName = reader.IsDBNull(reader.GetOrdinal("ItemName"))
                 ? null
-                : reader.GetGuid(reader.GetOrdinal("EntityId")),
-            ItemText = reader.GetString(reader.GetOrdinal("ItemText")),
+                : reader.GetString(reader.GetOrdinal("ItemName")),
             Quantity = reader.IsDBNull(reader.GetOrdinal("Quantity"))
                 ? null
                 : reader.GetDecimal(reader.GetOrdinal("Quantity")),
@@ -447,11 +428,8 @@ public class ReportsRepository : SqlHelper, IReportsRepository
                 ? null
                 : reader.GetString(reader.GetOrdinal("Notes")),
             IsChecked = reader.GetBoolean(reader.GetOrdinal("IsChecked")),
-            SortOrder = reader.GetInt32(reader.GetOrdinal("SortOrder")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt"))
-                ? null
-                : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+            OrderIndex = reader.GetInt32(reader.GetOrdinal("OrderIndex")),
+            AddedAt = reader.GetDateTime(reader.GetOrdinal("AddedAt"))
         }, new SqlParameter("@ListId", listId));
     }
 
@@ -461,7 +439,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
 
         // Get next sort order
         const string getOrderSql = @"
-            SELECT ISNULL(MAX(SortOrder), 0) + 1
+            SELECT ISNULL(MAX(OrderIndex), 0) + 1
             FROM UserListItem
             WHERE ListId = @ListId";
 
@@ -470,22 +448,22 @@ public class ReportsRepository : SqlHelper, IReportsRepository
 
         const string sql = @"
             INSERT INTO UserListItem
-                (Id, ListId, EntityType, EntityId, ItemText, Quantity, Unit,
-                 Notes, IsChecked, SortOrder, CreatedAt, IsDeleted)
+                (Id, ListId, ItemType, ItemId, ItemName, Quantity, Unit,
+                 Notes, IsChecked, OrderIndex, AddedAt, IsDeleted)
             VALUES
-                (@Id, @ListId, @EntityType, @EntityId, @ItemText, @Quantity, @Unit,
-                 @Notes, 0, @SortOrder, GETUTCDATE(), 0)";
+                (@Id, @ListId, @ItemType, @ItemId, @ItemName, @Quantity, @Unit,
+                 @Notes, 0, @OrderIndex, GETUTCDATE(), 0)";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
             new SqlParameter("@ListId", listId),
-            new SqlParameter("@EntityType", (object?)request.EntityType ?? DBNull.Value),
-            new SqlParameter("@EntityId", (object?)request.EntityId ?? DBNull.Value),
-            new SqlParameter("@ItemText", request.ItemText),
+            new SqlParameter("@ItemType", request.ItemType),
+            new SqlParameter("@ItemId", (object?)request.ItemId ?? DBNull.Value),
+            new SqlParameter("@ItemName", (object?)request.ItemName ?? DBNull.Value),
             new SqlParameter("@Quantity", (object?)request.Quantity ?? DBNull.Value),
             new SqlParameter("@Unit", (object?)request.Unit ?? DBNull.Value),
             new SqlParameter("@Notes", (object?)request.Notes ?? DBNull.Value),
-            new SqlParameter("@SortOrder", sortOrder));
+            new SqlParameter("@OrderIndex", sortOrder));
 
         // Update list item count
         await UpdateListItemCountAsync(listId);
@@ -497,21 +475,20 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     {
         const string sql = @"
             UPDATE UserListItem
-            SET ItemText = @ItemText,
-                Quantity = @Quantity,
+            SET Quantity = @Quantity,
                 Unit = @Unit,
                 Notes = @Notes,
-                SortOrder = @SortOrder,
-                UpdatedAt = GETUTCDATE()
+                IsChecked = @IsChecked,
+                OrderIndex = @OrderIndex
             WHERE Id = @Id AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", itemId),
-            new SqlParameter("@ItemText", request.ItemText),
             new SqlParameter("@Quantity", (object?)request.Quantity ?? DBNull.Value),
             new SqlParameter("@Unit", (object?)request.Unit ?? DBNull.Value),
             new SqlParameter("@Notes", (object?)request.Notes ?? DBNull.Value),
-            new SqlParameter("@SortOrder", request.SortOrder));
+            new SqlParameter("@IsChecked", request.IsChecked),
+            new SqlParameter("@OrderIndex", request.OrderIndex));
 
         return rowsAffected > 0;
     }
@@ -576,7 +553,7 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     public async Task<List<ListSharingDto>> GetListSharingAsync(Guid listId)
     {
         const string sql = @"
-            SELECT Id, ListId, SharedWithUserId, Permission, SharedAt, ExpiresAt
+            SELECT Id, ListId, SharedWithUserId, CanEdit, SharedAt, ExpiresAt
             FROM ListSharing
             WHERE ListId = @ListId
             ORDER BY SharedAt DESC";
@@ -585,8 +562,10 @@ public class ReportsRepository : SqlHelper, IReportsRepository
         {
             Id = reader.GetGuid(reader.GetOrdinal("Id")),
             ListId = reader.GetGuid(reader.GetOrdinal("ListId")),
-            SharedWithUserId = reader.GetGuid(reader.GetOrdinal("SharedWithUserId")),
-            Permission = reader.GetString(reader.GetOrdinal("Permission")),
+            SharedWithUserId = reader.IsDBNull(reader.GetOrdinal("SharedWithUserId"))
+                ? null
+                : reader.GetGuid(reader.GetOrdinal("SharedWithUserId")),
+            CanEdit = reader.GetBoolean(reader.GetOrdinal("CanEdit")),
             SharedAt = reader.GetDateTime(reader.GetOrdinal("SharedAt")),
             ExpiresAt = reader.IsDBNull(reader.GetOrdinal("ExpiresAt"))
                 ? null
@@ -597,8 +576,8 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     public async Task<List<UserListDto>> GetSharedListsAsync(Guid userId)
     {
         const string sql = @"
-            SELECT ul.Id, ul.UserId, ul.ListName, ul.ListType, ul.Description,
-                   ul.Icon, ul.IsShared, ul.ItemCount, ul.CreatedAt, ul.UpdatedAt
+            SELECT ul.Id, ul.UserId, ul.Name, ul.ListType, ul.Description,
+                   ul.IsShared, ul.ItemCount, ul.CreatedAt, ul.UpdatedAt
             FROM UserList ul
             INNER JOIN ListSharing ls ON ul.Id = ls.ListId
             WHERE ls.SharedWithUserId = @UserId
@@ -610,14 +589,11 @@ public class ReportsRepository : SqlHelper, IReportsRepository
         {
             Id = reader.GetGuid(reader.GetOrdinal("Id")),
             UserId = reader.GetGuid(reader.GetOrdinal("UserId")),
-            ListName = reader.GetString(reader.GetOrdinal("ListName")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
             ListType = reader.GetString(reader.GetOrdinal("ListType")),
             Description = reader.IsDBNull(reader.GetOrdinal("Description"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("Description")),
-            Icon = reader.IsDBNull(reader.GetOrdinal("Icon"))
-                ? null
-                : reader.GetString(reader.GetOrdinal("Icon")),
             IsShared = reader.GetBoolean(reader.GetOrdinal("IsShared")),
             ItemCount = reader.GetInt32(reader.GetOrdinal("ItemCount")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
@@ -634,15 +610,15 @@ public class ReportsRepository : SqlHelper, IReportsRepository
 
         const string sql = @"
             INSERT INTO ListSharing
-                (Id, ListId, SharedWithUserId, Permission, SharedAt, ExpiresAt)
+                (Id, ListId, SharedWithUserId, CanEdit, SharedAt, ExpiresAt)
             VALUES
-                (@Id, @ListId, @SharedWithUserId, @Permission, GETUTCDATE(), @ExpiresAt)";
+                (@Id, @ListId, @SharedWithUserId, @CanEdit, GETUTCDATE(), @ExpiresAt)";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
             new SqlParameter("@ListId", listId),
-            new SqlParameter("@SharedWithUserId", request.SharedWithUserId),
-            new SqlParameter("@Permission", request.Permission),
+            new SqlParameter("@SharedWithUserId", (object?)request.SharedWithUserId ?? DBNull.Value),
+            new SqlParameter("@CanEdit", request.CanEdit),
             new SqlParameter("@ExpiresAt", (object?)request.ExpiresAt ?? DBNull.Value));
 
         // Update IsShared flag on list
@@ -660,13 +636,13 @@ public class ReportsRepository : SqlHelper, IReportsRepository
     {
         const string sql = @"
             UPDATE ListSharing
-            SET Permission = @Permission,
+            SET CanEdit = @CanEdit,
                 ExpiresAt = @ExpiresAt
             WHERE Id = @Id";
 
         var rowsAffected = await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", sharingId),
-            new SqlParameter("@Permission", request.Permission),
+            new SqlParameter("@CanEdit", request.CanEdit),
             new SqlParameter("@ExpiresAt", (object?)request.ExpiresAt ?? DBNull.Value));
 
         return rowsAffected > 0;

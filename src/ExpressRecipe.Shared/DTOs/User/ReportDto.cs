@@ -256,6 +256,39 @@ public class ShareListRequest
     public DateTime? ExpiresAt { get; set; }
 }
 
+public class UpdateListSharingRequest
+{
+    public bool CanEdit { get; set; }
+
+    public DateTime? ExpiresAt { get; set; }
+}
+
+public class CheckListItemRequest
+{
+    public bool IsChecked { get; set; }
+}
+
+public class CreateReportHistoryRequest
+{
+    [Required]
+    public Guid ReportTypeId { get; set; }
+
+    public Guid? SavedReportId { get; set; }
+
+    public string? Parameters { get; set; }
+
+    public long? FileSize { get; set; }
+
+    [StringLength(50)]
+    public string? ExportFormat { get; set; }
+
+    [Required]
+    [StringLength(50)]
+    public string Status { get; set; } = string.Empty;
+
+    public string? ErrorMessage { get; set; }
+}
+
 public class ListSummaryDto
 {
     public int TotalLists { get; set; }

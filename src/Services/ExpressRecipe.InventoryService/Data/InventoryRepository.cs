@@ -414,6 +414,64 @@ public class InventoryRepository : IInventoryRepository
         return predictions;
     }
 
+    public async Task<List<ExpirationAlertDto>> GetActiveAlertsAsync(Guid userId)
+    {
+        return await GetExpirationAlertsAsync(userId);
+    }
+
+    public async Task DismissAlertAsync(Guid alertId)
+    {
+        const string sql = @"
+            UPDATE ExpirationAlert
+            SET IsDismissed = 1, DismissedAt = GETUTCDATE()
+            WHERE Id = @AlertId";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@AlertId", alertId);
+
+        await command.ExecuteNonQueryAsync();
+        _logger.LogInformation("Dismissed alert {AlertId}", alertId);
+    }
+
+    public async Task<StorageLocationDto?> GetStorageLocationByIdAsync(Guid id)
+    {
+        const string sql = @"
+            SELECT Id, UserId, Name, Description, Temperature, IsDefault, CreatedAt
+            FROM StorageLocation
+            WHERE Id = @Id AND IsDeleted = 0";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Id", id);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return new StorageLocationDto
+            {
+                Id = reader.GetGuid(0),
+                UserId = reader.GetGuid(1),
+                Name = reader.GetString(2),
+                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Temperature = reader.IsDBNull(4) ? null : reader.GetString(4),
+                IsDefault = reader.GetBoolean(5),
+                CreatedAt = reader.GetDateTime(6)
+            };
+        }
+
+        return null;
+    }
+
+    public async Task<List<InventoryHistoryDto>> GetUsageHistoryAsync(Guid itemId, int limit = 50)
+    {
+        return await GetItemHistoryAsync(itemId, limit);
+    }
+
     private async Task CreateHistoryEntryAsync(Guid inventoryItemId, Guid userId, string actionType,
         decimal quantityChange, decimal quantityBefore, decimal quantityAfter, string? reason,
         SqlTransaction? transaction = null)

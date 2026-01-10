@@ -42,7 +42,8 @@ public class AuthRepository : IAuthRepository
         command.Parameters.AddWithValue("@FirstName", firstName);
         command.Parameters.AddWithValue("@LastName", lastName);
 
-        var userId = (Guid)await command.ExecuteScalarAsync()!;
+        var result = await command.ExecuteScalarAsync();
+        var userId = result != null ? (Guid)result : Guid.Empty;
         _logger.LogInformation("Created user {UserId} with email {Email}", userId, email);
         return userId;
     }
@@ -141,7 +142,8 @@ public class AuthRepository : IAuthRepository
         command.Parameters.AddWithValue("@Token", token);
         command.Parameters.AddWithValue("@ExpiresAt", expiresAt);
 
-        return (Guid)await command.ExecuteScalarAsync()!;
+        var result = await command.ExecuteScalarAsync();
+        return result != null ? (Guid)result : Guid.Empty;
     }
 
     public async Task<(Guid userId, bool isValid)> ValidateRefreshTokenAsync(string token)

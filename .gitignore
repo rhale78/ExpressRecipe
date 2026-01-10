@@ -159,11 +159,32 @@ node_modules/
 *.db-wal
 local.db
 
-# User secrets
+# User secrets & Environment files (SECURITY CRITICAL)
 **/appsettings.Development.json
 **/appsettings.Local.json
+**/appsettings.Production.json
+**/appsettings.Staging.json
 secrets.json
+user-secrets.json
 
-# Environment files
+# Environment files - ALL VARIANTS
 .env
 .env.local
+.env.development
+.env.production
+.env.staging
+.env.test
+**/.env
+**/.env.local
+**/.env.development
+**/.env.production
+**/.env.staging
+**/.env.test
+
+# Sensitive configuration files
+**/secrets/
+**/private/
+*.key
+*.pem
+*.cert
+*.crt

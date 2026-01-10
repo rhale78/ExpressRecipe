@@ -1,17 +1,19 @@
 @page "/products/{ProductId:guid}"
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Product
-@attribute [Authorize]
 @inject IProductApiClient ProductApi
 @inject NavigationManager Navigation
 
 <PageTitle>@(_product?.Name ?? "Product Details") - ExpressRecipe</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="product-details-container">
     <!-- Back Button -->
     <div class="navigation-bar">
-        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/products")">
+        <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/products")'>
             ← Back to Products
         </button>
     </div>
@@ -95,7 +97,7 @@
                         <div class="ingredients-list">
                             @foreach (var ingredient in _product.Ingredients)
                             {
-                                <span class="ingredient-item">@ingredient</span>
+                                <span class="ingredient-item">@ingredient.IngredientName</span>
                             }
                         </div>
                     </div>
@@ -165,12 +167,20 @@
             <div class="error-icon">❌</div>
             <h2>Product Not Found</h2>
             <p>@_errorMessage</p>
-            <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/products")">
+            <button class="btn btn-primary" @onclick='() => Navigation.NavigateTo("/products")'>
                 Browse All Products
             </button>
         </div>
     }
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to access this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     [Parameter]

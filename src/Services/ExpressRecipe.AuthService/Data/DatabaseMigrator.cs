@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using System.Text.RegularExpressions;
 
 namespace ExpressRecipe.AuthService.Data;
 
@@ -71,22 +72,43 @@ public class DatabaseMigrator
             // Apply migration
             _logger.LogInformation("Applying migration: {Migration}", migrationName);
             var sql = await File.ReadAllTextAsync(file);
-            
-            await using (var command = connection.CreateCommand())
-            {
-                command.CommandText = sql;
-                await command.ExecuteNonQueryAsync();
-            }
 
-            // Record migration
-            await using (var command = connection.CreateCommand())
-            {
-                command.CommandText = "INSERT INTO MigrationHistory (MigrationName) VALUES (@Name)";
-                command.Parameters.AddWithValue("@Name", migrationName);
-                await command.ExecuteNonQueryAsync();
-            }
+            // Split into batches on lines that contain only GO (case-insensitive)
+            var batches = Regex.Split(sql, @"^\s*GO\s*$(\r?\n)?", RegexOptions.Multiline | RegexOptions.IgnoreCase)
+                .Select(b => b?.Trim())
+                .Where(b => !string.IsNullOrWhiteSpace(b))
+                .ToArray();
 
-            _logger.LogInformation("Migration {Migration} applied successfully", migrationName);
+            await using var transaction = await connection.BeginTransactionAsync();
+            try
+            {
+                foreach (var batch in batches)
+                {
+                    await using var cmd = connection.CreateCommand();
+                    cmd.Transaction = (SqlTransaction)transaction;
+                    cmd.CommandText = batch!;
+                    cmd.CommandTimeout = 120;
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                // Record migration
+                await using (var recordCmd = connection.CreateCommand())
+                {
+                    recordCmd.Transaction = (SqlTransaction)transaction;
+                    recordCmd.CommandText = "INSERT INTO MigrationHistory (MigrationName) VALUES (@Name)";
+                    recordCmd.Parameters.AddWithValue("@Name", migrationName);
+                    await recordCmd.ExecuteNonQueryAsync();
+                }
+
+                await transaction.CommitAsync();
+                _logger.LogInformation("Migration {Migration} applied successfully", migrationName);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Failed to apply migration {Migration}", migrationName);
+                throw;
+            }
         }
     }
 }

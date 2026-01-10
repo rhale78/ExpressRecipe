@@ -16,24 +16,24 @@ INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, Al
 GO
 
 -- Sweeteners
-INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, IsApproved) VALUES
-('Sugar', 'Sweetener', 'Refined white granulated sugar from sugar cane or beets', 'Sweetening, texture, preservation', 0, 1),
-('Brown Sugar', 'Sweetener', 'Sugar with molasses content', 'Sweetening, moisture, flavor', 0, 1),
-('Honey', 'Sweetener', 'Natural bee-produced sweetener', 'Sweetening, moisture, antimicrobial', 0, 1),
-('Maple Syrup', 'Sweetener', 'Natural tree sap syrup', 'Sweetening, flavor', 0, 1),
-('Corn Syrup', 'Sweetener', 'Glucose syrup from corn', 'Sweetening, moisture retention', 0, 1),
-('High Fructose Corn Syrup', 'Sweetener', 'Corn syrup with enzymatically converted fructose', 'Sweetening, preservation', 0, 1),
-('Molasses', 'Sweetener', 'Dark syrup from sugar refining', 'Sweetening, color, flavor', 0, 1);
+INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, AllergenType, IsApproved) VALUES
+('Sugar', 'Sweetener', 'Refined white granulated sugar from sugar cane or beets', 'Sweetening, texture, preservation', 0, NULL, 1),
+('Brown Sugar', 'Sweetener', 'Sugar with molasses content', 'Sweetening, moisture, flavor', 0, NULL, 1),
+('Honey', 'Sweetener', 'Natural bee-produced sweetener', 'Sweetening, moisture, antimicrobial', 0, NULL, 1),
+('Maple Syrup', 'Sweetener', 'Natural tree sap syrup', 'Sweetening, flavor', 0, NULL, 1),
+('Corn Syrup', 'Sweetener', 'Glucose syrup from corn', 'Sweetening, moisture retention', 0, NULL, 1),
+('High Fructose Corn Syrup', 'Sweetener', 'Corn syrup with enzymatically converted fructose', 'Sweetening, preservation', 0, NULL, 1),
+('Molasses', 'Sweetener', 'Dark syrup from sugar refining', 'Sweetening, color, flavor', 0, NULL, 1);
 GO
 
 -- Fats & Oils
-INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, IsApproved) VALUES
+INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, AllergenType, IsApproved) VALUES
 ('Butter', 'Fat/Oil', 'Dairy fat from milk', 'Flavor, texture, moisture', 1, 'Dairy', 1),
-('Vegetable Oil', 'Fat/Oil', 'Refined oil from various plants', 'Cooking, moisture, texture', 0, 1),
-('Olive Oil', 'Fat/Oil', 'Oil pressed from olives', 'Cooking, flavor, healthy fats', 0, 1),
-('Coconut Oil', 'Fat/Oil', 'Oil extracted from coconut meat', 'Cooking, flavor, texture', 0, 1),
-('Canola Oil', 'Fat/Oil', 'Oil from rapeseed plant', 'Cooking, neutral flavor', 0, 1),
-('Palm Oil', 'Fat/Oil', 'Oil from palm fruit', 'Texture, stability, preservation', 0, 1),
+('Vegetable Oil', 'Fat/Oil', 'Refined oil from various plants', 'Cooking, moisture, texture', 0, NULL, 1),
+('Olive Oil', 'Fat/Oil', 'Oil pressed from olives', 'Cooking, flavor, healthy fats', 0, NULL, 1),
+('Coconut Oil', 'Fat/Oil', 'Oil extracted from coconut meat', 'Cooking, flavor, texture', 0, NULL, 1),
+('Canola Oil', 'Fat/Oil', 'Oil from rapeseed plant', 'Cooking, neutral flavor', 0, NULL, 1),
+('Palm Oil', 'Fat/Oil', 'Oil from palm fruit', 'Texture, stability, preservation', 0, NULL, 1),
 ('Soybean Oil', 'Fat/Oil', 'Oil extracted from soybeans', 'Cooking, emulsifying', 1, 'Soy', 1);
 GO
 
@@ -60,27 +60,27 @@ INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, Al
 GO
 
 -- Vegetables
-INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, IsApproved) VALUES
-('Tomato', 'Vegetable', 'Red fruit vegetable', 'Flavor, acidity, moisture', 0, 1),
-('Onion', 'Vegetable', 'Bulb vegetable', 'Flavor, aroma', 0, 1),
-('Garlic', 'Vegetable', 'Pungent bulb vegetable', 'Flavor, aroma, antimicrobial', 0, 1),
-('Carrot', 'Vegetable', 'Root vegetable', 'Sweetness, color, nutrients', 0, 1),
-('Celery', 'Vegetable', 'Stalk vegetable', 'Flavor, crunch, aromatics', 0, 1),
-('Potato', 'Vegetable', 'Starchy tuber', 'Carbohydrate, texture, bulk', 0, 1),
-('Lettuce', 'Vegetable', 'Leafy green vegetable', 'Texture, nutrients, freshness', 0, 1),
-('Spinach', 'Vegetable', 'Leafy green vegetable', 'Nutrients, iron, vitamins', 0, 1);
+INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, AllergenType, IsApproved) VALUES
+('Tomato', 'Vegetable', 'Red fruit vegetable', 'Flavor, acidity, moisture', 0, NULL, 1),
+('Onion', 'Vegetable', 'Bulb vegetable', 'Flavor, aroma', 0, NULL, 1),
+('Garlic', 'Vegetable', 'Pungent bulb vegetable', 'Flavor, aroma, antimicrobial', 0, NULL, 1),
+('Carrot', 'Vegetable', 'Root vegetable', 'Sweetness, color, nutrients', 0, NULL, 1),
+('Celery', 'Vegetable', 'Stalk vegetable', 'Flavor, crunch, aromatics', 0, NULL, 1),
+('Potato', 'Vegetable', 'Starchy tuber', 'Carbohydrate, texture, bulk', 0, NULL, 1),
+('Lettuce', 'Vegetable', 'Leafy green vegetable', 'Texture, nutrients, freshness', 0, NULL, 1),
+('Spinach', 'Vegetable', 'Leafy green vegetable', 'Nutrients, iron, vitamins', 0, NULL, 1);
 GO
 
 -- Spices & Seasonings
-INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, IsApproved) VALUES
-('Salt', 'Spice', 'Sodium chloride', 'Seasoning, preservation, flavor enhancement', 0, 1),
-('Black Pepper', 'Spice', 'Ground peppercorn', 'Seasoning, heat, flavor', 0, 1),
-('Cinnamon', 'Spice', 'Ground bark of cinnamon tree', 'Flavor, aroma, warmth', 0, 1),
-('Paprika', 'Spice', 'Ground dried peppers', 'Color, mild flavor', 0, 1),
-('Cumin', 'Spice', 'Ground cumin seeds', 'Earthy flavor, aroma', 0, 1),
-('Oregano', 'Spice', 'Dried oregano herb', 'Flavor, aroma', 0, 1),
-('Basil', 'Spice', 'Dried basil herb', 'Flavor, aroma', 0, 1),
-('Thyme', 'Spice', 'Dried thyme herb', 'Flavor, aroma', 0, 1);
+INSERT INTO BaseIngredient (Name, Category, Description, Purpose, IsAllergen, AllergenType, IsApproved) VALUES
+('Salt', 'Spice', 'Sodium chloride', 'Seasoning, preservation, flavor enhancement', 0, NULL, 1),
+('Black Pepper', 'Spice', 'Ground peppercorn', 'Seasoning, heat, flavor', 0, NULL, 1),
+('Cinnamon', 'Spice', 'Ground bark of cinnamon tree', 'Flavor, aroma, warmth', 0, NULL, 1),
+('Paprika', 'Spice', 'Ground dried peppers', 'Color, mild flavor', 0, NULL, 1),
+('Cumin', 'Spice', 'Ground cumin seeds', 'Earthy flavor, aroma', 0, NULL, 1),
+('Oregano', 'Spice', 'Dried oregano herb', 'Flavor, aroma', 0, NULL, 1),
+('Basil', 'Spice', 'Dried basil herb', 'Flavor, aroma', 0, NULL, 1),
+('Thyme', 'Spice', 'Dried thyme herb', 'Flavor, aroma', 0, NULL, 1);
 GO
 
 -- Additives & Leavening Agents

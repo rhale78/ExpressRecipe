@@ -1,5 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
+using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace ExpressRecipe.ProductService.Data;
 
@@ -39,19 +41,19 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {
             whereClauses.Add("(Name LIKE @SearchTerm OR Brand LIKE @SearchTerm OR Address LIKE @SearchTerm)");
-            parameters.Add(CreateParameter("@SearchTerm", $"%{request.SearchTerm}%"));
+            parameters.Add((SqlParameter)CreateParameter("@SearchTerm", $"%{request.SearchTerm}%"));
         }
 
         if (!string.IsNullOrWhiteSpace(request.CuisineType))
         {
             whereClauses.Add("CuisineType = @CuisineType");
-            parameters.Add(CreateParameter("@CuisineType", request.CuisineType));
+            parameters.Add((SqlParameter)CreateParameter("@CuisineType", request.CuisineType));
         }
 
         if (!string.IsNullOrWhiteSpace(request.City))
         {
             whereClauses.Add("City = @City");
-            parameters.Add(CreateParameter("@City", request.City));
+            parameters.Add((SqlParameter)CreateParameter("@City", request.City));
         }
 
         var sql = $@"
@@ -67,7 +69,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
         return await ExecuteReaderAsync(
             sql,
-            reader => MapRestaurantDto(reader),
+            (SqlDataReader reader) => MapRestaurantDto(reader),
             parameters.ToArray());
     }
 
@@ -83,7 +85,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
         var results = await ExecuteReaderAsync(
             sql,
-            reader => MapRestaurantDto(reader),
+            (SqlDataReader reader) => MapRestaurantDto(reader),
             CreateParameter("@Id", id));
 
         return results.FirstOrDefault();
@@ -229,13 +231,13 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
         return await ExecuteReaderAsync(
             sql,
-            reader => new UserRestaurantRatingDto
+            (SqlDataReader reader) => new UserRestaurantRatingDto
             {
                 UserId = GetGuid(reader, "UserId"),
                 RestaurantId = GetGuid(reader, "RestaurantId"),
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetDateTime(reader, "CreatedAt"),
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@RestaurantId", restaurantId));
@@ -250,13 +252,13 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
         var results = await ExecuteReaderAsync(
             sql,
-            reader => new UserRestaurantRatingDto
+            (SqlDataReader reader) => new UserRestaurantRatingDto
             {
                 UserId = GetGuid(reader, "UserId"),
                 RestaurantId = GetGuid(reader, "RestaurantId"),
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetDateTime(reader, "CreatedAt"),
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@RestaurantId", restaurantId),
@@ -322,7 +324,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
     #endregion
 
-    private RestaurantDto MapRestaurantDto(IDataReader reader)
+    private RestaurantDto MapRestaurantDto(IDataRecord reader)
     {
         return new RestaurantDto
         {
@@ -344,7 +346,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             ApprovedAt = GetDateTime(reader, "ApprovedAt"),
             RejectionReason = GetString(reader, "RejectionReason"),
             SubmittedBy = GetGuid(reader, "SubmittedBy"),
-            CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            CreatedAt = GetDateTime(reader, "CreatedAt"),
             UpdatedAt = GetDateTime(reader, "UpdatedAt")
         };
     }

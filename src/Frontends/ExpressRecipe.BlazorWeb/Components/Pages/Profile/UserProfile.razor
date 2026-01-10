@@ -1,5 +1,6 @@
 @page "/profile"
 @using ExpressRecipe.Client.Shared.Services
+@using ClientModels = ExpressRecipe.Client.Shared.Models.User
 @inject IUserProfileApiClient UserProfileClient
 @inject IToastService ToastService
 @rendermode InteractiveServer
@@ -105,7 +106,7 @@
                         <div class="mb-3">
                             <IngredientTagInput
                                 Ingredients="@profile.IngredientsToAvoid"
-                                IngredientsChanged="@((list) => profile.IngredientsToAvoid = list)"
+                                IngredientsChanged="@HandleIngredientsChanged"
                                 Label="Specific Ingredients to Avoid"
                                 Placeholder="Type ingredient name (e.g., annatto, strawberries, gelatin, palm oil)"
                                 HelpText="Add individual ingredients you need to avoid due to allergies, religious beliefs, or personal preferences. Press Enter or click Add."
@@ -175,9 +176,9 @@
 </div>
 
 @code {
-    private UserProfileDto? profile;
-    private bool isLoading = true;
-    private bool isSaving = false;
+private ClientModels.UserProfileDto? profile;
+private bool isLoading = true;
+private bool isSaving = false;
 
     // Notification preferences
     private bool emailNotifications = true;
@@ -209,7 +210,7 @@
 
         try
         {
-            profile = await UserProfileClient.GetCurrentUserProfileAsync();
+            profile = await UserProfileClient.GetProfileAsync();
 
             if (profile != null)
             {
@@ -239,7 +240,26 @@
 
         try
         {
-            var success = await UserProfileClient.UpdateProfileAsync(profile);
+            // Convert UserProfileDto to UpdateUserProfileRequest
+            var request = new ClientModels.UpdateUserProfileRequest
+            {
+                FirstName = profile.FirstName,
+                LastName = profile.LastName,
+                Phone = profile.Phone,
+                DateOfBirth = profile.DateOfBirth,
+                Gender = profile.Gender,
+                HeightCm = profile.HeightCm,
+                WeightKg = profile.WeightKg,
+                ActivityLevel = profile.ActivityLevel,
+                CookingSkillLevel = profile.CookingSkillLevel,
+                Allergens = profile.Allergens,
+                IngredientsToAvoid = profile.IngredientsToAvoid,
+                DietaryRestrictions = profile.DietaryRestrictions,
+                DislikedFoods = profile.DislikedFoods,
+                DailyCalorieGoal = profile.DailyCalorieGoal
+            };
+
+            var success = await UserProfileClient.UpdateProfileAsync(request);
 
             if (success)
             {
@@ -294,5 +314,14 @@
         {
             profile.Allergens.Remove(allergen);
         }
+    }
+
+    private Task HandleIngredientsChanged(List<string> updatedList)
+    {
+        if (profile != null)
+        {
+            profile.IngredientsToAvoid = updatedList;
+        }
+        return Task.CompletedTask;
     }
 }

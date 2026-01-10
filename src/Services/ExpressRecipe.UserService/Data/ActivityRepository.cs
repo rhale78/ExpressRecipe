@@ -22,9 +22,9 @@ public class ActivityRepository : SqlHelper, IActivityRepository
             FETCH NEXT @PageSize ROWS ONLY";
 
         return await ExecuteReaderAsync(sql, MapToDto,
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@Offset", offset),
-            new SqlParameter("@PageSize", pageSize));
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Offset", offset),
+            CreateParameter("@PageSize", pageSize));
     }
 
     public async Task<List<UserActivityDto>> GetRecentActivityAsync(Guid userId, int days = 7)
@@ -38,8 +38,8 @@ public class ActivityRepository : SqlHelper, IActivityRepository
             ORDER BY ActivityDate DESC";
 
         return await ExecuteReaderAsync(sql, MapToDto,
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@Days", days));
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Days", days));
     }
 
     public async Task<List<UserActivityDto>> GetActivityByTypeAsync(Guid userId, string activityType)
@@ -53,8 +53,8 @@ public class ActivityRepository : SqlHelper, IActivityRepository
             ORDER BY ActivityDate DESC";
 
         return await ExecuteReaderAsync(sql, MapToDto,
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@ActivityType", activityType));
+            CreateParameter("@UserId", userId),
+            CreateParameter("@ActivityType", activityType));
     }
 
     public async Task<Guid> LogActivityAsync(Guid userId, LogActivityRequest request)
@@ -67,17 +67,16 @@ public class ActivityRepository : SqlHelper, IActivityRepository
                  ActivityDate, DeviceType, IPAddress)
             VALUES
                 (@Id, @UserId, @ActivityType, @EntityType, @EntityId, @Metadata,
-                 GETUTCDATE(), @DeviceType, @IPAddress)";
+                 GETUTCDATE(), @DeviceType, NULL)";
 
         await ExecuteNonQueryAsync(sql,
-            new SqlParameter("@Id", id),
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@ActivityType", request.ActivityType),
-            new SqlParameter("@EntityType", (object?)request.EntityType ?? DBNull.Value),
-            new SqlParameter("@EntityId", (object?)request.EntityId ?? DBNull.Value),
-            new SqlParameter("@Metadata", (object?)request.Metadata ?? DBNull.Value),
-            new SqlParameter("@DeviceType", (object?)request.DeviceType ?? DBNull.Value),
-            new SqlParameter("@IPAddress", (object?)request.IPAddress ?? DBNull.Value));
+            CreateParameter("@Id", id),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@ActivityType", request.ActivityType),
+            CreateParameter("@EntityType", (object?)request.EntityType ?? DBNull.Value),
+            CreateParameter("@EntityId", (object?)request.EntityId ?? DBNull.Value),
+            CreateParameter("@Metadata", (object?)request.Metadata ?? DBNull.Value),
+            CreateParameter("@DeviceType", (object?)request.DeviceType ?? DBNull.Value));
 
         return id;
     }

@@ -31,15 +31,30 @@ builder.Services.AddScoped<ITokenProvider, LocalStorageTokenProvider>();
 // Register toast notification service
 builder.Services.AddSingleton<IToastService, ToastService>();
 
-// Register HTTP clients for each microservice with service discovery
+// Helper method to get service URL with fallback for development
+string GetServiceUrl(string serviceName)
+{
+    // Try to get from configuration (appsettings.Development.json)
+    var configUrl = builder.Configuration[$"Services:{serviceName}"];
+    if (!string.IsNullOrEmpty(configUrl))
+    {
+        return configUrl;
+    }
+    
+    // Fallback to Aspire service discovery format (works when running via AppHost)
+    return $"http://{serviceName.ToLowerInvariant()}";
+}
+
+// Register HTTP clients for each microservice with Aspire service discovery
 builder.Services.AddHttpClient<IAuthService, AuthService>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:AuthService"] ?? "http://authservice");
+    // Aspire service discovery will automatically resolve "http://authservice" when running in AppHost
+    client.BaseAddress = new Uri(GetServiceUrl("AuthService"));
 });
 
 builder.Services.AddHttpClient<IProductApiClient, ProductApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:ProductService"] ?? "http://productservice");
+    client.BaseAddress = new Uri(GetServiceUrl("ProductService"));
 });
 
 // Register AdminApiClient with IHttpClientFactory for multi-service communication
@@ -48,82 +63,82 @@ builder.Services.AddScoped<IAdminApiClient, AdminApiClient>();
 // Register named HttpClients for AdminApiClient to use
 builder.Services.AddHttpClient("ProductService", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:ProductService"] ?? "http://productservice");
+    client.BaseAddress = new Uri(GetServiceUrl("ProductService"));
 });
 
 builder.Services.AddHttpClient("RecallService", client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:RecallService"] ?? "http://recallservice");
+    client.BaseAddress = new Uri(GetServiceUrl("RecallService"));
 });
 
 builder.Services.AddHttpClient<IRecipeApiClient, RecipeApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:RecipeService"] ?? "http://recipeservice");
+    client.BaseAddress = new Uri(GetServiceUrl("RecipeService"));
 });
 
 builder.Services.AddHttpClient<IUserProfileApiClient, UserProfileApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:UserService"] ?? "http://userservice");
+    client.BaseAddress = new Uri(GetServiceUrl("UserService"));
 });
 
 builder.Services.AddHttpClient<IInventoryApiClient, InventoryApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:InventoryService"] ?? "http://inventoryservice");
+    client.BaseAddress = new Uri(GetServiceUrl("InventoryService"));
 });
 
 builder.Services.AddHttpClient<IShoppingListApiClient, ShoppingListApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:ShoppingService"] ?? "http://shoppingservice");
+    client.BaseAddress = new Uri(GetServiceUrl("ShoppingService"));
 });
 
 builder.Services.AddHttpClient<IMealPlanApiClient, MealPlanApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:MealPlanningService"] ?? "http://mealplanningservice");
+    client.BaseAddress = new Uri(GetServiceUrl("MealPlanningService"));
 });
 
 builder.Services.AddHttpClient<INotificationApiClient, NotificationApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:NotificationService"] ?? "http://notificationservice");
+    client.BaseAddress = new Uri(GetServiceUrl("NotificationService"));
 });
 
 builder.Services.AddHttpClient<IAnalyticsApiClient, AnalyticsApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:AnalyticsService"] ?? "http://analyticsservice");
+    client.BaseAddress = new Uri(GetServiceUrl("AnalyticsService"));
 });
 
 builder.Services.AddHttpClient<ICommunityApiClient, CommunityApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:CommunityService"] ?? "http://communityservice");
+    client.BaseAddress = new Uri(GetServiceUrl("CommunityService"));
 });
 
 builder.Services.AddHttpClient<IPriceApiClient, PriceApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:PriceService"] ?? "http://priceservice");
+    client.BaseAddress = new Uri(GetServiceUrl("PriceService"));
 });
 
 builder.Services.AddHttpClient<IAIApiClient, AIApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:AIService"] ?? "http://aiservice");
+    client.BaseAddress = new Uri(GetServiceUrl("AIService"));
 });
 
 builder.Services.AddHttpClient<IScannerApiClient, ScannerApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:ScannerService"] ?? "http://scannerservice");
+    client.BaseAddress = new Uri(GetServiceUrl("ScannerService"));
 });
 
 builder.Services.AddHttpClient<IRecallApiClient, RecallApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:RecallService"] ?? "http://recallservice");
+    client.BaseAddress = new Uri(GetServiceUrl("RecallService"));
 });
 
 builder.Services.AddHttpClient<ISearchApiClient, SearchApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:SearchService"] ?? "http://searchservice");
+    client.BaseAddress = new Uri(GetServiceUrl("SearchService"));
 });
 
 builder.Services.AddHttpClient<ISyncApiClient, SyncApiClient>(client =>
 {
-    client.BaseAddress = new Uri(builder.Configuration["Services:SyncService"] ?? "http://syncservice");
+    client.BaseAddress = new Uri(GetServiceUrl("SyncService"));
 });
 
 // Register local storage services
@@ -134,55 +149,54 @@ builder.Services.AddScoped<OfflineDetectionService>();
 // Register SignalR client services (these would be initialized per-user)
 builder.Services.AddScoped<NotificationHubClient>(sp =>
 {
-    var config = sp.GetRequiredService<IConfiguration>();
     var logger = sp.GetRequiredService<ILogger<NotificationHubClient>>();
     var toast = sp.GetRequiredService<IToastService>();
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
-    var baseUrl = config["Services:NotificationService"] ?? "http://notificationservice";
-    var hubUrl = $"{baseUrl}/hubs/notifications";
-    var token = tokenProvider.GetTokenAsync().Result; // Get auth token
+    var hubUrl = $"{GetServiceUrl("NotificationService")}/hubs/notifications";
+    var token = tokenProvider.GetAccessTokenAsync().Result; // Get auth token
 
     return new NotificationHubClient(hubUrl, token, logger, toast);
 });
 
 builder.Services.AddScoped<SyncHubClient>(sp =>
 {
-    var config = sp.GetRequiredService<IConfiguration>();
     var logger = sp.GetRequiredService<ILogger<SyncHubClient>>();
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
-    var baseUrl = config["Services:SyncService"] ?? "http://syncservice";
-    var hubUrl = $"{baseUrl}/hubs/sync";
-    var token = tokenProvider.GetTokenAsync().Result; // Get auth token
+    var hubUrl = $"{GetServiceUrl("SyncService")}/hubs/sync";
+    var token = tokenProvider.GetAccessTokenAsync().Result;
 
     return new SyncHubClient(hubUrl, token, logger);
 });
 
-// Register custom authentication state provider
-builder.Services.AddScoped<AuthenticationStateProvider, CustomAuthenticationStateProvider>();
-builder.Services.AddScoped<CustomAuthenticationStateProvider>(sp =>
-    (CustomAuthenticationStateProvider)sp.GetRequiredService<AuthenticationStateProvider>());
+// Register AuthenticationStateProvider - register both base type and concrete type
+builder.Services.AddScoped<CustomAuthenticationStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<CustomAuthenticationStateProvider>());
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
-app.MapDefaultEndpoints();
-
-if (!app.Environment.IsDevelopment())
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseWebAssemblyDebugging();
+}
+else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-app.UseStaticFiles();
 app.UseAntiforgery();
+
 app.UseOutputCache();
 
-// Map Razor components with Auto render mode (Server → WASM)
+app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddInteractiveWebAssemblyRenderMode();
+    .AddInteractiveWebAssemblyRenderMode()
+    .AddAdditionalAssemblies(typeof(ExpressRecipe.Client.Shared.Services.IAuthService).Assembly);
 
 app.Run();

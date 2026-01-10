@@ -32,45 +32,45 @@ public class UserProfileApiClient : ApiClientBase, IUserProfileApiClient
     // User profile
     public async Task<UserProfileDto?> GetProfileAsync()
     {
-        return await GetAsync<UserProfileDto>("/api/user/profile");
+        return await GetAsync<UserProfileDto>("/api/userprofile/me");
     }
 
     public async Task<bool> UpdateProfileAsync(UpdateUserProfileRequest request)
     {
-        return await PutAsync("/api/user/profile", request);
+        return await PutAsync("/api/userprofile/me", request);
     }
 
     // Family members
     public async Task<List<FamilyMemberDto>?> GetFamilyMembersAsync()
     {
-        return await GetAsync<List<FamilyMemberDto>>("/api/user/family");
+        return await GetAsync<List<FamilyMemberDto>>("/api/family");
     }
 
     public async Task<FamilyMemberDto?> GetFamilyMemberAsync(Guid id)
     {
-        return await GetAsync<FamilyMemberDto>($"/api/user/family/{id}");
+        return await GetAsync<FamilyMemberDto>($"/api/family/{id}");
     }
 
     public async Task<Guid?> CreateFamilyMemberAsync(CreateFamilyMemberRequest request)
     {
-        var response = await PostAsync<CreateFamilyMemberRequest, CreateFamilyMemberResponse>("/api/user/family", request);
+        var response = await PostAsync<CreateFamilyMemberRequest, CreateFamilyMemberResponse>("/api/family", request);
         return response?.FamilyMemberId;
     }
 
     public async Task<bool> UpdateFamilyMemberAsync(Guid id, UpdateFamilyMemberRequest request)
     {
-        return await PutAsync($"/api/user/family/{id}", request);
+        return await PutAsync($"/api/family/{id}", request);
     }
 
     public async Task<bool> DeleteFamilyMemberAsync(Guid id)
     {
-        return await DeleteAsync($"/api/user/family/{id}");
+        return await DeleteAsync($"/api/family/{id}");
     }
 
     // Allergens and restrictions
     public async Task<AllergensAndRestrictionsDto?> GetAllergensAndRestrictionsAsync()
     {
-        return await GetAsync<AllergensAndRestrictionsDto>("/api/user/allergens-restrictions");
+        return await GetAsync<AllergensAndRestrictionsDto>("/api/allergymgmt");
     }
 
     // Helper response classes

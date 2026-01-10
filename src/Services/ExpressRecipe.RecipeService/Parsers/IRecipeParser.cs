@@ -1,4 +1,5 @@
 using ExpressRecipe.Shared.DTOs.Recipe;
+using System;
 
 namespace ExpressRecipe.RecipeService.Parsers;
 
@@ -49,9 +50,17 @@ public class ParsedRecipe
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    // Optional classification fields used by importers and services
+    public string? Category { get; set; }
+    public string? Cuisine { get; set; }
+    public string? DifficultyLevel { get; set; }
     public string? Author { get; set; }
     public string? Source { get; set; }
     public string? SourceUrl { get; set; }
+
+    // Raw notes and nutrition string (some parsers place full nutrition text here)
+    public string? Notes { get; set; }
+    public string? Nutrition { get; set; }
 
     public int? PrepTimeMinutes { get; set; }
     public int? CookTimeMinutes { get; set; }
@@ -86,6 +95,9 @@ public class ParsedIngredient
     /// Original unparsed text
     /// </summary>
     public string OriginalText { get; set; } = string.Empty;
+
+    // Optional field for substitute suggestions captured by some parsers
+    public string? SubstituteNotes { get; set; }
 }
 
 /// <summary>

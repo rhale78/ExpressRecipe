@@ -16,12 +16,29 @@ public class RestaurantDto
     public string? Country { get; set; }
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
+
+    [Phone]
+    [StringLength(20)]
     public string? PhoneNumber { get; set; }
+
+    // Backwards-compatible alias used by some repositories
+    [Phone]
+    [StringLength(20)]
+    public string? Phone
+    {
+        get => PhoneNumber;
+        set => PhoneNumber = value;
+    }
+
     public string? Website { get; set; }
     public string? ImageUrl { get; set; }
     public string? PriceRange { get; set; }
     public bool IsChain { get; set; }
-    public string ApprovalStatus { get; set; } = "Pending";
+    public bool IsApproved { get; set; }
+    public string? RejectionReason { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public string ApprovalStatus { get; set; } = string.Empty;
     public Guid? ApprovedBy { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public Guid? SubmittedBy { get; set; }
@@ -68,6 +85,11 @@ public class CreateRestaurantRequest
     [StringLength(20)]
     public string? PhoneNumber { get; set; }
 
+    // Backwards-compatible alias
+    [Phone]
+    [StringLength(20)]
+    public string? Phone { get => PhoneNumber; set => PhoneNumber = value; }
+
     [Url]
     [StringLength(500)]
     public string? Website { get; set; }
@@ -76,7 +98,7 @@ public class CreateRestaurantRequest
     [StringLength(500)]
     public string? ImageUrl { get; set; }
 
-    [RegularExpression(@"^\$+$")]
+    [RegularExpression("^\\$+$")]
     [StringLength(10)]
     public string? PriceRange { get; set; }
 
@@ -122,6 +144,10 @@ public class UpdateRestaurantRequest
     [StringLength(20)]
     public string? PhoneNumber { get; set; }
 
+    [Phone]
+    [StringLength(20)]
+    public string? Phone { get => PhoneNumber; set => PhoneNumber = value; }
+
     [Url]
     [StringLength(500)]
     public string? Website { get; set; }
@@ -130,7 +156,7 @@ public class UpdateRestaurantRequest
     [StringLength(500)]
     public string? ImageUrl { get; set; }
 
-    [RegularExpression(@"^\$+$")]
+    [RegularExpression("^\\$+$")]
     [StringLength(10)]
     public string? PriceRange { get; set; }
 
@@ -146,21 +172,20 @@ public class RestaurantSearchRequest
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public double? RadiusMiles { get; set; }
-    public bool? OnlyApproved { get; set; } = true;
+    public bool? OnlyApproved { get; set; }
+    // Pagination
     public int PageNumber { get; set; } = 1;
     public int PageSize { get; set; } = 20;
 }
 
 public class UserRestaurantRatingDto
 {
-    public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public Guid RestaurantId { get; set; }
-    public string RestaurantName { get; set; } = string.Empty;
     public int Rating { get; set; }
     public string? Review { get; set; }
-    public DateTime? VisitDate { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }
 
 public class RateRestaurantRequest
@@ -171,6 +196,4 @@ public class RateRestaurantRequest
 
     [StringLength(2000)]
     public string? Review { get; set; }
-
-    public DateTime? VisitDate { get; set; }
 }

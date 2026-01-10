@@ -66,6 +66,9 @@ public class SubscriptionTierDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    // Backwards-compatible properties used by repositories/controllers
+    public string TierName { get => Name; set => Name = value; }
+    public string DisplayName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal MonthlyPrice { get; set; }
     public decimal? YearlyPrice { get; set; }
@@ -77,6 +80,10 @@ public class SubscriptionTierDto
     public bool AllowsAdvancedReports { get; set; }
     public bool AllowsInventoryTracking { get; set; }
     public bool AllowsPriceTracking { get; set; }
+    public bool AllowsOfflineSync { get; set; }
+    public bool AllowsPriceComparison { get; set; }
+    public bool AllowsMenuPlanning { get; set; }
+    public decimal PointsMultiplier { get; set; } = 1.0m;
     public string? SupportLevel { get; set; }
     public bool IsActive { get; set; }
     public int SortOrder { get; set; }
@@ -87,10 +94,15 @@ public class SubscriptionHistoryDto
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public Guid SubscriptionTierId { get; set; }
-    public string? SubscriptionTierName { get; set; }
+    public string? TierName { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Action { get; set; }
+    public DateTime ChangeDate { get; set; }
+    public string? BillingCycle { get; set; }
+    public decimal? Amount { get; set; }
+    public string? Notes { get; set; }
     public DateTime StartDate { get; set; }
     public DateTime? EndDate { get; set; }
-    public string? BillingPeriod { get; set; }
     public decimal AmountPaid { get; set; }
     public string PaymentStatus { get; set; } = string.Empty;
     public string? PaymentProcessor { get; set; }
@@ -108,11 +120,14 @@ public class SubscribeRequest
 
     [Required]
     [StringLength(20)]
-    public string BillingPeriod { get; set; } = string.Empty; // Monthly, Yearly
+    public string BillingCycle { get; set; } = string.Empty; // Monthly, Yearly
 
     [Required]
     [StringLength(100)]
     public string PaymentMethodId { get; set; } = string.Empty; // External payment processor reference
+
+    // Optional flags
+    public bool AutoRenew { get; set; } = true;
 }
 
 public class CancelSubscriptionRequest
@@ -129,4 +144,31 @@ public class UserPointsSummaryDto
     public int PendingApproval { get; set; }
     public List<PointTransactionDto>? RecentTransactions { get; set; }
     public List<UserContributionDto>? RecentContributions { get; set; }
+}
+
+public class UserSubscriptionDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid SubscriptionTierId { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string BillingCycle { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+    public DateTime? NextBillingDate { get; set; }
+    public bool AutoRenew { get; set; }
+    public string? PaymentMethodId { get; set; }
+    public DateTime? CancellationDate { get; set; }
+    public string? CancellationReason { get; set; }
+    public string TierName { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public decimal MonthlyPrice { get; set; }
+    public decimal YearlyPrice { get; set; }
+}
+
+public class UpdatePaymentMethodRequest
+{
+    [Required]
+    [StringLength(100)]
+    public string PaymentMethodId { get; set; } = string.Empty;
 }

@@ -29,7 +29,7 @@ public class SearchRecipesQueryHandler : IQueryHandler<SearchRecipesQuery, Searc
         var offset = (page - 1) * pageSize;
 
         // Get recipes based on search term
-        List<RecipeDto> recipes;
+        List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto> recipes;
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
             recipes = await _repository.SearchRecipesAsync(query.SearchTerm, 1000, 0);
@@ -44,7 +44,7 @@ public class SearchRecipesQueryHandler : IQueryHandler<SearchRecipesQuery, Searc
 
         if (query.UserId.HasValue)
         {
-            filtered = filtered.Where(r => r.UserId == query.UserId.Value);
+            filtered = filtered.Where(r => r.AuthorId == query.UserId.Value); // Use AuthorId instead of UserId
         }
 
         if (!string.IsNullOrWhiteSpace(query.Difficulty))
@@ -66,7 +66,7 @@ public class SearchRecipesQueryHandler : IQueryHandler<SearchRecipesQuery, Searc
         var filteredList = filtered.ToList();
 
         // Apply rating filter
-        var recipesWithRatings = new List<(RecipeDto recipe, decimal rating, int count)>();
+        var recipesWithRatings = new List<(ExpressRecipe.Shared.DTOs.Recipe.RecipeDto recipe, decimal rating, int count)>();
         foreach (var recipe in filteredList)
         {
             var ratingInfo = await _repository.GetAverageRatingAsync(recipe.Id);
@@ -111,7 +111,7 @@ public class SearchRecipesQueryHandler : IQueryHandler<SearchRecipesQuery, Searc
                 Description = recipe.Description,
                 ImageUrl = recipe.ImageUrl,
                 TotalTimeMinutes = recipe.TotalTimeMinutes,
-                Servings = recipe.Servings,
+                Servings = recipe.Servings ?? 0, // Provide default value for nullable
                 Difficulty = recipe.Difficulty,
                 AverageRating = rating,
                 RatingCount = ratingCount,

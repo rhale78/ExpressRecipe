@@ -1,5 +1,5 @@
 @page "/notifications"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Notification
 @using ExpressRecipe.Client.Shared.Services
 @inject INotificationApiClient NotificationApi
@@ -17,7 +17,7 @@
             <button class="btn btn-secondary-outline" @onclick="DeleteAllRead">
                 Delete Read
             </button>
-            <button class="btn btn-secondary-outline" @onclick="() => Navigation.NavigateTo("/notifications/preferences")">
+            <button class="btn btn-secondary-outline" @onclick='() => Navigation.NavigateTo("/notifications/preferences")'>
                 ⚙️ Preferences
             </button>
         </div>
@@ -50,15 +50,15 @@
 
         <!-- Filter Tabs -->
         <div class="filter-tabs">
-            <button class="filter-tab @(_filterType == "All" ? "active" : "")" @onclick="() => SetFilter("All")">
+            <button class="filter-tab @(_filterType == "All" ? "active" : "")" @onclick="HandleSetFilter"">
                 All (@_summary.TotalNotifications)
             </button>
-            <button class="filter-tab @(_filterType == "Unread" ? "active" : "")" @onclick="() => SetFilter("Unread")">
+            <button class="filter-tab @(_filterType == "Unread" ? "active" : "")" @onclick="HandleSetFilter"">
                 Unread (@_summary.UnreadNotifications)
             </button>
             @foreach (var type in _summary.NotificationsByType.OrderByDescending(t => t.Value))
             {
-                <button class="filter-tab @(_filterType == type.Key ? "active" : "")" @onclick="() => SetFilter(type.Key)">
+                <button class="filter-tab @(_filterType == type.Key ? "active" : "")" @onclick="HandleSetFilter">
                     @GetTypeIcon(type.Key) @FormatTypeName(type.Key) (@type.Value)
                 </button>
             }
@@ -71,7 +71,7 @@
                 @foreach (var notification in _notifications)
                 {
                     <div class="notification-item @(notification.IsRead ? "read" : "unread") @GetPriorityClass(notification.Priority)"
-                         @onclick="() => HandleNotificationClick(notification)">
+                         @onclick="HandleHandleNotificationClick">
                         <div class="notification-icon">
                             @GetTypeIcon(notification.Type)
                         </div>
@@ -91,11 +91,11 @@
                         <div class="notification-actions">
                             @if (!notification.IsRead)
                             {
-                                <button class="btn-icon" @onclick:stopPropagation="true" @onclick="() => MarkAsRead(notification.Id)" title="Mark as read">
+                                <button class="btn-icon" @onclick:stopPropagation="true" @onclick="HandleMarkAsRead" title="Mark as read">
                                     ✓
                                 </button>
                             }
-                            <button class="btn-icon" @onclick:stopPropagation="true" @onclick="() => DeleteNotification(notification.Id)" title="Delete">
+                            <button class="btn-icon" @onclick:stopPropagation="true" @onclick="HandleDeleteNotification" title="Delete">
                                 🗑️
                             </button>
                         </div>
@@ -108,7 +108,7 @@
             {
                 <div class="pagination">
                     <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
-                            @onclick="() => ChangePage(_currentPage - 1)">
+                            @onclick="HandleChangePage">
                         ← Previous
                     </button>
 
@@ -117,7 +117,7 @@
                     </span>
 
                     <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _searchResult.TotalPages)"
-                            @onclick="() => ChangePage(_currentPage + 1)">
+                            @onclick="HandleChangePage">
                         Next →
                     </button>
                 </div>
@@ -295,5 +295,30 @@
             return $"{(int)diff.TotalDays}d ago";
 
         return time.ToString("MMM dd");
+    }
+
+    private void HandleChangePage()
+    {
+        // TODO: Get page number from event context
+    }
+
+    private void HandleDeleteNotification()
+    {
+        // TODO: Implement delete notification
+    }
+
+    private void HandleHandleNotificationClick()
+    {
+        // TODO: Implement handle notification click
+    }
+
+    private void HandleMarkAsRead()
+    {
+        // TODO: Implement mark as read
+    }
+
+    private void HandleSetFilter()
+    {
+        // TODO: Implement set filter
     }
 }

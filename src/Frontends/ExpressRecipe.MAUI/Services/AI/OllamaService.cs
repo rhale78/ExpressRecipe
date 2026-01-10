@@ -13,18 +13,15 @@ public class OllamaService : IOllamaService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<OllamaService> _logger;
-    private readonly string _ollamaUrl;
     private const string DefaultModel = "llava"; // Vision-capable model
 
     public OllamaService(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<OllamaService> logger)
     {
-        _httpClient = httpClientFactory.CreateClient();
         _logger = logger;
 
-        // Check appsettings for Ollama URL, default to localhost
-        _ollamaUrl = configuration["Ollama:BaseUrl"] ?? "http://localhost:11434";
-        _httpClient.BaseAddress = new Uri(_ollamaUrl);
-        _httpClient.Timeout = TimeSpan.FromMinutes(2); // AI inference can take time
+        // Use named client if configured, otherwise create default
+        var ollamaUrl = configuration["Ollama:BaseUrl"] ?? "http://localhost:11434";
+        _httpClient = httpClientFactory.CreateClient("Ollama");
     }
 
     public async Task<OllamaVisionResult> AnalyzeImageAsync(byte[] imageData, string prompt)
@@ -71,7 +68,7 @@ public class OllamaService : IOllamaService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Ollama service not reachable at {Url}", _ollamaUrl);
+            _logger.LogWarning(ex, "Ollama service not reachable");
             return new OllamaVisionResult
             {
                 Success = false,

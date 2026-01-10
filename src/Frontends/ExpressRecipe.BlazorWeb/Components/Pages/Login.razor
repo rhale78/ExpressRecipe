@@ -1,6 +1,6 @@
 @page "/login"
-@using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Auth
+@using ExpressRecipe.Client.Shared.Services
 @inject IAuthService AuthService
 @inject CustomAuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Navigation
@@ -60,9 +60,9 @@
 </div>
 
 @code {
-    private LoginRequest _loginRequest = new();
-    private string? _errorMessage;
-    private bool _isLoading;
+private ExpressRecipe.Client.Shared.Models.Auth.LoginRequest _loginRequest = new();
+private string? _errorMessage;
+private bool _isLoading;
 
     private async Task HandleLogin()
     {
@@ -83,8 +83,8 @@
                     result.UserId
                 );
 
-                // Navigate to dashboard
-                Navigation.NavigateTo("/dashboard");
+                // Force reload to ensure authentication state is fully initialized
+                Navigation.NavigateTo("/dashboard", forceLoad: true);
             }
             else
             {

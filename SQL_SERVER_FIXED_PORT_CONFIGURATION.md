@@ -1,0 +1,205 @@
+# SQL Server Fixed Port Configuration
+
+## Overview
+SQL Server is now configured to run on a **fixed port 1433** (standard SQL Server port) and with **persistent data storage** across AppHost restarts.
+
+## Configuration Applied
+
+### In `AppHost.cs`:
+```csharp
+var sqlServer = builder.AddSqlServer("sqlserver")
+    .WithLifetime(ContainerLifetime.Persistent)  // Container persists between runs
+    .WithDataVolume()                             // Data is stored in a Docker volume
+    .WithEndpoint("tcp", endpoint => endpoint     // Fixed port configuration
+        .WithPort(1433)
+        .WithTargetPort(1433));
+```
+
+## Benefits
+
+### 1. Fixed Port (1433)
+- **Consistent connection strings** - Always `localhost,1433` or `127.0.0.1,1433`
+- **Easier debugging** - No need to find random ports in Aspire dashboard
+- **Tool compatibility** - Works seamlessly with SQL Server Management Studio (SSMS), Azure Data Studio, etc.
+- **Connection string stability** - No changes needed between AppHost restarts
+
+### 2. Persistent Data
+- **`WithLifetime(ContainerLifetime.Persistent)`** - Container isn't removed when AppHost stops
+- **`WithDataVolume()`** - Database files stored in Docker named volume
+- **Survives restarts** - Your databases, tables, and data remain intact
+- **No re-migrations needed** - Schema changes persist
+
+## Connection Information
+
+### From Host Machine (for debugging/tools)
+```
+Server: localhost,1433
+or
+Server: 127.0.0.1,1433
+
+Username: sa
+Password: (check Aspire dashboard or docker inspect for generated password)
+```
+
+### From Service Applications
+The services automatically receive the correct connection string via Aspire service discovery:
+```csharp
+builder.AddSqlServerClient("authdb");  // Resolves to correct connection string
+```
+
+## Debugging with SQL Server Tools
+
+### SQL Server Management Studio (SSMS)
+1. Open SSMS
+2. Connect to server: `localhost,1433`
+3. Authentication: SQL Server Authentication
+4. Login: `sa`
+5. Password: Get from Aspire dashboard or use:
+   ```cmd
+   docker inspect aspire-sql-server-1 | findstr MSSQL_SA_PASSWORD
+   ```
+
+### Azure Data Studio
+1. New Connection
+2. Server: `localhost,1433`
+3. Authentication Type: SQL Login
+4. User name: `sa`
+5. Password: (from Aspire dashboard)
+
+### sqlcmd (Command Line)
+```cmd
+sqlcmd -S localhost,1433 -U sa -P <password>
+```
+
+## Verifying Configuration
+
+### Check Container Port Mapping
+```cmd
+docker ps -f name=sqlserver
+```
+Should show: `0.0.0.0:1433->1433/tcp`
+
+### Check Volume Persistence
+```cmd
+docker volume ls | findstr aspire
+```
+Should show volume like: `aspire-sqlserver-data`
+
+### Test Connection
+```cmd
+# Using sqlcmd
+sqlcmd -S localhost,1433 -U sa -P <password> -Q "SELECT @@VERSION"
+
+# Using PowerShell
+Test-NetConnection -ComputerName localhost -Port 1433
+```
+
+## Database Locations
+
+All databases are stored in the persistent volume:
+
+| Database Name | Logical Name | Purpose |
+|--------------|--------------|---------|
+| ExpressRecipe.Auth | authdb | User authentication |
+| ExpressRecipe.Users | userdb | User profiles |
+| ExpressRecipe.Products | productdb | Product catalog |
+| ExpressRecipe.Recipes | recipedb | Recipe management |
+| ExpressRecipe.Inventory | inventorydb | Inventory tracking |
+| ExpressRecipe.Scans | scandb | Barcode scans |
+| ExpressRecipe.Shopping | shoppingdb | Shopping lists |
+| ExpressRecipe.MealPlanning | mealplandb | Meal plans |
+| ExpressRecipe.Pricing | pricedb | Price tracking |
+| ExpressRecipe.Recalls | recalldb | FDA recalls |
+| ExpressRecipe.Notifications | notificationdb | Notifications |
+| ExpressRecipe.Community | communitydb | Community features |
+| ExpressRecipe.Sync | syncdb | Sync operations |
+| ExpressRecipe.Search | searchdb | Search indexes |
+| ExpressRecipe.Analytics | analyticsdb | Analytics data |
+
+## Troubleshooting
+
+### Port 1433 Already in Use
+If you have SQL Server installed locally:
+```cmd
+# Stop local SQL Server service
+net stop MSSQLSERVER
+
+# Or use a different port in AppHost.cs
+.WithPort(1434)
+```
+
+### Container Won't Start on Port 1433
+```cmd
+# Check what's using the port
+netstat -ano | findstr :1433
+
+# Find and stop the process
+taskkill /PID <PID> /F
+```
+
+### Reset Persistent Data
+If you need to start fresh:
+```cmd
+# Stop AppHost first, then:
+docker stop aspire-sql-server-1
+docker rm aspire-sql-server-1
+docker volume rm aspire-sqlserver-data
+
+# Next AppHost run will recreate everything
+```
+
+### Check Container Logs
+```cmd
+docker logs aspire-sql-server-1
+```
+
+## Connection String Format
+
+### Standard Format
+```
+Server=localhost,1433;Database=ExpressRecipe.Auth;User Id=sa;Password=<password>;TrustServerCertificate=True
+```
+
+### Environment Variable (Recommended)
+```bash
+# In .env or appsettings
+ConnectionStrings__AuthDb=Server=localhost,1433;Database=ExpressRecipe.Auth;User Id=sa;Password=${SQL_PASSWORD};TrustServerCertificate=True
+```
+
+## Security Considerations
+
+1. **Password Management**: The SA password is generated by Aspire. For production, use Key Vault or environment variables.
+2. **TrustServerCertificate**: Currently `True` for development. For production, use proper SSL certificates.
+3. **Firewall**: Port 1433 is now exposed on localhost. Ensure your firewall rules are appropriate.
+4. **Strong Password**: Consider setting a custom strong password instead of using generated one.
+
+## Best Practices
+
+1. **Backup Strategy**: Even with persistent volumes, implement backup strategy:
+   ```cmd
+   # Backup a database
+   docker exec aspire-sql-server-1 /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P <password> -Q "BACKUP DATABASE [ExpressRecipe.Auth] TO DISK = '/var/opt/mssql/backup/auth.bak'"
+   ```
+
+2. **Volume Management**: Periodically check volume size:
+   ```cmd
+   docker system df -v
+   ```
+
+3. **Connection Pooling**: Services automatically handle connection pooling via Aspire.
+
+4. **Health Checks**: SQL Server health checks are built into Aspire configuration.
+
+## Next Steps After Restart
+
+1. ? SQL Server now on fixed port 1433
+2. ? Data persists between AppHost restarts
+3. ? All 15 databases remain intact
+4. ? Migration history preserved
+5. ? Connect from any SQL tool using `localhost,1433`
+
+## Related Files
+- `src/ExpressRecipe.AppHost.New/AppHost.cs` - AppHost configuration
+- `src/ExpressRecipe.Data.Common/MigrationRunner.cs` - Migration execution
+- `MISSING_RECALL_TABLES_FIX.md` - Migration SQL file copy configuration
+- `.env` - Environment variables for connection strings

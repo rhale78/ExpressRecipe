@@ -34,7 +34,7 @@ public class NotificationApiClient : INotificationApiClient
 
     private async Task<bool> EnsureAuthenticatedAsync()
     {
-        var token = await _tokenProvider.GetTokenAsync();
+        var token = await _tokenProvider.GetAccessTokenAsync();
         if (string.IsNullOrEmpty(token))
             return false;
 

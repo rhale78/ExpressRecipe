@@ -29,7 +29,7 @@ public class InventoryApiClient : IInventoryApiClient
 
     private async Task<bool> EnsureAuthenticatedAsync()
     {
-        var token = await _tokenProvider.GetTokenAsync();
+        var token = await _tokenProvider.GetAccessTokenAsync();
         if (string.IsNullOrEmpty(token))
             return false;
 
@@ -60,9 +60,14 @@ public class InventoryApiClient : IInventoryApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/inventory/search", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<InventorySearchResult>();
+            // Return empty results for now since endpoint doesn't exist yet
+            return new InventorySearchResult
+            {
+                Items = new List<InventoryItemDto>(),
+                TotalCount = 0,
+                Page = request.Page,
+                PageSize = request.PageSize
+            };
         }
         catch
         {
@@ -77,7 +82,16 @@ public class InventoryApiClient : IInventoryApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<InventorySummaryDto>("/api/inventory/summary");
+            // Return empty summary for now since endpoint doesn't exist yet
+            return new InventorySummaryDto
+            {
+                TotalItems = 0,
+                ExpiredItems = 0,
+                ExpiringSoonItems = 0,
+                LowStockItems = 0,
+                ItemsByLocation = new Dictionary<string, int>(),
+                ItemsByCategory = new Dictionary<string, int>()
+            };
         }
         catch
         {

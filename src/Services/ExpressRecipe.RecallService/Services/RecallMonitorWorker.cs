@@ -53,12 +53,16 @@ public class RecallMonitorWorker : BackgroundService
             {
                 // Import recent recalls from FDA
                 var result = await importService.ImportRecentRecallsAsync(limit: 50);
-                _logger.LogInformation("Imported {Count} new recalls, {Errors} errors",
-                    result.SuccessfulImports, result.FailedImports);
+                _logger.LogInformation("Imported {Count} new FDA recalls, {Errors} errors",
+                    result.SuccessCount, result.FailureCount);
 
-                // Import from USDA FSIS
-                var usdaResult = await importService.ImportUSDARecallsAsync();
-                _logger.LogInformation("Imported {Count} USDA recalls", usdaResult.SuccessfulImports);
+                // Import meat/poultry recalls from FDA (includes USDA-regulated products)
+                var meatPoultryResult = await importService.ImportMeatPoultryRecallsFromFDAAsync(limit: 50);
+                _logger.LogInformation("Imported {Count} meat/poultry recalls, {Errors} errors",
+                    meatPoultryResult.SuccessCount, meatPoultryResult.FailureCount);
+
+                // Note: ImportUSDARecallsAsync() is deprecated - no public USDA API exists
+                // Meat/poultry recalls are now imported from FDA API above
 
                 // TODO: Check user subscriptions and send alerts
                 // This would require cross-service communication with NotificationService

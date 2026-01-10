@@ -1,5 +1,5 @@
 @page "/notifications/preferences"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Notification
 @using ExpressRecipe.Client.Shared.Services
 @inject INotificationApiClient NotificationApi
@@ -11,7 +11,7 @@
 <div class="preferences-container">
     <div class="notifications-header">
         <h1>⚙️ Notification Preferences</h1>
-        <button class="btn btn-secondary-outline" @onclick="() => Navigation.NavigateTo("/notifications")">
+        <button class="btn btn-secondary-outline" @onclick='() => Navigation.NavigateTo("/notifications")'>
             ← Back to Notifications
         </button>
     </div>
@@ -208,7 +208,7 @@
 
         <!-- Action Buttons -->
         <div class="preferences-actions">
-            <button class="btn btn-secondary-outline" @onclick="() => Navigation.NavigateTo("/notifications")">
+            <button class="btn btn-secondary-outline" @onclick='() => Navigation.NavigateTo("/notifications")'>
                 Cancel
             </button>
             <button class="btn btn-primary" @onclick="SavePreferences" disabled="@_isSaving">

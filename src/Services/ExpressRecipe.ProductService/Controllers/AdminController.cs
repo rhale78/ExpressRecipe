@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ExpressRecipe.ProductService.Services;
+using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.Shared.DTOs.Product;
+using System.Text.Json;
 
 namespace ExpressRecipe.ProductService.Controllers;
 
@@ -14,6 +17,7 @@ public class AdminController : ControllerBase
 {
     private readonly USDAFoodDataImportService _usdaImportService;
     private readonly OpenFoodFactsImportService _openFoodFactsImportService;
+    private readonly IProductRepository _productRepository;
     private readonly ILogger<AdminController> _logger;
 
     // In-memory tracking of import jobs (in production, use database or distributed cache)
@@ -22,10 +26,12 @@ public class AdminController : ControllerBase
     public AdminController(
         USDAFoodDataImportService usdaImportService,
         OpenFoodFactsImportService openFoodFactsImportService,
+        IProductRepository productRepository,
         ILogger<AdminController> logger)
     {
         _usdaImportService = usdaImportService;
         _openFoodFactsImportService = openFoodFactsImportService;
+        _productRepository = productRepository;
         _logger = logger;
     }
 
@@ -134,6 +140,98 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
+    /// Backfill product images for existing products from OpenFoodFacts
+    /// Re-imports products to populate the ProductImage table
+    /// </summary>
+    [HttpPost("import/openfoodfacts/backfill-images")]
+    public async Task<ActionResult<ImportStatusDto>> BackfillProductImages(
+        [FromBody] BackfillImagesRequest? request = null)
+    {
+        var importId = Guid.NewGuid();
+        var jobStatus = new ImportJobStatus
+        {
+            ImportId = importId,
+            Source = "OpenFoodFacts-ImageBackfill",
+            Status = "InProgress",
+            StartedAt = DateTime.UtcNow
+        };
+
+        _importJobs[importId] = jobStatus;
+
+        _logger.LogInformation("Starting OpenFoodFacts image backfill job {ImportId}", importId);
+
+        // Run backfill in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var maxProducts = request?.MaxProducts ?? 100;
+                var successCount = 0;
+                var errorCount = 0;
+
+                // Get products that have barcodes but no images in ProductImage table
+                var products = await GetProductsNeedingImages(maxProducts);
+
+                jobStatus.TotalRecords = products.Count;
+
+                foreach (var product in products)
+                {
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(product.Barcode))
+                        {
+                            // Re-import the product - this will now save images
+                            var result = await _openFoodFactsImportService.ImportProductByBarcodeAsync(product.Barcode);
+
+                            if (result.Success)
+                                successCount++;
+                            else
+                                errorCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to backfill images for product {ProductId}", product.Id);
+                        errorCount++;
+                    }
+
+                    jobStatus.ProcessedRecords++;
+                }
+
+                jobStatus.Status = "Completed";
+                jobStatus.CompletedAt = DateTime.UtcNow;
+                jobStatus.SuccessCount = successCount;
+                jobStatus.ErrorCount = errorCount;
+
+                _logger.LogInformation("Image backfill {ImportId} completed: {Success} successful, {Failed} failed",
+                    importId, successCount, errorCount);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Image backfill {ImportId} failed", importId);
+                jobStatus.Status = "Failed";
+                jobStatus.CompletedAt = DateTime.UtcNow;
+                jobStatus.ErrorMessage = ex.Message;
+            }
+        });
+
+        return Ok(MapToDto(jobStatus));
+    }
+
+    private async Task<List<ProductDto>> GetProductsNeedingImages(int maxProducts)
+    {
+        // Simple implementation - get products with barcodes
+        // In a real implementation, you'd query for products without images in ProductImage table
+        var searchRequest = new ProductSearchRequest
+        {
+            PageSize = maxProducts,
+            OnlyApproved = true
+        };
+
+        return await _productRepository.SearchAsync(searchRequest);
+    }
+
+    /// <summary>
     /// Get import job status
     /// </summary>
     [HttpGet("import/status/{importId}")]
@@ -145,6 +243,70 @@ public class AdminController : ControllerBase
         }
 
         return Ok(MapToDto(jobStatus));
+    }
+
+    /// <summary>
+    /// Diagnostic: Test OpenFoodFacts API response for a specific barcode
+    /// </summary>
+    [HttpGet("debug/openfoodfacts/{barcode}")]
+    public async Task<ActionResult> DebugOpenFoodFacts(string barcode)
+    {
+        try
+        {
+            var httpClient = new HttpClient();
+            httpClient.BaseAddress = new Uri("https://world.openfoodfacts.org/");
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "ExpressRecipe/1.0 (Dietary Management Platform)");
+
+            var response = await httpClient.GetAsync($"api/v2/product/{barcode}.json");
+            var json = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return BadRequest(new { error = "Product not found", statusCode = response.StatusCode, response = json });
+            }
+
+            var data = JsonDocument.Parse(json);
+
+            if (!data.RootElement.TryGetProperty("product", out var product))
+            {
+                return BadRequest(new { error = "Invalid response format", response = json });
+            }
+
+            // Extract all possible image fields
+            var imageDebug = new
+            {
+                barcode = barcode,
+                productName = product.TryGetProperty("product_name", out var pn) ? pn.GetString() : null,
+
+                // Top-level image fields
+                image_url = product.TryGetProperty("image_url", out var iu) ? iu.GetString() : null,
+                image_front_url = product.TryGetProperty("image_front_url", out var ifu) ? ifu.GetString() : null,
+                image_front_small_url = product.TryGetProperty("image_front_small_url", out var ifsu) ? ifsu.GetString() : null,
+                image_thumb_url = product.TryGetProperty("image_thumb_url", out var itu) ? itu.GetString() : null,
+                image_nutrition_url = product.TryGetProperty("image_nutrition_url", out var inu) ? inu.GetString() : null,
+                image_nutrition_small_url = product.TryGetProperty("image_nutrition_small_url", out var insu) ? insu.GetString() : null,
+                image_ingredients_url = product.TryGetProperty("image_ingredients_url", out var iinu) ? iinu.GetString() : null,
+                image_ingredients_small_url = product.TryGetProperty("image_ingredients_small_url", out var iinsu) ? iinsu.GetString() : null,
+
+                // Check for selected_images structure
+                has_selected_images = product.TryGetProperty("selected_images", out var si),
+                selected_images_raw = product.TryGetProperty("selected_images", out var si2) ? si2.GetRawText() : null,
+
+                // Check for images structure
+                has_images = product.TryGetProperty("images", out var imgs),
+                images_keys = product.TryGetProperty("images", out var imgs2) ?
+                    string.Join(", ", imgs2.EnumerateObject().Select(p => p.Name)) : null,
+
+                full_product_json = product.GetRawText()
+            };
+
+            return Ok(imageDebug);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to debug OpenFoodFacts for barcode {Barcode}", barcode);
+            return StatusCode(500, new { error = ex.Message, stackTrace = ex.StackTrace });
+        }
     }
 
     /// <summary>
@@ -255,4 +417,12 @@ public class ImportHistoryDto
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public TimeSpan? Duration => CompletedAt.HasValue ? CompletedAt.Value - StartedAt : null;
+}
+
+/// <summary>
+/// Request for backfilling images
+/// </summary>
+public class BackfillImagesRequest
+{
+    public int MaxProducts { get; set; } = 100;
 }

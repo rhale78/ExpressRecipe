@@ -57,7 +57,7 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Description = GetString(reader, "Description"),
-                PointValue = GetInt(reader, "PointValue"),
+                PointValue = GetInt(reader, "PointValue") ?? 0,
                 RequiresApproval = GetBoolean(reader, "RequiresApproval"),
                 IsActive = GetBoolean(reader, "IsActive")
             });
@@ -77,7 +77,7 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Description = GetString(reader, "Description"),
-                PointValue = GetInt(reader, "PointValue"),
+                PointValue = GetInt(reader, "PointValue") ?? 0,
                 RequiresApproval = GetBoolean(reader, "RequiresApproval"),
                 IsActive = GetBoolean(reader, "IsActive")
             },
@@ -211,7 +211,7 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 UserId = GetGuid(reader, "UserId"),
                 ContributionTypeId = GetGuid(reader, "ContributionTypeId"),
                 ContributionTypeName = GetString(reader, "ContributionTypeName"),
-                PointsAwarded = GetInt(reader, "PointsAwarded"),
+                PointsAwarded = GetInt(reader, "PointsAwarded") ?? 0,
                 IsApproved = GetBoolean(reader, "IsApproved"),
                 ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
@@ -219,7 +219,7 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 ReferenceId = GetGuidNullable(reader, "ReferenceId"),
                 ReferenceType = GetString(reader, "ReferenceType"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             parameters.ToArray());
     }
@@ -242,7 +242,7 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 UserId = GetGuid(reader, "UserId"),
                 ContributionTypeId = GetGuid(reader, "ContributionTypeId"),
                 ContributionTypeName = GetString(reader, "ContributionTypeName"),
-                PointsAwarded = GetInt(reader, "PointsAwarded"),
+                PointsAwarded = GetInt(reader, "PointsAwarded") ?? 0,
                 IsApproved = GetBoolean(reader, "IsApproved"),
                 ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
@@ -250,7 +250,7 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 ReferenceId = GetGuidNullable(reader, "ReferenceId"),
                 ReferenceType = GetString(reader, "ReferenceType"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@Id", id));
 
@@ -322,12 +322,12 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 Id = GetGuid(reader, "Id"),
                 UserId = GetGuid(reader, "UserId"),
                 TransactionType = GetString(reader, "TransactionType") ?? string.Empty,
-                PointsAmount = GetInt(reader, "PointsAmount"),
-                BalanceAfter = GetInt(reader, "BalanceAfter"),
+                PointsAmount = GetInt(reader, "PointsAmount") ?? 0,
+                BalanceAfter = GetInt(reader, "BalanceAfter") ?? 0,
                 Description = GetString(reader, "Description"),
                 UserContributionId = GetGuidNullable(reader, "UserContributionId"),
                 RewardItemId = GetGuidNullable(reader, "RewardItemId"),
-                TransactionDate = GetDateTime(reader, "TransactionDate") ?? DateTime.UtcNow
+                TransactionDate = GetNullableDateTime(reader, "TransactionDate") ?? DateTime.UtcNow
             },
             new SqlParameter("@UserId", userId),
             new SqlParameter("@Limit", limit));
@@ -414,13 +414,13 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Description = GetString(reader, "Description"),
-                PointsCost = GetInt(reader, "PointsCost"),
+                PointsCost = GetInt(reader, "PointsCost") ?? 0,
                 RewardType = GetString(reader, "RewardType") ?? string.Empty,
                 Value = GetString(reader, "Value"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 IsActive = GetBoolean(reader, "IsActive"),
                 QuantityAvailable = GetIntNullable(reader, "QuantityAvailable"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             });
     }
 
@@ -439,13 +439,13 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Description = GetString(reader, "Description"),
-                PointsCost = GetInt(reader, "PointsCost"),
+                PointsCost = GetInt(reader, "PointsCost") ?? 0,
                 RewardType = GetString(reader, "RewardType") ?? string.Empty,
                 Value = GetString(reader, "Value"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 IsActive = GetBoolean(reader, "IsActive"),
                 QuantityAvailable = GetIntNullable(reader, "QuantityAvailable"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@Id", id));
 
@@ -529,14 +529,15 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Description = GetString(reader, "Description"),
-                PointsCost = GetInt(reader, "PointsCost"),
+                PointsCost = GetInt(reader, "PointsCost") ?? 0,
                 RewardType = GetString(reader, "RewardType") ?? string.Empty,
                 Value = GetString(reader, "Value"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 IsActive = GetBoolean(reader, "IsActive"),
                 QuantityAvailable = GetIntNullable(reader, "QuantityAvailable"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@UserId", userId));
     }
 }
+

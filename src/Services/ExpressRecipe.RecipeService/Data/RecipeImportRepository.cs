@@ -158,13 +158,13 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 FileName = GetString(reader, "FileName"),
                 FileUrl = GetString(reader, "FileUrl"),
                 Status = GetString(reader, "Status") ?? string.Empty,
-                TotalRecipes = GetInt(reader, "TotalRecipes"),
-                SuccessCount = GetInt(reader, "SuccessCount"),
-                FailureCount = GetInt(reader, "FailureCount"),
+                TotalRecipes = GetInt(reader, "TotalRecipes") ?? 0,
+                SuccessCount = GetInt(reader, "SuccessCount") ?? 0,
+                FailureCount = GetInt(reader, "FailureCount") ?? 0,
                 ErrorLog = GetString(reader, "ErrorLog"),
                 StartedAt = GetDateTime(reader, "StartedAt"),
                 CompletedAt = GetDateTime(reader, "CompletedAt"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@Id", id));
 
@@ -202,13 +202,13 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 FileName = GetString(reader, "FileName"),
                 FileUrl = GetString(reader, "FileUrl"),
                 Status = GetString(reader, "Status") ?? string.Empty,
-                TotalRecipes = GetInt(reader, "TotalRecipes"),
-                SuccessCount = GetInt(reader, "SuccessCount"),
-                FailureCount = GetInt(reader, "FailureCount"),
+                TotalRecipes = GetInt(reader, "TotalRecipes") ?? 0,
+                SuccessCount = GetInt(reader, "SuccessCount") ?? 0,
+                FailureCount = GetInt(reader, "FailureCount") ?? 0,
                 ErrorLog = GetString(reader, "ErrorLog"),
                 StartedAt = GetDateTime(reader, "StartedAt"),
                 CompletedAt = GetDateTime(reader, "CompletedAt"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@UserId", userId),
             new SqlParameter("@Limit", limit));
@@ -304,7 +304,7 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 Status = GetString(reader, "Status") ?? string.Empty,
                 ErrorMessage = GetString(reader, "ErrorMessage"),
                 RawData = GetString(reader, "RawData"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@JobId", jobId));
     }
@@ -362,11 +362,11 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
             {
                 Id = GetGuid(reader, "Id"),
                 RecipeId = GetGuid(reader, "RecipeId"),
-                VersionNumber = GetInt(reader, "VersionNumber"),
+                VersionNumber = GetInt(reader, "VersionNumber") ?? 0,
                 ChangeDescription = GetString(reader, "ChangeDescription"),
                 CreatedBy = GetGuid(reader, "CreatedBy"),
                 CreatedByName = GetString(reader, "CreatedByName"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 SnapshotData = GetString(reader, "SnapshotData") ?? string.Empty
             },
             new SqlParameter("@RecipeId", recipeId));
@@ -387,11 +387,11 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
             {
                 Id = GetGuid(reader, "Id"),
                 RecipeId = GetGuid(reader, "RecipeId"),
-                VersionNumber = GetInt(reader, "VersionNumber"),
+                VersionNumber = GetInt(reader, "VersionNumber") ?? 0,
                 ChangeDescription = GetString(reader, "ChangeDescription"),
                 CreatedBy = GetGuid(reader, "CreatedBy"),
                 CreatedByName = GetString(reader, "CreatedByName"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 SnapshotData = GetString(reader, "SnapshotData") ?? string.Empty
             },
             new SqlParameter("@Id", id));
@@ -452,7 +452,7 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 ForkedBy = GetGuid(reader, "ForkedBy"),
                 ForkedByName = GetString(reader, "ForkedByName"),
                 ForkReason = GetString(reader, "ForkReason"),
-                ForkedAt = GetDateTime(reader, "ForkedAt") ?? DateTime.UtcNow
+                ForkedAt = GetNullableDateTime(reader, "ForkedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@OriginalRecipeId", originalRecipeId));
     }
@@ -499,8 +499,8 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 Description = GetString(reader, "Description"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 IsPublic = GetBoolean(reader, "IsPublic"),
-                SortOrder = GetInt(reader, "SortOrder"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                SortOrder = GetInt(reader, "SortOrder") ?? 0,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 UpdatedAt = GetDateTime(reader, "UpdatedAt"),
                 IsDeleted = GetBoolean(reader, "IsDeleted"),
                 DeletedAt = GetDateTime(reader, "DeletedAt")
@@ -537,8 +537,8 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 Description = GetString(reader, "Description"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 IsPublic = GetBoolean(reader, "IsPublic"),
-                SortOrder = GetInt(reader, "SortOrder"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                SortOrder = GetInt(reader, "SortOrder") ?? 0,
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
                 UpdatedAt = GetDateTime(reader, "UpdatedAt"),
                 IsDeleted = GetBoolean(reader, "IsDeleted"),
                 DeletedAt = GetDateTime(reader, "DeletedAt")
@@ -696,12 +696,12 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 Id = GetGuid(reader, "Id"),
                 UserId = GetGuid(reader, "UserId"),
                 ExportFormat = GetString(reader, "ExportFormat") ?? string.Empty,
-                RecipeCount = GetInt(reader, "RecipeCount"),
+                RecipeCount = GetInt(reader, "RecipeCount") ?? 0,
                 FileName = GetString(reader, "FileName"),
                 FileSize = GetLongNullable(reader, "FileSize"),
                 FileUrl = GetString(reader, "FileUrl"),
                 ExpiresAt = GetDateTime(reader, "ExpiresAt"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@UserId", userId),
             new SqlParameter("@Limit", limit));
@@ -810,9 +810,9 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
                 RecipeId = GetGuid(reader, "RecipeId"),
                 RecipeName = GetString(reader, "RecipeName"),
                 RecipeImageUrl = GetString(reader, "RecipeImageUrl"),
-                OrderIndex = GetInt(reader, "OrderIndex"),
+                OrderIndex = GetInt(reader, "OrderIndex") ?? 0,
                 Notes = GetString(reader, "Notes"),
-                AddedAt = GetDateTime(reader, "AddedAt") ?? DateTime.UtcNow
+                AddedAt = GetNullableDateTime(reader, "AddedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@CollectionId", collectionId));
     }
@@ -829,3 +829,4 @@ public class RecipeImportRepository : SqlHelper, IRecipeImportRepository
         return reader.IsDBNull(ordinal) ? null : reader.GetInt64(ordinal);
     }
 }
+

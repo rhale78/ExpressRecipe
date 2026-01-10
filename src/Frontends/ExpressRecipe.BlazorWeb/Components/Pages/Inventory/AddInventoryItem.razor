@@ -1,5 +1,5 @@
 @page "/inventory/add"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Inventory
 @using ExpressRecipe.Client.Shared.Models.Product
 @using ExpressRecipe.Client.Shared.Services
@@ -42,7 +42,7 @@
                 <div class="product-search-results">
                     @foreach (var product in _productSearchResults)
                     {
-                        <div class="product-result-card" @onclick="() => SelectProduct(product)">
+                        <div class="product-result-card" @onclick="HandleSelectProduct">
                             @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
                             {
                                 <img src="@product.ImageUrl" alt="@product.Name" class="product-result-image" />
@@ -357,5 +357,13 @@
     private void NavigateBack()
     {
         Navigation.NavigateTo("/inventory");
+    }
+
+    // Event Handler
+    private void HandleSelectProduct()
+    {
+        // TODO: Get the product ID from the clicked item
+        // For now, this is a placeholder that would need the product context
+        // In production, you'd pass the product ID as a parameter or use a lambda
     }
 }

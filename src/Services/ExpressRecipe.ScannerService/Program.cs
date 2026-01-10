@@ -1,7 +1,12 @@
+using ExpressRecipe.Data.Common;
 using ExpressRecipe.ScannerService.Data;
 using ExpressRecipe.ScannerService.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load layered configuration (global + env + local)
+builder.AddLayeredConfiguration(args);
 
 // Add Aspire service defaults (telemetry, health checks, service discovery)
 builder.AddServiceDefaults();
@@ -40,11 +45,11 @@ builder.Services.AddScoped<BarcodeScannerService>();
 builder.Services.AddControllers();
 
 // Add Swagger
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.ScannerService API", Version = "v1" });
-});
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddSwaggerGen(c =>
+// {
+//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.ScannerService API", Version = "v1" });
+// });
 
 // CORS
 builder.Services.AddCors(options =>
@@ -59,30 +64,25 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Run migrations on startup
-using (var scope = app.Services.CreateScope())
+// Run database management (drop db/tables if configured)
+await app.RunDatabaseManagementAsync("ScannerService", "scandb");
+
+// Run migrations using shared MigrationRunner
+var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+if (!Directory.Exists(migrationsPath))
 {
-    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    
-    try
-    {
-        var migrator = new DatabaseMigrator(connectionString, logger);
-        await migrator.MigrateAsync();
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Failed to run database migrations");
-    }
+    migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
 }
+var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // app.UseSwagger();
+    // app.UseSwaggerUI();
 }
 
 app.UseCors("AllowAll");

@@ -8,7 +8,7 @@ public interface IActivityRepository
     Task<List<UserActivityDto>> GetUserActivityAsync(Guid userId, int pageNumber = 1, int pageSize = 50);
     Task<List<UserActivityDto>> GetRecentActivityAsync(Guid userId, int days = 7);
     Task<List<UserActivityDto>> GetActivityByTypeAsync(Guid userId, string activityType);
-    Task<Guid> LogActivityAsync(Guid userId, CreateUserActivityRequest request);
+    Task<Guid> LogActivityAsync(Guid userId, LogActivityRequest request);
 
     // Activity Summary
     Task<UserActivitySummaryDto> GetActivitySummaryAsync(Guid userId, DateTime? startDate = null, DateTime? endDate = null);

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "WebFetch(domain:world.openfoodfacts.org)",
+      "WebFetch(domain:static.openfoodfacts.org)",
+      "Bash(Select-String -Pattern \"error|succeeded|failed\")",
+      "Bash(Select-Object -Last 20)",
+      "Bash(Select-String -Pattern \"error CS\")",
+      "Bash(timeout 120 dotnet build:*)",
+      "Bash(Select-Object -First 10)",
+      "Bash(Select-String -Pattern \"error CS\" -Context 0,1)",
+      "Bash(ls:*)",
+      "WebFetch(domain:openfoodfacts.github.io)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

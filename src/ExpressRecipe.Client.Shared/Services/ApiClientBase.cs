@@ -34,6 +34,12 @@ public abstract class ApiClientBase
 
             if (!response.IsSuccessStatusCode)
             {
+                // Don't throw on 404 - return null instead
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return default;
+                }
+
                 await HandleErrorResponseAsync(response);
                 return default;
             }
@@ -105,6 +111,21 @@ public abstract class ApiClientBase
         }
     }
 
+    protected async Task<bool> PutAsync<TRequest>(string endpoint, TRequest data)
+    {
+        await SetAuthorizationHeaderAsync();
+
+        try
+        {
+            var response = await HttpClient.PutAsJsonAsync(endpoint, data, JsonOptions);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ApiException("Network error occurred", ex);
+        }
+    }
+
     protected async Task<bool> DeleteAsync(string endpoint)
     {
         await SetAuthorizationHeaderAsync();
@@ -125,8 +146,17 @@ public abstract class ApiClientBase
         var token = await _tokenProvider.GetAccessTokenAsync();
         if (!string.IsNullOrEmpty(token))
         {
+            // Ensure token doesn't have quotes
+            token = token.Trim('"');
             HttpClient.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", token);
+            Console.WriteLine($"[ApiClientBase] Authorization header set with token");
+        }
+        else
+        {
+            // Clear authorization header if no token
+            HttpClient.DefaultRequestHeaders.Authorization = null;
+            Console.WriteLine($"[ApiClientBase] WARNING: No token available, Authorization header cleared");
         }
     }
 

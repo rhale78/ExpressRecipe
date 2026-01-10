@@ -15,34 +15,43 @@ public class RecallRepository : IRecallRepository
 
     public async Task<Guid> CreateRecallAsync(string recallNumber, string source, string title, string description, string severity, DateTime recallDate, string? reason, string? distributionArea)
     {
+        // Map to common DAL schema: ExternalId, Source, Title, Description, Severity, RecallDate, PublishedDate, Reason, Status
         const string sql = @"
-            INSERT INTO Recall (RecallNumber, Source, Title, Description, Severity, RecallDate, Reason, DistributionArea, Status, CreatedAt)
+            INSERT INTO Recall (ExternalId, Source, Title, Description, Severity, RecallDate, PublishedDate, Reason, Status, ImportedAt)
             OUTPUT INSERTED.Id
-            VALUES (@RecallNumber, @Source, @Title, @Description, @Severity, @RecallDate, @Reason, @DistributionArea, 'Active', GETUTCDATE())";
+            VALUES (@ExternalId, @Source, @Title, @Description, @Severity, @RecallDate, @PublishedDate, @Reason, 'Active', GETUTCDATE())";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@RecallNumber", recallNumber);
+        command.Parameters.AddWithValue("@ExternalId", recallNumber);
         command.Parameters.AddWithValue("@Source", source);
         command.Parameters.AddWithValue("@Title", title);
         command.Parameters.AddWithValue("@Description", description);
         command.Parameters.AddWithValue("@Severity", severity);
         command.Parameters.AddWithValue("@RecallDate", recallDate);
-        command.Parameters.AddWithValue("@Reason", reason ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@DistributionArea", distributionArea ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@PublishedDate", recallDate);
+        command.Parameters.AddWithValue("@Reason", (object?)reason ?? DBNull.Value);
 
-        return (Guid)await command.ExecuteScalarAsync()!;
+        var id = (Guid)await command.ExecuteScalarAsync()!;
+
+        // Optionally store distributionArea via RecallProduct with a generic product entry
+        if (!string.IsNullOrEmpty(distributionArea))
+        {
+            await AddProductToRecallAsync(id, title, null, null, distributionArea);
+        }
+
+        return id;
     }
 
     public async Task<List<RecallDto>> GetRecentRecallsAsync(int limit = 100)
     {
         const string sql = @"
-            SELECT TOP (@Limit) r.Id, r.RecallNumber, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.DistributionArea, r.Status, r.CreatedAt,
-                   (SELECT COUNT(*) FROM RecallProduct WHERE RecallId = r.Id) AS AffectedProductCount
+            SELECT TOP (@Limit) r.Id, r.ExternalId, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.Status, r.PublishedDate,
+                   (SELECT COUNT(*) FROM RecallProduct rp WHERE rp.RecallId = r.Id) AS AffectedProductCount
             FROM Recall r
-            ORDER BY r.RecallDate DESC";
+            ORDER BY r.PublishedDate DESC";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -60,14 +69,13 @@ public class RecallRepository : IRecallRepository
                 RecallNumber = reader.GetString(1),
                 Source = reader.GetString(2),
                 Title = reader.GetString(3),
-                Description = reader.GetString(4),
+                Description = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
                 Severity = reader.GetString(5),
                 RecallDate = reader.GetDateTime(6),
                 Reason = reader.IsDBNull(7) ? null : reader.GetString(7),
-                DistributionArea = reader.IsDBNull(8) ? null : reader.GetString(8),
-                Status = reader.GetString(9),
-                CreatedAt = reader.GetDateTime(10),
-                AffectedProductCount = reader.GetInt32(11)
+                Status = reader.GetString(8),
+                CreatedAt = reader.GetDateTime(9),
+                AffectedProductCount = reader.GetInt32(10)
             });
         }
 
@@ -76,14 +84,52 @@ public class RecallRepository : IRecallRepository
 
     public async Task<List<RecallDto>> SearchRecallsAsync(string searchTerm, string? severity = null, DateTime? startDate = null, DateTime? endDate = null)
     {
-        return await GetRecentRecallsAsync(100); // Stub
+        var sql = @"SELECT r.Id, r.ExternalId, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.Status, r.PublishedDate,
+                           (SELECT COUNT(*) FROM RecallProduct rp WHERE rp.RecallId = r.Id) AS AffectedProductCount
+                    FROM Recall r
+                    WHERE (r.Title LIKE @Search OR r.Description LIKE @Search)";
+        if (!string.IsNullOrEmpty(severity)) sql += " AND r.Severity = @Severity";
+        if (startDate.HasValue) sql += " AND r.PublishedDate >= @StartDate";
+        if (endDate.HasValue) sql += " AND r.PublishedDate <= @EndDate";
+        sql += " ORDER BY r.PublishedDate DESC";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Search", $"%{searchTerm}%");
+        if (!string.IsNullOrEmpty(severity)) command.Parameters.AddWithValue("@Severity", severity);
+        if (startDate.HasValue) command.Parameters.AddWithValue("@StartDate", startDate.Value);
+        if (endDate.HasValue) command.Parameters.AddWithValue("@EndDate", endDate.Value);
+
+        var recalls = new List<RecallDto>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            recalls.Add(new RecallDto
+            {
+                Id = reader.GetGuid(0),
+                RecallNumber = reader.GetString(1),
+                Source = reader.GetString(2),
+                Title = reader.GetString(3),
+                Description = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                Severity = reader.GetString(5),
+                RecallDate = reader.GetDateTime(6),
+                Reason = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Status = reader.GetString(8),
+                CreatedAt = reader.GetDateTime(9),
+                AffectedProductCount = reader.GetInt32(10)
+            });
+        }
+
+        return recalls;
     }
 
     public async Task<RecallDto?> GetRecallAsync(Guid recallId)
     {
         const string sql = @"
-            SELECT r.Id, r.RecallNumber, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.DistributionArea, r.Status, r.CreatedAt,
-                   (SELECT COUNT(*) FROM RecallProduct WHERE RecallId = r.Id) AS AffectedProductCount
+            SELECT r.Id, r.ExternalId, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.Status, r.PublishedDate,
+                   (SELECT COUNT(*) FROM RecallProduct rp WHERE rp.RecallId = r.Id) AS AffectedProductCount
             FROM Recall r
             WHERE r.Id = @RecallId";
 
@@ -102,14 +148,13 @@ public class RecallRepository : IRecallRepository
                 RecallNumber = reader.GetString(1),
                 Source = reader.GetString(2),
                 Title = reader.GetString(3),
-                Description = reader.GetString(4),
+                Description = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
                 Severity = reader.GetString(5),
                 RecallDate = reader.GetDateTime(6),
                 Reason = reader.IsDBNull(7) ? null : reader.GetString(7),
-                DistributionArea = reader.IsDBNull(8) ? null : reader.GetString(8),
-                Status = reader.GetString(9),
-                CreatedAt = reader.GetDateTime(10),
-                AffectedProductCount = reader.GetInt32(11)
+                Status = reader.GetString(8),
+                CreatedAt = reader.GetDateTime(9),
+                AffectedProductCount = reader.GetInt32(10)
             };
         }
 
@@ -132,9 +177,10 @@ public class RecallRepository : IRecallRepository
 
     public async Task AddProductToRecallAsync(Guid recallId, string productName, string? brand, string? upc, string? lotCode)
     {
+        // Map to common DAL schema: RecallProduct has LotNumber, DistributionArea, no UPC/LotCode fields in DTO. Store UPC/LotCode into LotNumber.
         const string sql = @"
-            INSERT INTO RecallProduct (RecallId, ProductName, Brand, UPC, LotCode)
-            VALUES (@RecallId, @ProductName, @Brand, @UPC, @LotCode)";
+            INSERT INTO RecallProduct (RecallId, ProductName, Brand, LotNumber, DistributionArea)
+            VALUES (@RecallId, @ProductName, @Brand, @LotNumber, @DistributionArea)";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -142,16 +188,16 @@ public class RecallRepository : IRecallRepository
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@RecallId", recallId);
         command.Parameters.AddWithValue("@ProductName", productName);
-        command.Parameters.AddWithValue("@Brand", brand ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@UPC", upc ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@LotCode", lotCode ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@Brand", (object?)brand ?? DBNull.Value);
+        command.Parameters.AddWithValue("@LotNumber", (object?)(upc ?? lotCode) ?? DBNull.Value);
+        command.Parameters.AddWithValue("@DistributionArea", DBNull.Value);
 
         await command.ExecuteNonQueryAsync();
     }
 
     public async Task<List<RecallProductDto>> GetRecallProductsAsync(Guid recallId)
     {
-        const string sql = "SELECT Id, RecallId, ProductName, Brand, UPC, LotCode FROM RecallProduct WHERE RecallId = @RecallId";
+        const string sql = "SELECT Id, RecallId, ProductName, Brand, LotNumber, DistributionArea FROM RecallProduct WHERE RecallId = @RecallId";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -169,8 +215,8 @@ public class RecallRepository : IRecallRepository
                 RecallId = reader.GetGuid(1),
                 ProductName = reader.GetString(2),
                 Brand = reader.IsDBNull(3) ? null : reader.GetString(3),
-                UPC = reader.IsDBNull(4) ? null : reader.GetString(4),
-                LotCode = reader.IsDBNull(5) ? null : reader.GetString(5)
+                UPC = null,
+                LotCode = reader.IsDBNull(4) ? null : reader.GetString(4)
             });
         }
 
@@ -179,15 +225,54 @@ public class RecallRepository : IRecallRepository
 
     public async Task<List<RecallDto>> GetRecallsByProductAsync(string productName, string? brand = null, string? upc = null)
     {
-        return new List<RecallDto>(); // Stub
+        var sql = @"SELECT r.Id, r.ExternalId, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.Status, r.PublishedDate,
+                           (SELECT COUNT(*) FROM RecallProduct rp WHERE rp.RecallId = r.Id) AS AffectedProductCount
+                    FROM Recall r
+                    WHERE EXISTS (
+                        SELECT 1 FROM RecallProduct rp
+                        WHERE rp.RecallId = r.Id AND rp.ProductName LIKE @ProductName";
+        if (!string.IsNullOrEmpty(brand)) sql += " AND rp.Brand = @Brand";
+        if (!string.IsNullOrEmpty(upc)) sql += " AND rp.LotNumber = @UPC";
+        sql += ") ORDER BY r.PublishedDate DESC";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@ProductName", $"%{productName}%");
+        if (!string.IsNullOrEmpty(brand)) command.Parameters.AddWithValue("@Brand", brand);
+        if (!string.IsNullOrEmpty(upc)) command.Parameters.AddWithValue("@UPC", upc);
+
+        var recalls = new List<RecallDto>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            recalls.Add(new RecallDto
+            {
+                Id = reader.GetGuid(0),
+                RecallNumber = reader.GetString(1),
+                Source = reader.GetString(2),
+                Title = reader.GetString(3),
+                Description = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                Severity = reader.GetString(5),
+                RecallDate = reader.GetDateTime(6),
+                Reason = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Status = reader.GetString(8),
+                CreatedAt = reader.GetDateTime(9),
+                AffectedProductCount = reader.GetInt32(10)
+            });
+        }
+
+        return recalls;
     }
 
     public async Task<Guid> CreateRecallAlertAsync(Guid userId, Guid recallId, string matchType, string matchedValue, bool isAcknowledged)
     {
+        // Map to RecallAlert: AlertType, IsRead; no MatchedValue column exists in schema, so ignore
         const string sql = @"
-            INSERT INTO RecallAlert (UserId, RecallId, MatchType, MatchedValue, IsAcknowledged, CreatedAt)
+            INSERT INTO RecallAlert (UserId, RecallId, AlertType, IsRead)
             OUTPUT INSERTED.Id
-            VALUES (@UserId, @RecallId, @MatchType, @MatchedValue, @IsAcknowledged, GETUTCDATE())";
+            VALUES (@UserId, @RecallId, @AlertType, @IsRead)";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -195,25 +280,20 @@ public class RecallRepository : IRecallRepository
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@RecallId", recallId);
-        command.Parameters.AddWithValue("@MatchType", matchType);
-        command.Parameters.AddWithValue("@MatchedValue", matchedValue);
-        command.Parameters.AddWithValue("@IsAcknowledged", isAcknowledged);
+        command.Parameters.AddWithValue("@AlertType", matchType);
+        command.Parameters.AddWithValue("@IsRead", isAcknowledged);
 
         return (Guid)await command.ExecuteScalarAsync()!;
     }
 
     public async Task<List<RecallAlertDto>> GetUserAlertsAsync(Guid userId, bool unacknowledgedOnly = true)
     {
-        var sql = @"
-            SELECT ra.Id, ra.UserId, ra.RecallId, r.Title AS RecallTitle, r.Severity, ra.MatchType, ra.MatchedValue, ra.IsAcknowledged, ra.AcknowledgedAt, ra.CreatedAt
-            FROM RecallAlert ra
-            INNER JOIN Recall r ON ra.RecallId = r.Id
-            WHERE ra.UserId = @UserId";
-
-        if (unacknowledgedOnly)
-            sql += " AND ra.IsAcknowledged = 0";
-
-        sql += " ORDER BY ra.CreatedAt DESC";
+        var sql = @"SELECT a.Id, a.UserId, a.RecallId, r.Title, r.Severity, a.AlertType, a.IsRead, a.ReadAt, a.CreatedAt
+                    FROM RecallAlert a
+                    JOIN Recall r ON r.Id = a.RecallId
+                    WHERE a.UserId = @UserId";
+        if (unacknowledgedOnly) sql += " AND a.IsRead = 0";
+        sql += " ORDER BY a.CreatedAt DESC";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -233,10 +313,10 @@ public class RecallRepository : IRecallRepository
                 RecallTitle = reader.GetString(3),
                 Severity = reader.GetString(4),
                 MatchType = reader.GetString(5),
-                MatchedValue = reader.GetString(6),
-                IsAcknowledged = reader.GetBoolean(7),
-                AcknowledgedAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
-                CreatedAt = reader.GetDateTime(9)
+                MatchedValue = string.Empty,
+                IsAcknowledged = reader.GetBoolean(6),
+                AcknowledgedAt = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                CreatedAt = reader.GetDateTime(8)
             });
         }
 
@@ -245,97 +325,101 @@ public class RecallRepository : IRecallRepository
 
     public async Task AcknowledgeAlertAsync(Guid alertId)
     {
-        const string sql = "UPDATE RecallAlert SET IsAcknowledged = 1, AcknowledgedAt = GETUTCDATE() WHERE Id = @AlertId";
-
+        const string sql = "UPDATE RecallAlert SET IsRead = 1, ReadAt = GETUTCDATE() WHERE Id = @Id";
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@AlertId", alertId);
-
+        command.Parameters.AddWithValue("@Id", alertId);
         await command.ExecuteNonQueryAsync();
     }
 
     public async Task<int> GetUnacknowledgedCountAsync(Guid userId)
     {
-        const string sql = "SELECT COUNT(*) FROM RecallAlert WHERE UserId = @UserId AND IsAcknowledged = 0";
-
+        const string sql = "SELECT COUNT(*) FROM RecallAlert WHERE UserId = @UserId AND IsRead = 0";
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
-
-        return (int)await command.ExecuteScalarAsync()!;
+        var count = (int)(await command.ExecuteScalarAsync() ?? 0);
+        return count;
     }
 
     public async Task<Guid> SubscribeToRecallsAsync(Guid userId, string? category = null, string? brand = null, string? keyword = null)
     {
         const string sql = @"
-            INSERT INTO RecallSubscription (UserId, Category, Brand, Keyword, IsActive, CreatedAt)
+            INSERT INTO RecallSubscription (UserId, SubscriptionType, FilterValue)
             OUTPUT INSERTED.Id
-            VALUES (@UserId, @Category, @Brand, @Keyword, 1, GETUTCDATE())";
+            VALUES (@UserId, @Type, @Value)";
+
+        var type = !string.IsNullOrEmpty(category) ? "ByCategory" : (!string.IsNullOrEmpty(brand) ? "ByBrand" : "Keyword");
+        var value = category ?? brand ?? keyword ?? string.Empty;
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Brand", brand ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Keyword", keyword ?? (object)DBNull.Value);
-
+        command.Parameters.AddWithValue("@Type", type);
+        command.Parameters.AddWithValue("@Value", value);
         return (Guid)await command.ExecuteScalarAsync()!;
     }
 
     public async Task<List<RecallSubscriptionDto>> GetUserSubscriptionsAsync(Guid userId)
     {
-        const string sql = @"
-            SELECT Id, UserId, Category, Brand, Keyword, IsActive, CreatedAt
-            FROM RecallSubscription
-            WHERE UserId = @UserId
-            ORDER BY CreatedAt DESC";
-
+        const string sql = @"SELECT Id, UserId, SubscriptionType, FilterValue, IsActive, CreatedAt FROM RecallSubscription WHERE UserId = @UserId";
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
-
-        var subs = new List<RecallSubscriptionDto>();
+        var subscriptions = new List<RecallSubscriptionDto>();
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            subs.Add(new RecallSubscriptionDto
+            subscriptions.Add(new RecallSubscriptionDto
             {
                 Id = reader.GetGuid(0),
                 UserId = reader.GetGuid(1),
-                Category = reader.IsDBNull(2) ? null : reader.GetString(2),
-                Brand = reader.IsDBNull(3) ? null : reader.GetString(3),
-                Keyword = reader.IsDBNull(4) ? null : reader.GetString(4),
-                IsActive = reader.GetBoolean(5),
-                CreatedAt = reader.GetDateTime(6)
+                Category = reader.GetString(2) == "ByCategory" ? reader.GetString(3) : null,
+                Brand = reader.GetString(2) == "ByBrand" ? reader.GetString(3) : null,
+                Keyword = reader.GetString(2) == "Keyword" ? reader.GetString(3) : null,
+                IsActive = reader.GetBoolean(4),
+                CreatedAt = reader.GetDateTime(5)
             });
         }
-
-        return subs;
+        return subscriptions;
     }
 
     public async Task UnsubscribeAsync(Guid subscriptionId)
     {
-        const string sql = "UPDATE RecallSubscription SET IsActive = 0 WHERE Id = @SubscriptionId";
-
+        const string sql = "UPDATE RecallSubscription SET IsActive = 0 WHERE Id = @Id";
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@SubscriptionId", subscriptionId);
-
+        command.Parameters.AddWithValue("@Id", subscriptionId);
         await command.ExecuteNonQueryAsync();
     }
 
     public async Task<List<Guid>> GetAffectedUsersAsync(Guid recallId)
     {
-        return new List<Guid>(); // Stub
+        // Simple join: users with subscriptions matching brand keyword in RecallProduct brand
+        const string sql = @"
+            SELECT DISTINCT rs.UserId
+            FROM RecallSubscription rs
+            JOIN RecallProduct rp ON rp.RecallId = @RecallId
+            WHERE rs.IsActive = 1 AND (
+                (rs.SubscriptionType = 'ByBrand' AND rs.FilterValue = rp.Brand) OR
+                (rs.SubscriptionType = 'Keyword' AND rp.ProductName LIKE '%' + rs.FilterValue + '%')
+            )";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@RecallId", recallId);
+        var users = new List<Guid>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            users.Add(reader.GetGuid(0));
+        }
+        return users;
     }
 }

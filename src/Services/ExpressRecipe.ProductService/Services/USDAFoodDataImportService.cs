@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.Shared.DTOs.Product;
 
 namespace ExpressRecipe.ProductService.Services;
 
@@ -220,16 +221,7 @@ public class USDAFoodDataImportService
             }
 
             // Create product
-            var productId = await _productRepository.CreateProductAsync(new CreateProductRequest
-            {
-                Name = description,
-                Brand = brand,
-                UPC = upc,
-                Category = DetermineCategory(description, dataType),
-                ExternalSource = "USDA",
-                ExternalId = fdcId,
-                IsVerified = true
-            });
+            var productId = await _productRepository.CreateProductAsync(new Shared.DTOs.Product.CreateProductRequest { Name = description, Brand = brand, Barcode = upc, Category = DetermineCategory(description, dataType) });
 
             result.ProductId = productId;
 
@@ -399,3 +391,4 @@ public class CreateProductRequest
     public string? ExternalId { get; set; }
     public bool IsVerified { get; set; }
 }
+

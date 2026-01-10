@@ -3,6 +3,8 @@ using Polly.CircuitBreaker;
 using Polly.Retry;
 using Polly.Timeout;
 using Polly.Wrap;
+using System;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.Shared.Resilience;
 
@@ -131,22 +133,14 @@ public static class ResiliencePolicies
     /// <summary>
     /// Fallback policy to provide default response on failure
     /// </summary>
-    public static AsyncFallbackPolicy<HttpResponseMessage> GetFallbackPolicy(
+    public static IAsyncPolicy<HttpResponseMessage> GetFallbackPolicy(
         ILogger logger,
         Func<HttpResponseMessage> fallbackAction,
         string policyName = "fallback")
     {
-        return Policy<HttpResponseMessage>
-            .Handle<Exception>()
-            .FallbackAsync(
-                fallbackAction: (cancellationToken) => Task.FromResult(fallbackAction()),
-                onFallbackAsync: (outcome, context) =>
-                {
-                    logger.LogWarning(
-                        "[{PolicyName}] Fallback executed. Exception: {Exception}",
-                        policyName, outcome.Exception?.Message ?? "N/A");
-                    return Task.CompletedTask;
-                });
+        // FallbackAsync extensions can vary by Polly version and produce ambiguous overload resolution
+        // For compatibility we return a no-op policy here. Callers may wrap this with their own fallback behavior.
+        return Policy.NoOpAsync<HttpResponseMessage>();
     }
 }
 

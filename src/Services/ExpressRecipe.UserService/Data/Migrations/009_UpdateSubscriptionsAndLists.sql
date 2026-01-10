@@ -112,7 +112,26 @@ GO
 -- Drop ShareCode if it exists (will use ListSharing table instead)
 IF COL_LENGTH('UserList', 'ShareCode') IS NOT NULL
 BEGIN
+    -- Drop the index first
     DROP INDEX IF EXISTS IX_UserList_ShareCode ON UserList;
+    
+    -- Find and drop the unique constraint on ShareCode
+    DECLARE @ConstraintName NVARCHAR(200);
+    SELECT @ConstraintName = kc.name
+    FROM sys.key_constraints kc
+    INNER JOIN sys.index_columns ic ON kc.parent_object_id = ic.object_id AND kc.unique_index_id = ic.index_id
+    INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+    WHERE kc.type = 'UQ'
+    AND kc.parent_object_id = OBJECT_ID('UserList')
+    AND c.name = 'ShareCode';
+    
+    IF @ConstraintName IS NOT NULL
+    BEGIN
+        DECLARE @SQL NVARCHAR(MAX) = 'ALTER TABLE UserList DROP CONSTRAINT ' + QUOTENAME(@ConstraintName);
+        EXEC sp_executesql @SQL;
+    END
+    
+    -- Now drop the column
     ALTER TABLE UserList DROP COLUMN ShareCode;
 END
 GO

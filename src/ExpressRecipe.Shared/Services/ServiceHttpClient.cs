@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using ExpressRecipe.Shared.Resilience;
 using Polly;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.Shared.Services;
 

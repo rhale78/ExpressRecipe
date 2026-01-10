@@ -29,21 +29,19 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
     {
-        // Check if email already exists
         if (await _userRepository.EmailExistsAsync(request.Email))
         {
             throw new InvalidOperationException("Email already registered");
         }
 
-        // Hash password
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-        // Create user
         var user = new User
         {
             Email = request.Email,
             EmailConfirmed = false,
-            LockoutEnabled = true,
+            FirstName = request.FirstName,
+            LastName = request.LastName,
             AccessFailedCount = 0
         };
 
@@ -52,7 +50,6 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("User registered: {Email}", request.Email);
 
-        // Generate tokens
         var accessToken = _tokenService.GenerateAccessToken(user);
         var refreshToken = _tokenService.GenerateRefreshToken();
 
@@ -74,19 +71,11 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
-        // Get user by email
         var user = await _userRepository.GetByEmailAsync(request.Email);
         if (user == null)
         {
             _logger.LogWarning("Login attempt with non-existent email: {Email}", request.Email);
             throw new UnauthorizedAccessException("Invalid email or password");
-        }
-
-        // Check if account is locked
-        if (user.LockoutEnd.HasValue && user.LockoutEnd > DateTime.UtcNow)
-        {
-            _logger.LogWarning("Login attempt on locked account: {Email}", request.Email);
-            throw new UnauthorizedAccessException("Account is locked");
         }
 
         // Verify password (retrieve password hash from database)
@@ -98,7 +87,6 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
-        // Reset failed access count on successful login
         if (user.AccessFailedCount > 0)
         {
             await _userRepository.ResetAccessFailedCountAsync(user.Id);
@@ -106,7 +94,6 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("User logged in: {Email}", request.Email);
 
-        // Generate tokens
         var accessToken = _tokenService.GenerateAccessToken(user);
         var refreshToken = _tokenService.GenerateRefreshToken();
 
@@ -128,21 +115,18 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> RefreshTokenAsync(string refreshToken)
     {
-        // Validate refresh token
         var userId = _tokenService.ValidateRefreshToken(refreshToken);
         if (userId == null)
         {
             throw new UnauthorizedAccessException("Invalid refresh token");
         }
 
-        // Get user
         var user = await _userRepository.GetByIdAsync(userId.Value);
         if (user == null)
         {
             throw new UnauthorizedAccessException("User not found");
         }
 
-        // Generate new tokens
         var accessToken = _tokenService.GenerateAccessToken(user);
         var newRefreshToken = _tokenService.GenerateRefreshToken();
 
@@ -164,8 +148,6 @@ public class AuthService : IAuthService
 
     private async Task<string> GetPasswordHashAsync(Guid userId)
     {
-        // This is a simplified version - in production, you'd query the password hash
-        // For now, we'll add this method to the repository
         const string sql = "SELECT PasswordHash FROM [User] WHERE Id = @Id";
 
         using var connection = new Microsoft.Data.SqlClient.SqlConnection(_userRepository.GetType()

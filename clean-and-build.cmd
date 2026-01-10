@@ -1,0 +1,6 @@
+@echo off
+echo Cleaning obj and bin folders...
+for /d /r "src\Services" %%d in (obj,bin) do @if exist "%%d" rd /s /q "%%d"
+echo Building solution...
+dotnet build ExpressRecipe.sln --no-incremental
+echo Done!

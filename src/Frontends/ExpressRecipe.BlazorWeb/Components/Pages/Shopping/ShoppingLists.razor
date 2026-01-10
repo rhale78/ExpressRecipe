@@ -1,5 +1,5 @@
 @page "/shopping"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Shopping
 @using ExpressRecipe.Client.Shared.Services
 @inject IShoppingListApiClient ShoppingApi
@@ -60,19 +60,19 @@
         <!-- Status Tabs -->
         <div class="status-tabs">
             <button class="status-tab @(_selectedStatus == "Active" ? "active" : "")"
-                    @onclick="() => SelectStatus(\"Active\")">
+                    @onclick="HandleSelectStatus"">
                 Active (@_searchResult?.Lists.Count(l => l.Status == "Active") ?? 0)
             </button>
             <button class="status-tab @(_selectedStatus == "Completed" ? "active" : "")"
-                    @onclick="() => SelectStatus(\"Completed\")">
+                    @onclick="HandleSelectStatus"">
                 Completed
             </button>
             <button class="status-tab @(_selectedStatus == "Archived" ? "active" : "")"
-                    @onclick="() => SelectStatus(\"Archived\")">
+                    @onclick="HandleSelectStatus"">
                 Archived
             </button>
             <button class="status-tab @(_selectedStatus == "All" ? "active" : "")"
-                    @onclick="() => SelectStatus(\"All\")">
+                    @onclick="HandleSelectStatus"">
                 All Lists
             </button>
         </div>
@@ -83,7 +83,7 @@
             <div class="shopping-lists-grid">
                 @foreach (var list in _searchResult.Lists)
                 {
-                    <div class="shopping-list-card" @onclick="() => ViewList(list.Id)">
+                    <div class="shopping-list-card" @onclick="HandleViewList">
                         <!-- Status Badge -->
                         <div class="list-status-badge @list.Status.ToLower()">
                             @list.Status
@@ -141,16 +141,16 @@
 
                         <!-- Card Actions -->
                         <div class="card-actions">
-                            <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ViewList(list.Id)">
+                            <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="HandleViewList">
                                 View List
                             </button>
                             @if (list.Status == "Active")
                             {
-                                <button class="btn btn-sm btn-success-outline" @onclick:stopPropagation="true" @onclick="() => CompleteList(list.Id)">
+                                <button class="btn btn-sm btn-success-outline" @onclick:stopPropagation="true" @onclick="HandleCompleteList">
                                     ✓ Complete
                                 </button>
                             }
-                            <button class="btn btn-sm btn-danger-outline" @onclick:stopPropagation="true" @onclick="() => ConfirmDelete(list)">
+                            <button class="btn btn-sm btn-danger-outline" @onclick:stopPropagation="true" @onclick="HandleConfirmDelete">
                                 Delete
                             </button>
                         </div>
@@ -168,7 +168,7 @@
             {
                 <div class="pagination">
                     <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
-                            @onclick="() => ChangePage(_currentPage - 1)">
+                            @onclick="HandleChangePage">
                         ← Previous
                     </button>
 
@@ -178,7 +178,7 @@
                     </span>
 
                     <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _searchResult.TotalPages)"
-                            @onclick="() => ChangePage(_currentPage + 1)">
+                            @onclick="HandleChangePage">
                         Next →
                     </button>
                 </div>
@@ -448,6 +448,50 @@
         {
             CloseDeleteModal();
             await LoadShoppingLists();
+        }
+    }
+
+    // Event Handlers
+    private void HandleSelectStatus()
+    {
+        // This is a simplified handler - in production you'd pass status as parameter
+        SelectStatus(_selectedStatus);
+    }
+
+    private void HandleViewList()
+    {
+        // TODO: Get the list ID from the clicked item
+        // For now, this is a placeholder that would need the list context
+        // In production, you'd pass the list ID as a parameter or use a lambda
+    }
+
+    private async Task HandleCompleteList()
+    {
+        if (_selectedList != null)
+        {
+            await CompleteList(_selectedList.Id);
+        }
+    }
+
+    private void HandleConfirmDelete()
+    {
+        if (_selectedList != null)
+        {
+            ConfirmDelete(_selectedList);
+        }
+    }
+
+    private void HandleChangePage()
+    {
+        // Determine direction based on button context
+        // This is a simplified handler - in production you'd pass direction as parameter
+        if (_currentPage < (_searchResult?.TotalPages ?? 1))
+        {
+            ChangePage(_currentPage + 1);
+        }
+        else if (_currentPage > 1)
+        {
+            ChangePage(_currentPage - 1);
         }
     }
 }

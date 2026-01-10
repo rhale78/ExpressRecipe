@@ -7,6 +7,7 @@ public interface IProductApiClient
     Task<ProductDto?> GetProductAsync(Guid id);
     Task<ProductDto?> GetProductByUpcAsync(string upc);
     Task<ProductSearchResult?> SearchProductsAsync(ProductSearchRequest request);
+    Task<Dictionary<string, int>?> GetLetterCountsAsync(ProductSearchRequest request);
     Task<Guid?> CreateProductAsync(CreateProductRequest request);
     Task<bool> UpdateProductAsync(Guid id, CreateProductRequest request);
     Task<bool> DeleteProductAsync(Guid id);
@@ -39,11 +40,34 @@ public class ProductApiClient : ApiClientBase, IProductApiClient
         if (!string.IsNullOrEmpty(request.Brand))
             queryParams.Add($"brand={Uri.EscapeDataString(request.Brand)}");
 
-        queryParams.Add($"page={request.Page}");
+        if (!string.IsNullOrEmpty(request.FirstLetter))
+            queryParams.Add($"firstLetter={Uri.EscapeDataString(request.FirstLetter)}");
+
+        if (!string.IsNullOrEmpty(request.SortBy))
+            queryParams.Add($"sortBy={Uri.EscapeDataString(request.SortBy)}");
+
+        queryParams.Add($"pageNumber={request.Page}");
         queryParams.Add($"pageSize={request.PageSize}");
 
         var query = string.Join("&", queryParams);
         return await GetAsync<ProductSearchResult>($"/api/products/search?{query}");
+    }
+
+    public async Task<Dictionary<string, int>?> GetLetterCountsAsync(ProductSearchRequest request)
+    {
+        var queryParams = new List<string>();
+
+        if (!string.IsNullOrEmpty(request.SearchTerm))
+            queryParams.Add($"searchTerm={Uri.EscapeDataString(request.SearchTerm)}");
+
+        if (!string.IsNullOrEmpty(request.Brand))
+            queryParams.Add($"brand={Uri.EscapeDataString(request.Brand)}");
+
+        // Note: Don't include FirstLetter when getting counts - we want all letter counts
+        // Don't include page/pageSize either - we want total counts
+
+        var query = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
+        return await GetAsync<Dictionary<string, int>>($"/api/products/letter-counts{query}");
     }
 
     public async Task<Guid?> CreateProductAsync(CreateProductRequest request)

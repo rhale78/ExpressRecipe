@@ -15,7 +15,7 @@ public partial class ScannerViewModel : ObservableObject
     private readonly IProductRecognitionService _productRecognitionService;
     private readonly IScannerApiClient _scannerApiClient;
     private readonly IProductApiClient _productApiClient;
-    private readonly IToastService _toastService;
+    private readonly ExpressRecipe.MAUI.Services.IToastService _toastService;
     private readonly ILogger<ScannerViewModel> _logger;
 
     [ObservableProperty]
@@ -60,7 +60,7 @@ public partial class ScannerViewModel : ObservableObject
         IProductRecognitionService productRecognitionService,
         IScannerApiClient scannerApiClient,
         IProductApiClient productApiClient,
-        IToastService toastService,
+        ExpressRecipe.MAUI.Services.IToastService toastService,
         ILogger<ScannerViewModel> logger)
     {
         _barcodeService = barcodeService;
@@ -116,11 +116,11 @@ public partial class ScannerViewModel : ObservableObject
             Category = response.Product.Category;
 
             // Check for allergen warnings
-            if (response.HasAllergenWarning)
+            if (response.AllergenAlerts != null && response.AllergenAlerts.Count > 0)
             {
-                AllergenWarnings = response.DetectedAllergens;
+                AllergenWarnings = response.AllergenAlerts.Select(a => a.Allergen).ToList();
                 HasAllergenWarning = true;
-                await _toastService.ShowWarningToast($"⚠️ ALLERGEN WARNING: Contains {string.Join(", ", response.DetectedAllergens)}");
+                await _toastService.ShowWarningToast($"⚠️ ALLERGEN WARNING: Contains {string.Join(", ", AllergenWarnings)}");
 
                 // Vibrate to alert user
                 Vibration.Default.Vibrate(TimeSpan.FromMilliseconds(500));

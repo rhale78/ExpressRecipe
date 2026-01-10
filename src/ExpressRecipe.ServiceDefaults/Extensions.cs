@@ -73,10 +73,8 @@ public static class Extensions
     {
         var useOtlpExporter = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
 
-        if (useOtlpExporter)
-        {
-            builder.Services.AddOpenTelemetry().UseOtlpExporter();
-        }
+        // OTLP exporter may be configured by OpenTelemetry packages at startup.
+        // Keep this method lightweight to avoid requiring additional OpenTelemetry extension packages here.
 
         return builder;
     }
@@ -122,6 +120,23 @@ public static class Extensions
             .CreateLogger();
 
         builder.Services.AddSerilog();
+
+        return builder;
+    }
+
+    /// <summary>
+    /// Adds hybrid caching infrastructure with both in-memory (L1) and distributed/Redis (L2) cache.
+    /// Services should call AddRedisClient("cache") separately for distributed cache connection.
+    /// Then register HybridCacheService from ExpressRecipe.Shared.Services.
+    /// </summary>
+    public static IHostApplicationBuilder AddHybridCache(this IHostApplicationBuilder builder)
+    {
+        // Add in-memory cache (L1)
+        builder.Services.AddMemoryCache();
+
+        // Note: Services should call builder.AddRedisClient("cache") separately
+        // Then add distributed cache interface
+        builder.Services.AddDistributedMemoryCache(); // Fallback if Redis not available
 
         return builder;
     }

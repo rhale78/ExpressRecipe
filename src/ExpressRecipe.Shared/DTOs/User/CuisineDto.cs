@@ -29,6 +29,12 @@ public class AddUserPreferredCuisineRequest
     public int? PreferenceLevel { get; set; }
 }
 
+public class UpdateUserPreferredCuisineRequest
+{
+    [Range(1, 5)]
+    public int? PreferenceLevel { get; set; }
+}
+
 public class HealthGoalDto
 {
     public Guid Id { get; set; }
@@ -88,6 +94,14 @@ public class AddUserFavoriteIngredientRequest
     public string? Notes { get; set; }
 }
 
+public class UpdateUserFavoriteIngredientRequest
+{
+    [Range(1, 5)]
+    public int? Rating { get; set; }
+
+    public string? Notes { get; set; }
+}
+
 public class UserDislikedIngredientDto
 {
     public Guid Id { get; set; }
@@ -103,6 +117,14 @@ public class AddUserDislikedIngredientRequest
     [Required]
     public Guid IngredientId { get; set; }
 
+    [StringLength(200)]
+    public string? Reason { get; set; }
+
+    public string? Notes { get; set; }
+}
+
+public class UpdateUserDislikedIngredientRequest
+{
     [StringLength(200)]
     public string? Reason { get; set; }
 

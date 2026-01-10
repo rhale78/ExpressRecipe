@@ -1,3 +1,4 @@
+using ExpressRecipe.NotificationService.Data;
 using ExpressRecipe.NotificationService.Hubs;
 using Microsoft.AspNetCore.SignalR;
 
@@ -20,15 +21,36 @@ public class NotificationBroadcastService
     }
 
     /// <summary>
+    /// Convert NotificationDto to NotificationMessage for SignalR
+    /// </summary>
+    private static NotificationMessage ToNotificationMessage(NotificationDto dto)
+    {
+        return new NotificationMessage
+        {
+            Id = dto.Id,
+            Type = dto.Type,
+            Title = dto.Title,
+            Message = dto.Message,
+            Severity = "Info", // Default, could be derived from Type
+            Data = dto.Metadata,
+            CreatedAt = dto.CreatedAt,
+            ActionUrl = dto.ActionUrl,
+            ActionText = null,
+            ImageUrl = null
+        };
+    }
+
+    /// <summary>
     /// Broadcast a notification to a specific user
     /// </summary>
     public async Task BroadcastToUserAsync(Guid userId, NotificationDto notification)
     {
         try
         {
+            var message = ToNotificationMessage(notification);
             await _hubContext.Clients
                 .Group($"user:{userId}")
-                .ReceiveNotification(notification);
+                .ReceiveNotification(message);
 
             _logger.LogInformation(
                 "Broadcasted notification {NotificationId} to user {UserId}",
@@ -80,7 +102,8 @@ public class NotificationBroadcastService
     {
         try
         {
-            await _hubContext.Clients.All.ReceiveNotification(notification);
+            var message = ToNotificationMessage(notification);
+            await _hubContext.Clients.All.ReceiveNotification(message);
 
             _logger.LogInformation(
                 "Broadcasted notification {NotificationId} to all users",

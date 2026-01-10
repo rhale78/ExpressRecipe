@@ -173,7 +173,7 @@
                                 <i class="bi bi-question-circle text-muted" style="font-size: 3rem;"></i>
                                 <h5 class="mt-3">Product Not Found</h5>
                                 <p class="text-muted">Barcode @scanResult.Barcode is not in our database</p>
-                                <button class="btn btn-primary" @onclick="() => ShowReportMissing(scanResult.Barcode)">
+                                <button class="btn btn-primary" @onclick="HandleShowReportMissing">
                                     <i class="bi bi-flag me-2"></i>Report Missing Product
                                 </button>
                             </div>
@@ -192,7 +192,7 @@
                     <div class="list-group list-group-flush">
                         @foreach (var item in scanHistory.Take(5))
                         {
-                            <div class="list-group-item list-group-item-action" @onclick="() => QuickScan(item.Barcode)" style="cursor: pointer;">
+                            <div class="list-group-item list-group-item-action" @onclick="HandleQuickScan" style="cursor: pointer;">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <strong>@item.ProductName</strong>
@@ -306,6 +306,24 @@
         ToastService.ShowInfo("Coming Soon", "Report missing product feature");
     }
 
+    // Event handlers
+    private async Task HandleQuickScan()
+    {
+        if (scanHistory.Any())
+        {
+            var lastScan = scanHistory.First();
+            await QuickScan(lastScan.Barcode);
+        }
+    }
+
+    private void HandleShowReportMissing()
+    {
+        if (scanResult != null)
+        {
+            ShowReportMissing(scanResult.Barcode);
+        }
+    }
+
     private async Task AddToInventory()
     {
         if (scanResult?.Product == null)
@@ -313,21 +331,20 @@
 
         try
         {
-            var request = new
+            var request = new ExpressRecipe.Client.Shared.Models.Inventory.CreateInventoryItemRequest
             {
-                ProductName = scanResult.Product.Name,
+                Name = scanResult.Product.Name,
                 Brand = scanResult.Product.Brand,
                 Quantity = 1,
                 Unit = "unit",
-                ExpirationDate = (DateTime?)null,
-                Location = "Pantry",
-                Barcode = scanResult.Barcode
+                Category = scanResult.Product.Category,
+                Location = "Pantry"
             };
 
             // Add to inventory via API
-            var success = await InventoryClient.AddItemAsync(request.ProductName, request.Brand, request.Quantity, request.Unit);
+            var itemId = await InventoryClient.CreateInventoryItemAsync(request);
 
-            if (success)
+            if (itemId.HasValue)
             {
                 ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to inventory");
             }
@@ -349,21 +366,19 @@
 
         try
         {
-            var request = new
+            var request = new ExpressRecipe.Client.Shared.Models.Shopping.AddShoppingListItemRequest
             {
-                ProductName = scanResult.Product.Name,
+                ShoppingListId = Guid.Empty, // TODO: Get from user's default/active shopping list
+                Name = scanResult.Product.Name,
                 Brand = scanResult.Product.Brand,
                 Quantity = 1,
-                Unit = "unit",
-                Category = scanResult.Product.Category ?? "General",
-                Priority = "Medium",
-                Barcode = scanResult.Barcode
+                Unit = "unit"
             };
 
             // Add to shopping list via API
-            var success = await ShoppingClient.AddItemAsync(request.ProductName, request.Brand, request.Quantity, request.Unit);
+            var itemId = await ShoppingClient.AddItemAsync(request);
 
-            if (success)
+            if (itemId.HasValue)
             {
                 ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to shopping list");
             }

@@ -59,7 +59,8 @@ public class DatabaseMigrator
             {
                 command.CommandText = "SELECT COUNT(*) FROM MigrationHistory WHERE MigrationName = @Name";
                 command.Parameters.AddWithValue("@Name", migrationName);
-                var count = (int)await command.ExecuteScalarAsync()!;
+                var result = await command.ExecuteScalarAsync();
+                var count = result != null ? Convert.ToInt32(result) : 0;
                 
                 if (count > 0)
                 {

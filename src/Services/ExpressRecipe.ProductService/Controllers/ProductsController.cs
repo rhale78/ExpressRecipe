@@ -1,8 +1,10 @@
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace ExpressRecipe.ProductService.Controllers;
 
@@ -12,15 +14,21 @@ public class ProductsController : ControllerBase
 {
     private readonly IProductRepository _productRepository;
     private readonly IIngredientRepository _ingredientRepository;
+    private readonly IAllergenRepository _allergenRepository;
+    private readonly HybridCacheService _cache;
     private readonly ILogger<ProductsController> _logger;
 
     public ProductsController(
         IProductRepository productRepository,
         IIngredientRepository ingredientRepository,
+        IAllergenRepository allergenRepository,
+        HybridCacheService cache,
         ILogger<ProductsController> logger)
     {
         _productRepository = productRepository;
         _ingredientRepository = ingredientRepository;
+        _allergenRepository = allergenRepository;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -38,16 +46,60 @@ public class ProductsController : ControllerBase
     /// Search for products
     /// </summary>
     [HttpGet("search")]
-    public async Task<ActionResult<List<ProductDto>>> Search([FromQuery] ProductSearchRequest request)
+    public async Task<ActionResult<ProductSearchResult>> Search([FromQuery] ProductSearchRequest request)
     {
         try
         {
-            var products = await _productRepository.SearchAsync(request);
-            return Ok(products);
+            // Get products and total count in parallel for better performance
+            var productsTask = _productRepository.SearchAsync(request);
+            var countTask = _productRepository.GetSearchCountAsync(request);
+
+            await Task.WhenAll(productsTask, countTask);
+
+            var result = new ProductSearchResult
+            {
+                Products = productsTask.Result,
+                TotalCount = countTask.Result,
+                Page = request.PageNumber,
+                PageSize = request.PageSize
+            };
+
+            return Ok(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error searching products");
+            return StatusCode(500, new { message = "An error occurred" });
+        }
+    }
+
+    /// <summary>
+    /// Get product counts grouped by first letter (for alphabetical pagination)
+    /// </summary>
+    [HttpGet("letter-counts")]
+    public async Task<ActionResult<Dictionary<string, int>>> GetLetterCounts([FromQuery] ProductSearchRequest request)
+    {
+        try
+        {
+            // Create cache key based on request parameters
+            var cacheKey = CacheKeys.FormatKey(
+                CacheKeys.ProductLetterCounts,
+                $"{request.SearchTerm}_{request.Brand}_{request.Category}"
+            );
+
+            // Cache for 30 minutes (letter counts don't change frequently)
+            var letterCounts = await _cache.GetOrSetAsync(
+                cacheKey,
+                () => _productRepository.GetLetterCountsAsync(request),
+                memoryExpiry: TimeSpan.FromMinutes(10),
+                distributedExpiry: TimeSpan.FromMinutes(30)
+            );
+
+            return Ok(letterCounts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting letter counts");
             return StatusCode(500, new { message = "An error occurred" });
         }
     }
@@ -60,15 +112,38 @@ public class ProductsController : ControllerBase
     {
         try
         {
-            var product = await _productRepository.GetByIdAsync(id);
+            var cacheKey = CacheKeys.FormatKey(CacheKeys.ProductById, id);
+
+            // Cache product for 1 hour (products don't change often)
+            var product = await _cache.GetOrSetAsync(
+                cacheKey,
+                () => _productRepository.GetByIdAsync(id)!,
+                memoryExpiry: TimeSpan.FromMinutes(15),
+                distributedExpiry: TimeSpan.FromHours(1)
+            );
 
             if (product == null)
             {
                 return NotFound(new { message = "Product not found" });
             }
 
-            // Load ingredients
-            product.Ingredients = await _ingredientRepository.GetProductIngredientsAsync(id);
+            // Load ingredients and allergens (cache these too)
+            var ingredientsCacheKey = CacheKeys.FormatKey("product:ingredients:{0}", id);
+            var allergensCacheKey = CacheKeys.FormatKey("product:allergens:{0}", id);
+
+            product.Ingredients = await _cache.GetOrSetAsync(
+                ingredientsCacheKey,
+                () => _ingredientRepository.GetProductIngredientsAsync(id),
+                memoryExpiry: TimeSpan.FromMinutes(15),
+                distributedExpiry: TimeSpan.FromHours(1)
+            );
+
+            product.Allergens = await _cache.GetOrSetAsync(
+                allergensCacheKey,
+                () => _allergenRepository.GetProductAllergensAsync(id),
+                memoryExpiry: TimeSpan.FromMinutes(15),
+                distributedExpiry: TimeSpan.FromHours(1)
+            );
 
             return Ok(product);
         }
@@ -87,15 +162,28 @@ public class ProductsController : ControllerBase
     {
         try
         {
-            var product = await _productRepository.GetByBarcodeAsync(barcode);
+            var cacheKey = CacheKeys.FormatKey("product:barcode:{0}", barcode);
+
+            var product = await _cache.GetOrSetAsync(
+                cacheKey,
+                () => _productRepository.GetByBarcodeAsync(barcode)!,
+                memoryExpiry: TimeSpan.FromMinutes(15),
+                distributedExpiry: TimeSpan.FromHours(2)
+            );
 
             if (product == null)
             {
                 return NotFound(new { message = "Product not found with this barcode" });
             }
 
-            // Load ingredients
-            product.Ingredients = await _ingredientRepository.GetProductIngredientsAsync(product.Id);
+            // Load ingredients (also cached)
+            var ingredientsCacheKey = CacheKeys.FormatKey("product:ingredients:{0}", product.Id);
+            product.Ingredients = await _cache.GetOrSetAsync(
+                ingredientsCacheKey,
+                () => _ingredientRepository.GetProductIngredientsAsync(product.Id),
+                memoryExpiry: TimeSpan.FromMinutes(15),
+                distributedExpiry: TimeSpan.FromHours(2)
+            );
 
             return Ok(product);
         }
@@ -178,7 +266,18 @@ public class ProductsController : ControllerBase
                 return NotFound(new { message = "Product not found" });
             }
 
+            // Invalidate all caches for this product
+            await _cache.RemoveAsync(CacheKeys.FormatKey(CacheKeys.ProductById, id));
+            await _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", id));
+            await _cache.RemoveAsync(CacheKeys.FormatKey("product:allergens:{0}", id));
+
+            // Also invalidate barcode cache if barcode exists
             var product = await _productRepository.GetByIdAsync(id);
+            if (product?.Barcode != null)
+            {
+                await _cache.RemoveAsync(CacheKeys.FormatKey("product:barcode:{0}", product.Barcode));
+            }
+
             if (product != null)
             {
                 product.Ingredients = await _ingredientRepository.GetProductIngredientsAsync(id);
@@ -210,11 +309,25 @@ public class ProductsController : ControllerBase
                 return Unauthorized();
             }
 
+            // Get product before deletion to invalidate barcode cache
+            var product = await _productRepository.GetByIdAsync(id);
+
             var success = await _productRepository.DeleteAsync(id, userId.Value);
 
             if (!success)
             {
                 return NotFound(new { message = "Product not found" });
+            }
+
+            // Invalidate all caches for this product
+            await _cache.RemoveAsync(CacheKeys.FormatKey(CacheKeys.ProductById, id));
+            await _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", id));
+            await _cache.RemoveAsync(CacheKeys.FormatKey("product:allergens:{0}", id));
+
+            // Invalidate barcode cache
+            if (product?.Barcode != null)
+            {
+                await _cache.RemoveAsync(CacheKeys.FormatKey("product:barcode:{0}", product.Barcode));
             }
 
             _logger.LogInformation("Product {ProductId} deleted by user {UserId}", id, userId);

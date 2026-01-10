@@ -7,6 +7,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load layered configuration (global + env + local)
+builder.AddLayeredConfiguration(args);
+
 // Add Aspire service defaults (logging, telemetry, health checks)
 builder.AddServiceDefaults();
 
@@ -18,7 +21,7 @@ builder.AddRedisClient("redis");
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -29,8 +32,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
+            ValidIssuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService",
+            ValidAudience = jwtSettings["Audience"] ?? "ExpressRecipe.API",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
             ClockSkew = TimeSpan.Zero
         };
@@ -48,40 +51,34 @@ builder.Services.AddScoped<IAuthRepository>(sp =>
 // Register services
 builder.Services.AddScoped<TokenService>();
 
-// Add controllers
-builder.Services.AddControllers();
+// Add HttpClient for UserService communication
+builder.Services.AddHttpClient("UserService", client =>
+{
+    var userServiceUrl = builder.Configuration["Services:UserService"] ?? "http://userservice";
+    client.BaseAddress = new Uri(userServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Add controllers with custom configuration
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Use camelCase for JSON (this is already default, but being explicit)
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        // Make property name matching case-insensitive
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Disable automatic 400 responses for model validation errors
+        // so we can log what's actually wrong
+        options.SuppressModelStateInvalidFilter = true;
+    });
 
 // Add API documentation
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "ExpressRecipe Auth API", Version = "v1" });
-
-    // Add JWT authentication to Swagger
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token.",
-        Name = "Authorization",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-    {
-        {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
+// TODO: Re-add Swagger after resolving OpenApi 2.0 compatibility
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddSwaggerGen();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -95,6 +92,9 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Run database management (drop db/tables if configured)
+await app.RunDatabaseManagementAsync("AuthService", "authdb");
 
 // Run database migrations
 var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
@@ -110,8 +110,9 @@ app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // TODO: Re-enable after resolving OpenApi 2.0 compatibility
+    // app.UseSwagger();
+    // app.UseSwaggerUI();
 }
 
 app.UseCors();

@@ -8,7 +8,7 @@ namespace ExpressRecipe.SyncService.Hubs;
 /// Notifies clients about sync progress, conflicts, and completion
 /// </summary>
 [Authorize]
-public class SyncHub : Hub
+public class SyncHub : Hub<ISyncClient>
 {
     private readonly ILogger<SyncHub> _logger;
 
@@ -61,7 +61,7 @@ public class SyncHub : Hub
 
         // This would typically query the sync service for current status
         // For now, we'll just acknowledge the request
-        await Clients.Caller.SendAsync("SyncStatusRequested");
+        await Clients.Caller.SyncStatusRequested();
     }
 
     /// <summary>

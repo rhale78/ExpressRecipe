@@ -7,9 +7,11 @@ public class ToastService : IToastService
 {
     public async Task ShowToast(string message, ToastDuration duration = ToastDuration.Short)
     {
-        var toastDuration = duration == ToastDuration.Short ? CommunityToolkit.Maui.Core.ToastDuration.Short : CommunityToolkit.Maui.Core.ToastDuration.Long;
+        var toastDuration = duration == ToastDuration.Short 
+            ? CommunityToolkit.Maui.Core.ToastDuration.Short 
+            : CommunityToolkit.Maui.Core.ToastDuration.Long;
 
-        var toast = Toast.Make(message, toastDuration);
+        var toast = CommunityToolkit.Maui.Alerts.Toast.Make(message, toastDuration);
         await toast.Show();
     }
 

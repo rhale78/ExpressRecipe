@@ -1,8 +1,9 @@
 @page "/admin/users"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @attribute [Authorize(Roles = "Admin")]
 @using ExpressRecipe.Client.Shared.Models.User
 @using ExpressRecipe.Client.Shared.Services
+@using Microsoft.AspNetCore.Authorization
 @inject IUserProfileApiClient UserApi
 @inject IToastService ToastService
 
@@ -90,43 +91,34 @@
                                     <div class="user-avatar">@GetInitials(user.FirstName, user.LastName)</div>
                                     <div>
                                         <strong>@user.FirstName @user.LastName</strong>
-                                        <small>ID: @user.Id.ToString().Substring(0, 8)</small>
+                                        <small>ID: @user.UserId.ToString().Substring(0, 8)</small>
                                     </div>
                                 </div>
                             </td>
                             <td>@user.Email</td>
                             <td>
-                                <span class="role-badge role-@user.Role?.ToLower()">
-                                    @user.Role
+                                <span class="role-badge">
+                                    User
                                 </span>
                             </td>
                             <td>
-                                <span class="status-badge status-@user.Status?.ToLower()">
-                                    @user.Status
+                                <span class="status-badge">
+                                    Active
                                 </span>
                             </td>
                             <td>@user.CreatedAt.ToString("MMM dd, yyyy")</td>
-                            <td>@(user.LastLoginAt?.ToString("MMM dd, yyyy") ?? "Never")</td>
+                            <td>@(user.UpdatedAt?.ToString("MMM dd, yyyy") ?? "Never")</td>
                             <td>
                                 <div class="action-buttons">
-                                    <button class="btn-action" @onclick="() => ViewUser(user.Id)" title="View">
+                                    <button class="btn-action" @onclick="@(() => ViewUser(user.UserId))" title="View">
                                         👁️
                                     </button>
-                                    <button class="btn-action" @onclick="() => EditUser(user.Id)" title="Edit">
+                                    <button class="btn-action" @onclick="@(() => EditUser(user.UserId))" title="Edit">
                                         ✏️
                                     </button>
-                                    @if (user.Status == "Active")
-                                    {
-                                        <button class="btn-action danger" @onclick="() => SuspendUser(user.Id)" title="Suspend">
-                                            🚫
-                                        </button>
-                                    }
-                                    else
-                                    {
-                                        <button class="btn-action success" @onclick="() => ActivateUser(user.Id)" title="Activate">
-                                            ✓
-                                        </button>
-                                    }
+                                    <button class="btn-action danger" @onclick="@(() => SuspendUser(user.UserId))" title="Suspend">
+                                        🚫
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -140,7 +132,7 @@
         {
             <div class="pagination">
                 <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
-                        @onclick="() => ChangePage(_currentPage - 1)">
+                        @onclick="@(() => ChangePage(_currentPage - 1))">
                     ← Previous
                 </button>
 
@@ -149,7 +141,7 @@
                 </span>
 
                 <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _totalPages)"
-                        @onclick="() => ChangePage(_currentPage + 1)">
+                        @onclick="@(() => ChangePage(_currentPage + 1))">
                     Next →
                 </button>
             </div>

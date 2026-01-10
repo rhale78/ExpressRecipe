@@ -6,6 +6,9 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load layered configuration (global + env + local)
+builder.AddLayeredConfiguration(args);
+
 // Add Aspire service defaults
 builder.AddServiceDefaults();
 
@@ -17,7 +20,18 @@ builder.AddRedisClient("redis");
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
+var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService";
+var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
+
+// Log JWT configuration for debugging
+var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
+var startupLogger = loggerFactory.CreateLogger("Startup");
+startupLogger.LogInformation("JWT Configuration:");
+startupLogger.LogInformation("  Issuer: {Issuer}", issuer);
+startupLogger.LogInformation("  Audience: {Audience}", audience);
+startupLogger.LogInformation("  SecretKey Length: {Length}", secretKey.Length);
+startupLogger.LogInformation("  SecretKey Preview: {Preview}...", secretKey.Substring(0, Math.Min(5, secretKey.Length)));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -28,10 +42,32 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
+            ValidIssuer = issuer,
+            ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
             ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogError("Authentication failed: {Message}", context.Exception.Message);
+                return Task.CompletedTask;
+            },
+            OnTokenValidated = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogDebug("Token validated for user: {User}", context.Principal?.Identity?.Name);
+                return Task.CompletedTask;
+            },
+            OnChallenge = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning("Authentication challenge: {Error}, {ErrorDescription}", context.Error, context.ErrorDescription);
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -65,36 +101,9 @@ builder.Services.AddHostedService<ExpressRecipe.UserService.Services.PointsManag
 builder.Services.AddControllers();
 
 // Add API documentation
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new() { Title = "ExpressRecipe User API", Version = "v1" });
-
-    // Add JWT authentication to Swagger
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-    {
-        Description = "JWT Authorization header using the Bearer scheme.",
-        Name = "Authorization",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
-    });
-
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
-    {
-        {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
-    });
-});
+// TODO: Re-add Swagger after resolving OpenApi 2.0 compatibility
+// builder.Services.AddEndpointsApiExplorer();
+// builder.Services.AddSwaggerGen();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -108,6 +117,9 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Run database management (drop db/tables if configured)
+await app.RunDatabaseManagementAsync("UserService", "userdb");
 
 // Run database migrations
 var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
@@ -123,8 +135,9 @@ app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    // TODO: Re-enable after resolving OpenApi 2.0 compatibility
+    // app.UseSwagger();
+    // app.UseSwaggerUI();
 }
 
 app.UseCors();

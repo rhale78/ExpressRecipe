@@ -1,6 +1,7 @@
 using RabbitMQ.Client;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.Shared.Services;
 
@@ -10,7 +11,7 @@ namespace ExpressRecipe.Shared.Services;
 public class EventPublisher : IDisposable
 {
     private readonly IConnection? _connection;
-    private readonly IModel? _channel;
+    private readonly IChannel? _channel;
     private readonly ILogger<EventPublisher> _logger;
     private const string ExchangeName = "expressrecipe.events";
 
@@ -20,11 +21,11 @@ public class EventPublisher : IDisposable
 
         try
         {
-            _connection = connectionFactory.CreateConnection();
-            _channel = _connection.CreateModel();
+            _connection = connectionFactory.CreateConnectionAsync().GetAwaiter().GetResult();
+            _channel = _connection.CreateChannelAsync().GetAwaiter().GetResult();
 
             // Declare topic exchange
-            _channel.ExchangeDeclare(exchange: ExchangeName, type: ExchangeType.Topic, durable: true);
+            _channel.ExchangeDeclareAsync(exchange: ExchangeName, type: ExchangeType.Topic, durable: true).GetAwaiter().GetResult();
 
             _logger.LogInformation("EventPublisher initialized successfully");
         }
@@ -47,14 +48,17 @@ public class EventPublisher : IDisposable
             var message = JsonSerializer.Serialize(@event);
             var body = Encoding.UTF8.GetBytes(message);
 
-            var properties = _channel.CreateBasicProperties();
-            properties.Persistent = true;
-            properties.ContentType = "application/json";
-            properties.Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            var properties = new BasicProperties
+            {
+                Persistent = true,
+                ContentType = "application/json",
+                Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+            };
 
-            _channel.BasicPublish(
+            await _channel.BasicPublishAsync(
                 exchange: ExchangeName,
                 routingKey: routingKey,
+                mandatory: false,
                 basicProperties: properties,
                 body: body);
 
@@ -71,9 +75,9 @@ public class EventPublisher : IDisposable
 
     public void Dispose()
     {
-        _channel?.Close();
+        _channel?.CloseAsync().GetAwaiter().GetResult();
         _channel?.Dispose();
-        _connection?.Close();
+        _connection?.CloseAsync().GetAwaiter().GetResult();
         _connection?.Dispose();
     }
 }

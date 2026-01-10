@@ -1,18 +1,23 @@
 @page "/products"
-@using Microsoft.AspNetCore.Authorization
-@using ExpressRecipe.Client.Shared.Services
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Models.Product
-@attribute [Authorize]
+@using ExpressRecipe.Client.Shared.Services
+@using Microsoft.Extensions.Logging
 @inject IProductApiClient ProductApi
 @inject NavigationManager Navigation
+@inject ILogger<Products> Logger
+@inject IJSRuntime JS
 
 <PageTitle>Products - ExpressRecipe</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="products-container">
     <div class="products-header">
         <h1>Product Database</h1>
         <div class="header-actions">
-            <button class="btn btn-primary" @onclick="() => Navigation.NavigateTo("/products/scan")">
+            <button class="btn btn-primary" @onclick="NavigateToScan">
                 📷 Scan Barcode
             </button>
         </div>
@@ -26,11 +31,18 @@
                    placeholder="Search products by name, brand, or UPC..."
                    @bind="_searchTerm"
                    @bind:event="oninput"
+                   @bind:after="HandleSearchInput"
                    @onkeypress="HandleSearchKeyPress" />
             <button class="btn btn-primary" @onclick="SearchProducts">
                 🔍 Search
             </button>
         </div>
+
+        <!-- Unified Dietary Filter -->
+        <UnifiedDietaryFilter
+            OnFiltersChanged="HandleFiltersChanged"
+            InitialFilters="_allDietaryFilters"
+            AutoLoadUserProfile="true" />
 
         <!-- Filters Row -->
         <div class="filters-row">
@@ -43,16 +55,24 @@
             </div>
 
             <div class="filter-group">
-                <label>Allergens to Exclude</label>
-                <div class="allergen-checkboxes">
-                    @foreach (var allergen in _commonAllergens)
-                    {
-                        <label class="allergen-checkbox">
-                            <input type="checkbox"
-                                   @bind="_excludedAllergens[allergen]" />
-                            <span>@allergen</span>
-                        </label>
-                    }
+                <label>Pagination Style</label>
+                <div class="pagination-toggle">
+                    <label class="toggle-option">
+                        <input type="radio"
+                               name="paginationType"
+                               value="numeric"
+                               checked="@(!_useAlphabeticalPagination)"
+                               @onchange="() => TogglePaginationType(false)" />
+                        <span>📄 Numeric (1, 2, 3...)</span>
+                    </label>
+                    <label class="toggle-option">
+                        <input type="radio"
+                               name="paginationType"
+                               value="alphabetical"
+                               checked="@_useAlphabeticalPagination"
+                               @onchange="() => TogglePaginationType(true)" />
+                        <span>🔤 Alphabetical (A-Z)</span>
+                    </label>
                 </div>
             </div>
 
@@ -71,15 +91,21 @@
             <p>Searching products...</p>
         </div>
     }
-    else if (_searchResult != null)
+    else if (_searchResult is not null)
     {
         <!-- Results Summary -->
         <div class="results-summary">
             <p>
                 Showing @_searchResult.Products.Count of @_searchResult.TotalCount.ToString("N0") products
-                @if (!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_brandFilter) || _excludedAllergens.Any(x => x.Value))
+                @if (!string.IsNullOrEmpty(_searchTerm) || !string.IsNullOrEmpty(_brandFilter) || _allDietaryFilters.Any())
                 {
                     <span class="filter-indicator">(filtered)</span>
+                }
+                @if (_allDietaryFilters.Any())
+                {
+                    <span class="dietary-indicator">
+                        🍽️ Dietary filters: @string.Join(", ", _allDietaryFilters.Take(3))@((_allDietaryFilters.Count > 3) ? $" +{_allDietaryFilters.Count - 3} more" : "")
+                    </span>
                 }
             </p>
         </div>
@@ -130,7 +156,7 @@
                         </div>
 
                         <div class="product-actions">
-                            <button class="btn-link" @onclick:stopPropagation="true" @onclick="() => ViewProduct(product.Id)">
+                            <button class="btn-link" @onclick:stopPropagation="true" @onclick='() => ViewProduct(product.Id)'>
                                 View Details →
                             </button>
                         </div>
@@ -138,10 +164,20 @@
                 }
             </div>
 
-            <!-- Pagination -->
-            @if (_searchResult.TotalPages > 1)
+            <!-- Pagination - Only show if more than 1 page OR using alphabetical mode -->
+            @if (!_useAlphabeticalPagination && _searchResult.TotalPages > 1)
             {
+                <!-- Numeric Pagination -->
                 <div class="pagination">
+                    <!-- First Page Button -->
+                    <button class="btn btn-outline"
+                            @onclick="() => ChangePage(1)"
+                            disabled="@(_currentPage <= 1)"
+                            title="First page">
+                        ⏮ First
+                    </button>
+
+                    <!-- Previous Button -->
                     <button class="btn btn-outline"
                             @onclick="() => ChangePage(_currentPage - 1)"
                             disabled="@(_currentPage <= 1)">
@@ -149,21 +185,144 @@
                     </button>
 
                     <div class="page-numbers">
-                        @for (int i = Math.Max(1, _currentPage - 2); i <= Math.Min(_searchResult.TotalPages, _currentPage + 2); i++)
+                        @foreach (var pageInfo in GetPageNumbers())
                         {
-                            var page = i;
-                            <button class="page-number @(page == _currentPage ? "active" : "")"
-                                    @onclick="() => ChangePage(page)">
-                                @page
-                            </button>
+                            if (pageInfo.IsEllipsis)
+                            {
+                                <span class="page-ellipsis">…</span>
+                            }
+                            else
+                            {
+                                var pageNum = pageInfo.PageNumber;
+                                <button class="page-number @(pageNum == _currentPage ? "active" : "")"
+                                        @onclick="() => ChangePage(pageNum)">
+                                    @pageNum
+                                </button>
+                            }
                         }
                     </div>
 
+                    <!-- Next Button -->
                     <button class="btn btn-outline"
                             @onclick="() => ChangePage(_currentPage + 1)"
                             disabled="@(_currentPage >= _searchResult.TotalPages)">
                         Next →
                     </button>
+
+                    <!-- Last Page Button -->
+                    <button class="btn btn-outline"
+                            @onclick="() => ChangePage(_searchResult.TotalPages)"
+                            disabled="@(_currentPage >= _searchResult.TotalPages)"
+                            title="Last page">
+                        Last ⏭
+                    </button>
+                </div>
+
+                <!-- Page Info -->
+                <div class="pagination-info">
+                    Page @_currentPage of @_searchResult.TotalPages (@_searchResult.TotalCount total products)
+                </div>
+            }
+            else if (_useAlphabeticalPagination)
+            {
+                <!-- Alphabetical Navigation -->
+                <div class="pagination alphabet-pagination">
+                    @if (!string.IsNullOrEmpty(_selectedLetter))
+                    {
+                        <button class="btn btn-outline" @onclick="() => SelectLetter(null)">
+                            ← Show All
+                        </button>
+                    }
+
+                    <div class="alphabet-letters">
+                        @foreach (var letter in GetAllLetters())
+                        {
+                            var hasProducts = _letterCounts.GetValueOrDefault(letter, 0) > 0;
+                            // Handle "#" special case - it's active when selectedLetter is "0"
+                            var isActive = (letter == "#" && _selectedLetter == "0") || letter == _selectedLetter;
+
+                            <button class="page-number alphabet-btn @(isActive ? "active" : "") @(!hasProducts ? "disabled" : "")"
+                                    @onclick="() => SelectLetter(letter)"
+                                    disabled="@(!hasProducts)"
+                                    title="@(hasProducts ? (letter == "#" ? "Show products starting with numbers (0-9)" : $"Show products starting with {letter}") : (letter == "#" ? "No products starting with numbers" : $"No products starting with {letter}"))">
+                                @letter
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <!-- Numeric pagination within a selected letter (if too many products) -->
+                @if (!string.IsNullOrEmpty(_selectedLetter) && _searchResult.TotalPages > 1)
+                {
+                    <div class="pagination">
+                        <button class="btn btn-outline"
+                                @onclick="() => ChangePage(1)"
+                                disabled="@(_currentPage <= 1)">
+                            ⏮ First
+                        </button>
+
+                        <button class="btn btn-outline"
+                                @onclick="() => ChangePage(_currentPage - 1)"
+                                disabled="@(_currentPage <= 1)">
+                            ← Previous
+                        </button>
+
+                        <div class="page-numbers">
+                            @foreach (var pageInfo in GetPageNumbers())
+                            {
+                                if (pageInfo.IsEllipsis)
+                                {
+                                    <span class="page-ellipsis">…</span>
+                                }
+                                else
+                                {
+                                    var pageNum = pageInfo.PageNumber;
+                                    <button class="page-number @(pageNum == _currentPage ? "active" : "")"
+                                            @onclick="() => ChangePage(pageNum)">
+                                        @pageNum
+                                    </button>
+                                }
+                            }
+                        </div>
+
+                        <button class="btn btn-outline"
+                                @onclick="() => ChangePage(_currentPage + 1)"
+                                disabled="@(_currentPage >= _searchResult.TotalPages)">
+                            Next →
+                        </button>
+
+                        <button class="btn btn-outline"
+                                @onclick="() => ChangePage(_searchResult.TotalPages)"
+                                disabled="@(_currentPage >= _searchResult.TotalPages)">
+                            Last ⏭
+                        </button>
+                    </div>
+                }
+
+                <div class="pagination-info">
+                    @if (!string.IsNullOrEmpty(_selectedLetter))
+                    {
+                        var displayLetter = _selectedLetter == "0" ? "#" : _selectedLetter;
+                        <text>Showing @_searchResult.Products.Count of @_searchResult.TotalCount products starting with "@displayLetter"</text>
+                        @if (_searchResult.TotalPages > 1)
+                        {
+                            <text> - Page @_currentPage of @_searchResult.TotalPages</text>
+                        }
+                    }
+                    else
+                    {
+                        var lettersWithProducts = _letterCounts.Count(kv => kv.Value > 0);
+                        var totalProducts = _letterCounts.Sum(kv => kv.Value);
+
+                        @if (lettersWithProducts > 0)
+                        {
+                            <text>@lettersWithProducts letters with products (@totalProducts.ToString("N0") total) - select a letter to browse</text>
+                        }
+                        else
+                        {
+                            <text>Select a letter above to browse products alphabetically</text>
+                        }
+                    }
                 </div>
             }
         }
@@ -186,16 +345,19 @@
         </div>
     }
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to view products.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     private string _searchTerm = string.Empty;
     private string _brandFilter = string.Empty;
-    private Dictionary<string, bool> _excludedAllergens = new();
-    private readonly string[] _commonAllergens = new[]
-    {
-        "Dairy", "Eggs", "Fish", "Shellfish", "Tree Nuts",
-        "Peanuts", "Wheat", "Soy", "Sesame"
-    };
+    private List<string> _allDietaryFilters = new(); // Unified filters from UnifiedDietaryFilter component
 
     private ProductSearchResult? _searchResult;
     private int _currentPage = 1;
@@ -203,16 +365,69 @@
     private bool _isLoading = false;
     private string? _errorMessage;
 
+    // Alphabetical pagination fields
+    private bool _useAlphabeticalPagination = false;
+    private string? _selectedLetter;
+    private Dictionary<string, int> _letterCounts = new();
+
+    // Live search debounce
+    private CancellationTokenSource? _searchDebounceTokenSource;
+    private const int SearchDebounceMs = 500; // Wait 500ms after typing stops
+
     protected override async Task OnInitializedAsync()
     {
-        // Initialize allergen checkboxes
-        foreach (var allergen in _commonAllergens)
+        // Load search state from localStorage (preserves search term and brand filter)
+        try
         {
-            _excludedAllergens[allergen] = false;
+            var savedSearchTerm = await JS.InvokeAsync<string>("localStorage.getItem", "productsSearchTerm");
+            var savedBrand = await JS.InvokeAsync<string>("localStorage.getItem", "productsBrandFilter");
+
+            if (!string.IsNullOrEmpty(savedSearchTerm))
+            {
+                _searchTerm = savedSearchTerm;
+            }
+
+            if (!string.IsNullOrEmpty(savedBrand))
+            {
+                _brandFilter = savedBrand;
+            }
         }
+        catch { /* Ignore localStorage errors */ }
 
         // Load initial products
         await SearchProducts();
+    }
+
+    private async Task HandleFiltersChanged(List<string> filters)
+    {
+        _allDietaryFilters = filters;
+        _currentPage = 1;
+        await SearchProducts();
+    }
+
+    private async Task HandleSearchInput()
+    {
+        // Cancel any pending search
+        _searchDebounceTokenSource?.Cancel();
+        _searchDebounceTokenSource = new CancellationTokenSource();
+        var token = _searchDebounceTokenSource.Token;
+
+        try
+        {
+            // Wait for debounce period
+            await Task.Delay(SearchDebounceMs, token);
+
+            // If not cancelled, perform search
+            if (!token.IsCancellationRequested)
+            {
+                _currentPage = 1;
+                await SearchProducts();
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // This is expected when user is still typing
+        }
     }
 
     private async Task SearchProducts()
@@ -222,20 +437,55 @@
 
         try
         {
+            // Save search state to localStorage (preserves across navigation to product details)
+            try
+            {
+                await JS.InvokeVoidAsync("localStorage.setItem", "productsSearchTerm", _searchTerm ?? "");
+                await JS.InvokeVoidAsync("localStorage.setItem", "productsBrandFilter", _brandFilter ?? "");
+            }
+            catch { /* Ignore localStorage errors */ }
+
             var request = new ProductSearchRequest
             {
                 SearchTerm = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
                 Brand = string.IsNullOrWhiteSpace(_brandFilter) ? null : _brandFilter,
-                Allergens = _excludedAllergens.Where(x => x.Value).Select(x => x.Key).ToList(),
+                Restrictions = _allDietaryFilters.Any() ? _allDietaryFilters : null, // Pass all dietary filters to backend
+                FirstLetter = _useAlphabeticalPagination && !string.IsNullOrEmpty(_selectedLetter) ? _selectedLetter : null,
+                SortBy = _useAlphabeticalPagination ? "name" : null, // Always sort by name for alphabetical mode
                 Page = _currentPage,
-                PageSize = _pageSize
+                PageSize = _pageSize // Use consistent page size for both modes
             };
 
             _searchResult = await ProductApi.SearchProductsAsync(request);
+
+            // Fetch letter counts from server when in alphabetical mode
+            if (_useAlphabeticalPagination)
+            {
+                await LoadLetterCountsAsync(request);
+            }
+
+            // Handle null result
+            if (_searchResult == null)
+            {
+                _searchResult = new ProductSearchResult
+                {
+                    Products = new List<ProductDto>(),
+                    TotalCount = 0,
+                    Page = _currentPage,
+                    PageSize = _pageSize
+                };
+            }
         }
         catch (Exception ex)
         {
             _errorMessage = $"Failed to search products: {ex.Message}";
+            _searchResult = new ProductSearchResult
+            {
+                Products = new List<ProductDto>(),
+                TotalCount = 0,
+                Page = _currentPage,
+                PageSize = _pageSize
+            };
         }
         finally
         {
@@ -254,7 +504,7 @@
 
     private async Task ChangePage(int newPage)
     {
-        if (newPage < 1 || (_searchResult != null && newPage > _searchResult.TotalPages))
+        if (newPage < 1 || (_searchResult is not null && newPage > _searchResult.TotalPages))
             return;
 
         _currentPage = newPage;
@@ -265,10 +515,7 @@
     {
         _searchTerm = string.Empty;
         _brandFilter = string.Empty;
-        foreach (var key in _excludedAllergens.Keys.ToList())
-        {
-            _excludedAllergens[key] = false;
-        }
+        _allDietaryFilters.Clear();
         _currentPage = 1;
         await SearchProducts();
     }
@@ -277,4 +524,170 @@
     {
         Navigation.NavigateTo($"/products/{productId}");
     }
+
+    private void NavigateToScan()
+    {
+        Navigation.NavigateTo("/products/scan");
+    }
+
+    private void HandleViewProduct()
+    {
+        // TODO: Get product ID from event context
+    }
+
+    private void HandleChangePage()
+    {
+        // TODO: Get page number from event context
+    }
+
+    private async Task TogglePaginationType(bool useAlphabetical)
+    {
+        _useAlphabeticalPagination = useAlphabetical;
+        _selectedLetter = null;
+        _currentPage = 1;
+        await SearchProducts();
+    }
+
+    private async Task SelectLetter(string? letter)
+    {
+        // Handle "#" as a special case for numbers (0-9)
+        if (letter == "#")
+        {
+            _selectedLetter = "0"; // Backend will handle "0" as "any digit"
+        }
+        else
+        {
+            _selectedLetter = letter;
+        }
+
+        _currentPage = 1;
+        await SearchProducts();
+    }
+
+    private List<string> GetAllLetters()
+    {
+        return new List<string>
+        {
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+            "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+            "#" // Special character for numbers/symbols
+        };
+    }
+
+    /// <summary>
+    /// Loads product counts for each letter from the server (across all products, not just current page)
+    /// </summary>
+    private async Task LoadLetterCountsAsync(ProductSearchRequest baseRequest)
+    {
+        try
+        {
+            // Create a request without FirstLetter filter to get counts for all letters
+            var countRequest = new ProductSearchRequest
+            {
+                SearchTerm = baseRequest.SearchTerm,
+                Brand = baseRequest.Brand,
+                // Don't include FirstLetter, Page, or PageSize - we want all counts
+            };
+
+            var counts = await ProductApi.GetLetterCountsAsync(countRequest);
+            _letterCounts = counts ?? new Dictionary<string, int>();
+
+            // Aggregate number counts (0-9) into "#" for display
+            var numberCount = 0;
+            for (char c = '0'; c <= '9'; c++)
+            {
+                if (_letterCounts.TryGetValue(c.ToString(), out var count))
+                {
+                    numberCount += count;
+                }
+            }
+
+            if (numberCount > 0)
+            {
+                _letterCounts["#"] = numberCount;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load letter counts");
+            _letterCounts.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Smart pagination algorithm that shows consistent number of page buttons
+    /// with ellipsis for large page counts
+    /// </summary>
+    private List<PageInfo> GetPageNumbers()
+    {
+        var result = new List<PageInfo>();
+
+        if (_searchResult == null || _searchResult.TotalPages == 0)
+            return result;
+
+        int totalPages = _searchResult.TotalPages;
+        int currentPage = _currentPage;
+
+        // Configuration
+        const int maxVisiblePages = 7; // Always show max 7 page buttons (consistent!)
+        const int sidePages = 2; // Pages to show on each side of current
+
+        if (totalPages <= maxVisiblePages)
+        {
+            // Show all pages if total is small
+            for (int i = 1; i <= totalPages; i++)
+            {
+                result.Add(new PageInfo { PageNumber = i, IsEllipsis = false });
+            }
+        }
+        else
+        {
+            // Always show first page
+            result.Add(new PageInfo { PageNumber = 1, IsEllipsis = false });
+
+            // Calculate range around current page
+            int rangeStart = Math.Max(2, currentPage - sidePages);
+            int rangeEnd = Math.Min(totalPages - 1, currentPage + sidePages);
+
+            // Adjust range if at edges to maintain consistent count
+            if (currentPage <= sidePages + 2)
+            {
+                rangeEnd = Math.Min(totalPages - 1, maxVisiblePages - 1);
+            }
+            else if (currentPage >= totalPages - sidePages - 1)
+            {
+                rangeStart = Math.Max(2, totalPages - maxVisiblePages + 2);
+            }
+
+            // Add ellipsis after first page if needed
+            if (rangeStart > 2)
+            {
+                result.Add(new PageInfo { PageNumber = 0, IsEllipsis = true });
+            }
+
+            // Add middle pages
+            for (int i = rangeStart; i <= rangeEnd; i++)
+            {
+                result.Add(new PageInfo { PageNumber = i, IsEllipsis = false });
+            }
+
+            // Add ellipsis before last page if needed
+            if (rangeEnd < totalPages - 1)
+            {
+                result.Add(new PageInfo { PageNumber = 0, IsEllipsis = true });
+            }
+
+            // Always show last page
+            result.Add(new PageInfo { PageNumber = totalPages, IsEllipsis = false });
+        }
+
+        return result;
+    }
+
+    private record PageInfo
+    {
+        public int PageNumber { get; init; }
+        public bool IsEllipsis { get; init; }
+    }
+
 }

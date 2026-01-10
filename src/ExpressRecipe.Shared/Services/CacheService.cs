@@ -1,5 +1,6 @@
 using StackExchange.Redis;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.Shared.Services;
 
@@ -28,7 +29,7 @@ public class CacheService
             var value = await _db.StringGetAsync(key);
             if (value.IsNullOrEmpty) return default;
 
-            return JsonSerializer.Deserialize<T>(value!);
+            return JsonSerializer.Deserialize<T>((string)value!);
         }
         catch (Exception ex)
         {
@@ -44,7 +45,11 @@ public class CacheService
         try
         {
             var serialized = JsonSerializer.Serialize(value);
-            return await _db.StringSetAsync(key, serialized, expiry);
+            if (expiry.HasValue)
+            {
+                return await _db.StringSetAsync(key, serialized, expiry.Value);
+            }
+            return await _db.StringSetAsync(key, serialized);
         }
         catch (Exception ex)
         {

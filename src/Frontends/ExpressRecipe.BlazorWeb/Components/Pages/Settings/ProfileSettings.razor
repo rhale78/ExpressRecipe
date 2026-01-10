@@ -1,17 +1,20 @@
 @page "/settings"
 @page "/settings/profile"
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.User
-@attribute [Authorize]
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IUserProfileApiClient UserProfileApi
 @inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Profile & Family Settings - ExpressRecipe</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="settings-container">
     <div class="settings-header">
-        <button class="btn btn-outline" @onclick="() => Navigation.NavigateTo("/dashboard")">
+        <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo("/dashboard"))">
             ← Back to Dashboard
         </button>
         <h1>Profile & Family Settings</h1>
@@ -37,7 +40,7 @@
                 <h2>👤 My Profile</h2>
                 @if (!_isEditingProfile)
                 {
-                    <button class="btn btn-outline btn-sm" @onclick="() => _isEditingProfile = true">
+                    <button class="btn btn-outline btn-sm" @onclick="StartEditingProfile">
                         ✏️ Edit
                     </button>
                 }
@@ -65,80 +68,40 @@
                     </div>
                 }
 
-                <!-- My Allergies -->
+                <!-- My Dietary Restrictions & Allergies -->
                 <div class="restriction-section">
-                    <h4>⚠️ My Allergies</h4>
+                    <h4>⚠️ My Dietary Restrictions & Allergies</h4>
                     <p class="restriction-description">
-                        Select all allergens you need to avoid. Recipes will be automatically filtered.
+                        Select your allergies, dietary preferences, and religious restrictions. These will be automatically applied when searching for recipes and products.
                     </p>
 
                     @if (_isEditingProfile)
                     {
-                        <div class="allergen-grid">
-                            @foreach (var allergen in _commonAllergens)
-                            {
-                                <label class="allergen-checkbox-card @(_profileEdit.Allergens.Contains(allergen) ? "selected" : "")">
-                                    <input type="checkbox"
-                                           checked="@_profileEdit.Allergens.Contains(allergen)"
-                                           @onchange="e => ToggleAllergen(_profileEdit.Allergens, allergen, (bool)e.Value!)" />
-                                    <span class="allergen-name">@allergen</span>
-                                </label>
-                            }
-                        </div>
+                        <!-- Unified Dietary Filter for editing -->
+                        <UnifiedDietaryFilter
+                            OnFiltersChanged="HandleProfileRestrictionsChanged"
+                            InitialFilters="_currentProfileRestrictions"
+                            AutoLoadUserProfile="false" />
                     }
                     else
                     {
-                        @if (_profile.Allergens.Any())
+                        <!-- Display mode: show combined restrictions -->
+                        @if (_profile.Allergens.Any() || _profile.DietaryRestrictions.Any())
                         {
                             <div class="tags-display">
                                 @foreach (var allergen in _profile.Allergens)
                                 {
                                     <span class="allergen-tag">⚠️ @allergen</span>
                                 }
-                            </div>
-                        }
-                        else
-                        {
-                            <p class="empty-message">No allergens specified</p>
-                        }
-                    }
-                </div>
-
-                <!-- My Dietary Restrictions -->
-                <div class="restriction-section">
-                    <h4>🥗 My Dietary Restrictions</h4>
-                    <p class="restriction-description">
-                        Select your dietary preferences (e.g., vegetarian, gluten-free).
-                    </p>
-
-                    @if (_isEditingProfile)
-                    {
-                        <div class="dietary-grid">
-                            @foreach (var diet in _dietaryOptions)
-                            {
-                                <label class="dietary-checkbox-card @(_profileEdit.DietaryRestrictions.Contains(diet) ? "selected" : "")">
-                                    <input type="checkbox"
-                                           checked="@_profileEdit.DietaryRestrictions.Contains(diet)"
-                                           @onchange="e => ToggleDietary(_profileEdit.DietaryRestrictions, diet, (bool)e.Value!)" />
-                                    <span class="dietary-name">@diet</span>
-                                </label>
-                            }
-                        </div>
-                    }
-                    else
-                    {
-                        @if (_profile.DietaryRestrictions.Any())
-                        {
-                            <div class="tags-display">
                                 @foreach (var diet in _profile.DietaryRestrictions)
                                 {
-                                    <span class="dietary-tag">@diet</span>
+                                    <span class="dietary-tag">🥗 @diet</span>
                                 }
                             </div>
                         }
                         else
                         {
-                            <p class="empty-message">No dietary restrictions specified</p>
+                            <p class="empty-message">No dietary restrictions or allergens specified</p>
                         }
                     }
                 </div>
@@ -280,7 +243,7 @@
 
                                     <div class="form-actions">
                                         <button class="btn btn-outline btn-sm" @onclick="CancelFamilyMemberEdit">Cancel</button>
-                                        <button class="btn btn-primary btn-sm" @onclick="() => SaveFamilyMember(member.Id)" disabled="@_isSaving">
+                                        <button class="btn btn-primary btn-sm" @onclick="@(() => HandleSaveFamilyMember(member.Id))" disabled="@_isSaving">
                                             @if (_isSaving)
                                             {
                                                 <span class="spinner-small"></span>
@@ -506,6 +469,14 @@
         </div>
     }
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to access settings.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     private UserProfileDto? _profile;
@@ -525,21 +496,36 @@
     private string _familyMemberDislikedFoodsInput = string.Empty;
     private string _newFamilyMemberDislikedFoodsInput = string.Empty;
 
+    // Current profile restrictions for UnifiedDietaryFilter
+    private List<string> _currentProfileRestrictions = new();
+
+    // Known restriction categories (for categorization when saving)
     private readonly string[] _commonAllergens = new[]
     {
         "Dairy", "Eggs", "Fish", "Shellfish", "Tree Nuts",
-        "Peanuts", "Wheat", "Soy", "Sesame"
+        "Peanuts", "Wheat", "Soy", "Sesame", "Gluten", "Corn", "Mustard", "Sulfites"
     };
 
     private readonly string[] _dietaryOptions = new[]
     {
         "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
-        "Keto", "Paleo", "Low-Carb", "Low-Fat", "Halal", "Kosher"
+        "Keto", "Paleo", "Low-Carb", "Low-Fat", "Halal", "Kosher",
+        "Pescatarian", "Plant-Based", "Whole30", "Raw",
+        "No Pork", "No Beef", "No Alcohol", "Jain"
     };
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await LoadProfileAsync();
+        if (firstRender)
+        {
+            // Ensure user is authenticated and token is valid/refreshed before loading data
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            if (authState.User.Identity?.IsAuthenticated == true)
+            {
+                await LoadProfileAsync();
+                StateHasChanged();
+            }
+        }
     }
 
     private async Task LoadProfileAsync()
@@ -564,6 +550,29 @@
         {
             _isLoading = false;
         }
+    }
+
+    private void HandleProfileRestrictionsChanged(List<string> restrictions)
+    {
+        // Store the selected restrictions from UnifiedDietaryFilter
+        _currentProfileRestrictions = restrictions;
+
+        // Categorize restrictions into Allergens and DietaryRestrictions
+        _profileEdit.Allergens = restrictions
+            .Where(r => _commonAllergens.Contains(r, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        _profileEdit.DietaryRestrictions = restrictions
+            .Where(r => _dietaryOptions.Contains(r, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        // Any custom restrictions (not in known lists) are treated as allergens
+        var customRestrictions = restrictions
+            .Where(r => !_commonAllergens.Contains(r, StringComparer.OrdinalIgnoreCase) &&
+                       !_dietaryOptions.Contains(r, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        _profileEdit.Allergens.AddRange(customRestrictions);
     }
 
     private async Task SaveProfile()
@@ -611,6 +620,32 @@
         }
     }
 
+    private void StartEditingProfile()
+    {
+        if (_profile == null) return;
+
+        _isEditingProfile = true;
+
+        // Initialize profile edit with current values
+        _profileEdit = new UpdateUserProfileRequest
+        {
+            FirstName = _profile.FirstName,
+            LastName = _profile.LastName,
+            Allergens = new List<string>(_profile.Allergens),
+            DietaryRestrictions = new List<string>(_profile.DietaryRestrictions),
+            DislikedFoods = new List<string>(_profile.DislikedFoods)
+        };
+
+        // Initialize current restrictions for UnifiedDietaryFilter (combined list)
+        _currentProfileRestrictions = _profile.Allergens
+            .Concat(_profile.DietaryRestrictions)
+            .Distinct()
+            .ToList();
+
+        // Initialize disliked foods input
+        _dislikedFoodsInput = string.Join(", ", _profile.DislikedFoods);
+    }
+
     private void CancelProfileEdit()
     {
         _isEditingProfile = false;
@@ -641,7 +676,7 @@
         _newFamilyMember = null;
     }
 
-    private async Task SaveFamilyMember(Guid memberId)
+    private async Task HandleSaveFamilyMember(Guid memberId)
     {
         _isSaving = true;
         _errorMessage = null;

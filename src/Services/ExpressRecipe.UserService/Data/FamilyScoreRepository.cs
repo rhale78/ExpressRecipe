@@ -270,9 +270,9 @@ public class FamilyScoreRepository : SqlHelper, IFamilyScoreRepository
                 FamilyScoreId = GetGuid(reader, "FamilyScoreId"),
                 FamilyMemberId = GetGuid(reader, "FamilyMemberId"),
                 FamilyMemberName = GetString(reader, "FamilyMemberName"),
-                IndividualScore = GetInt(reader, "IndividualScore"),
+                IndividualScore = GetInt(reader, "IndividualScore") ?? 0,
                 Notes = GetString(reader, "Notes"),
-                LastUpdated = GetDateTime(reader, "LastUpdated") ?? DateTime.UtcNow
+                LastUpdated = GetNullableDateTime(reader, "LastUpdated") ?? DateTime.UtcNow
             },
             new SqlParameter("@FamilyScoreId", familyScoreId));
     }
@@ -346,8 +346,9 @@ public class FamilyScoreRepository : SqlHelper, IFamilyScoreRepository
             Notes = GetString(reader, "Notes"),
             IsFavorite = GetBoolean(reader, "IsFavorite"),
             IsBlacklisted = GetBoolean(reader, "IsBlacklisted"),
-            CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
             UpdatedAt = GetDateTime(reader, "UpdatedAt")
         };
     }
 }
+

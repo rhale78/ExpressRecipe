@@ -1,8 +1,13 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ExpressRecipe.Client.Shared.Services;
+using ExpressRecipe.Client.Shared.Models.Inventory;
 using ExpressRecipe.MAUI.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
+using IToastService = ExpressRecipe.MAUI.Services.IToastService;
 
 namespace ExpressRecipe.MAUI.ViewModels;
 
@@ -15,10 +20,10 @@ public partial class InventoryViewModel : ObservableObject
     private readonly ILogger<InventoryViewModel> _logger;
 
     [ObservableProperty]
-    private ObservableCollection<InventoryItemViewModel> _items = new();
+    private ObservableCollection<InventoryItemDto> _items = new();
 
     [ObservableProperty]
-    private ObservableCollection<InventoryItemViewModel> _expiringItems = new();
+    private ObservableCollection<InventoryItemDto> _expiringItems = new();
 
     [ObservableProperty]
     private bool _isLoading;
@@ -63,22 +68,14 @@ public partial class InventoryViewModel : ObservableObject
             // Try to load from API
             try
             {
-                var apiItems = await _inventoryClient.GetAllItemsAsync();
+                var searchResult = await _inventoryClient.SearchInventoryAsync(new InventorySearchRequest { PageSize = 1000 });
+                var apiItems = searchResult?.Items;
                 if (apiItems != null)
                 {
                     Items.Clear();
                     foreach (var item in apiItems)
                     {
-                        Items.Add(new InventoryItemViewModel
-                        {
-                            Id = item.Id,
-                            ProductName = item.ProductName ?? "Unknown",
-                            Quantity = item.Quantity,
-                            Unit = item.Unit ?? "units",
-                            ExpirationDate = item.ExpirationDate,
-                            Category = item.Category ?? "Other",
-                            Location = item.Location ?? "Pantry"
-                        });
+                        Items.Add(item);
                     }
 
                     // Cache to local database
@@ -134,14 +131,15 @@ public partial class InventoryViewModel : ObservableObject
         if (!int.TryParse(quantityStr, out var quantity))
             quantity = 1;
 
-        var item = new InventoryItemViewModel
+        var item = new InventoryItemDto
         {
             Id = Guid.NewGuid(),
-            ProductName = result,
+            Name = result,
             Quantity = quantity,
             Unit = "units",
             Category = "Other",
-            Location = "Pantry"
+            Location = "Pantry",
+            CreatedAt = DateTime.UtcNow
         };
 
         Items.Add(item);
@@ -160,11 +158,11 @@ public partial class InventoryViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task DeleteItemAsync(InventoryItemViewModel item)
+    private async Task DeleteItemAsync(InventoryItemDto item)
     {
         var confirm = await Application.Current!.MainPage!.DisplayAlert(
             "Delete Item",
-            $"Delete {item.ProductName}?",
+            $"Delete {item.Name}?",
             "Delete",
             "Cancel");
 
@@ -175,8 +173,8 @@ public partial class InventoryViewModel : ObservableObject
 
         try
         {
-            await _inventoryClient.DeleteItemAsync(item.Id);
-            await _toastService.ShowSuccessToast($"Deleted {item.ProductName}");
+            await _inventoryClient.DeleteInventoryItemAsync(item.Id);
+            await _toastService.ShowSuccessToast($"Deleted {item.Name}");
         }
         catch (Exception ex)
         {
@@ -186,11 +184,11 @@ public partial class InventoryViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task UpdateQuantityAsync(InventoryItemViewModel item)
+    private async Task UpdateQuantityAsync(InventoryItemDto item)
     {
         var result = await Application.Current!.MainPage!.DisplayPromptAsync(
             "Update Quantity",
-            $"New quantity for {item.ProductName}:",
+            $"New quantity for {item.Name}:",
             "Update",
             "Cancel",
             initialValue: item.Quantity.ToString(),
@@ -219,11 +217,6 @@ public partial class InventoryViewModel : ObservableObject
         UpdateExpiringItems();
     }
 
-    partial void OnSearchTextChanged(string value)
-    {
-        // Implement search filtering
-    }
-
     private void UpdateExpiringItems()
     {
         ExpiringItems.Clear();
@@ -245,7 +238,7 @@ public partial class InventoryViewModel : ObservableObject
                 await connection.InsertOrReplaceAsync(new OfflineInventoryItem
                 {
                     ServerId = item.Id,
-                    ProductName = item.ProductName,
+                    ProductName = item.Name,
                     Quantity = item.Quantity,
                     ExpirationDate = item.ExpirationDate,
                     IsSynced = true,
@@ -269,11 +262,11 @@ public partial class InventoryViewModel : ObservableObject
             Items.Clear();
             foreach (var item in cachedItems)
             {
-                Items.Add(new InventoryItemViewModel
+                Items.Add(new InventoryItemDto
                 {
                     Id = item.ServerId,
-                    ProductName = item.ProductName,
-                    Quantity = item.Quantity,
+                    Name = item.ProductName,
+                    Quantity = (int)item.Quantity,
                     ExpirationDate = item.ExpirationDate,
                     Category = "Cached",
                     Location = "Unknown"
@@ -285,67 +278,6 @@ public partial class InventoryViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error loading from cache");
-        }
-    }
-}
-
-public partial class InventoryItemViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private Guid _id;
-
-    [ObservableProperty]
-    private string _productName = string.Empty;
-
-    [ObservableProperty]
-    private int _quantity;
-
-    [ObservableProperty]
-    private string _unit = "units";
-
-    [ObservableProperty]
-    private DateTime? _expirationDate;
-
-    [ObservableProperty]
-    private string _category = string.Empty;
-
-    [ObservableProperty]
-    private string _location = string.Empty;
-
-    public bool IsExpiringSoon => ExpirationDate.HasValue && ExpirationDate.Value <= DateTime.Now.AddDays(7);
-    public bool IsExpired => ExpirationDate.HasValue && ExpirationDate.Value < DateTime.Now;
-
-    public string ExpirationText
-    {
-        get
-        {
-            if (!ExpirationDate.HasValue)
-                return "No expiration";
-
-            if (IsExpired)
-                return "EXPIRED";
-
-            var daysLeft = (ExpirationDate.Value - DateTime.Now).Days;
-            if (daysLeft == 0)
-                return "Expires today";
-            if (daysLeft == 1)
-                return "Expires tomorrow";
-            if (daysLeft <= 7)
-                return $"Expires in {daysLeft} days";
-
-            return $"Expires {ExpirationDate.Value:MMM d}";
-        }
-    }
-
-    public Color ExpirationColor
-    {
-        get
-        {
-            if (IsExpired)
-                return Colors.Red;
-            if (IsExpiringSoon)
-                return Colors.Orange;
-            return Colors.Green;
         }
     }
 }

@@ -1,0 +1,407 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Models.User
+@inject AuthenticationStateProvider AuthStateProvider
+
+<div class="dietary-filter-container">
+    <!-- Filter Header -->
+    <div class="filter-header">
+        <h3>🥗 Dietary Restrictions & Preferences</h3>
+        @if (!_isExpanded)
+        {
+            <button class="btn-expand" @onclick="() => _isExpanded = !_isExpanded">
+                ▼ Expand Filters
+            </button>
+        }
+        else
+        {
+            <button class="btn-expand" @onclick="() => _isExpanded = !_isExpanded">
+                ▲ Collapse
+            </button>
+        }
+    </div>
+
+    @if (_isExpanded)
+    {
+        <!-- Quick Profile Selection -->
+        @if (_userProfile != null || _familyMembers.Any())
+        {
+            <div class="profile-selection">
+                <label class="section-label">Quick Select:</label>
+                <div class="profile-buttons">
+                    @if (_userProfile != null)
+                    {
+                        <button class="btn-profile @(_useMyRestrictions ? "active" : "")"
+                                @onclick="LoadMyRestrictions">
+                            👤 My Restrictions (@_userRestrictions.Count)
+                        </button>
+                    }
+
+                    @foreach (var member in _familyMembers)
+                    {
+                        var isActive = _selectedFamilyMembers.Contains(member.Id);
+                        <button class="btn-profile @(isActive ? "active" : "")"
+                                @onclick="() => ToggleFamilyMember(member.Id)">
+                            👨‍👩‍👧‍👦 @member.Name (@member.DietaryRestrictions.Count)
+                        </button>
+                    }
+
+                    @if (_activeRestrictions.Any())
+                    {
+                        <button class="btn-profile btn-clear" @onclick="ClearAllRestrictions">
+                            ✖ Clear All
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Text Input for Comma-Delimited -->
+        <div class="input-section">
+            <label class="section-label">
+                Type Restrictions (comma-separated):
+                <span class="help-text">e.g., peanuts, dairy, shellfish</span>
+            </label>
+            <div class="text-input-group">
+                <input type="text"
+                       class="restriction-input"
+                       placeholder="Enter allergens or dietary restrictions..."
+                       @bind="_textInput"
+                       @bind:event="oninput"
+                       @bind:after="ParseTextInput"
+                       @onkeypress="HandleKeyPress" />
+                @if (!string.IsNullOrWhiteSpace(_textInput))
+                {
+                    <button class="btn-clear-input" @onclick="() => { _textInput = string.Empty; ParseTextInput(); }">
+                        ✖
+                    </button>
+                }
+            </div>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="category-tabs">
+            <button class="tab @(_selectedCategory == "allergens" ? "active" : "")"
+                    @onclick='() => _selectedCategory = "allergens"'>
+                ⚠️ Allergens
+            </button>
+            <button class="tab @(_selectedCategory == "dietary" ? "active" : "")"
+                    @onclick='() => _selectedCategory = "dietary"'>
+                🌱 Dietary Preferences
+            </button>
+            <button class="tab @(_selectedCategory == "religious" ? "active" : "")"
+                    @onclick='() => _selectedCategory = "religious"'>
+                🕌 Religious/Cultural
+            </button>
+            <button class="tab @(_selectedCategory == "health" ? "active" : "")"
+                    @onclick='() => _selectedCategory = "health"'>
+                💊 Health Concerns
+            </button>
+        </div>
+
+        <!-- Search Box -->
+        <div class="search-box">
+            <input type="text"
+                   class="filter-search"
+                   placeholder="🔍 Search restrictions..."
+                   @bind="_searchFilter"
+                   @bind:event="oninput" />
+        </div>
+
+        <!-- Checkbox Grid with Multi-Select -->
+        <div class="checkbox-grid">
+            @foreach (var restriction in GetFilteredRestrictions())
+            {
+                var isSelected = _activeRestrictions.Contains(restriction.Name);
+                <label class="restriction-checkbox @(isSelected ? "selected" : "")">
+                    <input type="checkbox"
+                           checked="@isSelected"
+                           @onchange="@(() => ToggleRestriction(restriction.Name))" />
+                    <span class="restriction-icon">@restriction.Icon</span>
+                    <span class="restriction-name">@restriction.Name</span>
+                    @if (!string.IsNullOrEmpty(restriction.Description))
+                    {
+                        <span class="restriction-desc">@restriction.Description</span>
+                    }
+                </label>
+            }
+        </div>
+
+        <!-- Active Restrictions Tags -->
+        @if (_activeRestrictions.Any())
+        {
+            <div class="active-restrictions">
+                <label class="section-label">Active Filters (@_activeRestrictions.Count):</label>
+                <div class="restriction-tags">
+                    @foreach (var restriction in _activeRestrictions)
+                    {
+                        <span class="restriction-tag">
+                            @restriction
+                            <button class="btn-remove-tag" @onclick="() => RemoveRestriction(restriction)">✖</button>
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback<List<string>> OnRestrictionsChanged { get; set; }
+
+    [Parameter]
+    public List<string> InitialRestrictions { get; set; } = new();
+
+    private bool _isExpanded = false;
+    private string _textInput = string.Empty;
+    private string _searchFilter = string.Empty;
+    private string _selectedCategory = "allergens";
+    private HashSet<string> _activeRestrictions = new();
+    private bool _useMyRestrictions = false;
+    private HashSet<Guid> _selectedFamilyMembers = new();
+
+    // User profile data
+    private UserProfileDto? _userProfile;
+    private List<DietaryRestrictionDto> _userRestrictions = new();
+    private List<FamilyMemberDto> _familyMembers = new();
+
+    // Predefined restrictions
+    private List<RestrictionOption> _allRestrictions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Initialize predefined restrictions
+        InitializeRestrictions();
+
+        // Load user profile and restrictions
+        await LoadUserProfileAsync();
+
+        // Set initial restrictions if provided
+        if (InitialRestrictions.Any())
+        {
+            foreach (var restriction in InitialRestrictions)
+            {
+                _activeRestrictions.Add(restriction);
+            }
+        }
+    }
+
+    private void InitializeRestrictions()
+    {
+        _allRestrictions = new List<RestrictionOption>
+        {
+            // Allergens
+            new("Dairy", "allergens", "🥛", "Milk, cheese, yogurt, butter, cream"),
+            new("Eggs", "allergens", "🥚", "All egg products"),
+            new("Fish", "allergens", "🐟", "Salmon, tuna, cod, etc."),
+            new("Shellfish", "allergens", "🦐", "Shrimp, crab, lobster, clams"),
+            new("Tree Nuts", "allergens", "🌰", "Almonds, walnuts, cashews, pecans"),
+            new("Peanuts", "allergens", "🥜", "Peanuts and peanut products"),
+            new("Wheat", "allergens", "🌾", "Wheat, flour, bread"),
+            new("Soy", "allergens", "🫘", "Soybeans, tofu, soy sauce"),
+            new("Sesame", "allergens", "🌱", "Sesame seeds, tahini"),
+            new("Corn", "allergens", "🌽", "Corn and corn products"),
+            new("Gluten", "allergens", "🌾", "Wheat, barley, rye, malt"),
+            new("Sulfites", "allergens", "⚗️", "Preservatives in dried fruits, wine"),
+            new("Mustard", "allergens", "🌶️", "Mustard seeds and products"),
+
+            // Dietary Preferences
+            new("Vegan", "dietary", "🌱", "No animal products"),
+            new("Vegetarian", "dietary", "🥗", "No meat or fish"),
+            new("Pescatarian", "dietary", "🐟", "No meat, but fish allowed"),
+            new("Plant-Based", "dietary", "🌿", "Primarily plant foods"),
+            new("Whole30", "dietary", "💯", "No grains, dairy, legumes, sugar"),
+            new("Paleo", "dietary", "🦴", "No grains, legumes, dairy"),
+            new("Keto", "dietary", "🥓", "Very low carb, high fat"),
+            new("Low-Carb", "dietary", "🥩", "Reduced carbohydrate intake"),
+            new("Raw", "dietary", "🥕", "Uncooked, unprocessed foods"),
+
+            // Religious/Cultural
+            new("Kosher", "religious", "✡️", "Jewish dietary laws"),
+            new("Halal", "religious", "☪️", "Islamic dietary laws"),
+            new("No Pork", "religious", "🚫🐷", "No pork products"),
+            new("No Beef", "religious", "🚫🐮", "No beef products (Hindu)"),
+            new("No Alcohol", "religious", "🚫🍺", "No alcoholic ingredients"),
+            new("Jain", "religious", "🕉️", "No root vegetables, no eggs"),
+
+            // Health Concerns
+            new("Low-Sodium", "health", "🧂", "Reduced salt content"),
+            new("Low-Sugar", "health", "🍬", "Reduced sugar content"),
+            new("Low-Fat", "health", "🥑", "Reduced fat content"),
+            new("Low-Cholesterol", "health", "❤️", "Reduced cholesterol"),
+            new("Diabetic-Friendly", "health", "💉", "Low glycemic index"),
+            new("Heart-Healthy", "health", "💗", "Low sodium, low saturated fat"),
+            new("Kidney-Friendly", "health", "🫘", "Low protein, potassium, phosphorus"),
+            new("FODMAP", "health", "🌾", "Low fermentable carbs (IBS)")
+        };
+    }
+
+    private async Task LoadUserProfileAsync()
+    {
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                // TODO: Load from UserProfileApiClient
+                // _userProfile = await UserProfileApi.GetMyProfileAsync();
+                // _userRestrictions = await UserProfileApi.GetMyRestrictionsAsync();
+                // _familyMembers = await UserProfileApi.GetFamilyMembersAsync();
+
+                // Placeholder - would come from API
+                _userProfile = new UserProfileDto { UserId = Guid.NewGuid(), Email = user.Identity.Name ?? "" };
+                _userRestrictions = new List<DietaryRestrictionDto>();
+                _familyMembers = new List<FamilyMemberDto>();
+            }
+        }
+        catch (Exception)
+        {
+            // Silently fail - user may not have profile yet
+        }
+    }
+
+    private void ParseTextInput()
+    {
+        if (string.IsNullOrWhiteSpace(_textInput))
+            return;
+
+        // Split by comma and clean up
+        var items = _textInput.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x));
+
+        foreach (var item in items)
+        {
+            // Try to match to known restriction, otherwise add as custom
+            var match = _allRestrictions.FirstOrDefault(r =>
+                r.Name.Equals(item, StringComparison.OrdinalIgnoreCase));
+
+            _activeRestrictions.Add(match?.Name ?? CapitalizeFirst(item));
+        }
+
+        _textInput = string.Empty;
+        NotifyChange();
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ParseTextInput();
+        }
+    }
+
+    private void ToggleRestriction(string restriction)
+    {
+        if (_activeRestrictions.Contains(restriction))
+        {
+            _activeRestrictions.Remove(restriction);
+        }
+        else
+        {
+            _activeRestrictions.Add(restriction);
+        }
+
+        NotifyChange();
+    }
+
+    private void RemoveRestriction(string restriction)
+    {
+        _activeRestrictions.Remove(restriction);
+        NotifyChange();
+    }
+
+    private void LoadMyRestrictions()
+    {
+        _useMyRestrictions = !_useMyRestrictions;
+        _selectedFamilyMembers.Clear();
+
+        if (_useMyRestrictions)
+        {
+            foreach (var restriction in _userRestrictions)
+            {
+                _activeRestrictions.Add(restriction.Name);
+            }
+        }
+        else
+        {
+            // Remove user restrictions
+            foreach (var restriction in _userRestrictions)
+            {
+                _activeRestrictions.Remove(restriction.Name);
+            }
+        }
+
+        NotifyChange();
+    }
+
+    private void ToggleFamilyMember(Guid memberId)
+    {
+        _useMyRestrictions = false;
+
+        if (_selectedFamilyMembers.Contains(memberId))
+        {
+            _selectedFamilyMembers.Remove(memberId);
+
+            // Remove that member's restrictions
+            var member = _familyMembers.First(m => m.Id == memberId);
+            foreach (var restriction in member.DietaryRestrictions)
+            {
+                _activeRestrictions.Remove(restriction);
+            }
+        }
+        else
+        {
+            _selectedFamilyMembers.Add(memberId);
+
+            // Add that member's restrictions
+            var member = _familyMembers.First(m => m.Id == memberId);
+            foreach (var restriction in member.DietaryRestrictions)
+            {
+                _activeRestrictions.Add(restriction);
+            }
+        }
+
+        NotifyChange();
+    }
+
+    private void ClearAllRestrictions()
+    {
+        _activeRestrictions.Clear();
+        _useMyRestrictions = false;
+        _selectedFamilyMembers.Clear();
+        _textInput = string.Empty;
+        NotifyChange();
+    }
+
+    private List<RestrictionOption> GetFilteredRestrictions()
+    {
+        var filtered = _allRestrictions.Where(r => r.Category == _selectedCategory);
+
+        if (!string.IsNullOrWhiteSpace(_searchFilter))
+        {
+            filtered = filtered.Where(r =>
+                r.Name.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase) ||
+                (r.Description?.Contains(_searchFilter, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return filtered.ToList();
+    }
+
+    private async Task NotifyChange()
+    {
+        await OnRestrictionsChanged.InvokeAsync(_activeRestrictions.ToList());
+    }
+
+    private string CapitalizeFirst(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        return char.ToUpper(input[0]) + input.Substring(1).ToLower();
+    }
+
+    private record RestrictionOption(string Name, string Category, string Icon, string? Description = null);
+}

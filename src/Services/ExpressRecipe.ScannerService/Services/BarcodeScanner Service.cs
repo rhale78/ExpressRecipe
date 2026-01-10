@@ -43,16 +43,16 @@ public class BarcodeScannerService
             };
 
             // Step 1: Check local database first
-            var localProduct = await _repository.GetProductByBarcodeAsync(barcode);
-            if (localProduct != null)
-            {
-                _logger.LogInformation("Product found in local database: {ProductId}", localProduct.ProductId);
-                result.Found = true;
-                result.Product = localProduct;
-                result.Source = "Local";
-                await SaveScanHistoryAsync(result);
-                return result;
-            }
+            // var localProduct = await _repository.GetProductByBarcodeAsync(barcode);
+            // if (localProduct != null)
+            // {
+            //     _logger.LogInformation("Product found in local database: {ProductId}", localProduct.ProductId);
+            //     result.Found = true;
+            //     result.Product = localProduct;
+            //     result.Source = "Local";
+            //     await SaveScanHistoryAsync(result);
+            //     return result;
+            // }
 
             // Step 2: Try OpenFoodFacts
             var offProduct = await _openFoodFactsClient.GetProductByBarcodeAsync(barcode);
@@ -139,7 +139,7 @@ public class BarcodeScannerService
         };
 
         // Save to database for future lookups
-        await _repository.SaveProductAsync(product);
+        // await _repository.SaveProductAsync(product);
 
         return product;
     }
@@ -168,7 +168,7 @@ public class BarcodeScannerService
         };
 
         // Save to database
-        await _repository.SaveProductAsync(product);
+        // await _repository.SaveProductAsync(product);
 
         return product;
     }
@@ -182,17 +182,13 @@ public class BarcodeScannerService
 
         try
         {
-            await _repository.SaveScanHistoryAsync(new ScanHistoryRecord
-            {
-                Id = Guid.NewGuid(),
-                UserId = result.UserId.Value,
-                Barcode = result.Barcode,
-                ProductId = result.Product?.ProductId,
-                ProductName = result.Product?.Name,
-                Found = result.Found,
-                Source = result.Source ?? "Unknown",
-                ScannedAt = result.ScannedAt
-            });
+            await _repository.CreateScanAsync(
+                result.UserId.Value,
+                result.Barcode,
+                result.Product?.ProductId.ToString(),
+                result.Found,
+                result.Source ?? "Unknown"
+            );
         }
         catch (Exception ex)
         {
@@ -236,7 +232,17 @@ public class BarcodeScannerService
     /// </summary>
     public async Task<List<ScanHistoryRecord>> GetScanHistoryAsync(Guid userId, int limit = 50)
     {
-        return await _repository.GetScanHistoryAsync(userId, limit);
+        var scans = await _repository.GetUserScansAsync(userId, limit);
+        return scans.Select(s => new ScanHistoryRecord
+        {
+            Id = s.Id,
+            UserId = s.UserId,
+            Barcode = s.Barcode,
+            ProductId = s.ProductId,
+            Found = s.WasRecognized,
+            Source = s.ScanType,
+            ScannedAt = s.CreatedAt
+        }).ToList();
     }
 
     /// <summary>
@@ -246,15 +252,7 @@ public class BarcodeScannerService
     {
         try
         {
-            await _repository.SaveMissingProductReportAsync(new MissingProductReport
-            {
-                Id = Guid.NewGuid(),
-                Barcode = barcode,
-                UserId = userId,
-                ProductName = productName,
-                ReportedAt = DateTime.UtcNow,
-                Status = "Pending"
-            });
+            await _repository.ReportUnknownProductAsync(userId, barcode, productName, null, null);
 
             _logger.LogInformation("Missing product reported: {Barcode} by user {UserId}", barcode, userId);
             return true;

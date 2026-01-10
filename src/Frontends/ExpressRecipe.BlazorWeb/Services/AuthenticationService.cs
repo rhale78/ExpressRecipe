@@ -79,14 +79,62 @@ public class AuthenticationService : IAuthenticationService
                 return authResponse;
             }
 
-            var error = await response.Content.ReadAsStringAsync();
-            _logger.LogWarning("Registration failed for {Email}: {Error}", request.Email, error);
-            return null;
+            // Read error response from API
+            var errorContent = await response.Content.ReadAsStringAsync();
+            _logger.LogWarning("Registration failed for {Email}: {StatusCode} - {Error}",
+                request.Email, response.StatusCode, errorContent);
+
+            // Try to parse error message from different response formats
+            try
+            {
+                var errorResponse = System.Text.Json.JsonDocument.Parse(errorContent);
+                
+                // Check for ASP.NET Core ValidationProblemDetails format
+                if (errorResponse.RootElement.TryGetProperty("errors", out var errorsElement))
+                {
+                    var errorMessages = new List<string>();
+                    foreach (var error in errorsElement.EnumerateObject())
+                    {
+                        var fieldName = error.Name;
+                        var messages = error.Value.EnumerateArray().Select(m => m.GetString()).Where(m => m != null);
+                        errorMessages.Add($"{fieldName}: {string.Join(", ", messages)}");
+                    }
+                    throw new InvalidOperationException(string.Join("; ", errorMessages));
+                }
+                
+                // Check for simple { message: "..." } format
+                if (errorResponse.RootElement.TryGetProperty("message", out var messageElement))
+                {
+                    throw new InvalidOperationException(messageElement.GetString() ?? "Registration failed");
+                }
+                
+                // Check for { title: "..." } format (ProblemDetails)
+                if (errorResponse.RootElement.TryGetProperty("title", out var titleElement))
+                {
+                    throw new InvalidOperationException(titleElement.GetString() ?? "Registration failed");
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // If not JSON, throw the raw error
+                throw new InvalidOperationException(errorContent);
+            }
+
+            throw new InvalidOperationException($"Registration failed with status: {response.StatusCode}");
+        }
+        catch (InvalidOperationException)
+        {
+            throw; // Re-throw operation exceptions (these contain API error messages)
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error during registration for {Email}", request.Email);
+            throw new InvalidOperationException("Could not connect to authentication service. Please try again later.", ex);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during registration for {Email}", request.Email);
-            return null;
+            throw new InvalidOperationException("An unexpected error occurred during registration.", ex);
         }
     }
 

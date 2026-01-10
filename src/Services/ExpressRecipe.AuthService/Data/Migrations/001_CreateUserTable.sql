@@ -9,24 +9,23 @@
 CREATE TABLE [User] (
     Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
     Email NVARCHAR(256) NOT NULL,
-    EmailConfirmed BIT NOT NULL DEFAULT 0,
     PasswordHash NVARCHAR(MAX) NOT NULL,
-    SecurityStamp NVARCHAR(MAX) NOT NULL,
+    FirstName NVARCHAR(100) NOT NULL,
+    LastName NVARCHAR(100) NOT NULL,
+    EmailVerified BIT NOT NULL DEFAULT 0,
+    IsActive BIT NOT NULL DEFAULT 1,
     PhoneNumber NVARCHAR(50) NULL,
     PhoneNumberConfirmed BIT NOT NULL DEFAULT 0,
     TwoFactorEnabled BIT NOT NULL DEFAULT 0,
-    LockoutEnd DATETIME2 NULL,
-    LockoutEnabled BIT NOT NULL DEFAULT 1,
     AccessFailedCount INT NOT NULL DEFAULT 0,
+    LockoutEnd DATETIME2 NULL,
 
     -- Audit fields
     CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    CreatedBy UNIQUEIDENTIFIER NULL,
     UpdatedAt DATETIME2 NULL,
-    UpdatedBy UNIQUEIDENTIFIER NULL,
+    LastLoginAt DATETIME2 NULL,
     IsDeleted BIT NOT NULL DEFAULT 0,
     DeletedAt DATETIME2 NULL,
-    RowVersion ROWVERSION,
 
     CONSTRAINT UQ_User_Email UNIQUE (Email)
 );
@@ -46,11 +45,8 @@ CREATE TABLE RefreshToken (
     Token NVARCHAR(MAX) NOT NULL,
     ExpiresAt DATETIME2 NOT NULL,
     CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    CreatedByIp NVARCHAR(50) NULL,
+    IsRevoked BIT NOT NULL DEFAULT 0,
     RevokedAt DATETIME2 NULL,
-    RevokedByIp NVARCHAR(50) NULL,
-    ReplacedByToken NVARCHAR(MAX) NULL,
-    ReasonRevoked NVARCHAR(256) NULL,
 
     CONSTRAINT FK_RefreshToken_User FOREIGN KEY (UserId)
         REFERENCES [User](Id) ON DELETE CASCADE

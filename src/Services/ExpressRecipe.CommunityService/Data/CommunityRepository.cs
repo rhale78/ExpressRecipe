@@ -413,7 +413,7 @@ public class CommunityRepository : ICommunityRepository
 
     public async Task VoteReviewAsync(Guid reviewId, Guid userId, bool isHelpful)
     {
-        const string sql = isHelpful
+        var sql = isHelpful
             ? "UPDATE CommunityReview SET HelpfulVotes = HelpfulVotes + 1 WHERE Id = @ReviewId"
             : "UPDATE CommunityReview SET UnhelpfulVotes = UnhelpfulVotes + 1 WHERE Id = @ReviewId";
 

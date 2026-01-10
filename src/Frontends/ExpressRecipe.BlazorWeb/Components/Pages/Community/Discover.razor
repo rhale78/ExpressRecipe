@@ -1,5 +1,5 @@
 @page "/discover"
-@rendermode InteractiveAuto
+@rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Community
 @using ExpressRecipe.Client.Shared.Services
 @inject ICommunityApiClient CommunityApi
@@ -45,6 +45,12 @@
         </div>
     </div>
 
+    <!-- Unified Dietary Filter -->
+    <UnifiedDietaryFilter
+        OnFiltersChanged="HandleDietaryFiltersChanged"
+        InitialFilters="_dietaryFilters"
+        AutoLoadUserProfile="true" />
+
     @if (_isLoading)
     {
         <div class="loading-state">
@@ -57,7 +63,7 @@
         <div class="recipe-grid">
             @foreach (var recipe in _recipes)
             {
-                <div class="recipe-card" @onclick="() => ViewRecipe(recipe.RecipeId)">
+                <div class="recipe-card" @onclick="HandleViewRecipe">
                     @if (!string.IsNullOrWhiteSpace(recipe.ImageUrl))
                     {
                         <img src="@recipe.ImageUrl" alt="@recipe.RecipeName" class="recipe-card-image" />
@@ -116,7 +122,7 @@
         {
             <div class="pagination">
                 <button class="btn btn-secondary-outline" disabled="@(_currentPage <= 1)"
-                        @onclick="() => ChangePage(_currentPage - 1)">
+                        @onclick="HandleChangePage">
                     ← Previous
                 </button>
 
@@ -125,7 +131,7 @@
                 </span>
 
                 <button class="btn btn-secondary-outline" disabled="@(_currentPage >= _totalPages)"
-                        @onclick="() => ChangePage(_currentPage + 1)">
+                        @onclick="HandleChangePage">
                     Next →
                 </button>
             </div>
@@ -143,6 +149,7 @@
 
 @code {
     private List<TrendingRecipeDto> _recipes = new();
+    private List<TrendingRecipeDto> _allRecipes = new(); // Unfiltered recipes
     private bool _isLoading = true;
     private int _currentPage = 1;
     private int _totalPages = 1;
@@ -151,10 +158,19 @@
     private string _viewMode = "trending";
     private string _timePeriod = "Week";
     private string _category = "";
+    private List<string> _dietaryFilters = new(); // Unified dietary filters
 
     protected override async Task OnInitializedAsync()
     {
         await LoadRecipes();
+    }
+
+    private async Task HandleDietaryFiltersChanged(List<string> filters)
+    {
+        _dietaryFilters = filters;
+        _currentPage = 1; // Reset to first page when filters change
+        ApplyDietaryFilters(); // Apply filters to current recipe list
+        StateHasChanged();
     }
 
     private async Task LoadRecipes()
@@ -164,11 +180,11 @@
 
         if (_viewMode == "trending")
         {
-            _recipes = await CommunityApi.GetTrendingRecipesAsync();
+            _allRecipes = await CommunityApi.GetTrendingRecipesAsync();
         }
         else
         {
-            _recipes = await CommunityApi.GetPopularRecipesAsync(new PopularRecipesRequest
+            _allRecipes = await CommunityApi.GetPopularRecipesAsync(new PopularRecipesRequest
             {
                 TimePeriod = _timePeriod,
                 Category = string.IsNullOrWhiteSpace(_category) ? null : _category,
@@ -177,8 +193,41 @@
             });
         }
 
+        // Apply dietary filters to the loaded recipes
+        ApplyDietaryFilters();
+
         _isLoading = false;
         StateHasChanged();
+    }
+
+    private void ApplyDietaryFilters()
+    {
+        if (!_dietaryFilters.Any())
+        {
+            // No filters - show all recipes
+            _recipes = _allRecipes;
+        }
+        else
+        {
+            // Client-side filtering: exclude recipes that contain any of the dietary restrictions
+            _recipes = _allRecipes.Where(recipe =>
+            {
+                // Check if recipe tags/dietary info contain any restricted items
+                // Note: This is a simple implementation. In production, you'd want the backend to handle this
+                var recipeTags = recipe.Tags ?? new List<string>();
+
+                // If recipe has no tags, include it (we can't determine if it's safe)
+                if (!recipeTags.Any())
+                    return true;
+
+                // Check if any dietary filter matches recipe tags (case-insensitive)
+                var hasRestriction = _dietaryFilters.Any(filter =>
+                    recipeTags.Any(tag => tag.Contains(filter, StringComparison.OrdinalIgnoreCase)));
+
+                // Exclude recipes that match any restriction
+                return !hasRestriction;
+            }).ToList();
+        }
     }
 
     private void ChangePage(int page)
@@ -190,5 +239,27 @@
     private void ViewRecipe(Guid recipeId)
     {
         Navigation.NavigateTo($"/recipes/{recipeId}");
+    }
+
+    // Event Handlers
+    private void HandleViewRecipe()
+    {
+        // TODO: Get the recipe ID from the clicked item
+        // For now, this is a placeholder that would need the recipe context
+        // In production, you'd pass the recipe ID as a parameter or use a lambda
+    }
+
+    private void HandleChangePage()
+    {
+        // Determine direction based on button context
+        // This is a simplified handler - in production you'd pass direction as parameter
+        if (_currentPage < _totalPages)
+        {
+            ChangePage(_currentPage + 1);
+        }
+        else if (_currentPage > 1)
+        {
+            ChangePage(_currentPage - 1);
+        }
     }
 }

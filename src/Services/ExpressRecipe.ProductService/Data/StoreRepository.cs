@@ -8,9 +8,9 @@ namespace ExpressRecipe.ProductService.Data;
 public interface IStoreRepository
 {
     Task<StoreDto?> GetByIdAsync(Guid id);
-    Task<List<StoreDto>> SearchAsync(StoreSearchRequest request);
-    Task<Guid> CreateAsync(CreateStoreRequest request, Guid? createdBy = null);
-    Task<bool> UpdateAsync(Guid id, UpdateStoreRequest request, Guid? updatedBy = null);
+    Task<List<StoreDto>> SearchAsync(ExpressRecipe.Shared.DTOs.Product.StoreSearchRequest request);
+    Task<Guid> CreateAsync(ExpressRecipe.Shared.DTOs.Product.CreateStoreRequest request, Guid? createdBy = null);
+    Task<bool> UpdateAsync(Guid id, ExpressRecipe.Shared.DTOs.Product.UpdateStoreRequest request, Guid? updatedBy = null);
     Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null);
     Task<bool> StoreExistsAsync(Guid id);
     Task<List<StoreDto>> GetNearbyStoresAsync(decimal latitude, decimal longitude, double radiusMiles);
@@ -65,7 +65,7 @@ public class StoreRepository : SqlHelper, IStoreRepository
         return results.FirstOrDefault();
     }
 
-    public async Task<List<StoreDto>> SearchAsync(StoreSearchRequest request)
+    public async Task<List<StoreDto>> SearchAsync(ExpressRecipe.Shared.DTOs.Product.StoreSearchRequest request)
     {
         var sql = @"
             SELECT Id, ChainName, StoreNumber, Name, Address, City, State, ZipCode,
@@ -145,7 +145,7 @@ public class StoreRepository : SqlHelper, IStoreRepository
             parameters.ToArray());
     }
 
-    public async Task<Guid> CreateAsync(CreateStoreRequest request, Guid? createdBy = null)
+    public async Task<Guid> CreateAsync(ExpressRecipe.Shared.DTOs.Product.CreateStoreRequest request, Guid? createdBy = null)
     {
         var id = Guid.NewGuid();
 
@@ -189,7 +189,7 @@ public class StoreRepository : SqlHelper, IStoreRepository
         return id;
     }
 
-    public async Task<bool> UpdateAsync(Guid id, UpdateStoreRequest request, Guid? updatedBy = null)
+    public async Task<bool> UpdateAsync(Guid id, ExpressRecipe.Shared.DTOs.Product.UpdateStoreRequest request, Guid? updatedBy = null)
     {
         const string sql = @"
             UPDATE Store

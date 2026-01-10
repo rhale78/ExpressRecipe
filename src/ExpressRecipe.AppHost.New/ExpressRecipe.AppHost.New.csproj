@@ -1,0 +1,49 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.0">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>b6eb95d8-5c54-4b7a-b463-f01168ad6407</UserSecretsId>
+    <IsAspireHost>true</IsAspireHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.1.0" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="13.1.0" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ExpressRecipe.ServiceDefaults\ExpressRecipe.ServiceDefaults.csproj">
+      <IsAspireProjectResource>false</IsAspireProjectResource>
+    </ProjectReference>
+    <ProjectReference Include="..\Services\ExpressRecipe.AuthService\ExpressRecipe.AuthService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.RecipeService\ExpressRecipe.RecipeService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.InventoryService\ExpressRecipe.InventoryService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.ScannerService\ExpressRecipe.ScannerService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.ShoppingService\ExpressRecipe.ShoppingService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.MealPlanningService\ExpressRecipe.MealPlanningService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.PriceService\ExpressRecipe.PriceService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.RecallService\ExpressRecipe.RecallService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.NotificationService\ExpressRecipe.NotificationService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.CommunityService\ExpressRecipe.CommunityService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.SyncService\ExpressRecipe.SyncService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.SearchService\ExpressRecipe.SearchService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.AnalyticsService\ExpressRecipe.AnalyticsService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.AIService\ExpressRecipe.AIService.csproj" />
+    <ProjectReference Include="..\Frontends\ExpressRecipe.BlazorWeb\ExpressRecipe.BlazorWeb.csproj" />
+  </ItemGroup>
+
+  <!-- Include shared Config folder so it appears in Solution Explorer -->
+  <ItemGroup>
+    <None Include="..\..\Config\**\*.*">
+      <Link>Config\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

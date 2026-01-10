@@ -1,0 +1,219 @@
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 2rem 0;
+    flex-wrap: wrap;
+}
+
+.page-numbers {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.page-number {
+    min-width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.5rem;
+    border: 1px solid #e0e0e0;
+    background-color: white;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.page-number:hover:not(.active) {
+    background-color: #f5f5f5;
+    border-color: #2563eb;
+    color: #2563eb;
+}
+
+.page-number.active {
+    background-color: #2563eb;
+    color: white;
+    border-color: #2563eb;
+    font-weight: 600;
+    cursor: default;
+}
+
+.page-ellipsis {
+    padding: 0.5rem;
+    color: #9ca3af;
+    font-weight: 500;
+    user-select: none;
+    min-width: 2rem;
+    text-align: center;
+}
+
+.pagination-info {
+    text-align: center;
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+}
+
+/* Alphabetical Pagination Styles */
+.alphabet-pagination {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.alphabet-letters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: center;
+    align-items: center;
+    max-width: 800px;
+}
+
+.alphabet-btn {
+    min-width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    font-size: 0.875rem;
+    line-height: 1;
+}
+
+.letter-count {
+    font-size: 0.625rem;
+    font-weight: 400;
+    opacity: 0.7;
+    margin-top: 0.125rem;
+    line-height: 1;
+}
+
+/* Pagination Toggle Styles */
+.pagination-toggle {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.toggle-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: white;
+}
+
+.toggle-option:hover {
+    background-color: #f9fafb;
+    border-color: #2563eb;
+}
+
+.toggle-option input[type="radio"] {
+    cursor: pointer;
+}
+
+.toggle-option input[type="radio"]:checked + span {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+    .pagination {
+        gap: 0.25rem;
+    }
+
+    .page-number {
+        min-width: 2rem;
+        height: 2rem;
+        font-size: 0.875rem;
+    }
+
+    .btn.btn-outline {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+    }
+
+    /* Hide First/Last text on mobile, keep icons */
+    .pagination .btn.btn-outline {
+        white-space: nowrap;
+    }
+}
+
+/* Allergen Filters Section */
+.allergen-filters-section {
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.allergen-filters-section h4 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #991b1b;
+}
+
+.allergen-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+}
+
+.allergen-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: white;
+    border: 1px solid #fecaca;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.allergen-checkbox:hover {
+    background-color: #fff5f5;
+    border-color: #ef4444;
+}
+
+.allergen-checkbox input[type="checkbox"] {
+    cursor: pointer;
+    width: 1rem;
+    height: 1rem;
+}
+
+.allergen-checkbox input[type="checkbox"]:checked + span {
+    font-weight: 600;
+    color: #991b1b;
+}
+
+.allergen-checkbox span {
+    font-size: 0.875rem;
+    color: #374151;
+    user-select: none;
+}
+
+@media (max-width: 768px) {
+    .allergen-checkboxes {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 0.5rem;
+    }
+
+    .allergen-checkbox {
+        padding: 0.375rem;
+        font-size: 0.8125rem;
+    }
+}

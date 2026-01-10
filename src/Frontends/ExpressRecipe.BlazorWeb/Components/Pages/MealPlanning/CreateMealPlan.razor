@@ -1,0 +1,208 @@
+@page "/meal-planning/create"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+@using ExpressRecipe.Client.Shared.Services
+@inject IMealPlanApiClient MealPlanApi
+@inject NavigationManager Navigation
+
+<PageTitle>Create Meal Plan - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized Context="auth">
+        <div class="create-meal-plan-container">
+            <div class="page-header">
+                <button class="btn btn-outline" @onclick="NavigateBack">
+                    ← Back to Meal Planning
+                </button>
+                <h1>Create New Meal Plan</h1>
+            </div>
+
+            <div class="create-form-card">
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <div class="alert alert-error">
+                        <strong>Error:</strong> @_errorMessage
+                    </div>
+                }
+
+                <EditForm Model="@_request" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="form-section">
+                        <h3>Plan Details</h3>
+
+                        <div class="form-group">
+                            <label for="planName">Plan Name</label>
+                            <InputText id="planName"
+                                      class="form-control"
+                                      @bind-Value="_request.Name"
+                                      placeholder="e.g., Family Meals - Week of Jan 15" />
+                            <ValidationMessage For="@(() => _request.Name)" />
+                            <small class="form-text">Give your meal plan a descriptive name</small>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="startDate">Start Date</label>
+                                <InputDate id="startDate"
+                                          class="form-control"
+                                          @bind-Value="_request.StartDate" />
+                                <ValidationMessage For="@(() => _request.StartDate)" />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="endDate">End Date</label>
+                                <InputDate id="endDate"
+                                          class="form-control"
+                                          @bind-Value="_request.EndDate" />
+                                <ValidationMessage For="@(() => _request.EndDate)" />
+                            </div>
+                        </div>
+
+                        <div class="duration-info">
+                            <strong>Duration:</strong> @_durationDays @(_durationDays == 1 ? "day" : "days")
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Quick Setup Options</h3>
+                        <p class="section-subtitle">Choose a preset to quickly set your date range</p>
+
+                        <div class="quick-options">
+                            <button type="button" class="btn btn-outline-sm" @onclick="SetThisWeek">
+                                This Week (7 days)
+                            </button>
+                            <button type="button" class="btn btn-outline-sm" @onclick="SetNextWeek">
+                                Next Week (7 days)
+                            </button>
+                            <button type="button" class="btn btn-outline-sm" @onclick="SetTwoWeeks">
+                                Two Weeks (14 days)
+                            </button>
+                            <button type="button" class="btn btn-outline-sm" @onclick="SetMonth">
+                                One Month (30 days)
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="info-card">
+                        <h4>📝 What happens next?</h4>
+                        <ul>
+                            <li>Your meal plan will be created with the selected date range</li>
+                            <li>You can then add individual meals for each day</li>
+                            <li>Choose from your saved recipes or create custom meals</li>
+                            <li>Generate shopping lists automatically from your plan</li>
+                            <li>Track preparation progress throughout the week</li>
+                        </ul>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" disabled="@_isSubmitting">
+                            @if (_isSubmitting)
+                            {
+                                <span class="spinner"></span>
+                                <span>Creating Plan...</span>
+                            }
+                            else
+                            {
+                                <span>✓ Create Meal Plan</span>
+                            }
+                        </button>
+                        <button type="button" class="btn btn-outline" @onclick="NavigateBack" disabled="@_isSubmitting">
+                            Cancel
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to create meal plans.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private CreateMealPlanRequest _request = new()
+    {
+        Name = "",
+        StartDate = DateTime.Today,
+        EndDate = DateTime.Today.AddDays(7)
+    };
+
+    private bool _isSubmitting = false;
+    private string? _errorMessage;
+
+    private int _durationDays => (_request.EndDate - _request.StartDate).Days + 1;
+
+    private void SetThisWeek()
+    {
+        var today = DateTime.Today;
+        var startOfWeek = today.AddDays(-(int)today.DayOfWeek); // Sunday
+        _request.StartDate = startOfWeek;
+        _request.EndDate = startOfWeek.AddDays(6);
+    }
+
+    private void SetNextWeek()
+    {
+        var today = DateTime.Today;
+        var startOfNextWeek = today.AddDays(7 - (int)today.DayOfWeek); // Next Sunday
+        _request.StartDate = startOfNextWeek;
+        _request.EndDate = startOfNextWeek.AddDays(6);
+    }
+
+    private void SetTwoWeeks()
+    {
+        _request.StartDate = DateTime.Today;
+        _request.EndDate = DateTime.Today.AddDays(13);
+    }
+
+    private void SetMonth()
+    {
+        _request.StartDate = DateTime.Today;
+        _request.EndDate = DateTime.Today.AddDays(29);
+    }
+
+    private async Task HandleSubmit()
+    {
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            // Validate dates
+            if (_request.EndDate < _request.StartDate)
+            {
+                _errorMessage = "End date must be after start date";
+                _isSubmitting = false;
+                return;
+            }
+
+            var result = await MealPlanApi.CreateMealPlanAsync(_request);
+            if (result.HasValue)
+            {
+                Navigation.NavigateTo("/meal-planning");
+            }
+            else
+            {
+                _errorMessage = "Failed to create meal plan.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/meal-planning");
+    }
+}

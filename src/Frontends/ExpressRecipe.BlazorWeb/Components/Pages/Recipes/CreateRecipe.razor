@@ -1,14 +1,16 @@
 @page "/recipes/create"
 @page "/recipes/{RecipeId:guid}/edit"
-@using Microsoft.AspNetCore.Authorization
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
-@attribute [Authorize]
 @inject IRecipeApiClient RecipeApi
 @inject NavigationManager Navigation
 
 <PageTitle>@(_isEditMode ? "Edit Recipe" : "Create Recipe") - ExpressRecipe</PageTitle>
 
+<AuthorizeView>
+    <Authorized>
 <div class="create-recipe-container">
     <!-- Header -->
     <div class="create-header">
@@ -131,7 +133,7 @@
                                 Optional
                             </label>
                         </div>
-                        <button class="btn-icon btn-danger" @onclick="() => RemoveIngredient(ingredient)">
+                        <button class="btn-icon btn-danger" @onclick="HandleRemoveIngredient">
                             🗑️
                         </button>
                     </div>
@@ -176,7 +178,7 @@
                                        style="flex: 1;" />
                             </div>
                         </div>
-                        <button class="btn-icon btn-danger" @onclick="() => RemoveStep(step)">
+                        <button class="btn-icon btn-danger" @onclick="HandleRemoveStep">
                             🗑️
                         </button>
                     </div>
@@ -250,6 +252,14 @@
         </div>
     }
 </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to access this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
     [Parameter]
@@ -423,7 +433,27 @@
 
             if (_isEditMode)
             {
-                var success = await RecipeApi.UpdateRecipeAsync(RecipeId!.Value, _recipe);
+                // Convert CreateRecipeRequest to UpdateRecipeRequest
+                var updateRequest = new UpdateRecipeRequest
+                {
+                    Title = _recipe.Title,
+                    Description = _recipe.Description,
+                    Difficulty = _recipe.Difficulty,
+                    PrepTimeMinutes = _recipe.PrepTimeMinutes,
+                    CookTimeMinutes = _recipe.CookTimeMinutes,
+                    Servings = _recipe.Servings,
+                    ImageUrl = _recipe.ImageUrl,
+                    Source = _recipe.Source,
+                    SourceUrl = _recipe.SourceUrl,
+                    Ingredients = _recipe.Ingredients,
+                    Steps = _recipe.Steps,
+                    Tags = _recipe.Tags,
+                    DietaryInfo = _recipe.DietaryInfo,
+                    Nutrition = _recipe.Nutrition,
+                    IsPublic = _recipe.IsPublic
+                };
+                
+                var success = await RecipeApi.UpdateRecipeAsync(RecipeId!.Value, updateRequest);
                 resultId = success ? RecipeId : null;
             }
             else
@@ -459,6 +489,23 @@
         else
         {
             Navigation.NavigateTo("/recipes");
+        }
+    }
+
+    // Event Handlers
+    private void HandleRemoveIngredient()
+    {
+        if (_recipe.Ingredients.Count > 0)
+        {
+            _recipe.Ingredients.RemoveAt(_recipe.Ingredients.Count - 1);
+        }
+    }
+
+    private void HandleRemoveStep()
+    {
+        if (_recipe.Steps.Count > 0)
+        {
+            _recipe.Steps.RemoveAt(_recipe.Steps.Count - 1);
         }
     }
 }
