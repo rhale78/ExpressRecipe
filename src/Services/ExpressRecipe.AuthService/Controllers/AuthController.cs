@@ -260,4 +260,50 @@ public class AuthController : ControllerBase
 
         return Ok(new { message = "Logged out successfully" });
     }
+
+    /// <summary>
+    /// Internal endpoint for creating user accounts from other services (e.g., UserService)
+    /// </summary>
+    [HttpPost("register-internal")]
+    public async Task<IActionResult> RegisterInternal([FromBody] RegisterRequest request)
+    {
+        try
+        {
+            _logger.LogInformation("Internal registration attempt - Email: {Email}", request.Email);
+
+            // Validate the request
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { message = "Validation failed", errors = ModelState });
+            }
+
+            // Check if user already exists
+            var existingUser = await _repository.GetUserByEmailAsync(request.Email);
+            if (existingUser != null)
+            {
+                _logger.LogWarning("Internal registration failed: User {Email} already exists", request.Email);
+                return BadRequest(new { message = "User with this email already exists" });
+            }
+
+            // Hash password
+            var passwordHash = _tokenService.HashPassword(request.Password);
+
+            // Create user
+            var userId = await _repository.CreateUserAsync(
+                request.Email,
+                passwordHash,
+                request.FirstName ?? "",
+                request.LastName ?? ""
+            );
+
+            _logger.LogInformation("Internal user created: {UserId}", userId);
+
+            return Ok(new { userId, email = request.Email });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Internal registration failed");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
 }
