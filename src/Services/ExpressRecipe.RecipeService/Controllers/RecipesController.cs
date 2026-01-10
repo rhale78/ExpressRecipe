@@ -2,6 +2,7 @@ using ExpressRecipe.Shared.DTOs.Recipe;
 using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.CQRS.Commands;
 using ExpressRecipe.RecipeService.CQRS.Queries;
+using ExpressRecipe.RecipeService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -14,13 +15,19 @@ namespace ExpressRecipe.RecipeService.Controllers;
 public class RecipesController : ControllerBase
 {
     private readonly IRecipeRepository _recipeRepository;
+    private readonly ServingSizeService _servingSizeService;
+    private readonly ShoppingListIntegrationService _shoppingListService;
     private readonly ILogger<RecipesController> _logger;
 
     public RecipesController(
         IRecipeRepository recipeRepository,
+        ServingSizeService servingSizeService,
+        ShoppingListIntegrationService shoppingListService,
         ILogger<RecipesController> logger)
     {
         _recipeRepository = recipeRepository;
+        _servingSizeService = servingSizeService;
+        _shoppingListService = shoppingListService;
         _logger = logger;
     }
 
@@ -404,6 +411,118 @@ public class RecipesController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving cuisines");
             return StatusCode(500, new { message = "An error occurred while retrieving cuisines" });
+        }
+    }
+
+    /// <summary>
+    /// Scale recipe to a different serving size
+    /// </summary>
+    [HttpGet("{id:guid}/scale")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ScaledRecipeDto>> ScaleRecipe(Guid id, [FromQuery] int servings)
+    {
+        try
+        {
+            if (servings <= 0)
+            {
+                return BadRequest(new { message = "Servings must be greater than zero" });
+            }
+
+            // Get the recipe with ingredients
+            var recipe = await _recipeRepository.GetRecipeByIdAsync(id);
+            if (recipe == null)
+            {
+                return NotFound(new { message = "Recipe not found" });
+            }
+
+            recipe.Ingredients = await _recipeRepository.GetRecipeIngredientsAsync(id);
+
+            // Scale the recipe
+            var scaledRecipe = _servingSizeService.ScaleRecipe(recipe, servings);
+
+            // Add time adjustments
+            scaledRecipe.TimeAdjustment = _servingSizeService.AdjustTimings(
+                recipe.Servings ?? 1,
+                servings,
+                recipe.PrepTimeMinutes,
+                recipe.CookTimeMinutes
+            );
+
+            return Ok(scaledRecipe);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error scaling recipe {RecipeId}", id);
+            return StatusCode(500, new { message = "An error occurred while scaling the recipe" });
+        }
+    }
+
+    /// <summary>
+    /// Get serving size suggestions for a recipe
+    /// </summary>
+    [HttpGet("{id:guid}/serving-suggestions")]
+    [AllowAnonymous]
+    public async Task<ActionResult<List<int>>> GetServingSuggestions(Guid id)
+    {
+        try
+        {
+            var recipe = await _recipeRepository.GetRecipeByIdAsync(id);
+            if (recipe == null)
+            {
+                return NotFound(new { message = "Recipe not found" });
+            }
+
+            var suggestions = _servingSizeService.GetServingSizeSuggestions(recipe.Servings ?? 4);
+            return Ok(suggestions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting serving suggestions for recipe {RecipeId}", id);
+            return StatusCode(500, new { message = "An error occurred while getting serving suggestions" });
+        }
+    }
+
+    /// <summary>
+    /// Prepare recipe ingredients for shopping list
+    /// Returns ingredient data optimized for adding to shopping list
+    /// </summary>
+    [HttpPost("{id:guid}/prepare-shopping-list")]
+    public async Task<ActionResult<ShoppingListPreparationDto>> PrepareShoppingList(
+        Guid id,
+        [FromQuery] int? servings = null)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            // Get the recipe with ingredients
+            var recipe = await _recipeRepository.GetRecipeByIdAsync(id);
+            if (recipe == null)
+            {
+                return NotFound(new { message = "Recipe not found" });
+            }
+
+            var ingredients = await _recipeRepository.GetRecipeIngredientsAsync(id);
+
+            // Prepare shopping list items
+            var shoppingList = _shoppingListService.PrepareRecipeForShopping(recipe, ingredients, servings);
+
+            _logger.LogInformation("Prepared shopping list for recipe {RecipeId} for user {UserId}", id, userId.Value);
+
+            return Ok(shoppingList);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error preparing shopping list for recipe {RecipeId}", id);
+            return StatusCode(500, new { message = "An error occurred while preparing the shopping list" });
         }
     }
 }
