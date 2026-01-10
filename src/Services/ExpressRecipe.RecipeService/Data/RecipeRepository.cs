@@ -673,4 +673,352 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             new SqlParameter("@Instructions", instructions)
         );
     }
+
+    public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto>> GetRecipeIngredientsAsync(Guid recipeId)
+    {
+        const string sql = @"
+            SELECT Id, RecipeId, IngredientId, BaseIngredientId, IngredientName,
+                   Quantity, Unit, OrderIndex, PreparationNote, IsOptional, SubstituteNotes
+            FROM RecipeIngredient
+            WHERE RecipeId = @RecipeId AND IsDeleted = 0
+            ORDER BY OrderIndex";
+
+        return await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            RecipeId = reader.GetGuid(reader.GetOrdinal("RecipeId")),
+            IngredientId = reader.IsDBNull(reader.GetOrdinal("IngredientId")) ? null : reader.GetGuid(reader.GetOrdinal("IngredientId")),
+            BaseIngredientId = reader.IsDBNull(reader.GetOrdinal("BaseIngredientId")) ? null : reader.GetGuid(reader.GetOrdinal("BaseIngredientId")),
+            IngredientName = reader.IsDBNull(reader.GetOrdinal("IngredientName")) ? null : reader.GetString(reader.GetOrdinal("IngredientName")),
+            Quantity = reader.IsDBNull(reader.GetOrdinal("Quantity")) ? null : reader.GetDecimal(reader.GetOrdinal("Quantity")),
+            Unit = reader.IsDBNull(reader.GetOrdinal("Unit")) ? null : reader.GetString(reader.GetOrdinal("Unit")),
+            OrderIndex = reader.GetInt32(reader.GetOrdinal("OrderIndex")),
+            PreparationNote = reader.IsDBNull(reader.GetOrdinal("PreparationNote")) ? null : reader.GetString(reader.GetOrdinal("PreparationNote")),
+            IsOptional = reader.GetBoolean(reader.GetOrdinal("IsOptional")),
+            SubstituteNotes = reader.IsDBNull(reader.GetOrdinal("SubstituteNotes")) ? null : reader.GetString(reader.GetOrdinal("SubstituteNotes"))
+        },
+        new SqlParameter("@RecipeId", recipeId));
+    }
+
+    public async Task<ExpressRecipe.Shared.DTOs.Recipe.RecipeNutritionDto?> GetRecipeNutritionAsync(Guid recipeId)
+    {
+        const string sql = @"
+            SELECT Id, RecipeId, ServingSize, Calories, TotalFat, SaturatedFat, TransFat,
+                   Cholesterol, Sodium, TotalCarbohydrates, DietaryFiber, Sugars, Protein,
+                   VitaminD, Calcium, Iron, Potassium
+            FROM RecipeNutrition
+            WHERE RecipeId = @RecipeId";
+
+        var results = await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeNutritionDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            RecipeId = reader.GetGuid(reader.GetOrdinal("RecipeId")),
+            ServingSize = reader.IsDBNull(reader.GetOrdinal("ServingSize")) ? null : reader.GetString(reader.GetOrdinal("ServingSize")),
+            Calories = reader.IsDBNull(reader.GetOrdinal("Calories")) ? null : reader.GetDecimal(reader.GetOrdinal("Calories")),
+            TotalFat = reader.IsDBNull(reader.GetOrdinal("TotalFat")) ? null : reader.GetDecimal(reader.GetOrdinal("TotalFat")),
+            SaturatedFat = reader.IsDBNull(reader.GetOrdinal("SaturatedFat")) ? null : reader.GetDecimal(reader.GetOrdinal("SaturatedFat")),
+            TransFat = reader.IsDBNull(reader.GetOrdinal("TransFat")) ? null : reader.GetDecimal(reader.GetOrdinal("TransFat")),
+            Cholesterol = reader.IsDBNull(reader.GetOrdinal("Cholesterol")) ? null : reader.GetDecimal(reader.GetOrdinal("Cholesterol")),
+            Sodium = reader.IsDBNull(reader.GetOrdinal("Sodium")) ? null : reader.GetDecimal(reader.GetOrdinal("Sodium")),
+            TotalCarbohydrates = reader.IsDBNull(reader.GetOrdinal("TotalCarbohydrates")) ? null : reader.GetDecimal(reader.GetOrdinal("TotalCarbohydrates")),
+            DietaryFiber = reader.IsDBNull(reader.GetOrdinal("DietaryFiber")) ? null : reader.GetDecimal(reader.GetOrdinal("DietaryFiber")),
+            Sugars = reader.IsDBNull(reader.GetOrdinal("Sugars")) ? null : reader.GetDecimal(reader.GetOrdinal("Sugars")),
+            Protein = reader.IsDBNull(reader.GetOrdinal("Protein")) ? null : reader.GetDecimal(reader.GetOrdinal("Protein")),
+            VitaminD = reader.IsDBNull(reader.GetOrdinal("VitaminD")) ? null : reader.GetDecimal(reader.GetOrdinal("VitaminD")),
+            Calcium = reader.IsDBNull(reader.GetOrdinal("Calcium")) ? null : reader.GetDecimal(reader.GetOrdinal("Calcium")),
+            Iron = reader.IsDBNull(reader.GetOrdinal("Iron")) ? null : reader.GetDecimal(reader.GetOrdinal("Iron")),
+            Potassium = reader.IsDBNull(reader.GetOrdinal("Potassium")) ? null : reader.GetDecimal(reader.GetOrdinal("Potassium"))
+        },
+        new SqlParameter("@RecipeId", recipeId));
+
+        return results.FirstOrDefault();
+    }
+
+    public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeAllergenWarningDto>> GetRecipeAllergensAsync(Guid recipeId)
+    {
+        const string sql = @"
+            SELECT Id, RecipeId, AllergenId, AllergenName, SourceIngredientId
+            FROM RecipeAllergenWarning
+            WHERE RecipeId = @RecipeId";
+
+        return await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeAllergenWarningDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            RecipeId = reader.GetGuid(reader.GetOrdinal("RecipeId")),
+            AllergenId = reader.GetGuid(reader.GetOrdinal("AllergenId")),
+            AllergenName = reader.GetString(reader.GetOrdinal("AllergenName")),
+            SourceIngredientId = reader.IsDBNull(reader.GetOrdinal("SourceIngredientId")) ? null : reader.GetGuid(reader.GetOrdinal("SourceIngredientId"))
+        },
+        new SqlParameter("@RecipeId", recipeId));
+    }
+
+    public async Task UpdateRecipeAsync(Guid id, ExpressRecipe.Shared.DTOs.Recipe.UpdateRecipeRequest request, Guid userId)
+    {
+        const string sql = @"
+            UPDATE Recipe
+            SET Name = @Name,
+                Description = @Description,
+                Category = @Category,
+                Cuisine = @Cuisine,
+                DifficultyLevel = @DifficultyLevel,
+                PrepTimeMinutes = @PrepTimeMinutes,
+                CookTimeMinutes = @CookTimeMinutes,
+                TotalTimeMinutes = @TotalTimeMinutes,
+                Servings = @Servings,
+                ImageUrl = @ImageUrl,
+                VideoUrl = @VideoUrl,
+                Instructions = @Instructions,
+                Notes = @Notes,
+                IsPublic = @IsPublic,
+                SourceUrl = @SourceUrl,
+                UpdatedBy = @UpdatedBy,
+                UpdatedAt = GETUTCDATE()
+            WHERE Id = @Id";
+
+        await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@Id", id),
+            new SqlParameter("@Name", request.Name),
+            new SqlParameter("@Description", (object?)request.Description ?? DBNull.Value),
+            new SqlParameter("@Category", (object?)request.Category ?? DBNull.Value),
+            new SqlParameter("@Cuisine", (object?)request.Cuisine ?? DBNull.Value),
+            new SqlParameter("@DifficultyLevel", (object?)request.DifficultyLevel ?? DBNull.Value),
+            new SqlParameter("@PrepTimeMinutes", (object?)request.PrepTimeMinutes ?? DBNull.Value),
+            new SqlParameter("@CookTimeMinutes", (object?)request.CookTimeMinutes ?? DBNull.Value),
+            new SqlParameter("@TotalTimeMinutes", (object?)request.TotalTimeMinutes ?? DBNull.Value),
+            new SqlParameter("@Servings", (object?)request.Servings ?? DBNull.Value),
+            new SqlParameter("@ImageUrl", (object?)request.ImageUrl ?? DBNull.Value),
+            new SqlParameter("@VideoUrl", (object?)request.VideoUrl ?? DBNull.Value),
+            new SqlParameter("@Instructions", (object?)request.Instructions ?? DBNull.Value),
+            new SqlParameter("@Notes", (object?)request.Notes ?? DBNull.Value),
+            new SqlParameter("@IsPublic", request.IsPublic),
+            new SqlParameter("@SourceUrl", (object?)request.SourceUrl ?? DBNull.Value),
+            new SqlParameter("@UpdatedBy", userId)
+        );
+    }
+
+    public async Task DeleteRecipeAsync(Guid id)
+    {
+        const string sql = @"
+            UPDATE Recipe
+            SET IsDeleted = 1,
+                DeletedAt = GETUTCDATE()
+            WHERE Id = @Id";
+
+        await ExecuteNonQueryAsync(sql, new SqlParameter("@Id", id));
+    }
+
+    public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetUserRecipesAsync(Guid userId, int limit = 50)
+    {
+        const string sql = @"
+            SELECT Id, Name, Description, Category, Cuisine, DifficultyLevel,
+                   PrepTimeMinutes, CookTimeMinutes, TotalTimeMinutes, Servings,
+                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt
+            FROM Recipe
+            WHERE IsDeleted = 0 AND AuthorId = @UserId
+            ORDER BY CreatedAt DESC
+            OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+
+        return await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
+            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
+            Cuisine = reader.IsDBNull(reader.GetOrdinal("Cuisine")) ? null : reader.GetString(reader.GetOrdinal("Cuisine")),
+            DifficultyLevel = reader.IsDBNull(reader.GetOrdinal("DifficultyLevel")) ? null : reader.GetString(reader.GetOrdinal("DifficultyLevel")),
+            PrepTimeMinutes = reader.IsDBNull(reader.GetOrdinal("PrepTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("PrepTimeMinutes")),
+            CookTimeMinutes = reader.IsDBNull(reader.GetOrdinal("CookTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("CookTimeMinutes")),
+            TotalTimeMinutes = reader.IsDBNull(reader.GetOrdinal("TotalTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("TotalTimeMinutes")),
+            Servings = reader.IsDBNull(reader.GetOrdinal("Servings")) ? null : reader.GetInt32(reader.GetOrdinal("Servings")),
+            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
+            VideoUrl = reader.IsDBNull(reader.GetOrdinal("VideoUrl")) ? null : reader.GetString(reader.GetOrdinal("VideoUrl")),
+            Instructions = reader.IsDBNull(reader.GetOrdinal("Instructions")) ? null : reader.GetString(reader.GetOrdinal("Instructions")),
+            Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
+            IsPublic = reader.GetBoolean(reader.GetOrdinal("IsPublic")),
+            IsApproved = reader.GetBoolean(reader.GetOrdinal("IsApproved")),
+            SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
+            AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+        },
+        new SqlParameter("@UserId", userId),
+        new SqlParameter("@Limit", limit));
+    }
+
+    public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByCategoryAsync(string category, int limit = 50)
+    {
+        const string sql = @"
+            SELECT Id, Name, Description, Category, Cuisine, DifficultyLevel,
+                   PrepTimeMinutes, CookTimeMinutes, TotalTimeMinutes, Servings,
+                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt
+            FROM Recipe
+            WHERE IsDeleted = 0 AND Category = @Category
+            ORDER BY CreatedAt DESC
+            OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+
+        return await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
+            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
+            Cuisine = reader.IsDBNull(reader.GetOrdinal("Cuisine")) ? null : reader.GetString(reader.GetOrdinal("Cuisine")),
+            DifficultyLevel = reader.IsDBNull(reader.GetOrdinal("DifficultyLevel")) ? null : reader.GetString(reader.GetOrdinal("DifficultyLevel")),
+            PrepTimeMinutes = reader.IsDBNull(reader.GetOrdinal("PrepTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("PrepTimeMinutes")),
+            CookTimeMinutes = reader.IsDBNull(reader.GetOrdinal("CookTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("CookTimeMinutes")),
+            TotalTimeMinutes = reader.IsDBNull(reader.GetOrdinal("TotalTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("TotalTimeMinutes")),
+            Servings = reader.IsDBNull(reader.GetOrdinal("Servings")) ? null : reader.GetInt32(reader.GetOrdinal("Servings")),
+            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
+            VideoUrl = reader.IsDBNull(reader.GetOrdinal("VideoUrl")) ? null : reader.GetString(reader.GetOrdinal("VideoUrl")),
+            Instructions = reader.IsDBNull(reader.GetOrdinal("Instructions")) ? null : reader.GetString(reader.GetOrdinal("Instructions")),
+            Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
+            IsPublic = reader.GetBoolean(reader.GetOrdinal("IsPublic")),
+            IsApproved = reader.GetBoolean(reader.GetOrdinal("IsApproved")),
+            SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
+            AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+        },
+        new SqlParameter("@Category", category),
+        new SqlParameter("@Limit", limit));
+    }
+
+    public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByCuisineAsync(string cuisine, int limit = 50)
+    {
+        const string sql = @"
+            SELECT Id, Name, Description, Category, Cuisine, DifficultyLevel,
+                   PrepTimeMinutes, CookTimeMinutes, TotalTimeMinutes, Servings,
+                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt
+            FROM Recipe
+            WHERE IsDeleted = 0 AND Cuisine = @Cuisine
+            ORDER BY CreatedAt DESC
+            OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+
+        return await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
+            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
+            Cuisine = reader.IsDBNull(reader.GetOrdinal("Cuisine")) ? null : reader.GetString(reader.GetOrdinal("Cuisine")),
+            DifficultyLevel = reader.IsDBNull(reader.GetOrdinal("DifficultyLevel")) ? null : reader.GetString(reader.GetOrdinal("DifficultyLevel")),
+            PrepTimeMinutes = reader.IsDBNull(reader.GetOrdinal("PrepTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("PrepTimeMinutes")),
+            CookTimeMinutes = reader.IsDBNull(reader.GetOrdinal("CookTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("CookTimeMinutes")),
+            TotalTimeMinutes = reader.IsDBNull(reader.GetOrdinal("TotalTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("TotalTimeMinutes")),
+            Servings = reader.IsDBNull(reader.GetOrdinal("Servings")) ? null : reader.GetInt32(reader.GetOrdinal("Servings")),
+            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
+            VideoUrl = reader.IsDBNull(reader.GetOrdinal("VideoUrl")) ? null : reader.GetString(reader.GetOrdinal("VideoUrl")),
+            Instructions = reader.IsDBNull(reader.GetOrdinal("Instructions")) ? null : reader.GetString(reader.GetOrdinal("Instructions")),
+            Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
+            IsPublic = reader.GetBoolean(reader.GetOrdinal("IsPublic")),
+            IsApproved = reader.GetBoolean(reader.GetOrdinal("IsApproved")),
+            SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
+            AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+        },
+        new SqlParameter("@Cuisine", cuisine),
+        new SqlParameter("@Limit", limit));
+    }
+
+    public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByTagAsync(string tag, int limit = 50)
+    {
+        const string sql = @"
+            SELECT DISTINCT r.Id, r.Name, r.Description, r.Category, r.Cuisine, r.DifficultyLevel,
+                   r.PrepTimeMinutes, r.CookTimeMinutes, r.TotalTimeMinutes, r.Servings,
+                   r.ImageUrl, r.VideoUrl, r.Instructions, r.Notes, r.IsPublic, r.IsApproved, r.SourceUrl, r.AuthorId, r.CreatedAt, r.UpdatedAt
+            FROM Recipe r
+            INNER JOIN RecipeTagMapping rtm ON r.Id = rtm.RecipeId
+            INNER JOIN RecipeTag rt ON rtm.TagId = rt.Id
+            WHERE r.IsDeleted = 0 AND rt.Name = @Tag
+            ORDER BY r.CreatedAt DESC
+            OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+
+        return await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
+            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
+            Cuisine = reader.IsDBNull(reader.GetOrdinal("Cuisine")) ? null : reader.GetString(reader.GetOrdinal("Cuisine")),
+            DifficultyLevel = reader.IsDBNull(reader.GetOrdinal("DifficultyLevel")) ? null : reader.GetString(reader.GetOrdinal("DifficultyLevel")),
+            PrepTimeMinutes = reader.IsDBNull(reader.GetOrdinal("PrepTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("PrepTimeMinutes")),
+            CookTimeMinutes = reader.IsDBNull(reader.GetOrdinal("CookTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("CookTimeMinutes")),
+            TotalTimeMinutes = reader.IsDBNull(reader.GetOrdinal("TotalTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("TotalTimeMinutes")),
+            Servings = reader.IsDBNull(reader.GetOrdinal("Servings")) ? null : reader.GetInt32(reader.GetOrdinal("Servings")),
+            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
+            VideoUrl = reader.IsDBNull(reader.GetOrdinal("VideoUrl")) ? null : reader.GetString(reader.GetOrdinal("VideoUrl")),
+            Instructions = reader.IsDBNull(reader.GetOrdinal("Instructions")) ? null : reader.GetString(reader.GetOrdinal("Instructions")),
+            Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
+            IsPublic = reader.GetBoolean(reader.GetOrdinal("IsPublic")),
+            IsApproved = reader.GetBoolean(reader.GetOrdinal("IsApproved")),
+            SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
+            AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+        },
+        new SqlParameter("@Tag", tag),
+        new SqlParameter("@Limit", limit));
+    }
+
+    public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByIngredientAsync(string ingredient, int limit = 50)
+    {
+        const string sql = @"
+            SELECT DISTINCT r.Id, r.Name, r.Description, r.Category, r.Cuisine, r.DifficultyLevel,
+                   r.PrepTimeMinutes, r.CookTimeMinutes, r.TotalTimeMinutes, r.Servings,
+                   r.ImageUrl, r.VideoUrl, r.Instructions, r.Notes, r.IsPublic, r.IsApproved, r.SourceUrl, r.AuthorId, r.CreatedAt, r.UpdatedAt
+            FROM Recipe r
+            INNER JOIN RecipeIngredient ri ON r.Id = ri.RecipeId
+            WHERE r.IsDeleted = 0 AND ri.IsDeleted = 0 AND ri.IngredientName LIKE @Ingredient
+            ORDER BY r.CreatedAt DESC
+            OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+
+        return await ExecuteReaderAsync(sql, reader => new ExpressRecipe.Shared.DTOs.Recipe.RecipeDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
+            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
+            Cuisine = reader.IsDBNull(reader.GetOrdinal("Cuisine")) ? null : reader.GetString(reader.GetOrdinal("Cuisine")),
+            DifficultyLevel = reader.IsDBNull(reader.GetOrdinal("DifficultyLevel")) ? null : reader.GetString(reader.GetOrdinal("DifficultyLevel")),
+            PrepTimeMinutes = reader.IsDBNull(reader.GetOrdinal("PrepTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("PrepTimeMinutes")),
+            CookTimeMinutes = reader.IsDBNull(reader.GetOrdinal("CookTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("CookTimeMinutes")),
+            TotalTimeMinutes = reader.IsDBNull(reader.GetOrdinal("TotalTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("TotalTimeMinutes")),
+            Servings = reader.IsDBNull(reader.GetOrdinal("Servings")) ? null : reader.GetInt32(reader.GetOrdinal("Servings")),
+            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
+            VideoUrl = reader.IsDBNull(reader.GetOrdinal("VideoUrl")) ? null : reader.GetString(reader.GetOrdinal("VideoUrl")),
+            Instructions = reader.IsDBNull(reader.GetOrdinal("Instructions")) ? null : reader.GetString(reader.GetOrdinal("Instructions")),
+            Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
+            IsPublic = reader.GetBoolean(reader.GetOrdinal("IsPublic")),
+            IsApproved = reader.GetBoolean(reader.GetOrdinal("IsApproved")),
+            SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
+            AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+        },
+        new SqlParameter("@Ingredient", $"%{ingredient}%"),
+        new SqlParameter("@Limit", limit));
+    }
+
+    public async Task<List<string>> GetAllCategoriesAsync()
+    {
+        const string sql = @"
+            SELECT DISTINCT Category
+            FROM Recipe
+            WHERE IsDeleted = 0 AND Category IS NOT NULL
+            ORDER BY Category";
+
+        return await ExecuteReaderAsync(sql, reader => reader.GetString(0));
+    }
+
+    public async Task<List<string>> GetAllCuisinesAsync()
+    {
+        const string sql = @"
+            SELECT DISTINCT Cuisine
+            FROM Recipe
+            WHERE IsDeleted = 0 AND Cuisine IS NOT NULL
+            ORDER BY Cuisine";
+
+        return await ExecuteReaderAsync(sql, reader => reader.GetString(0));
+    }
 }

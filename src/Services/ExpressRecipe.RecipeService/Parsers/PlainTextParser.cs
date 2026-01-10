@@ -64,11 +64,24 @@ public class PlainTextParser : RecipeParserBase
             }
             else if (currentSection == "instructions" || IsLikelyInstruction(line))
             {
-                recipe.Instructions.Add(new ParsedInstruction
+                var instruction = new ParsedInstruction
                 {
                     StepNumber = ++stepNumber,
                     InstructionText = CleanText(line)
-                });
+                };
+
+                // Extract temperature from instruction
+                var (temp, tempUnit) = ParseTemperature(line);
+                if (temp.HasValue)
+                {
+                    instruction.Temperature = temp.Value;
+                    instruction.TemperatureUnit = tempUnit;
+                }
+
+                // Extract time from instruction
+                instruction.TimeMinutes = ParseTime(line);
+
+                recipe.Instructions.Add(instruction);
             }
             else if (currentSection == "description")
             {

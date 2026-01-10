@@ -18,6 +18,7 @@ public class RecipeParserFactory
             new JsonRecipeParser(),
             new RecipeKeeperParser(),
             new PaprikaParser(),
+            new YouTubeDescriptionParser(),
             new PlainTextParser(),
             new WebScraperParser(),
             new AllRecipesParser(),
