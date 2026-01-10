@@ -60,6 +60,8 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
 builder.Services.AddScoped<IRecipeRepository>(sp => new RecipeRepository(connectionString));
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Data.IRatingRepository>(sp => 
+    new ExpressRecipe.RecipeService.Data.RatingRepository(connectionString));
 
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
@@ -94,6 +96,8 @@ builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectio
         connectionString,
         sp.GetRequiredService<ILogger<ExpressRecipe.RecipeService.Services.AllergenDetectionService>>()));
 builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloadService>();
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ServingSizeService>();
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ShoppingListIntegrationService>();
 
 // Add controllers
 builder.Services.AddControllers();
