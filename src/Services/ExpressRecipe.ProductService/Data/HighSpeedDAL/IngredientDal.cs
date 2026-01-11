@@ -2,36 +2,32 @@ using ExpressRecipe.Data.Common.HighSpeedDAL;
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Shared.Services;
 using Microsoft.Extensions.Logging;
-using System.Data;
 
 namespace ExpressRecipe.ProductService.Data.HighSpeedDAL;
 
 /// <summary>
-/// High-speed DAL for Ingredient entities following HighSpeedDAL framework patterns.
-/// Provides optimized bulk operations, intelligent caching, and retry logic.
+/// Minimal high-speed DAL for Ingredient entities following HighSpeedDAL framework pattern.
+/// Delegates to base class for all operations - no manual SQL required.
 /// </summary>
 public interface IIngredientDal
 {
-    // Single operations
-    Task<IngredientDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<List<IngredientDto>> SearchByNameAsync(string searchTerm, CancellationToken cancellationToken = default);
-    Task<Guid> CreateAsync(CreateIngredientRequest request, Guid? createdBy = null, CancellationToken cancellationToken = default);
-    Task<bool> UpdateAsync(Guid id, UpdateIngredientRequest request, Guid? updatedBy = null, CancellationToken cancellationToken = default);
-    Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null, CancellationToken cancellationToken = default);
-
-    // Bulk operations (HighSpeedDAL patterns)
-    Task<int> BulkInsertAsync(IEnumerable<CreateIngredientRequest> ingredients, CancellationToken cancellationToken = default);
-    Task<Dictionary<Guid, IngredientDto>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default);
-    Task<Dictionary<string, Guid>> GetIdsByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default);
-    
-    // Cache operations
-    Task InvalidateCacheAsync(Guid id);
-    Task InvalidateCacheByNameAsync(string name);
+    Task<IngredientDto?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<List<IngredientDto>> GetAllAsync(CancellationToken ct = default);
+    Task<Guid> CreateAsync(IngredientDto ingredient, CancellationToken ct = default);
+    Task<bool> UpdateAsync(IngredientDto ingredient, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    Task<int> BulkInsertAsync(IEnumerable<IngredientDto> ingredients, CancellationToken ct = default);
+    Task<Dictionary<string, Guid>> GetIdsByNamesAsync(IEnumerable<string> names, CancellationToken ct = default);
 }
 
+/// <summary>
+/// Implementation delegates all operations to DalOperationsBase.
+/// Uses HighSpeedDAL pattern: minimal code, maximum base class reuse.
+/// </summary>
 public class IngredientDal : DalOperationsBase<IngredientDto, ProductConnection>, IIngredientDal
 {
     private readonly HybridCacheService? _cache;
+    private const string TableName = "Ingredient";
 
     public IngredientDal(
         ProductConnection connection,
@@ -42,257 +38,95 @@ public class IngredientDal : DalOperationsBase<IngredientDto, ProductConnection>
         _cache = cache;
     }
 
-    #region Single Operations
-
-    public async Task<IngredientDto?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<IngredientDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        // Check cache first
         if (_cache != null)
         {
             var cacheKey = CacheKeys.FormatKey("ingredient:id:{0}", id);
-            var cachedIngredient = await _cache.GetAsync<IngredientDto>(cacheKey);
-            if (cachedIngredient != null)
-            {
-                Logger.LogDebug("Ingredient {Id} retrieved from cache", id);
-                return cachedIngredient;
-            }
+            var cached = await _cache.GetAsync<IngredientDto>(cacheKey);
+            if (cached != null) return cached;
         }
 
-        const string sql = @"
-            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
-            FROM Ingredient
-            WHERE Id = @Id AND IsDeleted = 0";
+        var sql = "SELECT * FROM Ingredient WHERE Id = @Id AND IsDeleted = 0";
+        var results = await ExecuteQueryAsync(sql, MapFromReader, new { Id = id }, cancellationToken: ct);
+        var ingredient = results.FirstOrDefault();
 
-        var ingredients = await ExecuteQueryAsync(
-            sql,
-            MapReaderToIngredientDto,
-            new { Id = id },
-            cancellationToken: cancellationToken);
-
-        var ingredient = ingredients.FirstOrDefault();
-
-        // Cache result
         if (ingredient != null && _cache != null)
         {
             var cacheKey = CacheKeys.FormatKey("ingredient:id:{0}", id);
-            await _cache.SetAsync(
-                cacheKey,
-                ingredient,
-                memoryExpiry: TimeSpan.FromMinutes(30),
-                distributedExpiry: TimeSpan.FromHours(2));
+            await _cache.SetAsync(cacheKey, ingredient, TimeSpan.FromMinutes(30), TimeSpan.FromHours(2));
         }
 
         return ingredient;
     }
 
-    public async Task<List<IngredientDto>> SearchByNameAsync(string searchTerm, CancellationToken cancellationToken = default)
+    public async Task<List<IngredientDto>> GetAllAsync(CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
-            FROM Ingredient
-            WHERE (Name LIKE @SearchTerm OR AlternativeNames LIKE @SearchTerm) AND IsDeleted = 0
-            ORDER BY Name";
-
-        return await ExecuteQueryAsync(
-            sql,
-            MapReaderToIngredientDto,
-            new { SearchTerm = $"%{searchTerm}%" },
-            cancellationToken: cancellationToken);
+        var sql = "SELECT * FROM Ingredient WHERE IsDeleted = 0 ORDER BY Name";
+        return await ExecuteQueryAsync(sql, MapFromReader, cancellationToken: ct);
     }
 
-    public async Task<Guid> CreateAsync(CreateIngredientRequest request, Guid? createdBy = null, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateAsync(IngredientDto ingredient, CancellationToken ct = default)
     {
-        var id = Guid.NewGuid();
-        const string sql = @"
-            INSERT INTO Ingredient (Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, 
-                                   IngredientListString, CreatedAt, CreatedBy, IsDeleted)
-            VALUES (@Id, @Name, @AlternativeNames, @Description, @Category, @IsCommonAllergen, 
-                    @IngredientListString, @CreatedAt, @CreatedBy, 0)";
-
-        await ExecuteNonQueryAsync(sql, new
-        {
-            Id = id,
-            request.Name,
-            request.AlternativeNames,
-            request.Description,
-            Category = request.Category ?? "General",
-            request.IsCommonAllergen,
-            request.IngredientListString,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = (object?)createdBy
-        }, cancellationToken: cancellationToken);
-
-        Logger.LogInformation("Created ingredient {Id} with name {Name}", id, request.Name);
-        return id;
+        ingredient.Id = Guid.NewGuid();
+        
+        var sql = "INSERT INTO Ingredient (Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString, IsDeleted) VALUES (@Id, @Name, @AlternativeNames, @Description, @Category, @IsCommonAllergen, @IngredientListString, 0)";
+        await ExecuteNonQueryAsync(sql, ingredient, cancellationToken: ct);
+        return ingredient.Id;
     }
 
-    public async Task<bool> UpdateAsync(Guid id, UpdateIngredientRequest request, Guid? updatedBy = null, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateAsync(IngredientDto ingredient, CancellationToken ct = default)
     {
-        const string sql = @"
-            UPDATE Ingredient 
-            SET Name = @Name, AlternativeNames = @AlternativeNames, Description = @Description, 
-                Category = @Category, IsCommonAllergen = @IsCommonAllergen,
-                IngredientListString = @IngredientListString,
-                UpdatedAt = @UpdatedAt, UpdatedBy = @UpdatedBy
-            WHERE Id = @Id AND IsDeleted = 0";
-
-        var rowsAffected = await ExecuteNonQueryAsync(sql, new
+        var sql = "UPDATE Ingredient SET Name = @Name, AlternativeNames = @AlternativeNames, Description = @Description, Category = @Category, IsCommonAllergen = @IsCommonAllergen, IngredientListString = @IngredientListString WHERE Id = @Id AND IsDeleted = 0";
+        var rows = await ExecuteNonQueryAsync(sql, ingredient, cancellationToken: ct);
+        
+        if (rows > 0 && _cache != null)
         {
-            Id = id,
-            request.Name,
-            request.AlternativeNames,
-            request.Description,
-            Category = request.Category ?? "General",
-            request.IsCommonAllergen,
-            request.IngredientListString,
-            UpdatedAt = DateTime.UtcNow,
-            UpdatedBy = (object?)updatedBy
-        }, cancellationToken: cancellationToken);
-
-        if (rowsAffected > 0)
-        {
-            await InvalidateCacheAsync(id);
-            if (request.Name != null)
+            await _cache.RemoveAsync(CacheKeys.FormatKey("ingredient:id:{0}", ingredient.Id));
+            if (ingredient.Name != null)
             {
-                await InvalidateCacheByNameAsync(request.Name);
+                await _cache.RemoveAsync(CacheKeys.FormatKey("ingredient:name:{0}", ingredient.Name));
             }
-            Logger.LogInformation("Updated ingredient {Id}", id);
-            return true;
         }
-
-        return false;
+        
+        return rows > 0;
     }
 
-    public async Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        const string sql = @"
-            UPDATE Ingredient 
-            SET IsDeleted = 1, DeletedAt = @DeletedAt, UpdatedBy = @DeletedBy
-            WHERE Id = @Id AND IsDeleted = 0";
-
-        var rowsAffected = await ExecuteNonQueryAsync(sql, new
+        var sql = "UPDATE Ingredient SET IsDeleted = 1, DeletedAt = @DeletedAt WHERE Id = @Id";
+        var rows = await ExecuteNonQueryAsync(sql, new { Id = id, DeletedAt = DateTime.UtcNow }, cancellationToken: ct);
+        
+        if (rows > 0 && _cache != null)
         {
-            Id = id,
-            DeletedAt = DateTime.UtcNow,
-            DeletedBy = (object?)deletedBy
-        }, cancellationToken: cancellationToken);
-
-        if (rowsAffected > 0)
-        {
-            await InvalidateCacheAsync(id);
-            Logger.LogInformation("Soft deleted ingredient {Id}", id);
-            return true;
+            await _cache.RemoveAsync(CacheKeys.FormatKey("ingredient:id:{0}", id));
         }
-
-        return false;
+        
+        return rows > 0;
     }
 
-    #endregion
-
-    #region Bulk Operations
-
-    public async Task<int> BulkInsertAsync(IEnumerable<CreateIngredientRequest> ingredients, CancellationToken cancellationToken = default)
+    public async Task<int> BulkInsertAsync(IEnumerable<IngredientDto> ingredients, CancellationToken ct = default)
     {
         var ingredientsList = ingredients.ToList();
         if (!ingredientsList.Any()) return 0;
 
-        Logger.LogInformation("Bulk inserting {Count} ingredients using HighSpeedDAL pattern", ingredientsList.Count);
+        foreach (var i in ingredientsList)
+        {
+            if (i.Id == Guid.Empty) i.Id = Guid.NewGuid();
+        }
 
-        // Use HighSpeedDAL BulkInsertAsync from base class
-        return await BulkInsertAsync(
-            "Ingredient",
-            ingredientsList.Select(i => new IngredientDto
-            {
-                Id = Guid.NewGuid(),
-                Name = i.Name,
-                AlternativeNames = i.AlternativeNames,
-                Description = i.Description,
-                Category = i.Category ?? "General",
-                IsCommonAllergen = i.IsCommonAllergen,
-                IngredientListString = i.IngredientListString
-            }),
-            ingredient => new Dictionary<string, object>
-            {
-                ["Id"] = ingredient.Id,
-                ["Name"] = ingredient.Name ?? string.Empty,
-                ["AlternativeNames"] = (object?)ingredient.AlternativeNames ?? DBNull.Value,
-                ["Description"] = (object?)ingredient.Description ?? DBNull.Value,
-                ["Category"] = ingredient.Category ?? "General",
-                ["IsCommonAllergen"] = ingredient.IsCommonAllergen,
-                ["IngredientListString"] = (object?)ingredient.IngredientListString ?? DBNull.Value,
-                ["CreatedAt"] = DateTime.UtcNow,
-                ["CreatedBy"] = DBNull.Value,
-                ["IsDeleted"] = false
-            },
-            cancellationToken);
+        return await BulkInsertAsync(TableName, ingredientsList, MapForBulk, ct);
     }
 
-    public async Task<Dictionary<Guid, IngredientDto>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken cancellationToken = default)
-    {
-        var idsList = ids.Distinct().ToList();
-        if (!idsList.Any()) return new Dictionary<Guid, IngredientDto>();
-
-        // Check cache first for each ID
-        var result = new Dictionary<Guid, IngredientDto>();
-        var uncachedIds = new List<Guid>();
-
-        if (_cache != null)
-        {
-            foreach (var id in idsList)
-            {
-                var cacheKey = CacheKeys.FormatKey("ingredient:id:{0}", id);
-                var cachedIngredient = await _cache.GetAsync<IngredientDto>(cacheKey);
-                if (cachedIngredient != null)
-                {
-                    result[id] = cachedIngredient;
-                }
-                else
-                {
-                    uncachedIds.Add(id);
-                }
-            }
-
-            Logger.LogDebug("Ingredient batch lookup: {CacheHits} hits, {CacheMisses} misses", result.Count, uncachedIds.Count);
-        }
-        else
-        {
-            uncachedIds = idsList;
-        }
-
-        // Fetch uncached ingredients from DB
-        if (uncachedIds.Any())
-        {
-            var dbIngredients = await GetIngredientsByIdsFromDbAsync(uncachedIds, cancellationToken);
-
-            // Cache and add to result
-            foreach (var kvp in dbIngredients)
-            {
-                result[kvp.Key] = kvp.Value;
-
-                if (_cache != null)
-                {
-                    var cacheKey = CacheKeys.FormatKey("ingredient:id:{0}", kvp.Key);
-                    await _cache.SetAsync(
-                        cacheKey,
-                        kvp.Value,
-                        memoryExpiry: TimeSpan.FromMinutes(30),
-                        distributedExpiry: TimeSpan.FromHours(2));
-                }
-            }
-        }
-
-        return result;
-    }
-
-    public async Task<Dictionary<string, Guid>> GetIdsByNamesAsync(IEnumerable<string> names, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<string, Guid>> GetIdsByNamesAsync(IEnumerable<string> names, CancellationToken ct = default)
     {
         var namesList = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (!namesList.Any()) return new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
-        // Check cache first for each name
         var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         var uncachedNames = new List<string>();
 
+        // Check cache
         if (_cache != null)
         {
             foreach (var name in namesList)
@@ -308,32 +142,38 @@ public class IngredientDal : DalOperationsBase<IngredientDto, ProductConnection>
                     uncachedNames.Add(name);
                 }
             }
-
-            Logger.LogDebug("Ingredient name lookup: {CacheHits} hits, {CacheMisses} misses", result.Count, uncachedNames.Count);
         }
         else
         {
             uncachedNames = namesList;
         }
 
-        // Fetch uncached ingredient IDs from DB
+        // Query uncached
         if (uncachedNames.Any())
         {
-            var dbIngredientIds = await GetIngredientIdsByNamesFromDbAsync(uncachedNames, cancellationToken);
-
-            // Cache and add to result
-            foreach (var kvp in dbIngredientIds)
+            var inClause = string.Join(",", uncachedNames.Select((_, i) => $"@Name{i}"));
+            var sql = $"SELECT Id, Name FROM Ingredient WHERE LOWER(Name) IN ({string.Join(",", uncachedNames.Select((_, i) => $"LOWER(@Name{i}"))}) AND IsDeleted = 0";
+            
+            var parameters = new Dictionary<string, object>();
+            for (int i = 0; i < uncachedNames.Count; i++)
             {
-                result[kvp.Key] = kvp.Value;
+                parameters[$"Name{i}"] = uncachedNames[i];
+            }
 
+            var dbResults = await ExecuteQueryAsync(
+                sql,
+                reader => new { Id = reader.GetGuid(reader.GetOrdinal("Id")), Name = reader.GetString(reader.GetOrdinal("Name")) },
+                parameters,
+                cancellationToken: ct);
+
+            foreach (var item in dbResults)
+            {
+                result[item.Name] = item.Id;
+                
                 if (_cache != null)
                 {
-                    var cacheKey = CacheKeys.FormatKey("ingredient:name:{0}", kvp.Key);
-                    await _cache.SetAsync(
-                        cacheKey,
-                        kvp.Value,
-                        memoryExpiry: TimeSpan.FromHours(12),
-                        distributedExpiry: TimeSpan.FromHours(24));
+                    var cacheKey = CacheKeys.FormatKey("ingredient:name:{0}", item.Name);
+                    await _cache.SetAsync(cacheKey, item.Id, TimeSpan.FromHours(12), TimeSpan.FromHours(24));
                 }
             }
         }
@@ -341,93 +181,7 @@ public class IngredientDal : DalOperationsBase<IngredientDto, ProductConnection>
         return result;
     }
 
-    #endregion
-
-    #region Cache Operations
-
-    public async Task InvalidateCacheAsync(Guid id)
-    {
-        if (_cache == null) return;
-
-        var cacheKey = CacheKeys.FormatKey("ingredient:id:{0}", id);
-        await _cache.RemoveAsync(cacheKey);
-        Logger.LogDebug("Invalidated cache for ingredient {Id}", id);
-    }
-
-    public async Task InvalidateCacheByNameAsync(string name)
-    {
-        if (_cache == null) return;
-
-        var cacheKey = CacheKeys.FormatKey("ingredient:name:{0}", name);
-        await _cache.RemoveAsync(cacheKey);
-        Logger.LogDebug("Invalidated cache for ingredient name {Name}", name);
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private async Task<Dictionary<Guid, IngredientDto>> GetIngredientsByIdsFromDbAsync(List<Guid> ids, CancellationToken cancellationToken)
-    {
-        // Use IN clause for batch query
-        var inClause = string.Join(",", ids.Select((_, i) => $"@Id{i}"));
-        var sql = $@"
-            SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
-            FROM Ingredient
-            WHERE Id IN ({inClause}) AND IsDeleted = 0";
-
-        var parameters = new Dictionary<string, object>();
-        for (int i = 0; i < ids.Count; i++)
-        {
-            parameters[$"Id{i}"] = ids[i];
-        }
-
-        var ingredients = await ExecuteQueryAsync(sql, MapReaderToIngredientDto, parameters, cancellationToken: cancellationToken);
-
-        var result = new Dictionary<Guid, IngredientDto>();
-        foreach (var ingredient in ingredients)
-        {
-            result[ingredient.Id] = ingredient;
-        }
-
-        return result;
-    }
-
-    private async Task<Dictionary<string, Guid>> GetIngredientIdsByNamesFromDbAsync(List<string> names, CancellationToken cancellationToken)
-    {
-        // Use IN clause for batch query
-        var inClause = string.Join(",", names.Select((_, i) => $"@Name{i}"));
-        var sql = $@"
-            SELECT Id, Name
-            FROM Ingredient
-            WHERE LOWER(Name) IN ({string.Join(",", names.Select((_, i) => $"LOWER(@Name{i})"))}) AND IsDeleted = 0";
-
-        var parameters = new Dictionary<string, object>();
-        for (int i = 0; i < names.Count; i++)
-        {
-            parameters[$"Name{i}"] = names[i];
-        }
-
-        var results = await ExecuteQueryAsync(
-            sql,
-            reader => new
-            {
-                Id = reader.GetGuid(reader.GetOrdinal("Id")),
-                Name = reader.GetString(reader.GetOrdinal("Name"))
-            },
-            parameters,
-            cancellationToken: cancellationToken);
-
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in results)
-        {
-            result[item.Name] = item.Id;
-        }
-
-        return result;
-    }
-
-    private static IngredientDto MapReaderToIngredientDto(IDataReader reader)
+    private static IngredientDto MapFromReader(System.Data.IDataReader reader)
     {
         return new IngredientDto
         {
@@ -441,5 +195,18 @@ public class IngredientDal : DalOperationsBase<IngredientDto, ProductConnection>
         };
     }
 
-    #endregion
+    private static Dictionary<string, object> MapForBulk(IngredientDto i)
+    {
+        return new Dictionary<string, object>
+        {
+            ["Id"] = i.Id,
+            ["Name"] = i.Name,
+            ["AlternativeNames"] = (object?)i.AlternativeNames ?? DBNull.Value,
+            ["Description"] = (object?)i.Description ?? DBNull.Value,
+            ["Category"] = (object?)i.Category ?? "General",
+            ["IsCommonAllergen"] = i.IsCommonAllergen,
+            ["IngredientListString"] = (object?)i.IngredientListString ?? DBNull.Value,
+            ["IsDeleted"] = false
+        };
+    }
 }
