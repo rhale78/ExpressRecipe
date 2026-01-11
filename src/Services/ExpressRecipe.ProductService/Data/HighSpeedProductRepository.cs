@@ -489,7 +489,7 @@ public class HighSpeedProductRepository : SqlHelper, IHighSpeedProductRepository
             ApprovedAt = GetDateTimeNullable(reader, "ApprovedAt"),
             RejectionReason = GetString(reader, "RejectionReason"),
             SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
-            CreatedAt = GetDateTimeNullable(reader, "CreatedAt")
+            CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow
         };
     }
 
@@ -499,8 +499,26 @@ public class HighSpeedProductRepository : SqlHelper, IHighSpeedProductRepository
 
         try
         {
-            var images = await _productImageRepository.GetByProductIdAsync(product.Id);
-            product.Images = images;
+            var images = await _productImageRepository.GetImagesByProductIdAsync(product.Id);
+            product.Images = images.Select(img => new ProductImageDto
+            {
+                Id = img.Id,
+                ProductId = img.ProductId,
+                ImageType = img.ImageType,
+                ImageUrl = img.ImageUrl,
+                LocalFilePath = img.LocalFilePath,
+                FileName = img.FileName,
+                FileSize = img.FileSize,
+                MimeType = img.MimeType,
+                Width = img.Width,
+                Height = img.Height,
+                DisplayOrder = img.DisplayOrder,
+                IsPrimary = img.IsPrimary,
+                IsUserUploaded = img.IsUserUploaded,
+                SourceSystem = img.SourceSystem,
+                SourceId = img.SourceId,
+                CreatedAt = img.CreatedAt
+            }).ToList();
         }
         catch (Exception ex)
         {

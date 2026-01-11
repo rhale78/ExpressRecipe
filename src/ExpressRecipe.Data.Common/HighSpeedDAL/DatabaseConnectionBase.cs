@@ -71,21 +71,47 @@ public abstract class DatabaseConnectionBase
         Func<IDbConnection, IDbTransaction, Task<T>> action,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await CreateConnectionAsync(cancellationToken);
-        await using var transaction = connection.BeginTransaction();
+        var connection = await CreateConnectionAsync(cancellationToken);
+        IDbTransaction? transaction = null;
 
         try
         {
+            transaction = connection.BeginTransaction();
             var result = await action(connection, transaction);
-            await transaction.CommitAsync(cancellationToken);
+            
+            if (transaction is SqlTransaction sqlTransaction)
+            {
+                await sqlTransaction.CommitAsync(cancellationToken);
+            }
+            else
+            {
+                transaction.Commit();
+            }
+            
             Logger.LogDebug("Transaction committed successfully");
             return result;
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Transaction failed, rolling back");
-            await transaction.RollbackAsync(cancellationToken);
+            
+            if (transaction != null)
+            {
+                if (transaction is SqlTransaction sqlTransaction)
+                {
+                    await sqlTransaction.RollbackAsync(cancellationToken);
+                }
+                else
+                {
+                    transaction.Rollback();
+                }
+            }
             throw;
+        }
+        finally
+        {
+            transaction?.Dispose();
+            connection?.Dispose();
         }
     }
 }
