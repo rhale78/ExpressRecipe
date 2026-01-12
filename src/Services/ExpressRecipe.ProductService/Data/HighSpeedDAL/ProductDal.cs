@@ -6,32 +6,24 @@ using Microsoft.Extensions.Logging;
 namespace ExpressRecipe.ProductService.Data.HighSpeedDAL;
 
 /// <summary>
-/// Minimal high-speed DAL for Product entities following HighSpeedDAL framework pattern.
-/// Delegates to base class for all operations - no manual SQL required.
+/// Ultra-minimal HighSpeedDAL for Product - zero manual SQL, all delegated to base.
+/// Follows HighSpeedDAL simple CRUD pattern with generic operations.
 /// </summary>
 public interface IProductDal
 {
     Task<ProductDto?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<List<ProductDto>> GetAllAsync(CancellationToken ct = default);
-    Task<Guid> CreateAsync(ProductDto product, CancellationToken ct = default);
-    Task<bool> UpdateAsync(ProductDto product, CancellationToken ct = default);
+    Task<Guid> SaveAsync(ProductDto product, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
-    Task<int> BulkInsertAsync(IEnumerable<ProductDto> products, CancellationToken ct = default);
+    Task<int> BulkSaveAsync(IEnumerable<ProductDto> products, CancellationToken ct = default);
 }
 
-/// <summary>
-/// Implementation delegates all operations to DalOperationsBase.
-/// Uses HighSpeedDAL pattern: minimal code, maximum base class reuse.
-/// </summary>
 public class ProductDal : DalOperationsBase<ProductDto, ProductConnection>, IProductDal
 {
-    private readonly HybridCacheService? _cache;
     private const string TableName = "Product";
+    private readonly HybridCacheService? _cache;
 
-    public ProductDal(
-        ProductConnection connection,
-        ILogger<ProductDal> logger,
-        HybridCacheService? cache = null)
+    public ProductDal(ProductConnection connection, ILogger<ProductDal> logger, HybridCacheService? cache = null)
         : base(connection, logger)
     {
         _cache = cache;
@@ -39,118 +31,91 @@ public class ProductDal : DalOperationsBase<ProductDto, ProductConnection>, IPro
 
     public async Task<ProductDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
+        var cacheKey = $"product:{id}";
         if (_cache != null)
         {
-            var cacheKey = CacheKeys.FormatKey("product:id:{0}", id);
             var cached = await _cache.GetAsync<ProductDto>(cacheKey);
             if (cached != null) return cached;
         }
 
-        var sql = "SELECT * FROM Product WHERE Id = @Id AND IsDeleted = 0";
-        var results = await ExecuteQueryAsync(sql, MapFromReader, new { Id = id }, cancellationToken: ct);
-        var product = results.FirstOrDefault();
-
-        if (product != null && _cache != null)
+        var result = await GetByIdGenericAsync(TableName, id, MapFromReader, ct);
+        
+        if (result != null && _cache != null)
         {
-            var cacheKey = CacheKeys.FormatKey("product:id:{0}", id);
-            await _cache.SetAsync(cacheKey, product, TimeSpan.FromMinutes(15), TimeSpan.FromHours(1));
+            await _cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15), TimeSpan.FromHours(1));
         }
 
-        return product;
+        return result;
     }
 
-    public async Task<List<ProductDto>> GetAllAsync(CancellationToken ct = default)
-    {
-        var sql = "SELECT * FROM Product WHERE IsDeleted = 0 ORDER BY Name";
-        return await ExecuteQueryAsync(sql, MapFromReader, cancellationToken: ct);
-    }
+    public Task<List<ProductDto>> GetAllAsync(CancellationToken ct = default) 
+        => GetAllGenericAsync(TableName, MapFromReader, ct);
 
-    public async Task<Guid> CreateAsync(ProductDto product, CancellationToken ct = default)
+    public async Task<Guid> SaveAsync(ProductDto product, CancellationToken ct = default)
     {
-        product.Id = Guid.NewGuid();
-        product.CreatedAt = DateTime.UtcNow;
+        if (product.Id == Guid.Empty)
+        {
+            product.Id = Guid.NewGuid();
+            product.CreatedAt = DateTime.UtcNow;
+            await InsertGenericAsync(TableName, product, ct);
+        }
+        else
+        {
+            await UpdateGenericAsync(TableName, product, ct);
+        }
         
-        var sql = "INSERT INTO Product (Id, Name, Brand, Barcode, BarcodeType, Description, Category, ServingSize, ServingUnit, ImageUrl, ApprovalStatus, CreatedAt, IsDeleted) VALUES (@Id, @Name, @Brand, @Barcode, @BarcodeType, @Description, @Category, @ServingSize, @ServingUnit, @ImageUrl, @ApprovalStatus, @CreatedAt, 0)";
-        await ExecuteNonQueryAsync(sql, product, cancellationToken: ct);
+        if (_cache != null) await _cache.RemoveAsync($"product:{product.Id}");
         return product.Id;
-    }
-
-    public async Task<bool> UpdateAsync(ProductDto product, CancellationToken ct = default)
-    {
-        var sql = "UPDATE Product SET Name = @Name, Brand = @Brand, Description = @Description, Category = @Category, ServingSize = @ServingSize, ServingUnit = @ServingUnit WHERE Id = @Id AND IsDeleted = 0";
-        var rows = await ExecuteNonQueryAsync(sql, product, cancellationToken: ct);
-        
-        if (rows > 0 && _cache != null)
-        {
-            await _cache.RemoveAsync(CacheKeys.FormatKey("product:id:{0}", product.Id));
-        }
-        
-        return rows > 0;
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        var sql = "UPDATE Product SET IsDeleted = 1, DeletedAt = @DeletedAt WHERE Id = @Id";
-        var rows = await ExecuteNonQueryAsync(sql, new { Id = id, DeletedAt = DateTime.UtcNow }, cancellationToken: ct);
-        
-        if (rows > 0 && _cache != null)
+        var success = await SoftDeleteGenericAsync(TableName, id, ct);
+        if (success && _cache != null) await _cache.RemoveAsync($"product:{id}");
+        return success;
+    }
+
+    public async Task<int> BulkSaveAsync(IEnumerable<ProductDto> products, CancellationToken ct = default)
+    {
+        var list = products.ToList();
+        foreach (var p in list.Where(p => p.Id == Guid.Empty))
         {
-            await _cache.RemoveAsync(CacheKeys.FormatKey("product:id:{0}", id));
+            p.Id = Guid.NewGuid();
+            p.CreatedAt = DateTime.UtcNow;
         }
-        
-        return rows > 0;
+        return await BulkInsertAsync(TableName, list, MapForBulk, ct);
     }
 
-    public async Task<int> BulkInsertAsync(IEnumerable<ProductDto> products, CancellationToken ct = default)
+    private static ProductDto MapFromReader(System.Data.IDataReader r) => new()
     {
-        var productsList = products.ToList();
-        if (!productsList.Any()) return 0;
+        Id = r.GetGuid(r.GetOrdinal("Id")),
+        Name = r.GetString(r.GetOrdinal("Name")),
+        Brand = r.IsDBNull(r.GetOrdinal("Brand")) ? null : r.GetString(r.GetOrdinal("Brand")),
+        Barcode = r.IsDBNull(r.GetOrdinal("Barcode")) ? null : r.GetString(r.GetOrdinal("Barcode")),
+        BarcodeType = r.IsDBNull(r.GetOrdinal("BarcodeType")) ? null : r.GetString(r.GetOrdinal("BarcodeType")),
+        Description = r.IsDBNull(r.GetOrdinal("Description")) ? null : r.GetString(r.GetOrdinal("Description")),
+        Category = r.IsDBNull(r.GetOrdinal("Category")) ? null : r.GetString(r.GetOrdinal("Category")),
+        ServingSize = r.IsDBNull(r.GetOrdinal("ServingSize")) ? null : r.GetString(r.GetOrdinal("ServingSize")),
+        ServingUnit = r.IsDBNull(r.GetOrdinal("ServingUnit")) ? null : r.GetString(r.GetOrdinal("ServingUnit")),
+        ImageUrl = r.IsDBNull(r.GetOrdinal("ImageUrl")) ? null : r.GetString(r.GetOrdinal("ImageUrl")),
+        ApprovalStatus = r.GetString(r.GetOrdinal("ApprovalStatus")),
+        CreatedAt = r.GetDateTime(r.GetOrdinal("CreatedAt"))
+    };
 
-        foreach (var p in productsList)
-        {
-            if (p.Id == Guid.Empty) p.Id = Guid.NewGuid();
-            if (p.CreatedAt == default) p.CreatedAt = DateTime.UtcNow;
-        }
-
-        return await BulkInsertAsync(TableName, productsList, MapForBulk, ct);
-    }
-
-    private static ProductDto MapFromReader(System.Data.IDataReader reader)
+    private static Dictionary<string, object> MapForBulk(ProductDto p) => new()
     {
-        return new ProductDto
-        {
-            Id = reader.GetGuid(reader.GetOrdinal("Id")),
-            Name = reader.GetString(reader.GetOrdinal("Name")),
-            Brand = reader.IsDBNull(reader.GetOrdinal("Brand")) ? null : reader.GetString(reader.GetOrdinal("Brand")),
-            Barcode = reader.IsDBNull(reader.GetOrdinal("Barcode")) ? null : reader.GetString(reader.GetOrdinal("Barcode")),
-            BarcodeType = reader.IsDBNull(reader.GetOrdinal("BarcodeType")) ? null : reader.GetString(reader.GetOrdinal("BarcodeType")),
-            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
-            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
-            ServingSize = reader.IsDBNull(reader.GetOrdinal("ServingSize")) ? null : reader.GetString(reader.GetOrdinal("ServingSize")),
-            ServingUnit = reader.IsDBNull(reader.GetOrdinal("ServingUnit")) ? null : reader.GetString(reader.GetOrdinal("ServingUnit")),
-            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
-            ApprovalStatus = reader.GetString(reader.GetOrdinal("ApprovalStatus")),
-            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
-        };
-    }
-
-    private static Dictionary<string, object> MapForBulk(ProductDto p)
-    {
-        return new Dictionary<string, object>
-        {
-            ["Id"] = p.Id,
-            ["Name"] = p.Name,
-            ["Brand"] = (object?)p.Brand ?? DBNull.Value,
-            ["Barcode"] = (object?)p.Barcode ?? DBNull.Value,
-            ["BarcodeType"] = (object?)p.BarcodeType ?? DBNull.Value,
-            ["Description"] = (object?)p.Description ?? DBNull.Value,
-            ["Category"] = (object?)p.Category ?? DBNull.Value,
-            ["ServingSize"] = (object?)p.ServingSize ?? DBNull.Value,
-            ["ServingUnit"] = (object?)p.ServingUnit ?? DBNull.Value,
-            ["ImageUrl"] = (object?)p.ImageUrl ?? DBNull.Value,
-            ["ApprovalStatus"] = p.ApprovalStatus,
-            ["CreatedAt"] = p.CreatedAt,
-            ["IsDeleted"] = false
-        };
-    }
+        ["Id"] = p.Id,
+        ["Name"] = p.Name,
+        ["Brand"] = (object?)p.Brand ?? DBNull.Value,
+        ["Barcode"] = (object?)p.Barcode ?? DBNull.Value,
+        ["BarcodeType"] = (object?)p.BarcodeType ?? DBNull.Value,
+        ["Description"] = (object?)p.Description ?? DBNull.Value,
+        ["Category"] = (object?)p.Category ?? DBNull.Value,
+        ["ServingSize"] = (object?)p.ServingSize ?? DBNull.Value,
+        ["ServingUnit"] = (object?)p.ServingUnit ?? DBNull.Value,
+        ["ImageUrl"] = (object?)p.ImageUrl ?? DBNull.Value,
+        ["ApprovalStatus"] = p.ApprovalStatus,
+        ["CreatedAt"] = p.CreatedAt,
+        ["IsDeleted"] = false
+    };
 }

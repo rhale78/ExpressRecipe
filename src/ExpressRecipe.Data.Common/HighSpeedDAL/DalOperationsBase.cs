@@ -312,4 +312,86 @@ public abstract class DalOperationsBase<TEntity, TConnection>
     }
 
     #endregion
+
+    #region Generic CRUD Helpers (HighSpeedDAL Pattern)
+
+    /// <summary>
+    /// Generic Get by ID - constructs SQL automatically from table name.
+    /// </summary>
+    protected async Task<TEntity?> GetByIdGenericAsync<TKey>(
+        string tableName,
+        TKey id,
+        Func<IDataReader, TEntity> mapper,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = $"SELECT * FROM {tableName} WHERE Id = @Id AND IsDeleted = 0";
+        var results = await ExecuteQueryAsync(sql, mapper, new { Id = id }, cancellationToken: cancellationToken);
+        return results.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Generic Get All - constructs SQL automatically from table name.
+    /// </summary>
+    protected async Task<List<TEntity>> GetAllGenericAsync(
+        string tableName,
+        Func<IDataReader, TEntity> mapper,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = $"SELECT * FROM {tableName} WHERE IsDeleted = 0";
+        return await ExecuteQueryAsync(sql, mapper, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Generic Insert - constructs SQL automatically from entity properties.
+    /// </summary>
+    protected async Task<int> InsertGenericAsync(
+        string tableName,
+        object entity,
+        CancellationToken cancellationToken = default)
+    {
+        var properties = entity.GetType().GetProperties()
+            .Where(p => p.Name != "Images" && p.Name != "Ingredients" && p.Name != "Allergens" && p.Name != "Nutrition")
+            .ToList();
+        
+        var columns = string.Join(", ", properties.Select(p => p.Name));
+        var values = string.Join(", ", properties.Select(p => $"@{p.Name}"));
+        var sql = $"INSERT INTO {tableName} ({columns}) VALUES ({values})";
+        
+        return await ExecuteNonQueryAsync(sql, entity, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Generic Update - constructs SQL automatically from entity properties.
+    /// </summary>
+    protected async Task<int> UpdateGenericAsync(
+        string tableName,
+        object entity,
+        CancellationToken cancellationToken = default)
+    {
+        var properties = entity.GetType().GetProperties()
+            .Where(p => p.Name != "Id" && p.Name != "CreatedAt" && 
+                       p.Name != "Images" && p.Name != "Ingredients" && 
+                       p.Name != "Allergens" && p.Name != "Nutrition")
+            .ToList();
+        
+        var setClause = string.Join(", ", properties.Select(p => $"{p.Name} = @{p.Name}"));
+        var sql = $"UPDATE {tableName} SET {setClause} WHERE Id = @Id AND IsDeleted = 0";
+        
+        return await ExecuteNonQueryAsync(sql, entity, cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Generic Soft Delete - constructs SQL automatically.
+    /// </summary>
+    protected async Task<bool> SoftDeleteGenericAsync<TKey>(
+        string tableName,
+        TKey id,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = $"UPDATE {tableName} SET IsDeleted = 1, DeletedAt = @DeletedAt WHERE Id = @Id";
+        var rows = await ExecuteNonQueryAsync(sql, new { Id = id, DeletedAt = DateTime.UtcNow }, cancellationToken: cancellationToken);
+        return rows > 0;
+    }
+
+    #endregion
 }
