@@ -8,19 +8,19 @@ namespace ExpressRecipe.ProductService.Data;
 public interface IIngredientRepository
 {
     Task<List<IngredientDto>> GetAllAsync();
-    Task<IngredientDto?> GetByIdAsync(Guid id);
+    Task<IngredientDto?> GetByIdAsync(int id);
     Task<List<IngredientDto>> SearchByNameAsync(string searchTerm);
     Task<List<IngredientDto>> GetByCategoryAsync(string category);
-    Task<Guid> CreateAsync(CreateIngredientRequest request, Guid? createdBy = null);
-    Task<bool> UpdateAsync(Guid id, UpdateIngredientRequest request, Guid? updatedBy = null);
-    Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null);
-    Task<List<ProductIngredientDto>> GetProductIngredientsAsync(Guid productId);
-    Task<Guid> AddProductIngredientAsync(Guid productId, AddProductIngredientRequest request, Guid? createdBy = null);
-    Task<bool> RemoveProductIngredientAsync(Guid productIngredientId, Guid? deletedBy = null);
+    Task<int> CreateAsync(CreateIngredientRequest request, int? createdBy = null);
+    Task<bool> UpdateAsync(int id, UpdateIngredientRequest request, int? updatedBy = null);
+    Task<bool> DeleteAsync(int id, int? deletedBy = null);
+    Task<List<ProductIngredientDto>> GetProductIngredientsAsync(int productId);
+    Task<int> AddProductIngredientAsync(int productId, AddProductIngredientRequest request, int? createdBy = null);
+    Task<bool> RemoveProductIngredientAsync(int productIngredientId, int? deletedBy = null);
 
     // Bulk operations for performance
-    Task<Dictionary<string, Guid>> GetIngredientIdsByNamesAsync(IEnumerable<string> names);
-    Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, Guid? createdBy = null);
+    Task<Dictionary<string, int>> GetIngredientIdsByNamesAsync(IEnumerable<string> names);
+    Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, int? createdBy = null);
 }
 
 public class IngredientRepository : SqlHelper, IIngredientRepository

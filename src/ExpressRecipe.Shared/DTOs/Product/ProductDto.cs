@@ -4,7 +4,7 @@ namespace ExpressRecipe.Shared.DTOs.Product;
 
 public class ProductDto
 {
-    public Guid Id { get; set; }
+    public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Brand { get; set; }
     public string? Barcode { get; set; }
@@ -17,10 +17,10 @@ public class ProductDto
     public string? ImageUrl { get; set; } // Legacy - use Images collection instead
     public List<ProductImageDto> Images { get; set; } = new(); // Product images
     public string ApprovalStatus { get; set; } = "Pending";
-    public Guid? ApprovedBy { get; set; }
+    public int? ApprovedBy { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public string? RejectionReason { get; set; }
-    public Guid? SubmittedBy { get; set; }
+    public int? SubmittedBy { get; set; }
     public DateTime CreatedAt { get; set; } // Import/creation date
     public List<ProductIngredientDto> Ingredients { get; set; } = new();
     public List<string> Allergens { get; set; } = new(); // For quick allergen checks
@@ -59,7 +59,7 @@ public class CreateProductRequest
     [StringLength(500)]
     public string? ImageUrl { get; set; }
 
-    public List<Guid> IngredientIds { get; set; } = new();
+    public List<int> IngredientIds { get; set; } = new();
 }
 
 public class UpdateProductRequest
