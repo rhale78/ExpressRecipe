@@ -50,7 +50,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             sql,
             reader => new IngredientDto
             {
-                Id = GetInt32(reader, "Id"),
+                Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
@@ -60,7 +60,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             });
     }
 
-    public async Task<IngredientDto?> GetByIdAsync(int id)
+    public async Task<IngredientDto?> GetByIdAsync(Guid id)
     {
         if (_cache != null)
         {
@@ -76,7 +76,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
         return await GetByIdFromDbAsync(id);
     }
 
-    private async Task<IngredientDto?> GetByIdFromDbAsync(int id)
+    private async Task<IngredientDto?> GetByIdFromDbAsync(Guid id)
     {
         const string sql = @"
             SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen, IngredientListString
@@ -87,7 +87,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             sql,
             reader => new IngredientDto
             {
-                Id = GetInt32(reader, "Id"),
+                Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
@@ -113,7 +113,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             sql,
             reader => new IngredientDto
             {
-                Id = GetInt32(reader, "Id"),
+                Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
@@ -136,7 +136,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             sql,
             reader => new IngredientDto
             {
-                Id = GetInt32(reader, "Id"),
+                Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 AlternativeNames = GetString(reader, "AlternativeNames"),
                 Description = GetString(reader, "Description"),
@@ -147,23 +147,25 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             CreateParameter("@Category", category));
     }
 
-    public async Task<int> CreateAsync(CreateIngredientRequest request, int? createdBy = null)
+    public async Task<Guid> CreateAsync(CreateIngredientRequest request, Guid? createdBy = null)
     {
         const string sql = @"
             INSERT INTO Ingredient (
-                Name, AlternativeNames, Description, Category,
+                Id, Name, AlternativeNames, Description, Category,
                 IsCommonAllergen, IngredientListString, CreatedBy, CreatedAt
             )
             VALUES (
-                @Name, @AlternativeNames, @Description, @Category,
+                @Id, @Name, @AlternativeNames, @Description, @Category,
                 @IsCommonAllergen, @IngredientListString, @CreatedBy, GETUTCDATE()
-            );
-            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+            )";
+
+        var ingredientId = Guid.NewGuid();
 
             // Use 120 second timeout for bulk processing operations to avoid timeouts
-            var ingredientId = await ExecuteScalarAsync<int>(
+            await ExecuteNonQueryAsync(
                 sql,
                 timeoutSeconds: 120,
+                CreateParameter("@Id", ingredientId),
                 CreateParameter("@Name", request.Name),
                 CreateParameter("@AlternativeNames", request.AlternativeNames),
                 CreateParameter("@Description", request.Description),
@@ -182,7 +184,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             return ingredientId;
         }
 
-    public async Task<bool> UpdateAsync(int id, UpdateIngredientRequest request, int? updatedBy = null)
+    public async Task<bool> UpdateAsync(Guid id, UpdateIngredientRequest request, Guid? updatedBy = null)
     {
         const string sql = @"
             UPDATE Ingredient
@@ -217,7 +219,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
         return rowsAffected > 0;
     }
 
-    public async Task<bool> DeleteAsync(int id, int? deletedBy = null)
+    public async Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null)
     {
         const string sql = @"
             UPDATE Ingredient
@@ -235,7 +237,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
         return rowsAffected > 0;
     }
 
-    public async Task<List<ProductIngredientDto>> GetProductIngredientsAsync(int productId)
+    public async Task<List<ProductIngredientDto>> GetProductIngredientsAsync(Guid productId)
     {
         const string sql = @"
             SELECT pi.Id, pi.ProductId, pi.IngredientId, i.Name as IngredientName,
@@ -249,9 +251,9 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             sql,
             reader => new ProductIngredientDto
             {
-                Id = GetInt32(reader, "Id"),
-                ProductId = GetInt32(reader, "ProductId"),
-                IngredientId = GetInt32(reader, "IngredientId"),
+                Id = GetGuid(reader, "Id"),
+                ProductId = GetGuid(reader, "ProductId"),
+                IngredientId = GetGuid(reader, "IngredientId"),
                 IngredientName = GetString(reader, "IngredientName") ?? string.Empty,
                 OrderIndex = GetInt32(reader, "OrderIndex"),
                 Quantity = GetString(reader, "Quantity"),
@@ -261,7 +263,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             CreateParameter("@ProductId", productId));
     }
 
-    public async Task<int> AddProductIngredientAsync(int productId, AddProductIngredientRequest request, int? createdBy = null)
+    public async Task<Guid> AddProductIngredientAsync(Guid productId, AddProductIngredientRequest request, Guid? createdBy = null)
     {
         // Check if this combination already exists
         const string checkSql = @"
@@ -270,7 +272,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
               AND IngredientId = @IngredientId
               AND IsDeleted = 0";
 
-        var existingId = await ExecuteScalarAsync<int?>(
+        var existingId = await ExecuteScalarAsync<Guid?>(
             checkSql,
             CreateParameter("@ProductId", productId),
             CreateParameter("@IngredientId", request.IngredientId));
@@ -283,21 +285,23 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
         const string sql = @"
             INSERT INTO ProductIngredient (
-                ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString,
+                Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString,
                 CreatedBy, CreatedAt
             )
             VALUES (
-                @ProductId, @IngredientId, @OrderIndex, @Quantity, @Notes, @IngredientListString,
+                @Id, @ProductId, @IngredientId, @OrderIndex, @Quantity, @Notes, @IngredientListString,
                 @CreatedBy, GETUTCDATE()
-            );
-            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+            )";
+
+        var productIngredientId = Guid.NewGuid();
 
         try
         {
             // Use 120 second timeout for bulk processing operations to avoid timeouts
-            var productIngredientId = await ExecuteScalarAsync<int>(
+            await ExecuteNonQueryAsync(
                 sql,
                 timeoutSeconds: 120,
+                CreateParameter("@Id", productIngredientId),
                 CreateParameter("@ProductId", productId),
                 CreateParameter("@IngredientId", request.IngredientId),
                 CreateParameter("@OrderIndex", request.OrderIndex),
@@ -305,14 +309,12 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 CreateParameter("@Notes", request.Notes),
                 CreateParameter("@IngredientListString", request.IngredientListString),
                 CreateParameter("@CreatedBy", createdBy));
-            
-            return productIngredientId;
         }
         catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
         {
             // Unique constraint violation - race condition occurred
             // Fetch the existing record ID
-            var existingRecordId = await ExecuteScalarAsync<int?>(
+            var existingRecordId = await ExecuteScalarAsync<Guid?>(
                 checkSql,
                 CreateParameter("@ProductId", productId),
                 CreateParameter("@IngredientId", request.IngredientId));
@@ -325,9 +327,11 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             // If we still can't find it, rethrow
             throw;
         }
+
+        return productIngredientId;
     }
 
-    public async Task<bool> RemoveProductIngredientAsync(int productIngredientId, int? deletedBy = null)
+    public async Task<bool> RemoveProductIngredientAsync(Guid productIngredientId, Guid? deletedBy = null)
     {
         const string sql = @"
             UPDATE ProductIngredient
@@ -350,13 +354,13 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
     /// Instead of N individual queries, this does 1 query to get all ingredient IDs
     /// CACHED: Individual ingredient name-to-ID mappings cached for 24 hours
     /// </summary>
-    public async Task<Dictionary<string, int>> GetIngredientIdsByNamesAsync(IEnumerable<string> names)
+    public async Task<Dictionary<string, Guid>> GetIngredientIdsByNamesAsync(IEnumerable<string> names)
     {
         var namesList = names.ToList();
         if (!namesList.Any())
             return new Dictionary<string, Guid>();
 
-        var result = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
         // If cache available, check cached values first
         var uncachedNames = new List<string>();
@@ -412,7 +416,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 reader => new
                 {
                     Name = GetString(reader, "Name") ?? string.Empty,
-                    Id = GetInt32(reader, "Id")
+                    Id = GetGuid(reader, "Id")
                 },
                 parameters.ToArray());
 
@@ -442,9 +446,9 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
     /// <summary>
     /// Bulk create ingredients - much faster than individual inserts
-    /// Uses batched INSERT statements for optimal performance
+    /// Uses Table-Valued Parameters for optimal performance
     /// </summary>
-    public async Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, int? createdBy = null)
+    public async Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, Guid? createdBy = null)
     {
         var namesList = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (!namesList.Any())
@@ -460,15 +464,19 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
             for (int i = 0; i < batch.Length; i++)
             {
+                var id = Guid.NewGuid();
                 var nameParam = $"@Name{i}";
-                valuesClauses.Add($"({nameParam}, 'General', @CreatedBy, GETUTCDATE())");
+                var idParam = $"@Id{i}";
+
+                valuesClauses.Add($"({idParam}, {nameParam}, 'General', @CreatedBy, GETUTCDATE())");
                 parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter(nameParam, batch[i]));
+                parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter(idParam, id));
             }
 
             parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter("@CreatedBy", createdBy));
 
             var sql = $@"
-                INSERT INTO Ingredient (Name, Category, CreatedBy, CreatedAt)
+                INSERT INTO Ingredient (Id, Name, Category, CreatedBy, CreatedAt)
                 VALUES {string.Join(", ", valuesClauses)}";
 
             try

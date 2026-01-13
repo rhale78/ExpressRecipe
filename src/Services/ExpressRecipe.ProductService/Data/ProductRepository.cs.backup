@@ -44,7 +44,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         _logger = logger;
     }
 
-    public async Task<ProductDto?> GetByIdAsync(int id)
+    public async Task<ProductDto?> GetByIdAsync(Guid id)
     {
         if (_cache != null)
         {
@@ -59,7 +59,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         return await GetByIdFromDbAsync(id);
     }
 
-    private async Task<ProductDto?> GetByIdFromDbAsync(int id)
+    private async Task<ProductDto?> GetByIdFromDbAsync(Guid id)
     {
         const string sql = @"
             SELECT Id, Name, Brand, Barcode, BarcodeType, Description, Category,
@@ -72,7 +72,7 @@ public class ProductRepository : SqlHelper, IProductRepository
             sql,
             reader => new ProductDto
             {
-                Id = GetInt32(reader, "Id"),
+                Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Brand = GetString(reader, "Brand"),
                 Barcode = GetString(reader, "Barcode"),
@@ -83,10 +83,10 @@ public class ProductRepository : SqlHelper, IProductRepository
                 ServingUnit = GetString(reader, "ServingUnit"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 ApprovalStatus = GetString(reader, "ApprovalStatus") ?? "Pending",
-                ApprovedBy = GetInt32Nullable(reader, "ApprovedBy"),
+                ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
                 RejectionReason = GetString(reader, "RejectionReason"),
-                SubmittedBy = GetInt32Nullable(reader, "SubmittedBy"),
+                SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
                 CreatedAt = GetDateTime(reader, "CreatedAt")
             },
             CreateParameter("@Id", id));
@@ -117,7 +117,7 @@ public class ProductRepository : SqlHelper, IProductRepository
             sql,
             reader => new ProductDto
             {
-                Id = GetInt32(reader, "Id"),
+                Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Brand = GetString(reader, "Brand"),
                 Barcode = GetString(reader, "Barcode"),
@@ -128,10 +128,10 @@ public class ProductRepository : SqlHelper, IProductRepository
                 ServingUnit = GetString(reader, "ServingUnit"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 ApprovalStatus = GetString(reader, "ApprovalStatus") ?? "Pending",
-                ApprovedBy = GetInt32Nullable(reader, "ApprovedBy"),
+                ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
                 RejectionReason = GetString(reader, "RejectionReason"),
-                SubmittedBy = GetInt32Nullable(reader, "SubmittedBy"),
+                SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
                 CreatedAt = GetDateTime(reader, "CreatedAt")
             },
             CreateParameter("@Barcode", barcode));
@@ -308,7 +308,7 @@ public class ProductRepository : SqlHelper, IProductRepository
             sql,
             reader => new ProductDto
             {
-                Id = GetInt32(reader, "Id"),
+                Id = GetGuid(reader, "Id"),
                 Name = GetString(reader, "Name") ?? string.Empty,
                 Brand = GetString(reader, "Brand"),
                 Barcode = GetString(reader, "Barcode"),
@@ -319,10 +319,10 @@ public class ProductRepository : SqlHelper, IProductRepository
                 ServingUnit = GetString(reader, "ServingUnit"),
                 ImageUrl = GetString(reader, "ImageUrl"),
                 ApprovalStatus = GetString(reader, "ApprovalStatus") ?? "Pending",
-                ApprovedBy = GetInt32Nullable(reader, "ApprovedBy"),
+                ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
                 RejectionReason = GetString(reader, "RejectionReason"),
-                SubmittedBy = GetInt32Nullable(reader, "SubmittedBy"),
+                SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
                 CreatedAt = GetDateTime(reader, "CreatedAt")
             },
             parameters.ToArray());
@@ -490,23 +490,25 @@ public class ProductRepository : SqlHelper, IProductRepository
         return results.ToDictionary(r => r.Letter, r => r.Count);
     }
 
-    public async Task<int> CreateAsync(CreateProductRequest request, int? createdBy = null)
+    public async Task<Guid> CreateAsync(CreateProductRequest request, Guid? createdBy = null)
     {
         const string sql = @"
             INSERT INTO Product (
-                Name, Brand, Barcode, BarcodeType, Description, Category,
+                Id, Name, Brand, Barcode, BarcodeType, Description, Category,
                 ServingSize, ServingUnit, ImageUrl, ApprovalStatus,
                 SubmittedBy, CreatedBy, CreatedAt
             )
             VALUES (
-                @Name, @Brand, @Barcode, @BarcodeType, @Description, @Category,
+                @Id, @Name, @Brand, @Barcode, @BarcodeType, @Description, @Category,
                 @ServingSize, @ServingUnit, @ImageUrl, 'Pending',
                 @SubmittedBy, @CreatedBy, GETUTCDATE()
-            );
-            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+            )";
 
-        var productId = await ExecuteScalarAsync<int>(
+        var productId = Guid.NewGuid();
+
+        await ExecuteNonQueryAsync(
             sql,
+            CreateParameter("@Id", productId),
             CreateParameter("@Name", request.Name),
             CreateParameter("@Brand", request.Brand),
             CreateParameter("@Barcode", request.Barcode),
@@ -525,20 +527,21 @@ public class ProductRepository : SqlHelper, IProductRepository
             return productId;
     }
 
-    public async Task<int> CreateProductAsync(CreateProductRequest request)
+    public async Task<Guid> CreateProductAsync(CreateProductRequest request)
     {
         // Delegate to the existing CreateAsync implementation
         return await CreateAsync(request, null);
     }
 
-    public async Task AddIngredientToProductAsync(int productId, string ingredient, int orderIndex = 0)
+    public async Task AddIngredientToProductAsync(Guid productId, string ingredient, int orderIndex = 0)
     {
         const string sql = @"
-            INSERT INTO ProductIngredient (ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString, CreatedBy, CreatedAt)
-            VALUES (@ProductId, NULL, @OrderIndex, NULL, NULL, @IngredientListString, NULL, GETUTCDATE())";
+            INSERT INTO ProductIngredient (Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString, CreatedBy, CreatedAt)
+            VALUES (@Id, @ProductId, NULL, @OrderIndex, NULL, NULL, @IngredientListString, NULL, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
             sql,
+            CreateParameter("@Id", Guid.NewGuid()),
                     CreateParameter("@ProductId", productId),
                     CreateParameter("@OrderIndex", orderIndex),
                     CreateParameter("@IngredientListString", ingredient));
@@ -550,26 +553,28 @@ public class ProductRepository : SqlHelper, IProductRepository
                 }
             }
 
-    public async Task AddLabelToProductAsync(int productId, string label)
+    public async Task AddLabelToProductAsync(Guid productId, string label)
     {
         const string sql = @"
-            INSERT INTO ProductLabel (ProductId, LabelName, CreatedAt)
-            VALUES (@ProductId, @LabelName, GETUTCDATE())";
+            INSERT INTO ProductLabel (Id, ProductId, LabelName, CreatedAt)
+            VALUES (@Id, @ProductId, @LabelName, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
             sql,
+            CreateParameter("@Id", Guid.NewGuid()),
             CreateParameter("@ProductId", productId),
             CreateParameter("@LabelName", label));
     }
 
-    public async Task AddAllergenToProductAsync(int productId, string allergen)
+    public async Task AddAllergenToProductAsync(Guid productId, string allergen)
     {
         const string sql = @"
-            INSERT INTO ProductAllergen (ProductId, AllergenName, CreatedAt)
-            VALUES (@ProductId, @AllergenName, GETUTCDATE())";
+            INSERT INTO ProductAllergen (Id, ProductId, AllergenName, CreatedAt)
+            VALUES (@Id, @ProductId, @AllergenName, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
             sql,
+                    CreateParameter("@Id", Guid.NewGuid()),
                     CreateParameter("@ProductId", productId),
                     CreateParameter("@AllergenName", allergen));
 
@@ -580,27 +585,29 @@ public class ProductRepository : SqlHelper, IProductRepository
                 }
             }
 
-    public async Task AddExternalLinkAsync(int productId, string source, string externalId)
+    public async Task AddExternalLinkAsync(Guid productId, string source, string externalId)
     {
         const string sql = @"
-            INSERT INTO ProductExternalLink (ProductId, Source, ExternalId, CreatedAt)
-            VALUES (@ProductId, @Source, @ExternalId, GETUTCDATE())";
+            INSERT INTO ProductExternalLink (Id, ProductId, Source, ExternalId, CreatedAt)
+            VALUES (@Id, @ProductId, @Source, @ExternalId, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
             sql,
+            CreateParameter("@Id", Guid.NewGuid()),
             CreateParameter("@ProductId", productId),
             CreateParameter("@Source", source),
             CreateParameter("@ExternalId", externalId));
     }
 
-    public async Task UpdateProductMetadataAsync(int productId, string key, string value)
+    public async Task UpdateProductMetadataAsync(Guid productId, string key, string value)
     {
         const string sql = @"
-            INSERT INTO ProductMetadata (ProductId, MetaKey, MetaValue, CreatedAt)
-            VALUES (@ProductId, @MetaKey, @MetaValue, GETUTCDATE())";
+            INSERT INTO ProductMetadata (Id, ProductId, MetaKey, MetaValue, CreatedAt)
+            VALUES (@Id, @ProductId, @MetaKey, @MetaValue, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
             sql,
+            CreateParameter("@Id", Guid.NewGuid()),
             CreateParameter("@ProductId", productId),
             CreateParameter("@MetaKey", key),
             CreateParameter("@MetaValue", value));
@@ -622,7 +629,7 @@ public class ProductRepository : SqlHelper, IProductRepository
                 sql,
                 reader => new ProductDto
                 {
-                    Id = GetInt32(reader, "Id"),
+                    Id = GetGuid(reader, "Id"),
                     Name = GetString(reader, "Name") ?? string.Empty,
                     Brand = GetString(reader, "Brand"),
                     Barcode = GetString(reader, "Barcode"),
@@ -633,10 +640,10 @@ public class ProductRepository : SqlHelper, IProductRepository
                     ServingUnit = GetString(reader, "ServingUnit"),
                     ImageUrl = GetString(reader, "ImageUrl"),
                     ApprovalStatus = GetString(reader, "ApprovalStatus") ?? "Pending",
-                    ApprovedBy = GetInt32Nullable(reader, "ApprovedBy"),
+                    ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
                     ApprovedAt = GetDateTime(reader, "ApprovedAt"),
                     RejectionReason = GetString(reader, "RejectionReason"),
-                    SubmittedBy = GetInt32Nullable(reader, "SubmittedBy")
+                    SubmittedBy = GetGuidNullable(reader, "SubmittedBy")
                 },
                 CreateParameter("@Source", source),
                 CreateParameter("@ExternalId", externalId));
@@ -650,7 +657,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         }
     }
 
-    public async Task<bool> UpdateAsync(int id, UpdateProductRequest request, int? updatedBy = null)
+    public async Task<bool> UpdateAsync(Guid id, UpdateProductRequest request, Guid? updatedBy = null)
     {
         const string sql = @"
             UPDATE Product
@@ -701,7 +708,7 @@ public class ProductRepository : SqlHelper, IProductRepository
             return rowsAffected > 0;
     }
 
-    public async Task<bool> DeleteAsync(int id, int? deletedBy = null)
+    public async Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null)
     {
         const string sql = @"
             UPDATE Product
@@ -730,7 +737,7 @@ public class ProductRepository : SqlHelper, IProductRepository
             return rowsAffected > 0;
     }
 
-    public async Task<bool> ApproveAsync(int id, bool approve, int approvedBy, string? rejectionReason = null)
+    public async Task<bool> ApproveAsync(Guid id, bool approve, Guid approvedBy, string? rejectionReason = null)
     {
         const string sql = @"
             UPDATE Product
@@ -753,7 +760,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         return rowsAffected > 0;
     }
 
-        public async Task<bool> ProductExistsAsync(int id)
+        public async Task<bool> ProductExistsAsync(Guid id)
         {
             const string sql = "SELECT COUNT(*) FROM Product WHERE Id = @Id AND IsDeleted = 0";
 
