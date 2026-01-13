@@ -23,6 +23,11 @@
     <ProjectReference Include="..\..\ExpressRecipe.ServiceDefaults\ExpressRecipe.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Data.Common\ExpressRecipe.Data.Common.csproj" />
+    <ProjectReference Include="..\..\HighSpeedDAL\HighSpeedDAL.Core\HighSpeedDAL.Core.csproj" />
+    <ProjectReference Include="..\..\HighSpeedDAL\HighSpeedDAL.SqlServer\HighSpeedDAL.SqlServer.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\HighSpeedDAL\HighSpeedDAL.SourceGenerators\HighSpeedDAL.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />

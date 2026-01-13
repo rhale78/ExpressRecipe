@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <!-- NuGet Package Properties -->
+    <PackageId>HighSpeedDAL.SqlServer</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>rhale78</Authors>
+    <Company>HighSpeedDAL</Company>
+    <Product>HighSpeedDAL</Product>
+    <Description>SQL Server provider implementation for HighSpeedDAL - high-performance data access with optimized bulk operations and connection management.</Description>
+    <PackageTags>dal;orm;database;sql;sqlserver;performance;crud;bulk-operations</PackageTags>
+    <PackageProjectUrl>https://github.com/rhale78/HighSpeedDAL</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/rhale78/HighSpeedDAL</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HighSpeedDAL.Core\HighSpeedDAL.Core.csproj" />
+  </ItemGroup>
+
+</Project>

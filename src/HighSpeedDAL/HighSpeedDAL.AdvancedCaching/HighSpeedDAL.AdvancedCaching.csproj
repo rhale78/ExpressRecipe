@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Title>HighSpeedDAL Advanced Caching</Title>
+    <Description>Advanced caching strategies for HighSpeedDAL including read-through, write-through, cache-aside, and distributed cache coordination patterns</Description>
+    <Version>1.0.0</Version>
+
+    <!-- NuGet Package Properties -->
+    <PackageId>HighSpeedDAL.AdvancedCaching</PackageId>
+    <Authors>rhale78</Authors>
+    <Company>HighSpeedDAL</Company>
+    <Product>HighSpeedDAL</Product>
+    <PackageTags>dal;orm;caching;redis;distributed-cache;cache-coordination;performance</PackageTags>
+    <PackageProjectUrl>https://github.com/rhale78/HighSpeedDAL</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/rhale78/HighSpeedDAL</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Project References -->
+    <ProjectReference Include="..\HighSpeedDAL.Core\HighSpeedDAL.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Core .NET Dependencies -->
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+
+    <!-- Database Providers -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+
+    <!-- Redis for Distributed Caching -->
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+
+    <!-- JSON Serialization -->
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+</Project>
