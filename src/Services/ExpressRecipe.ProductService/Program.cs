@@ -1,6 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Services;
+using ExpressRecipe.ProductService.Entities;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -54,8 +55,21 @@ builder.Services.AddAuthorization();
 var connectionString = builder.Configuration.GetConnectionString("productdb")
     ?? throw new InvalidOperationException("Database connection string 'productdb' not found");
 
+// Register HighSpeedDAL components
+builder.Services.AddSingleton<ProductDatabaseConnection>();
+builder.Services.AddSingleton<ProductEntityDal>();
+builder.Services.AddSingleton<IngredientEntityDal>();
+
+// Keep existing repositories for now (fallback) alongside HighSpeedDAL adapters
 builder.Services.AddScoped<IProductImageRepository>(sp => 
     new ProductImageRepository(connectionString, sp.GetRequiredService<ILogger<ProductImageRepository>>()));
+
+// Option 1: Use HighSpeedDAL adapters (RECOMMENDED - new pattern)
+builder.Services.AddScoped<IProductRepository, ProductRepositoryAdapter>();
+builder.Services.AddScoped<IIngredientRepository, IngredientRepositoryAdapter>();
+
+// Option 2: Keep old repositories (FALLBACK - comment out above and uncomment below if needed)
+/*
 builder.Services.AddScoped<IProductRepository>(sp => 
 {
     var cache = sp.GetRequiredService<HybridCacheService>();
@@ -68,6 +82,7 @@ builder.Services.AddScoped<IIngredientRepository>(sp =>
     var logger = sp.GetRequiredService<ILogger<IngredientRepository>>();
     return new IngredientRepository(connectionString, cache, logger);
 });
+*/
 builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
 builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
 builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
