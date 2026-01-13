@@ -1,6 +1,12 @@
 # HighSpeed DAL for Products and Ingredients
 
-This directory contains ultra-minimal Data Access Layer (DAL) implementations for Products and Ingredients, following the [HighSpeedDAL framework](https://github.com/rhale78/HighSpeedDAL) simple CRUD pattern.
+This directory contains ultra-minimal Data Access Layer (DAL) implementations for Products and Ingredients, **inspired by** the [HighSpeedDAL framework](https://github.com/rhale78/HighSpeedDAL) principles.
+
+## Important Note
+
+**This is NOT using the actual HighSpeedDAL NuGet packages.** The actual HighSpeedDAL framework uses **Roslyn source generators** to auto-generate DAL classes from entity attributes. Our implementation **emulates the same principles** (minimal code, zero SQL in DAL classes, generic base methods) without requiring the source generators or GitHub package authentication.
+
+For full HighSpeedDAL integration instructions, see [HIGHSPEED_DAL_PROPER_INTEGRATION.md](../../../../../../HIGHSPEED_DAL_PROPER_INTEGRATION.md).
 
 ## Philosophy
 
