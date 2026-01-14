@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <HighSpeedDAL_DatabaseProvider>SqlServer</HighSpeedDAL_DatabaseProvider>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>HighSpeedDAL.SimpleCrudExample</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Configuration -->
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+    <PackageReference Include="MessagePack" Version="2.5.187" />
+
+    <!-- Database -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- HighSpeedDAL References -->
+    <ProjectReference Include="..\..\src\HighSpeedDAL.Core\HighSpeedDAL.Core.csproj" />
+    <ProjectReference Include="..\..\src\HighSpeedDAL.SqlServer\HighSpeedDAL.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\HighSpeedDAL.Sqlite\HighSpeedDAL.Sqlite.csproj" />
+    <ProjectReference Include="..\..\src\HighSpeedDAL.SourceGenerators\HighSpeedDAL.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

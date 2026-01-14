@@ -6,40 +6,38 @@ namespace ExpressRecipe.ProductService.Entities;
 
 /// <summary>
 /// Ingredient entity for HighSpeedDAL with auto-generated CRUD operations
+/// Framework will auto-generate: public Guid Id { get; set; }
 /// </summary>
-[Table("Ingredient")]
+[Table("Ingredient", PrimaryKeyType = PrimaryKeyType.Guid)]
 [Cache(CacheStrategy.TwoLayer, MaxSize = 20000, ExpirationSeconds = 1800)] // 30 min memory, longer distributed
 [DalEntity] // Triggers source generator to create IngredientEntityDal
 [MessagePackObject]
 public partial class IngredientEntity
 {
     [Key(0)]
-    public int Id { get; set; }
-
-    [Key(1)]
     [Index(IsUnique = true)]
     public string Name { get; set; } = string.Empty;
 
-    [Key(2)]
+    [Key(1)]
     public string? Description { get; set; }
 
-    [Key(3)]
+    [Key(2)]
     [Index]
     public string? Category { get; set; }
 
-    [Key(4)]
+    [Key(3)]
     public bool IsAllergen { get; set; } = false;
 
-    [Key(5)]
+    [Key(4)]
     public string? AllergenType { get; set; }
 
-    [Key(6)]
+    [Key(5)]
     [Index]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    [Key(7)]
+    [Key(6)]
     public DateTime? UpdatedAt { get; set; }
 
-    [Key(8)]
+    [Key(7)]
     public bool IsDeleted { get; set; } = false;
 }

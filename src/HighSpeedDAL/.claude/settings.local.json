@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(done)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)",
+      "Bash(tree:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(grep:*)",
+      "Bash(dotnet build:*)",
+      "Bash(ls:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(findstr:*)",
+      "Bash(Select-String \"error CS\")",
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet --version:*)",
+      "Bash(dotnet test:*)"
+    ]
+  }
+}

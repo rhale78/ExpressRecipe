@@ -4,13 +4,13 @@ namespace ExpressRecipe.Shared.DTOs.Product;
 
 public class IngredientDto
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? AlternativeNames { get; set; }
     public string? Description { get; set; }
     public string? Category { get; set; }
     public bool IsCommonAllergen { get; set; }
-    public List<int> AllergenIds { get; set; } = new();
+    public List<Guid> AllergenIds { get; set; } = new();
 
     // Raw ingredient string from product label (e.g., "Enriched Wheat Flour (Wheat Flour, Niacin, Iron)")
     public string? IngredientListString { get; set; }
@@ -21,9 +21,9 @@ public class IngredientDto
 
 public class ProductIngredientDto
 {
-    public int Id { get; set; }
-    public int ProductId { get; set; }
-    public int IngredientId { get; set; }
+    public Guid Id { get; set; }
+    public Guid ProductId { get; set; }
+    public Guid IngredientId { get; set; }
     public string IngredientName { get; set; } = string.Empty;
     public int OrderIndex { get; set; }
     public string? Quantity { get; set; }
@@ -46,7 +46,7 @@ public class CreateIngredientRequest
     public string? Category { get; set; }
 
     public bool IsCommonAllergen { get; set; }
-    public List<int> AllergenIds { get; set; } = new();
+    public List<Guid> AllergenIds { get; set; } = new();
 
     // Optional raw ingredient string for parsing into base components
     public string? IngredientListString { get; set; }
@@ -73,7 +73,7 @@ public class UpdateIngredientRequest
 public class AddProductIngredientRequest
 {
     [Required]
-    public int IngredientId { get; set; }
+    public Guid IngredientId { get; set; }
 
     public int OrderIndex { get; set; }
     public string? Quantity { get; set; }

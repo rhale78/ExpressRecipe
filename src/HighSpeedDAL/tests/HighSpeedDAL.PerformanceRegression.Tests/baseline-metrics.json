@@ -1,0 +1,195 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2025-01-01T00:00:00Z",
+  "baselines": {
+    "bulkOperations": {
+      "bulkInsert10K": {
+        "description": "Bulk insert 10,000 products",
+        "baselineRowsPerSecond": 228930,
+        "thresholdRowsPerSecond": 205000,
+        "baselineTimeMs": 43,
+        "thresholdTimeMs": 50,
+        "regressionTolerance": 0.10
+      },
+      "bulkInsert5KWithIndexes": {
+        "description": "Bulk insert 5,000 products with active indexes",
+        "baselineTimeMs": 2000,
+        "thresholdTimeMs": 3000,
+        "regressionTolerance": 0.10
+      },
+      "bulkUpdate5K": {
+        "description": "Bulk update 5,000 products",
+        "baselineTimeMs": 24,
+        "thresholdTimeMs": 3000,
+        "regressionTolerance": 0.10
+      },
+      "bulkSoftDelete5K": {
+        "description": "Bulk soft delete 5,000 orders",
+        "baselineTimeMs": 1500,
+        "thresholdTimeMs": 2000,
+        "regressionTolerance": 0.10
+      },
+      "mixedWorkload1K": {
+        "description": "Mixed workload: 500 inserts, 300 updates, 200 reads",
+        "baselineOpsPerSecond": 137129,
+        "thresholdOpsPerSecond": 90000,
+        "baselineTimeMs": 7,
+        "thresholdTimeMs": 12,
+        "regressionTolerance": 0.10
+      }
+    },
+    "caching": {
+      "cacheHitSequential10K": {
+        "description": "Cache hits - sequential reads of 10,000 items",
+        "baselineTimePerOpMs": 0.001,
+        "thresholdTimePerOpMs": 0.002,
+        "regressionTolerance": 0.20
+      },
+      "cacheHitRandom10K": {
+        "description": "Cache hits - random reads of 10,000 items",
+        "baselineTimePerOpMs": 0.001,
+        "thresholdTimePerOpMs": 0.002,
+        "regressionTolerance": 0.20
+      },
+      "cacheMiss10K": {
+        "description": "Cache misses - 10,000 lookups with no hits",
+        "baselineTimePerOpMs": 0.001,
+        "thresholdTimePerOpMs": 0.002,
+        "regressionTolerance": 0.20
+      },
+      "cacheWrite10K": {
+        "description": "Cache writes - 10,000 inserts",
+        "baselineTimePerOpMs": 0.001,
+        "thresholdTimePerOpMs": 0.002,
+        "regressionTolerance": 0.20
+      },
+      "cacheUpdate10K": {
+        "description": "Cache updates - 10,000 overwrites",
+        "baselineTimePerOpMs": 0.001,
+        "thresholdTimePerOpMs": 0.002,
+        "regressionTolerance": 0.20
+      },
+      "cacheRemove10K": {
+        "description": "Cache removes - 10,000 deletes",
+        "baselineTimePerOpMs": 0.001,
+        "thresholdTimePerOpMs": 0.002,
+        "regressionTolerance": 0.20
+      },
+      "defensiveCloningShallow10K": {
+        "description": "Defensive cloning - shallow clone 10,000 objects",
+        "baselineTotalTimeMs": 10,
+        "thresholdTotalTimeMs": 15,
+        "regressionTolerance": 0.20
+      },
+      "defensiveCloningDeep10K": {
+        "description": "Defensive cloning - deep clone 10,000 objects",
+        "baselineTotalTimeMs": 20,
+        "thresholdTotalTimeMs": 30,
+        "regressionTolerance": 0.20
+      },
+      "mixedCacheOps10K": {
+        "description": "Mixed cache operations: 80% reads, 15% writes, 5% removes",
+        "baselineTimePerOpMs": 0.001,
+        "thresholdTimePerOpMs": 0.002,
+        "regressionTolerance": 0.20
+      }
+    },
+    "concurrentAccess": {
+      "concurrentReads10": {
+        "description": "10 parallel read queries",
+        "baselineTotalTimeMs": 100,
+        "thresholdTotalTimeMs": 200,
+        "regressionTolerance": 0.15
+      },
+      "concurrentReads50": {
+        "description": "50 parallel read queries",
+        "baselineTotalTimeMs": 500,
+        "thresholdTotalTimeMs": 1000,
+        "regressionTolerance": 0.15
+      },
+      "concurrentReads100": {
+        "description": "100 parallel read queries",
+        "baselineTotalTimeMs": 1000,
+        "thresholdTotalTimeMs": 2000,
+        "regressionTolerance": 0.15
+      },
+      "sequentialInserts1K": {
+        "description": "1,000 sequential inserts",
+        "baselineTotalTimeMs": 2000,
+        "thresholdTotalTimeMs": 3000,
+        "regressionTolerance": 0.15
+      },
+      "sequentialUpdates1K": {
+        "description": "1,000 sequential updates",
+        "baselineTotalTimeMs": 2000,
+        "thresholdTotalTimeMs": 3000,
+        "regressionTolerance": 0.15
+      },
+      "mixedWorkload50Reads100Writes": {
+        "description": "Mixed workload: 50 reads + 100 writes",
+        "baselineTotalTimeMs": 1500,
+        "thresholdTotalTimeMs": 2000,
+        "regressionTolerance": 0.15
+      },
+      "concurrentUpdates100": {
+        "description": "100 concurrent updates (bulk)",
+        "baselineTotalTimeMs": 100,
+        "thresholdTotalTimeMs": 200,
+        "regressionTolerance": 0.15
+      },
+      "highFrequencyReads1K": {
+        "description": "1,000 high-frequency reads",
+        "baselineTotalTimeMs": 400,
+        "thresholdTotalTimeMs": 500,
+        "regressionTolerance": 0.15
+      },
+      "readHeavyWorkload90Reads10Writes": {
+        "description": "Read-heavy workload: 90 reads, 10 writes",
+        "baselineTotalTimeMs": 800,
+        "thresholdTotalTimeMs": 1000,
+        "regressionTolerance": 0.15
+      }
+    }
+  },
+  "testConfiguration": {
+    "framework": ".NET 9.0",
+    "benchmarkTool": "BenchmarkDotNet 0.14.0",
+    "testEnvironment": {
+      "database": "SQLite In-Memory",
+      "cache": "MemoryCache",
+      "dataSize": {
+        "bulkOperations": 10000,
+        "caching": 10000,
+        "concurrentAccess": 1000
+      }
+    }
+  },
+  "regressionDetection": {
+    "enabled": true,
+    "failOnRegression": true,
+    "toleranceLevels": {
+      "bulkOperations": 0.10,
+      "caching": 0.20,
+      "concurrentAccess": 0.15
+    },
+    "comparisonMethods": [
+      "absolute",
+      "percentage",
+      "statistical"
+    ]
+  },
+  "historicalData": {
+    "retentionPeriodDays": 90,
+    "dataPoints": []
+  },
+  "notes": [
+    "Baseline metrics established from SQLite integration tests (11 tests, 100% passing)",
+    "Bulk insert baseline: 228,930 rows/sec (10,000 rows in 43ms)",
+    "Mixed workload baseline: 137,129 ops/sec (1,000 operations in 7ms)",
+    "Cache operations baseline: <1ms per operation",
+    "Defensive cloning overhead: Shallow <10ms, Deep <20ms for 10K objects",
+    "SQLite limitation: Sequential writes only (no true concurrent writes)",
+    "Regression tolerance: 10% for bulk ops, 20% for cache, 15% for concurrent",
+    "Update these baselines after each release or major performance optimization"
+  ]
+}

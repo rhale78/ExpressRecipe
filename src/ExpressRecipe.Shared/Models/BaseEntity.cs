@@ -9,7 +9,7 @@ public abstract class BaseEntity
     /// <summary>
     /// Unique identifier for the entity.
     /// </summary>
-    public int Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
 
     /// <summary>
     /// When this entity was created (UTC).
@@ -19,7 +19,7 @@ public abstract class BaseEntity
     /// <summary>
     /// User who created this entity.
     /// </summary>
-    public int? CreatedBy { get; set; }
+    public Guid? CreatedBy { get; set; }
 
     /// <summary>
     /// When this entity was last updated (UTC).
@@ -29,7 +29,7 @@ public abstract class BaseEntity
     /// <summary>
     /// User who last updated this entity.
     /// </summary>
-    public int? UpdatedBy { get; set; }
+    public Guid? UpdatedBy { get; set; }
 
     /// <summary>
     /// Soft delete flag. Deleted entities remain in database but are filtered out.
