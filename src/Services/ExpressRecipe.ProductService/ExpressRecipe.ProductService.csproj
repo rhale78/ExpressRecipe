@@ -26,6 +26,7 @@
     <ProjectReference Include="..\..\HighSpeedDAL\src\HighSpeedDAL.Core\HighSpeedDAL.Core.csproj" />
     <ProjectReference Include="..\..\HighSpeedDAL\src\HighSpeedDAL.SqlServer\HighSpeedDAL.SqlServer.csproj" />
   </ItemGroup>
+  <!-- HighSpeedDAL Source Generator - ENABLED -->
   <ItemGroup>
     <ProjectReference Include="..\..\HighSpeedDAL\src\HighSpeedDAL.SourceGenerators\HighSpeedDAL.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>

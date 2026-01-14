@@ -17,8 +17,30 @@ internal sealed partial class DalClassGenerator
 
     /// <summary>
     /// Gets the primary key type (int, Guid, etc.) for the entity
+    /// Returns normalized C# type name: "int" for integer types, "Guid" for Guid types
     /// </summary>
-    private string PrimaryKeyType => _metadata.PrimaryKeyProperty?.PropertyType ?? "int";
+    private string PrimaryKeyType
+    {
+        get
+        {
+            // If we have an explicit primary key property, use its type
+            if (_metadata.PrimaryKeyProperty?.PropertyType != null)
+            {
+                string propType = _metadata.PrimaryKeyProperty.PropertyType;
+                // Normalize type names for consistency
+                if (propType == "System.Guid" || propType == "Guid")
+                    return "Guid";
+                if (propType == "Int32" || propType == "System.Int32" || propType == "int")
+                    return "int";
+                if (propType == "Int64" || propType == "System.Int64" || propType == "long")
+                    return "long";
+                return propType;
+            }
+
+            // Fall back to metadata's PrimaryKeyType setting
+            return _metadata.PrimaryKeyType == "Guid" ? "Guid" : "int";
+        }
+    }
 
     public DalClassGenerator(
         EntityMetadata metadata, 
@@ -221,20 +243,20 @@ internal sealed partial class DalClassGenerator
         if (_metadata.HasMemoryMappedTable)
         {
             code.AppendLine($"    private readonly MemoryMappedFileStore<{_metadata.ClassName}>? _memoryMappedStore;");
-            code.AppendLine($"    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, {_metadata.ClassName}> _l0Cache = new();");
+            code.AppendLine($"    private readonly System.Collections.Concurrent.ConcurrentDictionary<{PrimaryKeyType}, {_metadata.ClassName}> _l0Cache = new();");
             code.AppendLine("    private System.Threading.Timer? _memoryMappedSyncTimer;");
             code.AppendLine();
         }
 
         if (_metadata.HasCache)
         {
-            code.AppendLine($"    private readonly ICacheManager<{_metadata.ClassName}, int> _cache;");
+            code.AppendLine($"    private readonly ICacheManager<{_metadata.ClassName}, {PrimaryKeyType}> _cache;");
 
             // Expose cache publicly for benchmarking/testing
             code.AppendLine($"    /// <summary>");
             code.AppendLine($"    /// Gets access to the underlying cache manager");
             code.AppendLine($"    /// </summary>");
-            code.AppendLine($"    public ICacheManager<{_metadata.ClassName}, int> Cache => _cache;");
+            code.AppendLine($"    public ICacheManager<{_metadata.ClassName}, {PrimaryKeyType}> Cache => _cache;");
         }
 
         code.AppendLine("    private static bool _schemaInitialized = false;");
@@ -322,11 +344,11 @@ internal sealed partial class DalClassGenerator
 
         if (_metadata.HasCache)
         {
-            string cacheType = _metadata.CacheStrategy == "TwoLayer" 
-                ? "TwoLayerCacheManager" 
+            string cacheType = _metadata.CacheStrategy == "TwoLayer"
+                ? "TwoLayerCacheManager"
                 : "MemoryCacheManager";
 
-            code.AppendLine($"        _cache = new {cacheType}<{_metadata.ClassName}, int>(");
+            code.AppendLine($"        _cache = new {cacheType}<{_metadata.ClassName}, {PrimaryKeyType}>(");
             code.AppendLine($"            logger,");
             code.AppendLine($"            maxSize: {_metadata.CacheMaxSize},");
 

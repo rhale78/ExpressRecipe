@@ -102,14 +102,14 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    /// <summary>");
         code.AppendLine($"    /// Bulk deletes multiple {_metadata.ClassName} entities by IDs");
         code.AppendLine("    /// </summary>");
-        code.AppendLine("    public async Task<int> BulkDeleteAsync(IEnumerable<int> ids, CancellationToken cancellationToken = default)");
+        code.AppendLine($"    public async Task<int> BulkDeleteAsync(IEnumerable<{PrimaryKeyType}> ids, CancellationToken cancellationToken = default)");
         code.AppendLine("    {");
         code.AppendLine("        if (ids == null)");
         code.AppendLine("        {");
         code.AppendLine("            throw new ArgumentNullException(nameof(ids));");
         code.AppendLine("        }");
         code.AppendLine();
-        code.AppendLine("        List<int> idList = ids.ToList();");
+        code.AppendLine($"        List<{PrimaryKeyType}> idList = ids.ToList();");
         code.AppendLine("        if (idList.Count == 0)");
         code.AppendLine("        {");
         code.AppendLine("            return 0;");
@@ -133,7 +133,7 @@ internal sealed partial class DalClassGenerator
         if (_metadata.HasCache)
         {
             code.AppendLine("        // Remove from cache");
-            code.AppendLine("        foreach (int id in idList)");
+            code.AppendLine($"        foreach ({PrimaryKeyType} id in idList)");
             code.AppendLine("        {");
             code.AppendLine("            await _cache.RemoveAsync(id, cancellationToken);");
             code.AppendLine("        }");
@@ -158,7 +158,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    /// <summary>");
         code.AppendLine($"    /// Permanently deletes a {_metadata.ClassName} by ID (bypasses soft delete)");
         code.AppendLine("    /// </summary>");
-        code.AppendLine("    public async Task<int> HardDeleteAsync(int id, CancellationToken cancellationToken = default)");
+        code.AppendLine($"    public async Task<int> HardDeleteAsync({PrimaryKeyType} id, CancellationToken cancellationToken = default)");
         code.AppendLine("    {");
         code.AppendLine($"        Logger.LogWarning(\"Hard deleting {_metadata.ClassName} ID: {{Id}}\", id);");
         code.AppendLine();

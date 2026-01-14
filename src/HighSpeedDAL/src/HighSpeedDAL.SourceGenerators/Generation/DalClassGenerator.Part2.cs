@@ -68,10 +68,10 @@ internal sealed partial class DalClassGenerator
 
             code.AppendLine();
 
-            // For auto-increment keys (int), retrieve the generated ID
+            // For auto-increment keys (int/long), retrieve the generated ID
             if (_metadata.PrimaryKeyProperty?.IsAutoIncrement == true)
             {
-                code.AppendLine("        int? id = await ExecuteScalarAsync<int>(");
+                code.AppendLine($"        {PrimaryKeyType}? id = await ExecuteScalarAsync<{PrimaryKeyType}>(");
                 code.AppendLine("            SQL_INSERT,");
                 code.AppendLine("            parameters,");
                 code.AppendLine("            transaction: null,");
@@ -221,7 +221,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    /// <summary>");
         code.AppendLine($"    /// Deletes a {_metadata.ClassName} by ID");
         code.AppendLine("    /// </summary>");
-        code.AppendLine("    public async Task<int> DeleteAsync(int id, CancellationToken cancellationToken = default)");
+        code.AppendLine($"    public async Task<int> DeleteAsync({PrimaryKeyType} id, CancellationToken cancellationToken = default)");
         code.AppendLine("    {");
         code.AppendLine($"        Logger.LogDebug(\"Deleting {_metadata.ClassName} ID: {{Id}}\", id);");
         code.AppendLine();
@@ -363,7 +363,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    /// <summary>");
         code.AppendLine($"    /// Checks if a {_metadata.ClassName} exists by ID");
         code.AppendLine("    /// </summary>");
-        code.AppendLine("    public async Task<bool> ExistsAsync(int id, CancellationToken cancellationToken = default)");
+        code.AppendLine($"    public async Task<bool> ExistsAsync({PrimaryKeyType} id, CancellationToken cancellationToken = default)");
         code.AppendLine("    {");
         code.AppendLine("        Dictionary<string, object> parameters = new Dictionary<string, object>");
         code.AppendLine("        {");

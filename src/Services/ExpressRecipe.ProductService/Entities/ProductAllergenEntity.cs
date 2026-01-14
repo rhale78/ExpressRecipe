@@ -5,34 +5,34 @@ using MessagePack;
 namespace ExpressRecipe.ProductService.Entities;
 
 [DalEntity]
-[Table("Ingredient", PrimaryKeyType = PrimaryKeyType.Guid)]
+[Table("ProductAllergen", PrimaryKeyType = PrimaryKeyType.Guid)]
 [Cache(CacheStrategy.TwoLayer, MaxSize = 20000, ExpirationSeconds = 1800)]
 [InMemoryTable(FlushIntervalSeconds = 30, MaxRowCount = 100000)]
 [AutoAudit]
 [SoftDelete]
 [MessagePackObject]
-public partial class IngredientEntity
+public partial class ProductAllergenEntity
 {
     [Key(0)]
     [PrimaryKey]
     public Guid Id { get; set; }
 
     [Key(1)]
-    [Index(IsUnique = true)]
-    public string Name { get; set; } = string.Empty;
+    [Index]
+    public Guid ProductId { get; set; }
 
     [Key(2)]
-    public string? Description { get; set; }
+    [Index]
+    public string AllergenName { get; set; } = string.Empty;
 
     [Key(3)]
-    [Index]
-    public string? Category { get; set; }
+    public string? AllergenType { get; set; }
 
     [Key(4)]
-    public bool IsAllergen { get; set; } = false;
+    public string? Severity { get; set; }
 
     [Key(5)]
-    public string? AllergenType { get; set; }
+    public string? Notes { get; set; }
 
     [Key(6)]
     [Index]
