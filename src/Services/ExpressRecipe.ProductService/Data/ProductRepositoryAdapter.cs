@@ -236,30 +236,6 @@ public class ProductRepositoryAdapter : IProductRepository
         return true;
     }
 
-    private static ProductDto MapReaderToProductDto(System.Data.IDataRecord reader)
-    {
-        return new ProductDto
-        {
-            Id = reader.GetGuid(reader.GetOrdinal("Id")),
-            Name = reader.IsDBNull(reader.GetOrdinal("Name")) ? string.Empty : reader.GetString(reader.GetOrdinal("Name")),
-            Brand = reader.IsDBNull(reader.GetOrdinal("Brand")) ? null : reader.GetString(reader.GetOrdinal("Brand")),
-            Barcode = reader.IsDBNull(reader.GetOrdinal("Barcode")) ? null : reader.GetString(reader.GetOrdinal("Barcode")),
-            BarcodeType = reader.IsDBNull(reader.GetOrdinal("BarcodeType")) ? null : reader.GetString(reader.GetOrdinal("BarcodeType")),
-            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
-            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
-            ServingSize = reader.IsDBNull(reader.GetOrdinal("ServingSize")) ? null : reader.GetString(reader.GetOrdinal("ServingSize")),
-            ServingUnit = reader.IsDBNull(reader.GetOrdinal("ServingUnit")) ? null : reader.GetString(reader.GetOrdinal("ServingUnit")),
-            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
-            ApprovalStatus = reader.IsDBNull(reader.GetOrdinal("ApprovalStatus")) ? "Pending" : reader.GetString(reader.GetOrdinal("ApprovalStatus")),
-            ApprovedBy = reader.IsDBNull(reader.GetOrdinal("ApprovedBy")) ? null : reader.GetGuid(reader.GetOrdinal("ApprovedBy")),
-            ApprovedAt = reader.IsDBNull(reader.GetOrdinal("ApprovedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ApprovedAt")),
-            RejectionReason = reader.IsDBNull(reader.GetOrdinal("RejectionReason")) ? null : reader.GetString(reader.GetOrdinal("RejectionReason")),
-            SubmittedBy = reader.IsDBNull(reader.GetOrdinal("SubmittedBy")) ? null : reader.GetGuid(reader.GetOrdinal("SubmittedBy")),
-            CreatedAt = reader.IsDBNull(reader.GetOrdinal("CreatedDate")) ? DateTime.UtcNow : reader.GetDateTime(reader.GetOrdinal("CreatedDate"))
-            // Note: Audit fields (CreatedBy, ModifiedDate, ModifiedBy, IsDeleted) are internal and not exposed in DTOs
-        };
-    }
-
     public async Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null)
     {
         // If generated DAL does not expose SoftDeleteAsync, perform soft-delete via update
