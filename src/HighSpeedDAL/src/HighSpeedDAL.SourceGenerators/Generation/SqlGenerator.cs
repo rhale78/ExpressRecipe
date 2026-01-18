@@ -46,475 +46,581 @@ internal sealed class SqlGenerator
             columnDefinitions.Add($"    {columnDef}");
         }
 
-        // Add audit columns if auditable
-        if (_metadata.IsAuditable)
-        {
-            if (isSqlite)
-            {
-                columnDefinitions.Add("    [CreatedBy] TEXT NOT NULL");
-                columnDefinitions.Add("    [CreatedDate] TEXT NOT NULL DEFAULT (datetime('now'))");
-                columnDefinitions.Add("    [ModifiedBy] TEXT NOT NULL");
-                columnDefinitions.Add("    [ModifiedDate] TEXT NOT NULL DEFAULT (datetime('now'))");
-            }
-            else
-            {
-                columnDefinitions.Add("    [CreatedBy] NVARCHAR(256) NOT NULL");
-                columnDefinitions.Add("    [CreatedDate] DATETIME2 NOT NULL DEFAULT GETUTCDATE()");
-                columnDefinitions.Add("    [ModifiedBy] NVARCHAR(256) NOT NULL");
-                columnDefinitions.Add("    [ModifiedDate] DATETIME2 NOT NULL DEFAULT GETUTCDATE()");
-            }
-        }
+        // Track existing column names to avoid duplicates when adding generated audit/soft-delete/rowversion columns
+        var existingColumns = new HashSet<string>(_metadata.Properties.Select(p => p.ColumnName), System.StringComparer.OrdinalIgnoreCase);
 
-        // Add row version if enabled
-        if (_metadata.HasRowVersion)
-        {
-            if (isSqlite)
-            {
-                columnDefinitions.Add("    [RowVersion] INTEGER NOT NULL DEFAULT 1");
-            }
-            else
-            {
-                columnDefinitions.Add("    [RowVersion] ROWVERSION NOT NULL");
-            }
-        }
-
-        // Add soft delete column if enabled
-        if (_metadata.HasSoftDelete)
-        {
-            string isDeletedColumn = _metadata.SoftDeleteColumn ?? "IsDeleted";
-            string deletedDateColumn = _metadata.SoftDeleteDateColumn ?? "DeletedDate";
-
-            if (isSqlite)
-            {
-                columnDefinitions.Add($"    [{isDeletedColumn}] INTEGER NOT NULL DEFAULT 0");
-                columnDefinitions.Add($"    [{deletedDateColumn}] TEXT NULL");
-            }
-            else
-            {
-                columnDefinitions.Add($"    [{isDeletedColumn}] BIT NOT NULL DEFAULT 0");
-                columnDefinitions.Add($"    [{deletedDateColumn}] DATETIME2 NULL");
-            }
-        }
-
-        sql.AppendLine(string.Join(",\n", columnDefinitions));
-
-        // Add primary key constraint
-        if (_metadata.PrimaryKeyProperty != null)
-        {
-            if (isSqlite)
-            {
-                // Sqlite: PRIMARY KEY is already in column definition for autoincrement, skip if autoincrement
-                if (!_metadata.PrimaryKeyProperty.IsAutoIncrement)
+                // Add audit columns if auditable (but only if not already present in the entity definition)
+                if (_metadata.IsAuditable)
                 {
-                    sql.AppendLine($"    ,PRIMARY KEY ([{_metadata.PrimaryKeyProperty.ColumnName}])");
+                    if (isSqlite)
+                    {
+                        if (!existingColumns.Contains(_metadata.CreatedByColumn))
+                            columnDefinitions.Add($"    [{_metadata.CreatedByColumn}] TEXT NOT NULL");
+                        if (!existingColumns.Contains(_metadata.CreatedDateColumn))
+                            columnDefinitions.Add($"    [{_metadata.CreatedDateColumn}] TEXT NOT NULL DEFAULT (datetime('now'))");
+                        if (!existingColumns.Contains(_metadata.ModifiedByColumn))
+                            columnDefinitions.Add($"    [{_metadata.ModifiedByColumn}] TEXT NOT NULL");
+                        if (!existingColumns.Contains(_metadata.ModifiedDateColumn))
+                            columnDefinitions.Add($"    [{_metadata.ModifiedDateColumn}] TEXT NOT NULL DEFAULT (datetime('now'))");
+                    }
+                    else
+                    {
+                        if (!existingColumns.Contains(_metadata.CreatedByColumn))
+                            columnDefinitions.Add($"    [{_metadata.CreatedByColumn}] NVARCHAR(256) NOT NULL");
+                        if (!existingColumns.Contains(_metadata.CreatedDateColumn))
+                            columnDefinitions.Add($"    [{_metadata.CreatedDateColumn}] DATETIME2 NOT NULL DEFAULT GETUTCDATE()");
+                        if (!existingColumns.Contains(_metadata.ModifiedByColumn))
+                            columnDefinitions.Add($"    [{_metadata.ModifiedByColumn}] NVARCHAR(256) NOT NULL");
+                        if (!existingColumns.Contains(_metadata.ModifiedDateColumn))
+                            columnDefinitions.Add($"    [{_metadata.ModifiedDateColumn}] DATETIME2 NOT NULL DEFAULT GETUTCDATE()");
+                    }
+                }
+        
+                // Add row version if enabled
+                if (_metadata.HasRowVersion)
+                {
+                    if (!existingColumns.Contains("RowVersion"))
+                    {
+                        if (isSqlite)
+                        {
+                            columnDefinitions.Add("    [RowVersion] INTEGER NOT NULL DEFAULT 1");
+                        }
+                        else
+                        {
+                            columnDefinitions.Add("    [RowVersion] ROWVERSION NOT NULL");
+                        }
+                    }
+                }
+        
+                // Add soft delete column if enabled
+                if (_metadata.HasSoftDelete)
+                {
+                    if (isSqlite)
+                    {
+                        if (!existingColumns.Contains(_metadata.SoftDeleteColumn))
+                            columnDefinitions.Add($"    [{_metadata.SoftDeleteColumn}] INTEGER NOT NULL DEFAULT 0");
+                        if (!existingColumns.Contains(_metadata.SoftDeleteDateColumn))
+                            columnDefinitions.Add($"    [{_metadata.SoftDeleteDateColumn}] TEXT NULL");
+                        if (!existingColumns.Contains(_metadata.SoftDeleteByColumn))
+                            columnDefinitions.Add($"    [{_metadata.SoftDeleteByColumn}] TEXT NULL");
+                    }
+                    else
+                    {
+                        if (!existingColumns.Contains(_metadata.SoftDeleteColumn))
+                            columnDefinitions.Add($"    [{_metadata.SoftDeleteColumn}] BIT NOT NULL DEFAULT 0");
+                        if (!existingColumns.Contains(_metadata.SoftDeleteDateColumn))
+                            columnDefinitions.Add($"    [{_metadata.SoftDeleteDateColumn}] DATETIME2 NULL");
+                        if (!existingColumns.Contains(_metadata.SoftDeleteByColumn))
+                            columnDefinitions.Add($"    [{_metadata.SoftDeleteByColumn}] NVARCHAR(256) NULL");
+                    }
+                }
+        
+                // Ensure column definitions are unique (preserve first occurrence) to avoid duplicate column errors
+                var seenColumns = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+                var uniqueColumnDefinitions = new List<string>();
+        
+                foreach (var col in columnDefinitions)
+                {
+                    var trimmed = col.TrimStart();
+                    string colName;
+                    if (trimmed.StartsWith("["))
+                    {
+                        var end = trimmed.IndexOf(']');
+                        colName = end > 1 ? trimmed.Substring(1, end - 1) : trimmed;
+                    }
+                    else
+                    {
+                        // fallback: use the full trimmed line as identifier
+                        colName = trimmed;
+                    }
+        
+                    if (seenColumns.Add(colName))
+                    {
+                        uniqueColumnDefinitions.Add(col);
+                    }
+                    // else: duplicate column definition detected; skip additional entries
+                }
+        
+                sql.AppendLine(string.Join(",\n", uniqueColumnDefinitions));
+        
+                // Add primary key constraint
+                if (_metadata.PrimaryKeyProperty != null)
+                {
+                    if (isSqlite)
+                    {
+                        // Sqlite: PRIMARY KEY is already in column definition for autoincrement, skip if autoincrement
+                        if (!_metadata.PrimaryKeyProperty.IsAutoIncrement)
+                        {
+                            sql.AppendLine($"    ,PRIMARY KEY ([{_metadata.PrimaryKeyProperty.ColumnName}])");
+                        }
+                    }
+                    else
+                    {
+                        sql.AppendLine($"    ,CONSTRAINT [PK_{_metadata.TableName}] PRIMARY KEY CLUSTERED ([{_metadata.PrimaryKeyProperty.ColumnName}] ASC)");
+                    }
+                }
+        
+                sql.AppendLine(");");
+        
+                // Add indexes
+                foreach (IndexMetadata index in _metadata.Indexes)
+                {
+                    sql.AppendLine();
+                    sql.AppendLine(GenerateCreateIndexSql(index));
+                }
+        
+                if (!isSqlite)
+                {
+                    sql.AppendLine("END;");
+                }
+        
+                return sql.ToString();
+            }
+        
+            private string GenerateColumnDefinition(PropertyMetadata property)
+            {
+                bool isSqlite = _provider == "Sqlite";
+                StringBuilder columnDef = new StringBuilder();
+                columnDef.Append($"[{property.ColumnName}] ");
+        
+                // Use custom SQL type if specified, otherwise infer from C# type
+                string sqlType = property.CustomSqlType ?? InferSqlType(property);
+                columnDef.Append(sqlType);
+        
+                // Primary key with identity/autoincrement
+                if (property.IsPrimaryKey && property.IsAutoIncrement)
+                {
+                    if (isSqlite)
+                    {
+                        // Sqlite: INTEGER PRIMARY KEY AUTOINCREMENT (must be together)
+                        columnDef.Append(" PRIMARY KEY AUTOINCREMENT");
+                    }
+                    else
+                    {
+                        // SQL Server: IDENTITY is only valid for numeric types. For GUID primary keys
+                        // we use a DEFAULT NEWID() to populate values generated by the database.
+                        if (sqlType.Equals("UNIQUEIDENTIFIER", System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            columnDef.Append(" NOT NULL DEFAULT NEWID()");
+                        }
+                        else
+                        {
+                            // SQL Server: IDENTITY is only valid for numeric types. For GUID primary keys, use DEFAULT NEWID()
+                            if (sqlType.Equals("UNIQUEIDENTIFIER", System.StringComparison.OrdinalIgnoreCase))
+                            {
+                                columnDef.Append(" NOT NULL DEFAULT NEWID()");
+                            }
+                            else
+                            {
+                                columnDef.Append(" IDENTITY(1,1)");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Nullable (not for autoincrement primary keys)
+                    columnDef.Append(property.IsNullable ? " NULL" : " NOT NULL");
+                }
+        
+                return columnDef.ToString();
+            }
+        
+            private string InferSqlType(PropertyMetadata property)
+            {
+                bool isSqlite = _provider == "Sqlite";
+                string baseType = property.PropertyType.Replace("?", "").Trim();
+        
+                // Remove System. prefix
+                if (baseType.StartsWith("System."))
+                {
+                    baseType = baseType.Substring(7);
+                }
+        
+                if (isSqlite)
+                {
+                    // Sqlite type affinity: NULL, INTEGER, REAL, TEXT, BLOB
+                    return baseType switch
+                    {
+                        "int" => "INTEGER",
+                        "Int32" => "INTEGER",
+                        "long" => "INTEGER",
+                        "Int64" => "INTEGER",
+                        "short" => "INTEGER",
+                        "Int16" => "INTEGER",
+                        "byte" => "INTEGER",
+                        "Byte" => "INTEGER",
+                        "bool" => "INTEGER",
+                        "Boolean" => "INTEGER",
+                        "decimal" => "REAL",
+                        "Decimal" => "REAL",
+                        "double" => "REAL",
+                        "Double" => "REAL",
+                        "float" => "REAL",
+                        "Single" => "REAL",
+                        "DateTime" => "TEXT",
+                        "DateTimeOffset" => "TEXT",
+                        "TimeSpan" => "TEXT",
+                        "Guid" => "TEXT",
+                        "byte[]" => "BLOB",
+                        "string" when property.MaxLength.HasValue => $"TEXT",
+                        "String" when property.MaxLength.HasValue => $"TEXT",
+                        "string" => "TEXT",
+                        "String" => "TEXT",
+                        _ => "TEXT"
+                    };
+                }
+                else
+                {
+                    // SQL Server types
+                    return baseType switch
+                    {
+                        "int" => "INT",
+                        "Int32" => "INT",
+                        "long" => "BIGINT",
+                        "Int64" => "BIGINT",
+                        "short" => "SMALLINT",
+                        "Int16" => "SMALLINT",
+                        "byte" => "TINYINT",
+                        "Byte" => "TINYINT",
+                        "bool" => "BIT",
+                        "Boolean" => "BIT",
+                        "decimal" => "DECIMAL(18,2)",
+                        "Decimal" => "DECIMAL(18,2)",
+                        "double" => "FLOAT",
+                        "Double" => "FLOAT",
+                        "float" => "REAL",
+                        "Single" => "REAL",
+                        "DateTime" => "DATETIME2",
+                        "DateTimeOffset" => "DATETIMEOFFSET",
+                        "TimeSpan" => "TIME",
+                        "Guid" => "UNIQUEIDENTIFIER",
+                        "byte[]" => "VARBINARY(MAX)",
+                        "string" when property.MaxLength.HasValue => $"NVARCHAR({property.MaxLength.Value})",
+                        "String" when property.MaxLength.HasValue => $"NVARCHAR({property.MaxLength.Value})",
+                        "string" => "NVARCHAR(MAX)",
+                        "String" => "NVARCHAR(MAX)",
+                        _ => "NVARCHAR(MAX)"
+                    };
                 }
             }
-            else
+        
+            private string GenerateCreateIndexSql(IndexMetadata index)
             {
-                sql.AppendLine($"    ,CONSTRAINT [PK_{_metadata.TableName}] PRIMARY KEY CLUSTERED ([{_metadata.PrimaryKeyProperty.ColumnName}] ASC)");
+                bool isSqlite = _provider == "Sqlite";
+                string uniqueKeyword = index.IsUnique ? "UNIQUE " : "";
+                string columns = string.Join(", ", index.ColumnNames.Select(c => $"[{c}]"));
+        
+                if (isSqlite)
+                {
+                    return $"CREATE {uniqueKeyword}INDEX IF NOT EXISTS [{index.IndexName}] ON [{_metadata.TableName}] ({columns});";
+                }
+                else
+                {
+                    return $"CREATE {uniqueKeyword}NONCLUSTERED INDEX [{index.IndexName}] ON [{_metadata.TableName}] ({columns});";
+                }
             }
-        }
-
-        sql.AppendLine(");");
-
-            // Add indexes
-            foreach (IndexMetadata index in _metadata.Indexes)
+        
+            public string GenerateInsertSql()
             {
+                bool isSqlite = _provider == "Sqlite";
+                List<PropertyMetadata> insertableProperties = _metadata.Properties
+                    .Where(p => !p.IsPrimaryKey || !p.IsAutoIncrement)
+                    .ToList();
+        
+                List<string> columnNames = new List<string>();
+                List<string> parameterNames = new List<string>();
+        
+                foreach (PropertyMetadata property in insertableProperties)
+                {
+                    columnNames.Add($"[{property.ColumnName}]");
+                    parameterNames.Add($"@{property.PropertyName}");
+                }
+        
+                // Add audit columns
+                if (_metadata.IsAuditable)
+                {
+                    // Avoid adding audit columns that are already present in the entity properties
+                    var existing = new HashSet<string>(insertableProperties.Select(p => p.ColumnName), System.StringComparer.OrdinalIgnoreCase);
+                    if (!existing.Contains(_metadata.CreatedByColumn))
+                    {
+                        columnNames.Add($"[{_metadata.CreatedByColumn}]");
+                        parameterNames.Add($"@{_metadata.CreatedByColumn}");
+                    }
+                    if (!existing.Contains(_metadata.CreatedDateColumn))
+                    {
+                        columnNames.Add($"[{_metadata.CreatedDateColumn}]");
+                        parameterNames.Add($"@{_metadata.CreatedDateColumn}");
+                    }
+                    if (!existing.Contains(_metadata.ModifiedByColumn))
+                    {
+                        columnNames.Add($"[{_metadata.ModifiedByColumn}]");
+                        parameterNames.Add($"@{_metadata.ModifiedByColumn}");
+                    }
+                    if (!existing.Contains(_metadata.ModifiedDateColumn))
+                    {
+                        columnNames.Add($"[{_metadata.ModifiedDateColumn}]");
+                        parameterNames.Add($"@{_metadata.ModifiedDateColumn}");
+                    }
+                }
+        
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"INSERT INTO [{_metadata.TableName}]");
+                sql.AppendLine($"({string.Join(", ", columnNames)})");
+        
+                // If the primary key is DB-generated and is a GUID, use OUTPUT INSERTED.[Id] to return the generated GUID.
+                string? pkSqlType = null;
+                if (_metadata.PrimaryKeyProperty != null)
+                {
+                    pkSqlType = (_metadata.PrimaryKeyProperty.CustomSqlType ?? InferSqlType(_metadata.PrimaryKeyProperty))?.ToUpperInvariant();
+                }
+        
+                var useOutputInsertedForGuidPk = !isSqlite && _metadata.PrimaryKeyProperty?.IsAutoIncrement == true && pkSqlType == "UNIQUEIDENTIFIER";
+        
+                if (useOutputInsertedForGuidPk)
+                {
+                    sql.AppendLine($"OUTPUT INSERTED.[{_metadata.PrimaryKeyProperty!.ColumnName}]");
+                }
+        
+                sql.AppendLine($"VALUES");
+                sql.AppendLine($"({string.Join(", ", parameterNames)});");
+        
+                if (_metadata.PrimaryKeyProperty?.IsAutoIncrement == true && !useOutputInsertedForGuidPk)
+                {
+                    if (isSqlite)
+                    {
+                        sql.AppendLine("SELECT last_insert_rowid();");
+                    }
+                    else
+                    {
+                        sql.AppendLine("SELECT CAST(SCOPE_IDENTITY() AS INT);");
+                    }
+                }
+        
+                return sql.ToString();
+            }
+        
+            public string GenerateUpdateSql()
+            {
+                // Exclude audit and soft-delete properties - they're handled separately
+                List<PropertyMetadata> updatableProperties = _metadata.Properties
+                    .Where(p => !p.IsPrimaryKey
+                                && p.PropertyName != "CreatedDate"
+                                && p.PropertyName != "CreatedBy"
+                                && p.PropertyName != "ModifiedDate"
+                                && p.PropertyName != "ModifiedBy"
+                                && p.PropertyName != "IsDeleted"
+                                && p.PropertyName != "DeletedDate"
+                                && p.PropertyName != "DeletedBy"
+                                && p.PropertyName != "RowVersion")
+                    .ToList();
+        
+                List<string> setStatements = new List<string>();
+        
+                foreach (PropertyMetadata property in updatableProperties)
+                {
+                    setStatements.Add($"[{property.ColumnName}] = @{property.PropertyName}");
+                }
+        
+                // Add audit columns
+                if (_metadata.IsAuditable)
+                {
+                    setStatements.Add($"[{_metadata.ModifiedByColumn}] = @{_metadata.ModifiedByColumn}");
+                    setStatements.Add($"[{_metadata.ModifiedDateColumn}] = @{_metadata.ModifiedDateColumn}");
+                }
+        
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"UPDATE [{_metadata.TableName}]");
+                sql.AppendLine($"SET {string.Join(", ", setStatements)}");
+                sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @{_metadata.PrimaryKeyProperty?.PropertyName ?? "Id"}");
+        
+                // Add row version check for optimistic concurrency
+                if (_metadata.HasRowVersion)
+                {
+                    sql.Append(" AND [RowVersion] = @RowVersion");
+                }
+        
+                sql.AppendLine(";");
+        
+                return sql.ToString();
+            }
+        
+            public string GenerateDeleteSql()
+            {
+                StringBuilder sql = new StringBuilder();
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    // Soft delete - update IsDeleted flag
+                    sql.AppendLine($"UPDATE [{_metadata.TableName}]");
+                    sql.AppendLine($"SET [{_metadata.SoftDeleteColumn}] = 1, [{_metadata.SoftDeleteDateColumn}] = GETUTCDATE()");
+                }
+                else
+                {
+                    // Hard delete
+                    sql.AppendLine($"DELETE FROM [{_metadata.TableName}]");
+                }
+        
+                sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id");
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.Append($" AND [{_metadata.SoftDeleteColumn}] = 0");
+                }
+        
+                sql.AppendLine(";");
+        
+                return sql.ToString();
+            }
+        
+            public string GenerateGetByIdSql()
+            {
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"SELECT * FROM [{_metadata.TableName}]");
+                sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id");
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.Append($" AND [{_metadata.SoftDeleteColumn}] = 0");
+                }
+        
+                sql.AppendLine(";");
+        
+                return sql.ToString();
+            }
+        
+            public string GenerateGetAllSql()
+            {
+                StringBuilder sql = new StringBuilder();
+                sql.Append($"SELECT * FROM [{_metadata.TableName}]");
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.Append($" WHERE [{_metadata.SoftDeleteColumn}] = 0");
+                }
+        
+                sql.AppendLine(";");
+        
+                return sql.ToString();
+            }
+        
+            public string GenerateCountSql()
+            {
+                StringBuilder sql = new StringBuilder();
+                sql.Append($"SELECT COUNT(*) FROM [{_metadata.TableName}]");
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.Append($" WHERE [{_metadata.SoftDeleteColumn}] = 0");
+                }
+        
+                sql.AppendLine(";");
+        
+                return sql.ToString();
+            }
+        
+            public string GenerateExistsSql()
+            {
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"SELECT CASE WHEN EXISTS (");
+                sql.AppendLine($"    SELECT 1 FROM [{_metadata.TableName}]");
+                sql.Append($"    WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id");
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.Append($" AND [{_metadata.SoftDeleteColumn}] = 0");
+                }
+        
                 sql.AppendLine();
-                sql.AppendLine(GenerateCreateIndexSql(index));
+                sql.AppendLine(") THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END;");
+        
+                return sql.ToString();
             }
-
-            if (!isSqlite)
+        
+            public string GenerateGetByNameSql()
             {
-                sql.AppendLine("END;");
+                // For reference tables
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"SELECT * FROM [{_metadata.TableName}]");
+                sql.Append("WHERE [Name] = @Name");
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.Append($" AND [{_metadata.SoftDeleteColumn}] = 0");
+                }
+        
+                sql.AppendLine(";");
+        
+                return sql.ToString();
             }
-
-            return sql.ToString();
-        }
-
-    private string GenerateColumnDefinition(PropertyMetadata property)
-    {
-        bool isSqlite = _provider == "Sqlite";
-        StringBuilder columnDef = new StringBuilder();
-        columnDef.Append($"[{property.ColumnName}] ");
-
-        // Use custom SQL type if specified, otherwise infer from C# type
-        string sqlType = property.CustomSqlType ?? InferSqlType(property);
-        columnDef.Append(sqlType);
-
-        // Primary key with identity/autoincrement
-        if (property.IsPrimaryKey && property.IsAutoIncrement)
-        {
-            if (isSqlite)
+        
+            public string GenerateDeleteAllSql()
             {
-                // Sqlite: INTEGER PRIMARY KEY AUTOINCREMENT (must be together)
-                columnDef.Append(" PRIMARY KEY AUTOINCREMENT");
+                StringBuilder sql = new StringBuilder();
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.AppendLine($"UPDATE [{_metadata.TableName}]");
+                    sql.AppendLine($"SET [{_metadata.SoftDeleteColumn}] = 1, [{_metadata.SoftDeleteDateColumn}] = GETUTCDATE()");
+                    sql.AppendLine($"WHERE [{_metadata.SoftDeleteColumn}] = 0;");
+                }
+                else
+                {
+                    sql.AppendLine($"DELETE FROM [{_metadata.TableName}];");
+                }
+        
+                return sql.ToString();
             }
-            else
+        
+            public string GenerateHardDeleteSql()
             {
-                columnDef.Append(" IDENTITY(1,1)");
+                // For soft delete entities, provides a way to permanently delete
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"DELETE FROM [{_metadata.TableName}]");
+                sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id;");
+                return sql.ToString();
             }
-        }
-        else
-        {
-            // Nullable (not for autoincrement primary keys)
-            columnDef.Append(property.IsNullable ? " NULL" : " NOT NULL");
-        }
-
-        return columnDef.ToString();
-    }
-
-    private string InferSqlType(PropertyMetadata property)
-    {
-        bool isSqlite = _provider == "Sqlite";
-        string baseType = property.PropertyType.Replace("?", "").Trim();
-
-        // Remove System. prefix
-        if (baseType.StartsWith("System."))
-        {
-            baseType = baseType.Substring(7);
-        }
-
-        if (isSqlite)
-        {
-            // Sqlite type affinity: NULL, INTEGER, REAL, TEXT, BLOB
-            return baseType switch
+        
+            public string GenerateGetByIdsSql()
             {
-                "int" => "INTEGER",
-                "Int32" => "INTEGER",
-                "long" => "INTEGER",
-                "Int64" => "INTEGER",
-                "short" => "INTEGER",
-                "Int16" => "INTEGER",
-                "byte" => "INTEGER",
-                "Byte" => "INTEGER",
-                "bool" => "INTEGER",
-                "Boolean" => "INTEGER",
-                "decimal" => "REAL",
-                "Decimal" => "REAL",
-                "double" => "REAL",
-                "Double" => "REAL",
-                "float" => "REAL",
-                "Single" => "REAL",
-                "DateTime" => "TEXT",
-                "DateTimeOffset" => "TEXT",
-                "TimeSpan" => "TEXT",
-                "Guid" => "TEXT",
-                "byte[]" => "BLOB",
-                "string" when property.MaxLength.HasValue => $"TEXT",
-                "String" when property.MaxLength.HasValue => $"TEXT",
-                "string" => "TEXT",
-                "String" => "TEXT",
-                _ => "TEXT"
-            };
-        }
-        else
-        {
-            // SQL Server types
-            return baseType switch
-            {
-                "int" => "INT",
-                "Int32" => "INT",
-                "long" => "BIGINT",
-                "Int64" => "BIGINT",
-                "short" => "SMALLINT",
-                "Int16" => "SMALLINT",
-                "byte" => "TINYINT",
-                "Byte" => "TINYINT",
-                "bool" => "BIT",
-                "Boolean" => "BIT",
-                "decimal" => "DECIMAL(18,2)",
-                "Decimal" => "DECIMAL(18,2)",
-                "double" => "FLOAT",
-                "Double" => "FLOAT",
-                "float" => "REAL",
-                "Single" => "REAL",
-                "DateTime" => "DATETIME2",
-                "DateTimeOffset" => "DATETIMEOFFSET",
-                "TimeSpan" => "TIME",
-                "Guid" => "UNIQUEIDENTIFIER",
-                "byte[]" => "VARBINARY(MAX)",
-                "string" when property.MaxLength.HasValue => $"NVARCHAR({property.MaxLength.Value})",
-                "String" when property.MaxLength.HasValue => $"NVARCHAR({property.MaxLength.Value})",
-                "string" => "NVARCHAR(MAX)",
-                "String" => "NVARCHAR(MAX)",
-                _ => "NVARCHAR(MAX)"
-            };
-        }
-    }
-
-    private string GenerateCreateIndexSql(IndexMetadata index)
-    {
-        bool isSqlite = _provider == "Sqlite";
-        string uniqueKeyword = index.IsUnique ? "UNIQUE " : "";
-        string columns = string.Join(", ", index.ColumnNames.Select(c => $"[{c}]"));
-
-        if (isSqlite)
-        {
-            return $"CREATE {uniqueKeyword}INDEX IF NOT EXISTS [{index.IndexName}] ON [{_metadata.TableName}] ({columns});";
-        }
-        else
-        {
-            return $"CREATE {uniqueKeyword}NONCLUSTERED INDEX [{index.IndexName}] ON [{_metadata.TableName}] ({columns});";
-        }
-    }
-
-    public string GenerateInsertSql()
-    {
-        bool isSqlite = _provider == "Sqlite";
-        List<PropertyMetadata> insertableProperties = _metadata.Properties
-            .Where(p => !p.IsPrimaryKey || !p.IsAutoIncrement)
-            .ToList();
-
-        List<string> columnNames = new List<string>();
-        List<string> parameterNames = new List<string>();
-
-        foreach (PropertyMetadata property in insertableProperties)
-        {
-            columnNames.Add($"[{property.ColumnName}]");
-            parameterNames.Add($"@{property.PropertyName}");
-        }
-
-        // Add audit columns
-        if (_metadata.IsAuditable)
-        {
-            columnNames.AddRange(new[] { "[CreatedBy]", "[CreatedDate]", "[ModifiedBy]", "[ModifiedDate]" });
-            parameterNames.AddRange(new[] { "@CreatedBy", "@CreatedDate", "@ModifiedBy", "@ModifiedDate" });
-        }
-
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"INSERT INTO [{_metadata.TableName}]");
-        sql.AppendLine($"({string.Join(", ", columnNames)})");
-        sql.AppendLine($"VALUES");
-        sql.AppendLine($"({string.Join(", ", parameterNames)});");
-
-        if (_metadata.PrimaryKeyProperty?.IsAutoIncrement == true)
-        {
-            if (isSqlite)
-            {
-                sql.AppendLine("SELECT last_insert_rowid();");
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"SELECT * FROM [{_metadata.TableName}]");
+                sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] IN (SELECT value FROM STRING_SPLIT(@Ids, ','))");
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.Append($" AND [{_metadata.SoftDeleteColumn}] = 0");
+                }
+        
+                sql.AppendLine(";");
+                return sql.ToString();
             }
-            else
+        
+            public string GenerateGetAllIncludingDeletedSql()
             {
-                sql.AppendLine("SELECT CAST(SCOPE_IDENTITY() AS INT);");
+                // For soft delete entities, gets all records including deleted ones
+                StringBuilder sql = new StringBuilder();
+                sql.AppendLine($"SELECT * FROM [{_metadata.TableName}];");
+                return sql.ToString();
+            }
+        
+            public string GenerateBulkDeleteSql()
+            {
+                StringBuilder sql = new StringBuilder();
+        
+                if (_metadata.HasSoftDelete)
+                {
+                    sql.AppendLine($"UPDATE [{_metadata.TableName}]");
+                    sql.AppendLine($"SET [{_metadata.SoftDeleteColumn}] = 1, [{_metadata.SoftDeleteDateColumn}] = GETUTCDATE()");
+                    sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] IN (SELECT value FROM STRING_SPLIT(@Ids, ','))");
+                    sql.AppendLine($" AND [{_metadata.SoftDeleteColumn}] = 0;");
+                }
+                else
+                {
+                    sql.AppendLine($"DELETE FROM [{_metadata.TableName}]");
+                    sql.AppendLine($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] IN (SELECT value FROM STRING_SPLIT(@Ids, ','));");
+                }
+        
+                return sql.ToString();
             }
         }
-
-        return sql.ToString();
-    }
-
-    public string GenerateUpdateSql()
-    {
-        List<PropertyMetadata> updatableProperties = _metadata.Properties
-            .Where(p => !p.IsPrimaryKey)
-            .ToList();
-
-        List<string> setStatements = new List<string>();
-
-        foreach (PropertyMetadata property in updatableProperties)
-        {
-            setStatements.Add($"[{property.ColumnName}] = @{property.PropertyName}");
-        }
-
-        // Add audit columns
-        if (_metadata.IsAuditable)
-        {
-            setStatements.Add("[ModifiedBy] = @ModifiedBy");
-            setStatements.Add("[ModifiedDate] = @ModifiedDate");
-        }
-
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"UPDATE [{_metadata.TableName}]");
-        sql.AppendLine($"SET {string.Join(", ", setStatements)}");
-        sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @{_metadata.PrimaryKeyProperty?.PropertyName ?? "Id"}");
-
-        // Add row version check for optimistic concurrency
-        if (_metadata.HasRowVersion)
-        {
-            sql.Append(" AND [RowVersion] = @RowVersion");
-        }
-
-        sql.AppendLine(";");
-
-        return sql.ToString();
-    }
-
-    public string GenerateDeleteSql()
-    {
-        StringBuilder sql = new StringBuilder();
-
-        if (_metadata.HasSoftDelete)
-        {
-            // Soft delete - update IsDeleted flag
-            sql.AppendLine($"UPDATE [{_metadata.TableName}]");
-            sql.AppendLine("SET [IsDeleted] = 1, [DeletedDate] = GETUTCDATE()");
-        }
-        else
-        {
-            // Hard delete
-            sql.AppendLine($"DELETE FROM [{_metadata.TableName}]");
-        }
-
-        sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id");
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.Append(" AND [IsDeleted] = 0");
-        }
-
-        sql.AppendLine(";");
-
-        return sql.ToString();
-    }
-
-    public string GenerateGetByIdSql()
-    {
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"SELECT * FROM [{_metadata.TableName}]");
-        sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id");
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.Append(" AND [IsDeleted] = 0");
-        }
-
-        sql.AppendLine(";");
-
-        return sql.ToString();
-    }
-
-    public string GenerateGetAllSql()
-    {
-        StringBuilder sql = new StringBuilder();
-        sql.Append($"SELECT * FROM [{_metadata.TableName}]");
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.Append(" WHERE [IsDeleted] = 0");
-        }
-
-        sql.AppendLine(";");
-
-        return sql.ToString();
-    }
-
-    public string GenerateCountSql()
-    {
-        StringBuilder sql = new StringBuilder();
-        sql.Append($"SELECT COUNT(*) FROM [{_metadata.TableName}]");
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.Append(" WHERE [IsDeleted] = 0");
-        }
-
-        sql.AppendLine(";");
-
-        return sql.ToString();
-    }
-
-    public string GenerateExistsSql()
-    {
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"SELECT CASE WHEN EXISTS (");
-        sql.AppendLine($"    SELECT 1 FROM [{_metadata.TableName}]");
-        sql.Append($"    WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id");
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.Append(" AND [IsDeleted] = 0");
-        }
-
-        sql.AppendLine();
-        sql.AppendLine(") THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END;");
-
-        return sql.ToString();
-    }
-
-    public string GenerateGetByNameSql()
-    {
-        // For reference tables
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"SELECT * FROM [{_metadata.TableName}]");
-        sql.Append("WHERE [Name] = @Name");
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.Append(" AND [IsDeleted] = 0");
-        }
-
-        sql.AppendLine(";");
-
-        return sql.ToString();
-    }
-
-    public string GenerateDeleteAllSql()
-    {
-        StringBuilder sql = new StringBuilder();
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.AppendLine($"UPDATE [{_metadata.TableName}]");
-            sql.AppendLine("SET [IsDeleted] = 1, [DeletedDate] = GETUTCDATE()");
-            sql.AppendLine("WHERE [IsDeleted] = 0;");
-        }
-        else
-        {
-            sql.AppendLine($"DELETE FROM [{_metadata.TableName}];");
-        }
-
-        return sql.ToString();
-    }
-
-    public string GenerateHardDeleteSql()
-    {
-        // For soft delete entities, provides a way to permanently delete
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"DELETE FROM [{_metadata.TableName}]");
-        sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] = @Id;");
-        return sql.ToString();
-    }
-
-    public string GenerateGetByIdsSql()
-    {
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"SELECT * FROM [{_metadata.TableName}]");
-        sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] IN (SELECT value FROM STRING_SPLIT(@Ids, ','))");
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.Append(" AND [IsDeleted] = 0");
-        }
-
-        sql.AppendLine(";");
-        return sql.ToString();
-    }
-
-    public string GenerateGetAllIncludingDeletedSql()
-    {
-        // For soft delete entities, gets all records including deleted ones
-        StringBuilder sql = new StringBuilder();
-        sql.AppendLine($"SELECT * FROM [{_metadata.TableName}];");
-        return sql.ToString();
-    }
-
-    public string GenerateBulkDeleteSql()
-    {
-        StringBuilder sql = new StringBuilder();
-
-        if (_metadata.HasSoftDelete)
-        {
-            sql.AppendLine($"UPDATE [{_metadata.TableName}]");
-            sql.AppendLine("SET [IsDeleted] = 1, [DeletedDate] = GETUTCDATE()");
-            sql.Append($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] IN (SELECT value FROM STRING_SPLIT(@Ids, ','))");
-            sql.AppendLine(" AND [IsDeleted] = 0;");
-        }
-        else
-        {
-            sql.AppendLine($"DELETE FROM [{_metadata.TableName}]");
-            sql.AppendLine($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] IN (SELECT value FROM STRING_SPLIT(@Ids, ','));");
-        }
-
-        return sql.ToString();
-    }
-}

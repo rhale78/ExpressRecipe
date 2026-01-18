@@ -33,7 +33,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
                    c.ImageUrl, c.SourceUrl, c.CanBeDoubled, c.CanBeCombined,
                    c.RequiresLoyaltyCard, c.StartDate, c.ExpirationDate, c.IsActive,
                    c.SubmittedBy, c.IsApproved, c.ApprovedBy, c.ApprovedAt,
-                   c.RejectionReason, c.CreatedAt, c.UpdatedAt,
+                   c.RejectionReason, c.CreatedDate, c.UpdatedAt,
                    s.ChainName AS StoreName,
                    p.Name AS ProductName
             FROM Coupon c
@@ -58,7 +58,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
                    c.ImageUrl, c.SourceUrl, c.CanBeDoubled, c.CanBeCombined,
                    c.RequiresLoyaltyCard, c.StartDate, c.ExpirationDate, c.IsActive,
                    c.SubmittedBy, c.IsApproved, c.ApprovedBy, c.ApprovedAt,
-                   c.RejectionReason, c.CreatedAt, c.UpdatedAt,
+                   c.RejectionReason, c.CreatedDate, c.UpdatedAt,
                    s.ChainName AS StoreName,
                    p.Name AS ProductName
             FROM Coupon c
@@ -143,7 +143,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
                               MaxUsesPerUser, ProductId, StoreId, ManufacturerName,
                               ImageUrl, SourceUrl, CanBeDoubled, CanBeCombined,
                               RequiresLoyaltyCard, StartDate, ExpirationDate, IsActive,
-                              SubmittedBy, IsApproved, CreatedAt, IsDeleted)
+                              SubmittedBy, IsApproved, CreatedDate, IsDeleted)
             VALUES (@Id, @Code, @Description, @CouponType, @DiscountType, @DiscountAmount,
                     @MinimumPurchaseAmount, @MinimumQuantity, @MaximumQuantity,
                     @MaxUsesPerUser, @ProductId, @StoreId, @ManufacturerName,
@@ -302,7 +302,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
                    c.ImageUrl, c.SourceUrl, c.CanBeDoubled, c.CanBeCombined,
                    c.RequiresLoyaltyCard, c.StartDate, c.ExpirationDate, c.IsActive,
                    c.SubmittedBy, c.IsApproved, c.ApprovedBy, c.ApprovedAt,
-                   c.RejectionReason, c.CreatedAt, c.UpdatedAt,
+                   c.RejectionReason, c.CreatedDate, c.UpdatedAt,
                    s.ChainName AS StoreName,
                    p.Name AS ProductName
             FROM Coupon c
@@ -365,7 +365,7 @@ public class CouponRepository : SqlHelper, ICouponRepository
             ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
             ApprovedAt = GetDateTime(reader, "ApprovedAt"),
             RejectionReason = GetString(reader, "RejectionReason"),
-            CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            CreatedAt = GetNullableDateTime(reader, "CreatedDate") ?? DateTime.UtcNow,
             UpdatedAt = GetDateTime(reader, "UpdatedAt")
         };
     }

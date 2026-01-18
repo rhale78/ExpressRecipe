@@ -191,7 +191,7 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
                             NutriScore = COALESCE(NutriScore, @NutriScore),
                             NovaGroup = COALESCE(NovaGroup, @NovaGroup),
                             EcoScore = COALESCE(EcoScore, @EcoScore),
-                            UpdatedAt = GETUTCDATE()
+                            ModifiedDate = GETUTCDATE()
                         WHERE Barcode = @Barcode AND IsDeleted = 0";
 
                     using var command = new SqlCommand(sql, connection, transaction);
@@ -261,12 +261,12 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
                 ImageUrl, ImageSmallUrl, Lang, Countries,
                 NutriScore, NovaGroup, EcoScore, RawJson,
                 ProcessingStatus, ProcessedAt, ProcessingError, ProcessingAttempts,
-                CreatedAt, UpdatedAt
+                CreatedDate, UpdatedAt
             FROM ProductStaging WITH (UPDLOCK, READPAST)
             WHERE ProcessingStatus = 'Pending'
                 AND IsDeleted = 0
                 AND ProcessingAttempts < 3
-            ORDER BY CreatedAt ASC";
+            ORDER BY CreatedDate ASC";
 
         // Use 120 second timeout during high-volume processing
         return await ExecuteReaderAsync(sql, MapStagedProduct, timeoutSeconds: 120, new SqlParameter("@Limit", limit));
@@ -280,7 +280,7 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
                 ProcessedAt = CASE WHEN @Status = 'Completed' THEN GETUTCDATE() ELSE ProcessedAt END,
                 ProcessingError = @Error,
                 ProcessingAttempts = ProcessingAttempts + 1,
-                UpdatedAt = GETUTCDATE()
+                ModifiedDate = GETUTCDATE()
             WHERE Id = @Id";
 
         await ExecuteNonQueryAsync(sql,
@@ -332,8 +332,8 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
             ProcessedAt = reader.IsDBNull("ProcessedAt") ? null : reader.GetDateTime("ProcessedAt"),
             ProcessingError = reader.IsDBNull("ProcessingError") ? null : reader.GetString("ProcessingError"),
             ProcessingAttempts = reader.GetInt32("ProcessingAttempts"),
-            CreatedAt = reader.GetDateTime("CreatedAt"),
-            UpdatedAt = reader.IsDBNull("UpdatedAt") ? null : reader.GetDateTime("UpdatedAt")
+            CreatedDate = reader.GetDateTime("CreatedDate"),
+            ModifiedDate = reader.IsDBNull("UpdatedAt") ? null : reader.GetDateTime("UpdatedAt")
         };
     }
 }
@@ -365,6 +365,6 @@ public class StagedProduct
     public DateTime? ProcessedAt { get; set; }
     public string? ProcessingError { get; set; }
     public int ProcessingAttempts { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
+    public DateTime CreatedDate { get; set; }
+    public DateTime? ModifiedDate { get; set; }
 }

@@ -50,6 +50,13 @@ builder.Services.AddSingleton<RetryPolicyFactory>(sp =>
         delayMilliseconds: 100);
 });
 
+// Register a DatabaseRetryPolicy instance created from the factory for DI consumers
+builder.Services.AddSingleton<HighSpeedDAL.Core.Resilience.DatabaseRetryPolicy>(sp =>
+{
+    var factory = sp.GetRequiredService<RetryPolicyFactory>();
+    return factory.CreatePolicy();
+});
+
 // Register InMemoryTableManager for high-speed in-memory operations with 30s flush to SQL
 builder.Services.AddSingleton<InMemoryTableManager>(sp =>
 {
@@ -93,45 +100,38 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
     builder.Services.AddAuthorization();
 
-    // Register repositories
-    var connectionString = builder.Configuration.GetConnectionString("productdb")
-        ?? throw new InvalidOperationException("Database connection string 'productdb' not found");
+// Register repositories and their dependencies (DALs)
+var connectionString = builder.Configuration.GetConnectionString("productdb")
+    ?? throw new InvalidOperationException("Database connection string 'productdb' not found");
 
-    // TEMPORARILY DISABLED: HighSpeedDAL source generator has Guid/int type mismatch bug
-    // Register HighSpeedDAL components
-    // builder.Services.AddSingleton<ProductDatabaseConnection>();
-    // builder.Services.AddSingleton<ProductEntityDal>();
-    // builder.Services.AddSingleton<IngredientEntityDal>();
+// Register generated DALs from HighSpeedDAL. These are used by the repository adapters.
+builder.Services.AddScoped<ProductEntityDal>();
+builder.Services.AddScoped<IngredientEntityDal>();
+builder.Services.AddScoped<ProductIngredientEntityDal>();
+builder.Services.AddScoped<ProductImageEntityDal>();
+builder.Services.AddScoped<ProductLabelEntityDal>();
+builder.Services.AddScoped<ProductAllergenEntityDal>();
+builder.Services.AddScoped<ProductExternalLinkEntityDal>();
+builder.Services.AddScoped<ProductMetadataEntityDal>();
+builder.Services.AddScoped<ProductStagingEntityDal>();
 
-    // Keep existing repositories for now (fallback) alongside HighSpeedDAL adapters
-    builder.Services.AddScoped<IProductImageRepository>(sp => 
-        new ProductImageRepository(connectionString, sp.GetRequiredService<ILogger<ProductImageRepository>>()));
+// Register repository adapters. These adapt the DALs (which work with entities)
+// to the IProductRepository interface (which works with DTOs).
+builder.Services.AddScoped<IProductRepository, ProductRepositoryAdapter>();
+builder.Services.AddScoped<IIngredientRepository, IngredientRepositoryAdapter>();
+builder.Services.AddScoped<IProductImageRepository, ProductImageRepositoryAdapter>();
+builder.Services.AddScoped<IProductStagingRepository, ProductStagingRepositoryAdapter>();
+builder.Services.AddScoped<IAllergenRepository, AllergenRepositoryAdapter>();
 
-    // Option 1: Use HighSpeedDAL adapters (RECOMMENDED - new pattern) - TEMPORARILY DISABLED
-    // builder.Services.AddScoped<IProductRepository, ProductRepositoryAdapter>();
-    // builder.Services.AddScoped<IIngredientRepository, IngredientRepositoryAdapter>();
+// The search adapter contains complex queries and is kept separate for now.
+builder.Services.AddScoped<ProductSearchAdapter>();
 
-    // Option 2: Use old SqlHelper-based repositories (ACTIVE - until HighSpeedDAL source generator is fixed)
-    builder.Services.AddScoped<IProductRepository>(sp => 
-    {
-        var cache = sp.GetRequiredService<HybridCacheService>();
-        var logger = sp.GetRequiredService<ILogger<ProductRepository>>();
-        return new ProductRepository(connectionString, sp.GetRequiredService<IProductImageRepository>(), cache, logger);
-    });
-    builder.Services.AddScoped<IIngredientRepository>(sp =>
-    {
-        var cache = sp.GetRequiredService<HybridCacheService>();
-        var logger = sp.GetRequiredService<ILogger<IngredientRepository>>();
-        return new IngredientRepository(connectionString, cache, logger);
-    });
-
-    builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
-    builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
-    builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
-    builder.Services.AddScoped<IStoreRepository>(sp => new StoreRepository(connectionString));
-    builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connectionString));
-    builder.Services.AddScoped<IProductStagingRepository>(sp => new ProductStagingRepository(connectionString));
-    builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(connectionString));
+// Register legacy repositories that have not been migrated to HighSpeedDAL yet.
+builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
+builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
+builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
+builder.Services.AddScoped<IStoreRepository>(sp => new StoreRepository(connectionString));
+builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connectionString));
 
     // Register parsers
     builder.Services.AddScoped<IIngredientParser, IngredientParser>(); // For parsing individual ingredient components

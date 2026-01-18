@@ -6,6 +6,9 @@
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
           <OpenApiGenerateDocuments>false</OpenApiGenerateDocuments>
           <IncludeOpenAPIAnalyzers>false</IncludeOpenAPIAnalyzers>
+    <!-- Force source generator output to be written to disk -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
         </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Microsoft.Data.SqlClient" Version="13.1.0" />

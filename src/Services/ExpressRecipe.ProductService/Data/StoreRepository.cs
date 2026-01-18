@@ -154,7 +154,7 @@ public class StoreRepository : SqlHelper, IStoreRepository
                              Country, Phone, Email, Website, Latitude, Longitude,
                              AcceptsManufacturerCoupons, AcceptsStoreCoupons, AcceptsDigitalCoupons,
                              DoublesManufacturerCoupons, MaxCouponDoubleValue, CouponPolicy, Hours,
-                             IsActive, CreatedAt, CreatedBy)
+                             IsActive, CreatedDate, CreatedBy)
             VALUES (@Id, @ChainName, @StoreNumber, @Name, @Address, @City, @State, @ZipCode,
                     @Country, @Phone, @Email, @Website, @Latitude, @Longitude,
                     @AcceptsManufacturerCoupons, @AcceptsStoreCoupons, @AcceptsDigitalCoupons,

@@ -53,7 +53,7 @@ public class ProductImageRepository : IProductImageRepository
                 INSERT INTO ProductImage (
                     ProductId, ImageType, ImageUrl, LocalFilePath, FileName, FileSize, MimeType,
                     Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId,
-                    CreatedAt, CreatedBy, IsDeleted
+                    CreatedDate, CreatedBy, IsDeleted
                 )
                 OUTPUT INSERTED.Id
                 VALUES (
@@ -120,10 +120,10 @@ public class ProductImageRepository : IProductImageRepository
         const string sql = @"
             SELECT
                 Id, ProductId, ImageType, ImageUrl, LocalFilePath, FileName, FileSize, MimeType,
-                Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId, CreatedAt
+                Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId, CreatedDate
             FROM ProductImage
             WHERE ProductId = @ProductId AND IsDeleted = 0
-            ORDER BY DisplayOrder, CreatedAt";
+            ORDER BY DisplayOrder, CreatedDate";
 
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -164,7 +164,7 @@ public class ProductImageRepository : IProductImageRepository
         const string sql = @"
             SELECT TOP 1
                 Id, ProductId, ImageType, ImageUrl, LocalFilePath, FileName, FileSize, MimeType,
-                Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId, CreatedAt
+                Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId, CreatedDate
             FROM ProductImage
             WHERE ProductId = @ProductId AND IsDeleted = 0 AND IsPrimary = 1
             ORDER BY DisplayOrder";

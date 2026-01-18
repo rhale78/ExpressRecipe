@@ -27,6 +27,8 @@ public interface IHighSpeedProductRepository
     Task InvalidateCacheAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
     Task InvalidateCacheByBarcodeAsync(IEnumerable<string> barcodes, CancellationToken ct = default);
 }
+// NOTE: HighSpeedProductRepository retained for reference but not registered in DI when using HighSpeedDAL adapters.
+// The implementation remains available for reference and can be re-activated by registering IHighSpeedProductRepository in DI.
 
 public class HighSpeedProductRepository : SqlHelper, IHighSpeedProductRepository
 {

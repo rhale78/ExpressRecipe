@@ -1,242 +1,315 @@
-# HighSpeedDAL Product/Ingredient DAL - Framework-Compliant Implementation
+# HighSpeedDAL Product/Ingredient DAL Refactor - Complete
+
+**Date**: 2026-01-14
+**Status**: ✅ **COMPLETE** - Build successful, all fixes applied
+
+---
 
 ## Summary
 
-Successfully refactored `ProductDal` and `IngredientDal` to **work properly with the HighSpeedDAL framework** following the "pit of success" design pattern.
+Successfully fixed HighSpeedDAL source generator to properly handle:
+1. Soft-delete parameter binding in INSERT/UPDATE operations
+2. Guid primary keys (not treating them as database auto-increment)
+3. Auto-audit property naming conventions
+4. Repository adapter migration to HighSpeedDAL standard names
 
-## What Changed
+---
 
-### Before (Fighting the Framework ?)
+## Problems Fixed
+
+### 1. Missing @IsDeleted Parameter
+**Error**: `Must declare the scalar variable "@IsDeleted"`
+
+**Root Cause**: MapToParameters excluded soft-delete properties from parameter mapping, expecting "separate handling" but InsertAsync/UpdateAsync only added audit parameters.
+
+**Fix Applied**: Added soft-delete parameter binding in DalClassGenerator.Part2.cs:
+- InsertAsync (lines 69-76)
+- UpdateAsync (lines 184-191)
+- BulkInsertAsync (lines 349-359)
+
+### 2. Guid PK Incorrectly Using ExecuteScalarAsync
+**Error**: Generated code used `SCOPE_IDENTITY()` and `ExecuteScalarAsync<Guid>` for Guid PKs
+
+**Root Cause**: EntityParser.cs unconditionally set `IsAutoIncrement = true` for ANY `[Identity]` attribute, even on Guid properties.
+
+**Fix Applied**:
+- Modified [Identity] attribute handling to only set IsAutoIncrement for int/long types (EntityParser.cs lines 904-916)
+- Added safeguard in [PrimaryKey] attribute to default Guid PKs to IsAutoIncrement=false (lines 890-911)
+
+### 3. Invalid Column Names (Schema Mismatch)
+**Error**: `Invalid column name 'CreatedDate'/'ModifiedDate'/'DeletedBy'`
+
+**Root Cause**: Entity classes manually defined properties with different names:
+- `CreatedAt` instead of `CreatedDate`
+- `UpdatedAt` instead of `ModifiedDate`
+
+HighSpeedDAL's `[AutoAudit]` and `[SoftDelete]` generate standard names that must match database schema.
+
+**Fix Applied**:
+- Removed manually-defined CreatedAt, UpdatedAt, IsDeleted from ProductEntity.cs
+- Removed manually-defined CreatedAt, UpdatedAt, IsDeleted from IngredientEntity.cs
+- Added comments explaining auto-generation by framework
+
+### 4. Repository Adapters Referencing Old Property Names
+**Error**: Build errors - 'ProductEntity' does not contain definition for 'CreatedAt'/'UpdatedAt'
+
+**Root Cause**: After removing manually-defined properties, repository adapters still referenced old names.
+
+**Fix Applied**:
+- ProductRepositoryAdapter.cs: Changed UpdatedAt → ModifiedDate, CreatedAt → CreatedDate
+- IngredientRepositoryAdapter.cs: Changed UpdatedAt → ModifiedDate
+- Updated MapReaderToProductDto to only map CreatedDate → CreatedAt (line 222)
+- Changed InsertAsync username from `null` to `"System"`
+
+---
+
+## Files Modified
+
+### Source Generator Files (HighSpeedDAL)
+
+**src/HighSpeedDAL/src/HighSpeedDAL.SourceGenerators/Generation/DalClassGenerator.Part2.cs**
 ```csharp
-// Manual HybridCacheService injection
-private readonly HybridCacheService? _cache;
-
-public ProductDal(ProductConnection connection, ILogger logger, HybridCacheService? cache = null)
-
-// Manual cache key management
-var cacheKey = $"product:{id}";
-var cached = await _cache.GetAsync<ProductDto>(cacheKey);
-
-// Direct SQL writes (no in-memory layer)
-await InsertGenericAsync(TableName, product, ct);
-```
-
-### After (Framework-Compliant ?)
-```csharp
-// Framework interfaces for cache and in-memory table
-private readonly ICacheManager<ProductDto, Guid>? _cache;
-private readonly InMemoryTable<ProductDto>? _memoryTable;
-
-public ProductDal(
-    ProductConnection connection, 
-    ILogger logger,
-    ICacheManager<ProductDto, Guid>? cache = null,
-    InMemoryTable<ProductDto>? memoryTable = null)
-
-// 3-Tier access pattern: Cache ? InMemory ? SQL
-// Tier 1: Framework cache
-if (_cache != null)
+// Lines 69-76: InsertAsync soft-delete parameters
+if (_metadata.HasSoftDelete)
 {
-    var cached = await _cache.GetAsync(id, ct);
-    if (cached != null) return cached;
+    code.AppendLine();
+    code.AppendLine("        // Add soft-delete fields");
+    code.AppendLine("        parameters[\"IsDeleted\"] = entity.IsDeleted;");
+    code.AppendLine("        parameters[\"DeletedDate\"] = entity.DeletedDate ?? (object)DBNull.Value;");
+    code.AppendLine("        parameters[\"DeletedBy\"] = entity.DeletedBy ?? (object)DBNull.Value;");
 }
 
-// Tier 2: In-memory table (writes cached, auto-flush every 30s)
-if (_memoryTable != null)
+// Lines 184-191: UpdateAsync soft-delete parameters
+if (_metadata.HasSoftDelete)
 {
-    var inMemory = _memoryTable.GetById(id);
-    if (inMemory != null) return inMemory;
+    code.AppendLine();
+    code.AppendLine("        // Add soft-delete fields");
+    code.AppendLine("        parameters[\"IsDeleted\"] = entity.IsDeleted;");
+    code.AppendLine("        parameters[\"DeletedDate\"] = entity.DeletedDate ?? (object)DBNull.Value;");
+    code.AppendLine("        parameters[\"DeletedBy\"] = entity.DeletedBy ?? (object)DBNull.Value;");
 }
 
-// Tier 3: SQL fallback
-var result = await GetByIdGenericAsync(TableName, id, MapFromReader, ct);
-```
-
-## Key Improvements
-
-### 1. Removed Manual Cache Management
-- ? Removed `HybridCacheService` injection
-- ? Added `ICacheManager<TEntity, TKey>` (framework interface)
-- ? Framework handles cache key generation, expiration, invalidation
-
-### 2. Added In-Memory Table Support
-- ? Added `InMemoryTable<TEntity>` parameter (optional)
-- ? Writes go to memory first (instant, ~0.1ms)
-- ? Auto-flush to SQL every 30 seconds (from `[InMemoryTable]` attribute)
-- ? Reads check memory before hitting SQL
-
-### 3. Minimal Code in DAL
-The DAL is now **mostly delegation**:
-- Cache operations ? `ICacheManager`
-- Memory operations ? `InMemoryTable`
-- SQL operations ? `DalOperationsBase`
-- **~200 lines total** (vs potential 500+ for manual implementation)
-
-## How It Works
-
-### Entity Attributes Drive Behavior
-```csharp
-// In ProductEntity.cs
-[Table("Product", PrimaryKeyType = PrimaryKeyType.Guid)]
-[Cache(CacheStrategy.TwoLayer, MaxSize = 10000, ExpirationSeconds = 900)]
-[InMemoryTable(FlushIntervalSeconds = 30, MaxRowCount = 100000)] // When enabled
-[DalEntity] // Source generator creates DAL (currently disabled due to bug)
-public class ProductEntity { ... }
-```
-
-### DI Registration (Future)
-When source generator is fixed or when manually wiring:
-```csharp
-// Register cache manager (framework provides implementation)
-services.AddSingleton<ICacheManager<ProductDto, Guid>>(sp => 
-    new MemoryCacheManager<ProductDto, Guid>(
-        sp.GetRequiredService<ILogger<MemoryCacheManager<ProductDto, Guid>>>(),
-        maxSize: 10000,
-        expirationSeconds: 900));
-
-// Register in-memory table manager
-services.AddSingleton<InMemoryTableManager>(sp =>
-    new InMemoryTableManager(
-        sp.GetRequiredService<ILogger<InMemoryTableManager>>(),
-        () => new SqlConnection(connectionString)));
-
-// Register DAL
-services.AddScoped<IProductDal>(sp =>
+// Lines 349-359: BulkInsertAsync soft-delete initialization
+if (_metadata.HasSoftDelete)
 {
-    var connection = sp.GetRequiredService<ProductConnection>();
-    var logger = sp.GetRequiredService<ILogger<ProductDal>>();
-    var cache = sp.GetService<ICacheManager<ProductDto, Guid>>(); // Optional
-    
-    // Create in-memory table if configured
-    InMemoryTable<ProductDto>? memoryTable = null;
-    if (configuration.GetValue<bool>("HighSpeedDAL:UseInMemoryTables"))
+    code.AppendLine("        // Initialize soft-delete fields for all entities");
+    code.AppendLine("        foreach (var entity in entityList)");
+    code.AppendLine("        {");
+    code.AppendLine("            entity.IsDeleted = false;");
+    code.AppendLine("            entity.DeletedDate = null;");
+    code.AppendLine("            entity.DeletedBy = null;");
+    code.AppendLine("        }");
+    code.AppendLine();
+}
+```
+
+**src/HighSpeedDAL/src/HighSpeedDAL.SourceGenerators/Parsing/EntityParser.cs**
+```csharp
+// Lines 904-916: [Identity] attribute - only auto-increment for int/long
+case "IdentityAttribute":
+case "Identity":
+    // [Identity] means auto-populated by DAL/database
+    // For int/long: database IDENTITY column (auto-increment)
+    // For Guid: client-generated or database DEFAULT NEWID() (not auto-increment in code)
+    // For other types (DateTime, string): just auto-populated (not auto-increment)
+    if (metadata.PropertyType == "int" || metadata.PropertyType == "long" ||
+        metadata.PropertyType == "System.Int32" || metadata.PropertyType == "System.Int64")
     {
-        var tableManager = sp.GetRequiredService<InMemoryTableManager>();
-        var config = new InMemoryTableAttribute 
-        { 
-            FlushIntervalSeconds = 30, 
-            MaxRowCount = 100000 
-        };
-        memoryTable = tableManager.RegisterTable<ProductDto>(config, "Product");
+        metadata.IsAutoIncrement = true;
     }
-    
-    return new ProductDal(connection, logger, cache, memoryTable);
-});
+    // For Guid and other types, leave IsAutoIncrement as false
+    break;
+
+// Lines 890-911: [PrimaryKey] with Guid safeguard
+case "PrimaryKeyAttribute":
+case "PrimaryKey":
+    metadata.IsPrimaryKey = true;
+    bool? explicitAutoIncrement = null;
+    foreach (KeyValuePair<string, TypedConstant> namedArg in attribute.NamedArguments)
+    {
+        if ((namedArg.Key == "AutoGenerate" || namedArg.Key == "AutoIncrement") &&
+            namedArg.Value.Value is bool autoValue)
+        {
+            explicitAutoIncrement = autoValue;
+            metadata.IsAutoIncrement = autoValue;
+        }
+    }
+
+    // If AutoIncrement wasn't explicitly set and this is a Guid PK, default to false
+    if (!explicitAutoIncrement.HasValue &&
+        (metadata.PropertyType == "Guid" || metadata.PropertyType == "System.Guid"))
+    {
+        metadata.IsAutoIncrement = false;
+    }
+    break;
 ```
 
-## Performance Impact
+### Entity Files
 
-### Write Operations
-| Before | After (No InMemory) | After (With InMemory) |
-|--------|---------------------|----------------------|
-| ~10-50ms (direct SQL) | ~10-50ms (direct SQL) | **~0.1ms (memory)** |
-| Blocking on SQL | Blocking on SQL | Non-blocking, auto-flush |
-| High SQL load | High SQL load | **Low SQL load (batched)** |
+**src/Services/ExpressRecipe.ProductService/Entities/ProductEntity.cs**
+- Removed: CreatedAt, UpdatedAt, IsDeleted properties (lines 68-77)
+- Added: Comment explaining auto-generation by framework
 
-### Read Operations  
-| Before | After (Cache) | After (Cache + InMemory) |
-|--------|---------------|--------------------------|
-| ~10-50ms (SQL) | **~0.5ms (cache)** | **~0.3ms (memory)** |
-| Cache: 15min | Cache: 15min | Cache: 15min |
-| No read-through | Read-through to SQL | Read-through to memory?SQL |
+**src/Services/ExpressRecipe.ProductService/Entities/IngredientEntity.cs**
+- Removed: CreatedAt, UpdatedAt, IsDeleted properties (lines 36-45)
+- Added: Comment explaining auto-generation by framework
 
-## Current State
+### Repository Adapter Files
 
-### ? Completed
-- Refactored `ProductDal` to use `ICacheManager` and `InMemoryTable`
-- Refactored `IngredientDal` to use `ICacheManager` and `InMemoryTable`
-- Implemented 3-tier access pattern
-- Solution builds successfully
-- Framework-compliant architecture
+**src/Services/ExpressRecipe.ProductService/Data/ProductRepositoryAdapter.cs**
+- Line 232: Changed `UpdatedAt` to `ModifiedDate`
+- Line 222: Changed `CreatedAt` to `CreatedDate` in MapReaderToProductDto
+- Line 280: Map `entity.CreatedDate` to `dto.CreatedAt`
+- Lines 300-301: Removed manual CreatedAt assignment, added comment
 
-### ?? Not Yet Wired (Optional)
-The DAL classes are **ready** but cache/memory table dependencies are **optional**:
-- `ICacheManager` ? Pass `null` for no caching (current behavior)
-- `InMemoryTable` ? Pass `null` for direct SQL (current behavior)
+**src/Services/ExpressRecipe.ProductService/Data/IngredientRepositoryAdapter.cs**
+- Lines 119, 131: Changed `UpdatedAt` to `ModifiedDate`
+- Line 103: Removed manual CreatedAt assignment
+- Line 107: Changed username from `null` to `"System"`
 
-To enable:
-1. Register `ICacheManager<ProductDto, Guid>` in DI
-2. Register `InMemoryTableManager` in DI
-3. Create and register `InMemoryTable<ProductDto>` instances
-4. Pass them to DAL constructors
+---
 
-### ? Future Enhancement
-When source generator Guid/int bug is fixed:
-1. Re-enable `[DalEntity]` attribute on entities
-2. Remove manual DAL classes
-3. Let generator create everything automatically
-4. Zero manual DAL code needed
+## Generated Code Verification
 
-## Testing
+After fixes, the generated ProductEntityDal.g.cs contains:
 
-### Current Behavior (No Optional Dependencies)
+### InsertAsync (lines 240-276)
 ```csharp
-var dal = new ProductDal(connection, logger, cache: null, memoryTable: null);
+// Generate Guid ID if not already set
+if (entity.Id == Guid.Empty)
+{
+    entity.Id = Guid.NewGuid();
+}
 
-// Behavior: Direct SQL for all operations
-await dal.SaveAsync(product); // Direct SQL write
-var result = await dal.GetByIdAsync(id); // Direct SQL read
+Dictionary<string, object> parameters = MapToParameters(entity);
+
+// Add audit fields
+DateTime now = DateTime.UtcNow;
+parameters["CreatedBy"] = userName;
+parameters["CreatedDate"] = now;
+parameters["ModifiedBy"] = userName;
+parameters["ModifiedDate"] = now;
+
+// Populate audit fields on entity
+entity.CreatedBy = userName;
+entity.CreatedDate = now;
+entity.ModifiedBy = userName;
+entity.ModifiedDate = now;
+
+// Add soft-delete fields
+parameters["IsDeleted"] = entity.IsDeleted;
+parameters["DeletedDate"] = entity.DeletedDate ?? (object)DBNull.Value;
+parameters["DeletedBy"] = entity.DeletedBy ?? (object)DBNull.Value;
+
+await ExecuteNonQueryAsync(  // ← Correct for Guid PK
+    SQL_INSERT,
+    parameters,
+    transaction: null,
+    cancellationToken);
 ```
 
-### With Cache Enabled
+### SQL_INSERT (lines 50-54)
+```sql
+INSERT INTO [Product]
+([Id], [Name], [Brand], [Barcode], [BarcodeType], [Description], [Category],
+ [ServingSize], [ServingUnit], [ImageUrl], [ApprovalStatus], [ApprovedBy],
+ [ApprovedAt], [RejectionReason], [SubmittedBy], [CreatedDate], [CreatedBy],
+ [ModifiedDate], [ModifiedBy], [IsDeleted], [DeletedDate], [DeletedBy])
+VALUES
+(@Id, @Name, @Brand, @Barcode, @BarcodeType, @Description, @Category,
+ @ServingSize, @ServingUnit, @ImageUrl, @ApprovalStatus, @ApprovedBy,
+ @ApprovedAt, @RejectionReason, @SubmittedBy, @CreatedDate, @CreatedBy,
+ @ModifiedDate, @ModifiedBy, @IsDeleted, @DeletedDate, @DeletedBy);
+```
+
+**Key observations**:
+- ✅ Includes `[Id]` column and `@Id` parameter
+- ✅ No `OUTPUT INSERTED.[Id]` clause
+- ✅ No `SELECT CAST(SCOPE_IDENTITY() AS INT)`
+- ✅ Includes all soft-delete columns and parameters
+- ✅ Uses `ExecuteNonQueryAsync` (not `ExecuteScalarAsync`)
+
+---
+
+## Build Status
+
+```
+dotnet build src/Services/ExpressRecipe.ProductService/ExpressRecipe.ProductService.csproj
+
+Build succeeded.
+    18 Warning(s)
+    0 Error(s)
+```
+
+All warnings are pre-existing (nullable reference types, package references) and not related to our changes.
+
+---
+
+## Next Steps
+
+### Runtime Testing
+1. Start ProductService and test actual database operations:
+   - Create Product entity
+   - Update Product entity
+   - Verify soft-delete operations
+   - Check that audit fields are properly populated
+
+2. Verify database schema has required columns:
+   - CreatedDate, CreatedBy, ModifiedDate, ModifiedBy (from [AutoAudit])
+   - IsDeleted, DeletedDate, DeletedBy (from [SoftDelete])
+
+3. Test Ingredient entities similarly
+
+### Database Migration (if needed)
+If database schema doesn't have the audit columns, run migration to add:
+```sql
+ALTER TABLE Product ADD CreatedDate DATETIME2 NOT NULL DEFAULT GETUTCDATE();
+ALTER TABLE Product ADD CreatedBy NVARCHAR(MAX) NULL;
+ALTER TABLE Product ADD ModifiedDate DATETIME2 NULL;
+ALTER TABLE Product ADD ModifiedBy NVARCHAR(MAX) NULL;
+ALTER TABLE Product ADD DeletedDate DATETIME2 NULL;
+ALTER TABLE Product ADD DeletedBy NVARCHAR(MAX) NULL;
+
+-- Same for Ingredient table
+```
+
+---
+
+## Pattern for Future Entities
+
+When creating new entities with HighSpeedDAL:
+
 ```csharp
-var cache = new MemoryCacheManager<ProductDto, Guid>(logger, 10000, 900);
-var dal = new ProductDal(connection, logger, cache, memoryTable: null);
+[DalEntity]
+[Table("EntityName", PrimaryKeyType = PrimaryKeyType.Guid)]
+[Cache(CacheStrategy.TwoLayer, MaxSize = 10000, ExpirationSeconds = 900)]
+[InMemoryTable(FlushIntervalSeconds = 30, MaxRowCount = 100000)]
+[AutoAudit]        // Generates: CreatedDate, CreatedBy, ModifiedDate, ModifiedBy
+[SoftDelete]       // Generates: IsDeleted, DeletedDate, DeletedBy
+[MessagePackObject]
+public partial class EntityNameEntity
+{
+    [Key(0)]
+    [PrimaryKey]
+    public Guid Id { get; set; }
 
-// Behavior: Cache ? SQL
-await dal.SaveAsync(product); // SQL write + cache invalidate
-var result = await dal.GetByIdAsync(id); // Cache ? SQL fallback
+    // Your properties here...
+
+    // DO NOT manually define: CreatedAt, UpdatedAt, IsDeleted
+    // Framework generates: CreatedDate, ModifiedDate, IsDeleted
+    // Map CreatedDate → CreatedAt in DTOs for display
+}
 ```
 
-### With Full Stack (Cache + InMemory)
-```csharp
-var cache = new MemoryCacheManager<ProductDto, Guid>(logger, 10000, 900);
-var tableManager = new InMemoryTableManager(logger, () => new SqlConnection(conn));
-var memoryTable = tableManager.RegisterTable<ProductDto>(config, "Product");
-var dal = new ProductDal(connection, logger, cache, memoryTable);
-
-// Behavior: Cache ? InMemory (30s auto-flush) ? SQL
-await dal.SaveAsync(product); // Instant to memory, auto-flush in 30s
-var result = await dal.GetByIdAsync(id); // Cache ? Memory ? SQL fallback
-```
-
-## Architecture Compliance
-
-### ? Framework Patterns Followed
-1. **Use `ICacheManager`** - Not custom cache services
-2. **Use `InMemoryTable`** - Not custom backing stores
-3. **Let attributes drive behavior** - `[Cache]`, `[InMemoryTable]`
-4. **Minimal DAL code** - Delegate to framework
-5. **Optional dependencies** - Works with or without cache/memory
-
-### ? Anti-Patterns Avoided
-1. ~~Manual `HybridCacheService` injection~~
-2. ~~Custom `InMemoryBackingStore` classes~~
-3. ~~Manual cache key generation~~
-4. ~~Redundant caching layers~~
-5. ~~Fighting the framework~~
-
-## Recommendation
-
-**Current Setup**: Keep optional dependencies as `null` (direct SQL mode)
-- ? Simple, works, proven
-- ? No additional DI configuration needed
-- ? Framework-ready for future enhancements
-
-**Future Enhancement**: Wire up cache and in-memory tables when needed
-- ? 100x faster writes
-- ? 10-50x faster reads
-- ? Reduced SQL load
-- ?? Requires DI configuration
-- ?? More complex testing
+---
 
 ## Conclusion
 
-The DAL is now **framework-compliant and production-ready**:
-- Works with minimal configuration (direct SQL)
-- Ready for performance enhancements (cache + in-memory)
-- Follows HighSpeedDAL design patterns
-- Minimal code, maximum framework leverage
-- When source generator is fixed, can be replaced by generated code
+All HighSpeedDAL source generator issues have been resolved:
+- ✅ Soft-delete parameters properly bound
+- ✅ Guid primary keys handled correctly (client-generated, no SCOPE_IDENTITY)
+- ✅ Auto-audit property naming standardized
+- ✅ Repository adapters migrated to new property names
+- ✅ Build successful with 0 errors
 
-**The pit of success design is complete!** ??
+The ProductService is now ready for runtime testing to verify database operations work correctly.

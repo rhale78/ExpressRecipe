@@ -60,7 +60,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             SELECT Id, Name, Brand, CuisineType, Address, City, State, ZipCode,
                    Country, Latitude, Longitude, Phone, Website,
                    IsApproved, ApprovedBy, ApprovedAt, RejectionReason,
-                   SubmittedBy, CreatedAt, UpdatedAt
+                   SubmittedBy, CreatedDate, UpdatedAt
             FROM Restaurant
             WHERE {string.Join(" AND ", whereClauses)}
             ORDER BY Name
@@ -79,7 +79,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             SELECT Id, Name, Brand, CuisineType, Address, City, State, ZipCode,
                    Country, Latitude, Longitude, Phone, Website,
                    IsApproved, ApprovedBy, ApprovedAt, RejectionReason,
-                   SubmittedBy, CreatedAt, UpdatedAt
+                   SubmittedBy, CreatedDate, UpdatedAt
             FROM Restaurant
             WHERE Id = @Id AND IsDeleted = 0";
 
@@ -97,7 +97,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             INSERT INTO Restaurant (
                 Id, Name, Brand, CuisineType, Address, City, State, ZipCode,
                 Country, Latitude, Longitude, Phone, Website,
-                SubmittedBy, CreatedBy, CreatedAt
+                SubmittedBy, CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @Name, @Brand, @CuisineType, @Address, @City, @State, @ZipCode,
@@ -224,10 +224,10 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     public async Task<List<UserRestaurantRatingDto>> GetRestaurantRatingsAsync(Guid restaurantId)
     {
         const string sql = @"
-            SELECT UserId, RestaurantId, Rating, Review, CreatedAt, UpdatedAt
+            SELECT UserId, RestaurantId, Rating, Review, CreatedDate, UpdatedAt
             FROM UserRestaurantRating
             WHERE RestaurantId = @RestaurantId
-            ORDER BY CreatedAt DESC";
+            ORDER BY CreatedDate DESC";
 
         return await ExecuteReaderAsync(
             sql,
@@ -237,7 +237,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                 RestaurantId = GetGuid(reader, "RestaurantId"),
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
-                CreatedAt = GetDateTime(reader, "CreatedAt"),
+                CreatedAt = GetDateTime(reader, "CreatedDate"),
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@RestaurantId", restaurantId));
@@ -246,7 +246,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     public async Task<UserRestaurantRatingDto?> GetUserRatingAsync(Guid restaurantId, Guid userId)
     {
         const string sql = @"
-            SELECT UserId, RestaurantId, Rating, Review, CreatedAt, UpdatedAt
+            SELECT UserId, RestaurantId, Rating, Review, CreatedDate, UpdatedAt
             FROM UserRestaurantRating
             WHERE RestaurantId = @RestaurantId AND UserId = @UserId";
 
@@ -258,7 +258,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                 RestaurantId = GetGuid(reader, "RestaurantId"),
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
-                CreatedAt = GetDateTime(reader, "CreatedAt"),
+                CreatedAt = GetDateTime(reader, "CreatedDate"),
                 UpdatedAt = GetDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@RestaurantId", restaurantId),
@@ -292,7 +292,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
         // Insert new rating
         const string insertSql = @"
-            INSERT INTO UserRestaurantRating (Id, UserId, RestaurantId, Rating, Review, CreatedAt)
+            INSERT INTO UserRestaurantRating (Id, UserId, RestaurantId, Rating, Review, CreatedDate)
             VALUES (@Id, @UserId, @RestaurantId, @Rating, @Review, GETUTCDATE())";
 
         var id = Guid.NewGuid();
@@ -346,7 +346,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             ApprovedAt = GetDateTime(reader, "ApprovedAt"),
             RejectionReason = GetString(reader, "RejectionReason"),
             SubmittedBy = GetGuid(reader, "SubmittedBy"),
-            CreatedAt = GetDateTime(reader, "CreatedAt"),
+            CreatedAt = GetDateTime(reader, "CreatedDate"),
             UpdatedAt = GetDateTime(reader, "UpdatedAt")
         };
     }

@@ -68,7 +68,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             SELECT Id, Name, ScientificName, Category, Description, Purpose,
                    CommonNames, IsAllergen, AllergenType, IsAdditive, AdditiveCode,
                    NutritionalHighlights, IsApproved, ApprovedBy, ApprovedAt,
-                   RejectionReason, SubmittedBy, CreatedAt, UpdatedAt
+                   RejectionReason, SubmittedBy, CreatedDate, UpdatedAt
             FROM BaseIngredient
             WHERE {string.Join(" AND ", whereClauses)}
             ORDER BY Name
@@ -87,7 +87,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             SELECT Id, Name, ScientificName, Category, Description, Purpose,
                    CommonNames, IsAllergen, AllergenType, IsAdditive, AdditiveCode,
                    NutritionalHighlights, IsApproved, ApprovedBy, ApprovedAt,
-                   RejectionReason, SubmittedBy, CreatedAt, UpdatedAt
+                   RejectionReason, SubmittedBy, CreatedDate, UpdatedAt
             FROM BaseIngredient
             WHERE Id = @Id AND IsDeleted = 0";
 
@@ -105,7 +105,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             SELECT Id, Name, ScientificName, Category, Description, Purpose,
                    CommonNames, IsAllergen, AllergenType, IsAdditive, AdditiveCode,
                    NutritionalHighlights, IsApproved, ApprovedBy, ApprovedAt,
-                   RejectionReason, SubmittedBy, CreatedAt, UpdatedAt
+                   RejectionReason, SubmittedBy, CreatedDate, UpdatedAt
             FROM BaseIngredient
             WHERE Name = @Name AND IsDeleted = 0 AND IsApproved = 1";
 
@@ -123,7 +123,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             SELECT Id, Name, ScientificName, Category, Description, Purpose,
                    CommonNames, IsAllergen, AllergenType, IsAdditive, AdditiveCode,
                    NutritionalHighlights, IsApproved, ApprovedBy, ApprovedAt,
-                   RejectionReason, SubmittedBy, CreatedAt, UpdatedAt
+                   RejectionReason, SubmittedBy, CreatedDate, UpdatedAt
             FROM BaseIngredient
             WHERE Category = @Category AND IsDeleted = 0 AND IsApproved = 1
             ORDER BY Name";
@@ -140,7 +140,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             SELECT Id, Name, ScientificName, Category, Description, Purpose,
                    CommonNames, IsAllergen, AllergenType, IsAdditive, AdditiveCode,
                    NutritionalHighlights, IsApproved, ApprovedBy, ApprovedAt,
-                   RejectionReason, SubmittedBy, CreatedAt, UpdatedAt
+                   RejectionReason, SubmittedBy, CreatedDate, UpdatedAt
             FROM BaseIngredient
             WHERE IsAllergen = 1 AND IsDeleted = 0 AND IsApproved = 1
             ORDER BY AllergenType, Name";
@@ -156,7 +156,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             SELECT Id, Name, ScientificName, Category, Description, Purpose,
                    CommonNames, IsAllergen, AllergenType, IsAdditive, AdditiveCode,
                    NutritionalHighlights, IsApproved, ApprovedBy, ApprovedAt,
-                   RejectionReason, SubmittedBy, CreatedAt, UpdatedAt
+                   RejectionReason, SubmittedBy, CreatedDate, UpdatedAt
             FROM BaseIngredient
             WHERE IsAdditive = 1 AND IsDeleted = 0 AND IsApproved = 1
             ORDER BY AdditiveCode, Name";
@@ -172,7 +172,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             INSERT INTO BaseIngredient (
                 Id, Name, ScientificName, Category, Description, Purpose,
                 CommonNames, IsAllergen, AllergenType, IsAdditive, AdditiveCode,
-                NutritionalHighlights, SubmittedBy, CreatedBy, CreatedAt
+                NutritionalHighlights, SubmittedBy, CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @Name, @ScientificName, @Category, @Description, @Purpose,
@@ -326,7 +326,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
         const string sql = @"
             INSERT INTO IngredientBaseComponent (
                 Id, IngredientId, BaseIngredientId, OrderIndex, Percentage,
-                IsMainComponent, Notes, CreatedBy, CreatedAt
+                IsMainComponent, Notes, CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @IngredientId, @BaseIngredientId, @OrderIndex, @Percentage,
@@ -414,7 +414,7 @@ public class BaseIngredientRepository : SqlHelper, IBaseIngredientRepository
             ApprovedAt = GetDateTime(reader, "ApprovedAt"),
             RejectionReason = GetString(reader, "RejectionReason"),
             SubmittedBy = GetGuid(reader, "SubmittedBy"),
-            CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            CreatedAt = GetNullableDateTime(reader, "CreatedDate") ?? DateTime.UtcNow,
             UpdatedAt = GetDateTime(reader, "UpdatedAt")
         };
     }

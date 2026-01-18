@@ -38,9 +38,16 @@ internal sealed class EntityMetadata
     public bool RowVersionTrackHistory { get; set; }
     public bool HasSoftDelete { get; set; }
 
+    // Audit custom column names (from AutoAuditAttribute)
+    public string CreatedDateColumn { get; set; } = "CreatedDate";
+    public string CreatedByColumn { get; set; } = "CreatedBy";
+    public string ModifiedDateColumn { get; set; } = "ModifiedDate";
+    public string ModifiedByColumn { get; set; } = "ModifiedBy";
+
     // Soft delete custom column names (from SoftDeleteAttribute)
-    public string? SoftDeleteColumn { get; set; }
-    public string? SoftDeleteDateColumn { get; set; }
+    public string SoftDeleteColumn { get; set; } = "IsDeleted";
+    public string SoftDeleteDateColumn { get; set; } = "DeletedDate";
+    public string SoftDeleteByColumn { get; set; } = "DeletedBy";
 
     public bool HasStagingTable { get; set; }
     public int StagingMergeIntervalSeconds { get; set; }

@@ -135,7 +135,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
         const string sql = @"
             INSERT INTO Ingredient (
                 Id, Name, AlternativeNames, Description, Category,
-                IsCommonAllergen, IngredientListString, CreatedBy, CreatedAt
+                IsCommonAllergen, IngredientListString, CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @Name, @AlternativeNames, @Description, @Category,
@@ -269,7 +269,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
         const string sql = @"
             INSERT INTO ProductIngredient (
                 Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString,
-                CreatedBy, CreatedAt
+                CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @ProductId, @IngredientId, @OrderIndex, @Quantity, @Notes, @IngredientListString,
@@ -459,7 +459,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter("@CreatedBy", createdBy));
 
             var sql = $@"
-                INSERT INTO Ingredient (Id, Name, Category, CreatedBy, CreatedAt)
+                INSERT INTO Ingredient (Id, Name, Category, CreatedBy, CreatedDate)
                 VALUES {string.Join(", ", valuesClauses)}";
 
             try

@@ -15,6 +15,7 @@ public interface IProductRepository
     Task<Dictionary<string, int>> GetLetterCountsAsync(ProductSearchRequest request);
     Task<Guid> CreateAsync(CreateProductRequest request, Guid? createdBy = null);
     Task<Guid> CreateProductAsync(CreateProductRequest request);
+    Task<int> BulkCreateAsync(IEnumerable<CreateProductRequest> requests, Guid? createdBy = null);
     Task<bool> UpdateAsync(Guid id, UpdateProductRequest request, Guid? updatedBy = null);
     Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null);
     Task<bool> ApproveAsync(Guid id, bool approve, Guid approvedBy, string? rejectionReason = null);

@@ -54,16 +54,25 @@ internal sealed partial class DalClassGenerator
             code.AppendLine();
             code.AppendLine("        // Add audit fields");
             code.AppendLine("        DateTime now = DateTime.UtcNow;");
-            code.AppendLine("        parameters[\"CreatedBy\"] = userName;");
-            code.AppendLine("        parameters[\"CreatedDate\"] = now;");
-            code.AppendLine("        parameters[\"ModifiedBy\"] = userName;");
-            code.AppendLine("        parameters[\"ModifiedDate\"] = now;");
+            code.AppendLine($"        parameters[\"{_metadata.CreatedByColumn}\"] = userName;");
+            code.AppendLine($"        parameters[\"{_metadata.CreatedDateColumn}\"] = now;");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedByColumn}\"] = userName;");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedDateColumn}\"] = now;");
             code.AppendLine();
             code.AppendLine("        // Populate audit fields on entity");
             code.AppendLine("        entity.CreatedBy = userName;");
             code.AppendLine("        entity.CreatedDate = now;");
             code.AppendLine("        entity.ModifiedBy = userName;");
             code.AppendLine("        entity.ModifiedDate = now;");
+            }
+
+            if (_metadata.HasSoftDelete)
+            {
+                code.AppendLine();
+                code.AppendLine("        // Add soft-delete fields");
+                code.AppendLine($"        parameters[\"{_metadata.SoftDeleteColumn}\"] = entity.IsDeleted;");
+                code.AppendLine($"        parameters[\"{_metadata.SoftDeleteDateColumn}\"] = entity.DeletedDate ?? (object)DBNull.Value;");
+                code.AppendLine($"        parameters[\"{_metadata.SoftDeleteByColumn}\"] = entity.DeletedBy ?? (object)DBNull.Value;");
             }
 
             code.AppendLine();
@@ -164,12 +173,21 @@ internal sealed partial class DalClassGenerator
             code.AppendLine();
             code.AppendLine("        // Update audit fields");
             code.AppendLine("        DateTime now = DateTime.UtcNow;");
-            code.AppendLine("        parameters[\"ModifiedBy\"] = userName;");
-            code.AppendLine("        parameters[\"ModifiedDate\"] = now;");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedByColumn}\"] = userName;");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedDateColumn}\"] = now;");
             code.AppendLine();
             code.AppendLine("        // Populate audit fields on entity");
             code.AppendLine("        entity.ModifiedBy = userName;");
             code.AppendLine("        entity.ModifiedDate = now;");
+        }
+
+        if (_metadata.HasSoftDelete)
+        {
+            code.AppendLine();
+            code.AppendLine("        // Add soft-delete fields");
+            code.AppendLine($"        parameters[\"{_metadata.SoftDeleteColumn}\"] = entity.IsDeleted;");
+            code.AppendLine($"        parameters[\"{_metadata.SoftDeleteDateColumn}\"] = entity.DeletedDate ?? (object)DBNull.Value;");
+            code.AppendLine($"        parameters[\"{_metadata.SoftDeleteByColumn}\"] = entity.DeletedBy ?? (object)DBNull.Value;");
         }
 
         if (_metadata.HasRowVersion)
@@ -324,6 +342,18 @@ internal sealed partial class DalClassGenerator
             code.AppendLine("            entity.CreatedDate = now;");
             code.AppendLine("            entity.ModifiedBy = userName;");
             code.AppendLine("            entity.ModifiedDate = now;");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
+
+        if (_metadata.HasSoftDelete)
+        {
+            code.AppendLine("        // Initialize soft-delete fields for all entities");
+            code.AppendLine("        foreach (var entity in entityList)");
+            code.AppendLine("        {");
+            code.AppendLine("            entity.IsDeleted = false;");
+            code.AppendLine("            entity.DeletedDate = null;");
+            code.AppendLine("            entity.DeletedBy = null;");
             code.AppendLine("        }");
             code.AppendLine();
         }
@@ -490,17 +520,17 @@ internal sealed partial class DalClassGenerator
 
         if (_metadata.IsAuditable)
         {
-            code.AppendLine("        int ordCreatedBy = reader.GetOrdinal(\"CreatedBy\");");
-            code.AppendLine("        int ordCreatedDate = reader.GetOrdinal(\"CreatedDate\");");
-            code.AppendLine("        int ordModifiedBy = reader.GetOrdinal(\"ModifiedBy\");");
-            code.AppendLine("        int ordModifiedDate = reader.GetOrdinal(\"ModifiedDate\");");
+            code.AppendLine($"        int ordCreatedBy = reader.GetOrdinal(\"{_metadata.CreatedByColumn}\");");
+            code.AppendLine($"        int ordCreatedDate = reader.GetOrdinal(\"{_metadata.CreatedDateColumn}\");");
+            code.AppendLine($"        int ordModifiedBy = reader.GetOrdinal(\"{_metadata.ModifiedByColumn}\");");
+            code.AppendLine($"        int ordModifiedDate = reader.GetOrdinal(\"{_metadata.ModifiedDateColumn}\");");
         }
 
         if (_metadata.HasSoftDelete)
         {
-            code.AppendLine("        int ordIsDeleted = reader.GetOrdinal(\"IsDeleted\");");
-            code.AppendLine("        int ordDeletedDate = reader.GetOrdinal(\"DeletedDate\");");
-            code.AppendLine("        int ordDeletedBy = reader.GetOrdinal(\"DeletedBy\");");
+            code.AppendLine($"        int ordIsDeleted = reader.GetOrdinal(\"{_metadata.SoftDeleteColumn}\");");
+            code.AppendLine($"        int ordDeletedDate = reader.GetOrdinal(\"{_metadata.SoftDeleteDateColumn}\");");
+            code.AppendLine($"        int ordDeletedBy = reader.GetOrdinal(\"{_metadata.SoftDeleteByColumn}\");");
         }
 
         code.AppendLine();

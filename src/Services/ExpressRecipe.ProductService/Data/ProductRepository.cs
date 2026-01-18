@@ -41,7 +41,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         const string sql = @"
             SELECT Id, Name, Brand, Barcode, BarcodeType, Description, Category,
                    ServingSize, ServingUnit, ImageUrl, ApprovalStatus,
-                   ApprovedBy, ApprovedAt, RejectionReason, SubmittedBy, CreatedAt
+                   ApprovedBy, ApprovedAt, RejectionReason, SubmittedBy, CreatedDate
             FROM Product
             WHERE Id = @Id AND IsDeleted = 0";
 
@@ -64,7 +64,7 @@ public class ProductRepository : SqlHelper, IProductRepository
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
                 RejectionReason = GetString(reader, "RejectionReason"),
                 SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
-                CreatedAt = GetDateTime(reader, "CreatedAt")
+                CreatedAt = GetDateTime(reader, "CreatedDate")
             },
             CreateParameter("@Id", id));
 
@@ -86,7 +86,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         const string sql = @"
             SELECT Id, Name, Brand, Barcode, BarcodeType, Description, Category,
                    ServingSize, ServingUnit, ImageUrl, ApprovalStatus,
-                   ApprovedBy, ApprovedAt, RejectionReason, SubmittedBy, CreatedAt
+                   ApprovedBy, ApprovedAt, RejectionReason, SubmittedBy, CreatedDate
             FROM Product
             WHERE Barcode = @Barcode AND IsDeleted = 0 AND ApprovalStatus = 'Approved'";
 
@@ -109,7 +109,7 @@ public class ProductRepository : SqlHelper, IProductRepository
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
                 RejectionReason = GetString(reader, "RejectionReason"),
                 SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
-                CreatedAt = GetDateTime(reader, "CreatedAt")
+                CreatedAt = GetDateTime(reader, "CreatedDate")
             },
             CreateParameter("@Barcode", barcode));
 
@@ -167,7 +167,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         var selectClause = hasSearchTerm ? @"
             SELECT p.Id, p.Name, p.Brand, p.Barcode, p.BarcodeType, p.Description, p.Category,
                    p.ServingSize, p.ServingUnit, p.ImageUrl, p.ApprovalStatus,
-                   p.ApprovedBy, p.ApprovedAt, p.RejectionReason, p.SubmittedBy, p.CreatedAt,
+                   p.ApprovedBy, p.ApprovedAt, p.RejectionReason, p.SubmittedBy, p.CreatedDate,
                    -- Relevance scoring (higher = better match)
                    CASE
                        -- Exact match in Name (highest priority)
@@ -190,7 +190,7 @@ public class ProductRepository : SqlHelper, IProductRepository
             FROM Product p" : @"
             SELECT p.Id, p.Name, p.Brand, p.Barcode, p.BarcodeType, p.Description, p.Category,
                    p.ServingSize, p.ServingUnit, p.ImageUrl, p.ApprovalStatus,
-                   p.ApprovedBy, p.ApprovedAt, p.RejectionReason, p.SubmittedBy, p.CreatedAt
+                   p.ApprovedBy, p.ApprovedAt, p.RejectionReason, p.SubmittedBy, p.CreatedDate
             FROM Product p";
 
         var sql = selectClause + @"
@@ -273,7 +273,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         var orderByClause = hasSearchTerm ? "Relevance DESC, p.Name" : (request.SortBy?.ToLower() switch
         {
             "brand" => "p.Brand, p.Name",
-            "created" => "p.CreatedAt DESC",
+            "created" => "p.CreatedDate DESC",
             _ => "p.Name" // Default to name
         });
 
@@ -300,7 +300,7 @@ public class ProductRepository : SqlHelper, IProductRepository
                 ApprovedAt = GetDateTime(reader, "ApprovedAt"),
                 RejectionReason = GetString(reader, "RejectionReason"),
                 SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
-                CreatedAt = GetDateTime(reader, "CreatedAt")
+                CreatedAt = GetDateTime(reader, "CreatedDate")
             },
             parameters.ToArray());
 
@@ -467,13 +467,18 @@ public class ProductRepository : SqlHelper, IProductRepository
         return results.ToDictionary(r => r.Letter, r => r.Count);
     }
 
+    public Task<int> BulkCreateAsync(IEnumerable<CreateProductRequest> requests, Guid? createdBy = null)
+    {
+        throw new NotImplementedException("Use ProductRepositoryAdapter for bulk operations with HighSpeedDAL");
+    }
+
     public async Task<Guid> CreateAsync(CreateProductRequest request, Guid? createdBy = null)
     {
         const string sql = @"
             INSERT INTO Product (
                 Id, Name, Brand, Barcode, BarcodeType, Description, Category,
                 ServingSize, ServingUnit, ImageUrl, ApprovalStatus,
-                SubmittedBy, CreatedBy, CreatedAt
+                SubmittedBy, CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @Name, @Brand, @Barcode, @BarcodeType, @Description, @Category,
@@ -513,7 +518,7 @@ public class ProductRepository : SqlHelper, IProductRepository
     public async Task AddIngredientToProductAsync(Guid productId, string ingredient, int orderIndex = 0)
     {
         const string sql = @"
-            INSERT INTO ProductIngredient (Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString, CreatedBy, CreatedAt)
+            INSERT INTO ProductIngredient (Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString, CreatedBy, CreatedDate)
             VALUES (@Id, @ProductId, NULL, @OrderIndex, NULL, NULL, @IngredientListString, NULL, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
@@ -533,7 +538,7 @@ public class ProductRepository : SqlHelper, IProductRepository
     public async Task AddLabelToProductAsync(Guid productId, string label)
     {
         const string sql = @"
-            INSERT INTO ProductLabel (Id, ProductId, LabelName, CreatedAt)
+            INSERT INTO ProductLabel (Id, ProductId, LabelName, CreatedDate)
             VALUES (@Id, @ProductId, @LabelName, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
@@ -546,7 +551,7 @@ public class ProductRepository : SqlHelper, IProductRepository
     public async Task AddAllergenToProductAsync(Guid productId, string allergen)
     {
         const string sql = @"
-            INSERT INTO ProductAllergen (Id, ProductId, AllergenName, CreatedAt)
+            INSERT INTO ProductAllergen (Id, ProductId, AllergenName, CreatedDate)
             VALUES (@Id, @ProductId, @AllergenName, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
@@ -565,7 +570,7 @@ public class ProductRepository : SqlHelper, IProductRepository
     public async Task AddExternalLinkAsync(Guid productId, string source, string externalId)
     {
         const string sql = @"
-            INSERT INTO ProductExternalLink (Id, ProductId, Source, ExternalId, CreatedAt)
+            INSERT INTO ProductExternalLink (Id, ProductId, Source, ExternalId, CreatedDate)
             VALUES (@Id, @ProductId, @Source, @ExternalId, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
@@ -579,7 +584,7 @@ public class ProductRepository : SqlHelper, IProductRepository
     public async Task UpdateProductMetadataAsync(Guid productId, string key, string value)
     {
         const string sql = @"
-            INSERT INTO ProductMetadata (Id, ProductId, MetaKey, MetaValue, CreatedAt)
+            INSERT INTO ProductMetadata (Id, ProductId, MetaKey, MetaValue, CreatedDate)
             VALUES (@Id, @ProductId, @MetaKey, @MetaValue, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(

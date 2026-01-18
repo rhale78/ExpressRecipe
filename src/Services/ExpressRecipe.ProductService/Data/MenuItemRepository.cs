@@ -68,7 +68,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
         var sql = $@"
             SELECT mi.Id, mi.RestaurantId, mi.Name, mi.Description, mi.Category,
                    mi.Price, mi.Currency, mi.ServingSize, mi.ServingUnit,
-                   mi.IsAvailable, mi.CreatedAt, mi.UpdatedAt,
+                   mi.IsAvailable, mi.CreatedDate, mi.UpdatedAt,
                    r.Name AS RestaurantName
             FROM MenuItem mi
             INNER JOIN Restaurant r ON mi.RestaurantId = r.Id
@@ -88,7 +88,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
         const string sql = @"
             SELECT mi.Id, mi.RestaurantId, mi.Name, mi.Description, mi.Category,
                    mi.Price, mi.Currency, mi.ServingSize, mi.ServingUnit,
-                   mi.IsAvailable, mi.CreatedAt, mi.UpdatedAt,
+                   mi.IsAvailable, mi.CreatedDate, mi.UpdatedAt,
                    r.Name AS RestaurantName
             FROM MenuItem mi
             INNER JOIN Restaurant r ON mi.RestaurantId = r.Id
@@ -108,7 +108,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             INSERT INTO MenuItem (
                 Id, RestaurantId, Name, Description, Category,
                 Price, Currency, ServingSize, ServingUnit, IsAvailable,
-                CreatedBy, CreatedAt
+                CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @RestaurantId, @Name, @Description, @Category,
@@ -226,7 +226,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     public async Task<Guid> AddMenuItemIngredientAsync(Guid menuItemId, Guid ingredientId, int orderIndex, Guid createdBy)
     {
         const string sql = @"
-            INSERT INTO MenuItemIngredient (Id, MenuItemId, IngredientId, OrderIndex, CreatedBy, CreatedAt)
+            INSERT INTO MenuItemIngredient (Id, MenuItemId, IngredientId, OrderIndex, CreatedBy, CreatedDate)
             VALUES (@Id, @MenuItemId, @IngredientId, @OrderIndex, @CreatedBy, GETUTCDATE())";
 
         var id = Guid.NewGuid();
@@ -351,7 +351,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
                 Id, MenuItemId, Calories, TotalFat, SaturatedFat, TransFat,
                 Cholesterol, Sodium, TotalCarbohydrates, DietaryFiber,
                 Sugars, Protein, VitaminD, Calcium, Iron, Potassium,
-                CreatedBy, CreatedAt
+                CreatedBy, CreatedDate
             )
             VALUES (
                 @Id, @MenuItemId, @Calories, @TotalFat, @SaturatedFat, @TransFat,
@@ -392,10 +392,10 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     public async Task<List<UserMenuItemRatingDto>> GetMenuItemRatingsAsync(Guid menuItemId)
     {
         const string sql = @"
-            SELECT UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedAt, UpdatedAt
+            SELECT UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedDate, UpdatedAt
             FROM UserMenuItemRating
             WHERE MenuItemId = @MenuItemId
-            ORDER BY CreatedAt DESC";
+            ORDER BY CreatedDate DESC";
 
         return await ExecuteReaderAsync(
             sql,
@@ -406,7 +406,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
                 WouldOrderAgain = GetBool(reader, "WouldOrderAgain"),
-                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedDate") ?? DateTime.UtcNow,
                 UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@MenuItemId", menuItemId));
@@ -415,7 +415,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     public async Task<UserMenuItemRatingDto?> GetUserRatingAsync(Guid menuItemId, Guid userId)
     {
         const string sql = @"
-            SELECT UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedAt, UpdatedAt
+            SELECT UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedDate, UpdatedAt
             FROM UserMenuItemRating
             WHERE MenuItemId = @MenuItemId AND UserId = @UserId";
 
@@ -428,7 +428,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
                 WouldOrderAgain = GetBool(reader, "WouldOrderAgain"),
-                CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+                CreatedAt = GetNullableDateTime(reader, "CreatedDate") ?? DateTime.UtcNow,
                 UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@MenuItemId", menuItemId),
@@ -463,7 +463,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
 
         // Insert new rating
         const string insertSql = @"
-            INSERT INTO UserMenuItemRating (Id, UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedAt)
+            INSERT INTO UserMenuItemRating (Id, UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedDate)
             VALUES (@Id, @UserId, @MenuItemId, @Rating, @Review, @WouldOrderAgain, GETUTCDATE())";
 
         var id = Guid.NewGuid();
@@ -511,7 +511,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             ServingSize = GetNullableString(reader, "ServingSize"),
             ServingUnit = GetString(reader, "ServingUnit"),
             IsAvailable = GetBool(reader, "IsAvailable") ?? true,
-            CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
+            CreatedAt = GetNullableDateTime(reader, "CreatedDate") ?? DateTime.UtcNow,
             UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
         };
     }

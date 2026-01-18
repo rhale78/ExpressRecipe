@@ -92,6 +92,11 @@ public abstract class SqlServerDalBase<TEntity, TConnection> : DalOperationsBase
                 bulkCopy.BatchSize = 1000;
                 bulkCopy.BulkCopyTimeout = 300; // 5 minutes
 
+                foreach (DataColumn column in dataTable.Columns)
+                {
+                    bulkCopy.ColumnMappings.Add(column.ColumnName, column.ColumnName);
+                }
+
                 try
                 {
                     Logger.LogDebug("Starting bulk insert of {Count} rows into {Table}", dataTable.Rows.Count, tableName);
@@ -126,12 +131,35 @@ public abstract class SqlServerDalBase<TEntity, TConnection> : DalOperationsBase
 
         foreach (string columnName in firstMapping.Keys)
         {
-            Type columnType = firstMapping[columnName]?.GetType() ?? typeof(object);
-            
-            // Handle nullable types
-            if (columnType.IsGenericType && columnType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            object? value = firstMapping[columnName];
+            Type columnType;
+
+            // If value is null or DBNull, infer type from entity property via reflection
+            if (value == null || value is DBNull)
             {
-                columnType = Nullable.GetUnderlyingType(columnType) ?? typeof(object);
+                var property = typeof(TEntity).GetProperty(columnName);
+                if (property != null)
+                {
+                    columnType = property.PropertyType;
+                    // Handle nullable types
+                    if (columnType.IsGenericType && columnType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                    {
+                        columnType = Nullable.GetUnderlyingType(columnType) ?? typeof(object);
+                    }
+                }
+                else
+                {
+                    columnType = typeof(string); // Safe default for unknown columns
+                }
+            }
+            else
+            {
+                columnType = value.GetType();
+                // Handle nullable types
+                if (columnType.IsGenericType && columnType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                {
+                    columnType = Nullable.GetUnderlyingType(columnType) ?? typeof(object);
+                }
             }
 
             dataTable.Columns.Add(columnName, columnType);

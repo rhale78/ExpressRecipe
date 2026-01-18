@@ -92,13 +92,6 @@ public partial class ProductStagingEntity
     [Key(24)]
     public int ProcessingAttempts { get; set; } = 0;
 
-    [Key(25)]
-    [Index]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    [Key(26)]
-    public DateTime? UpdatedAt { get; set; }
-
     [Key(27)]
     public bool IsDeleted { get; set; } = false;
 }
