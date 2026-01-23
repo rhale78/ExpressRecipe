@@ -163,34 +163,69 @@ internal sealed partial class DalClassGenerator
     /// </summary>
     private void GenerateInMemoryTableFilter(StringBuilder code, NamedQueryMetadata namedQuery)
     {
-        // Build the predicate
-        string predicate = BuildLinqPredicate(namedQuery);
-
-        code.AppendLine("        // Filter from in-memory table (fastest, no database round-trip)");
+        code.AppendLine("        // PERFORMANCE: Filter from in-memory table using optimized property lookup (O(1) instead of O(n) LINQ scan)");
         code.AppendLine("        if (_inMemoryTable != null)");
         code.AppendLine("        {");
         code.AppendLine("            try");
         code.AppendLine("            {");
 
-        if (namedQuery.IsSingle)
+        // OPTIMIZATION: For single-property queries, use GetByPropertyAsync which only scans once
+        // For multi-property queries, we still use LINQ but it's typically rare
+        if (namedQuery.PropertyNames.Count == 1 && namedQuery.AutoFilterDeleted)
         {
-            code.AppendLine($"                var inMemoryResult = _inMemoryTable.Select().FirstOrDefault(e => {predicate});");
-            code.AppendLine($"                if (inMemoryResult != null)");
-            code.AppendLine($"                {{");
-            code.AppendLine($"                    Logger.LogDebug(\"Named query {namedQuery.Name} (in-memory) returned 1 result\");");
-            code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"{namedQuery.Name}\", null, 1);");
-            code.AppendLine($"                    return inMemoryResult;");
-            code.AppendLine($"                }}");
+            string propName = namedQuery.PropertyNames[0];
+            string paramVarName = ToCamelCase(propName);
+
+            if (namedQuery.IsSingle)
+            {
+                code.AppendLine($"                // PERFORMANCE: Direct property lookup instead of full table scan");
+                code.AppendLine($"                var inMemoryResult = await _inMemoryTable.GetByPropertyAsync(\"{propName}\", {paramVarName}, cancellationToken);");
+                code.AppendLine($"                if (inMemoryResult != null)");
+                code.AppendLine($"                {{");
+                code.AppendLine($"                    Logger.LogDebug(\"Named query {namedQuery.Name} (in-memory) returned 1 result\");");
+                code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"{namedQuery.Name}\", null, 1);");
+                code.AppendLine($"                    return inMemoryResult;");
+                code.AppendLine($"                }}");
+            }
+            else
+            {
+                code.AppendLine($"                // PERFORMANCE: Direct property lookup for list query");
+                code.AppendLine($"                var inMemoryResults = await _inMemoryTable.GetByPropertyAsync(\"{propName}\", {paramVarName}, true, cancellationToken);");
+                code.AppendLine($"                if (inMemoryResults.Count > 0)");
+                code.AppendLine($"                {{");
+                code.AppendLine($"                    Logger.LogDebug(\"Named query {namedQuery.Name} (in-memory) returned {{Count}} results\", inMemoryResults.Count);");
+                code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"{namedQuery.Name}\", null, inMemoryResults.Count);");
+                code.AppendLine($"                    return inMemoryResults;");
+                code.AppendLine($"                }}");
+            }
         }
         else
         {
-            code.AppendLine($"                var inMemoryResults = _inMemoryTable.Select().Where(e => {predicate}).ToList();");
-            code.AppendLine($"                if (inMemoryResults.Count > 0)");
-            code.AppendLine($"                {{");
-            code.AppendLine($"                    Logger.LogDebug(\"Named query {namedQuery.Name} (in-memory) returned {{Count}} results\", inMemoryResults.Count);");
-            code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"{namedQuery.Name}\", null, inMemoryResults.Count);");
-            code.AppendLine($"                    return inMemoryResults;");
-            code.AppendLine($"                }}");
+            // Multi-property query - use LINQ predicate (less common path)
+            string predicate = BuildLinqPredicate(namedQuery);
+
+            if (namedQuery.IsSingle)
+            {
+                code.AppendLine($"                // Multi-property query: using LINQ filter");
+                code.AppendLine($"                var inMemoryResult = _inMemoryTable.Select().FirstOrDefault(e => {predicate});");
+                code.AppendLine($"                if (inMemoryResult != null)");
+                code.AppendLine($"                {{");
+                code.AppendLine($"                    Logger.LogDebug(\"Named query {namedQuery.Name} (in-memory) returned 1 result\");");
+                code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"{namedQuery.Name}\", null, 1);");
+                code.AppendLine($"                    return inMemoryResult;");
+                code.AppendLine($"                }}");
+            }
+            else
+            {
+                code.AppendLine($"                // Multi-property query: using LINQ filter");
+                code.AppendLine($"                var inMemoryResults = _inMemoryTable.Select().Where(e => {predicate}).ToList();");
+                code.AppendLine($"                if (inMemoryResults.Count > 0)");
+                code.AppendLine($"                {{");
+                code.AppendLine($"                    Logger.LogDebug(\"Named query {namedQuery.Name} (in-memory) returned {{Count}} results\", inMemoryResults.Count);");
+                code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"{namedQuery.Name}\", null, inMemoryResults.Count);");
+                code.AppendLine($"                    return inMemoryResults;");
+                code.AppendLine($"                }}");
+            }
         }
 
         code.AppendLine("            }");

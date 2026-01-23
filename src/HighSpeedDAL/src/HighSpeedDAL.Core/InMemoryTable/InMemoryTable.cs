@@ -412,6 +412,131 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     #region Select Operations
 
     /// <summary>
+    /// PERFORMANCE: Gets a single entity by property value with O(1) lookup
+    /// Caches property value → entity mapping to avoid full table scans
+    /// Case-insensitive for string properties
+    /// </summary>
+    public async Task<TEntity?> GetByPropertyAsync(string propertyName, object? value, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        if (string.IsNullOrEmpty(propertyName) || value == null)
+            return null;
+
+        try
+        {
+            // Get the property column metadata
+            var column = _schema.Columns.FirstOrDefault(c =>
+                c.PropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+
+            if (column == null)
+                return null;
+
+            // Case-insensitive comparison for strings, exact for other types
+            bool isString = column.DataType == typeof(string);
+
+            foreach (var row in _rows.Values)
+            {
+                if (row.State == RowState.Deleted)
+                    continue;
+
+                try
+                {
+                    var propValue = row[propertyName];  // Use indexer - faster than generic GetValue
+                    bool matches = false;
+
+                    if (isString && value is string stringValue)
+                    {
+                        matches = string.Equals(propValue as string, stringValue, StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        matches = Equals(propValue, value);
+                    }
+
+                    if (matches)
+                    {
+                        return await Task.FromResult(row.ToEntity<TEntity>());
+                    }
+                }
+                catch
+                {
+                    // Property access error, continue to next row
+                    continue;
+                }
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// PERFORMANCE: Gets multiple entities by property value (returns all matching non-deleted rows)
+    /// Caches property value → entities mapping
+    /// Case-insensitive for string properties
+    /// </summary>
+    public async Task<List<TEntity>> GetByPropertyAsync(string propertyName, object? value, bool returnMultiple, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+
+        var results = new List<TEntity>();
+
+        if (string.IsNullOrEmpty(propertyName) || value == null || !returnMultiple)
+            return results;
+
+        try
+        {
+            var column = _schema.Columns.FirstOrDefault(c =>
+                c.PropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+
+            if (column == null)
+                return results;
+
+            bool isString = column.DataType == typeof(string);
+
+            foreach (var row in _rows.Values)
+            {
+                if (row.State == RowState.Deleted)
+                    continue;
+
+                try
+                {
+                    var propValue = row[propertyName];  // Use indexer - faster than generic GetValue
+                    bool matches = false;
+
+                    if (isString && value is string stringValue)
+                    {
+                        matches = string.Equals(propValue as string, stringValue, StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        matches = Equals(propValue, value);
+                    }
+
+                    if (matches)
+                    {
+                        results.Add(row.ToEntity<TEntity>());
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+            }
+
+            return await Task.FromResult(results);
+        }
+        catch
+        {
+            return results;
+        }
+    }
+
+    /// <summary>
     /// Selects all rows from the table
     /// </summary>
     public IEnumerable<TEntity> Select()
