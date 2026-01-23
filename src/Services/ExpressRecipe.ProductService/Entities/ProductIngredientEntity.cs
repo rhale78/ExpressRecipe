@@ -11,6 +11,9 @@ namespace ExpressRecipe.ProductService.Entities;
 [Table("ProductIngredient", PrimaryKeyType = PrimaryKeyType.Guid)]
 [AutoAudit]
 [SoftDelete]
+// Named queries for efficient lookups
+[NamedQuery("ByProductId", nameof(ProductId))]
+[NamedQuery("ByIngredientId", nameof(IngredientId))]
 [MessagePackObject]
 public partial class ProductIngredientEntity
 {

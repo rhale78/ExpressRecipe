@@ -10,10 +10,32 @@ public interface IProductImageRepository
         string? fileName, long? fileSize, string? mimeType, int? width, int? height,
         bool isPrimary, int displayOrder, bool isUserUploaded, string? sourceSystem, string? sourceId, Guid? userId);
     Task<List<ProductImageModel>> GetImagesByProductIdAsync(Guid productId);
+    Task<Dictionary<Guid, List<ProductImageModel>>> GetImagesByProductIdsAsync(IEnumerable<Guid> productIds);
     Task<ProductImageModel?> GetPrimaryImageAsync(Guid productId);
     Task SetPrimaryImageAsync(Guid productId, Guid imageId);
     Task DeleteImageAsync(Guid imageId);
     Task DeleteAllProductImagesAsync(Guid productId);
+
+    // Bulk operations
+    Task<int> BulkAddImagesAsync(IEnumerable<ProductImageRequest> images);
+}
+
+public class ProductImageRequest
+{
+    public Guid ProductId { get; set; }
+    public string ImageType { get; set; } = "Front";
+    public string? ImageUrl { get; set; }
+    public string? LocalFilePath { get; set; }
+    public string? FileName { get; set; }
+    public long? FileSize { get; set; }
+    public string? MimeType { get; set; } = "image/jpeg";
+    public int? Width { get; set; }
+    public int? Height { get; set; }
+    public bool IsPrimary { get; set; }
+    public int DisplayOrder { get; set; }
+    public bool IsUserUploaded { get; set; }
+    public string? SourceSystem { get; set; }
+    public string? SourceId { get; set; }
 }
 
 public class ProductImageRepository : IProductImageRepository
@@ -159,6 +181,20 @@ public class ProductImageRepository : IProductImageRepository
         return images;
     }
 
+    public async Task<Dictionary<Guid, List<ProductImageModel>>> GetImagesByProductIdsAsync(IEnumerable<Guid> productIds)
+    {
+        // Legacy implementation for batch loading - delegates to individual queries
+        // Note: This is superseded by ProductImageRepositoryAdapter.GetImagesByProductIdsAsync which uses
+        // HighSpeedDAL's caching and in-memory tables for much better performance
+        var result = new Dictionary<Guid, List<ProductImageModel>>();
+        foreach (var productId in productIds)
+        {
+            var images = await GetImagesByProductIdAsync(productId);
+            result[productId] = images;
+        }
+        return result;
+    }
+
     public async Task<ProductImageModel?> GetPrimaryImageAsync(Guid productId)
     {
         const string sql = @"
@@ -278,6 +314,12 @@ public class ProductImageRepository : IProductImageRepository
         command.Parameters.AddWithValue("@ProductId", productId);
 
         await command.ExecuteNonQueryAsync();
+    }
+
+    public Task<int> BulkAddImagesAsync(IEnumerable<ProductImageRequest> images)
+    {
+        // Use ProductImageRepositoryAdapter with HighSpeedDAL for bulk operations
+        throw new NotImplementedException("Use ProductImageRepositoryAdapter for bulk operations with HighSpeedDAL in-memory table support");
     }
 }
 

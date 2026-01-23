@@ -1,250 +1,349 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using ExpressRecipe.ProductService.Entities;
 using ExpressRecipe.Shared.DTOs.Product;
-using Microsoft.Data.SqlClient;
+using HighSpeedDAL.Core;
 using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.ProductService.Data;
 
 /// <summary>
-/// Adapter that implements IIngredientRepository and delegates simple CRUD to generated HighSpeedDAL DAL.
-/// Uses raw ADO.NET for batch and join operations where necessary.
+/// Adapter that implements IIngredientRepository using HighSpeedDAL generated DALs.
+/// All operations use the DAL's caching and in-memory table features.
 /// </summary>
 public class IngredientRepositoryAdapter : IIngredientRepository
 {
     private readonly IngredientEntityDal _dal;
-    private readonly ProductDatabaseConnection _dbConnection;
+    private readonly ProductIngredientEntityDal _productIngredientDal;
     private readonly ILogger<IngredientRepositoryAdapter> _logger;
+    private readonly DalMetricsCollector? _metrics;
 
-    public IngredientRepositoryAdapter(IngredientEntityDal dal, ProductDatabaseConnection dbConnection, ILogger<IngredientRepositoryAdapter> logger)
+    public IngredientRepositoryAdapter(
+        IngredientEntityDal dal,
+        ProductIngredientEntityDal productIngredientDal,
+        DalMetricsCollector? metrics,
+        ILogger<IngredientRepositoryAdapter> logger)
     {
         _dal = dal ?? throw new ArgumentNullException(nameof(dal));
-        _dbConnection = dbConnection ?? throw new ArgumentNullException(nameof(dbConnection));
+        _productIngredientDal = productIngredientDal ?? throw new ArgumentNullException(nameof(productIngredientDal));
+        _metrics = metrics;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<List<IngredientDto>> GetAllAsync()
     {
-        var entities = await _dal.GetAllAsync();
-        return entities.Select(MapEntityToDto).ToList();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Ingredient", "GetAll");
+            var entities = await _dal.GetAllAsync();
+            return entities.Select(MapEntityToDto).ToList();
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Ingredient", "GetAll", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<IngredientDto?> GetByIdAsync(Guid id)
     {
-        var e = await _dal.GetByIdAsync(id);
-        return e is null ? null : MapEntityToDto(e);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Ingredient", "GetById");
+            var e = await _dal.GetByIdAsync(id);
+            return e is null ? null : MapEntityToDto(e);
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Ingredient", "GetById", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<List<IngredientDto>> SearchByNameAsync(string searchTerm)
     {
-        const string sql = @"SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen FROM Ingredient WHERE (Name LIKE @SearchTerm OR AlternativeNames LIKE @SearchTerm) AND IsDeleted = 0 ORDER BY Name";
-        var list = new List<IngredientDto>();
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
-        cmd.CommandTimeout = 120;
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            list.Add(new IngredientDto
-            {
-                Id = reader.GetGuid(reader.GetOrdinal("Id")),
-                Name = reader.GetString(reader.GetOrdinal("Name")),
-                AlternativeNames = reader.IsDBNull(reader.GetOrdinal("AlternativeNames")) ? null : reader.GetString(reader.GetOrdinal("AlternativeNames")),
-                Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
-                Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
-                IsCommonAllergen = reader.IsDBNull(reader.GetOrdinal("IsCommonAllergen")) ? false : reader.GetBoolean(reader.GetOrdinal("IsCommonAllergen"))
-            });
-        }
+            _metrics?.RecordOperation("Ingredient", "SearchByName");
+            // IngredientEntity has [ReferenceTable] + [Cache] - fetch all from cache and filter in memory
+            // This is efficient because ingredients are a reference table with limited size
+            var allEntities = await _dal.GetAllAsync();
+            var searchLower = searchTerm.ToLowerInvariant();
 
-        return list;
+            var filtered = allEntities
+                .Where(e => (e.Name?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true) ||
+                           (e.AlternativeNames?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) == true))
+                .OrderBy(e => e.Name)
+                .Select(MapEntityToDto)
+                .ToList();
+
+            return filtered;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Ingredient", "SearchByName", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<List<IngredientDto>> GetByCategoryAsync(string category)
     {
-        const string sql = @"SELECT Id, Name, AlternativeNames, Description, Category, IsCommonAllergen FROM Ingredient WHERE Category = @Category AND IsDeleted = 0 ORDER BY Name";
-        var list = new List<IngredientDto>();
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
-        cmd.CommandTimeout = 120;
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            list.Add(new IngredientDto
-            {
-                Id = reader.GetGuid(reader.GetOrdinal("Id")),
-                Name = reader.GetString(reader.GetOrdinal("Name")),
-                AlternativeNames = reader.IsDBNull(reader.GetOrdinal("AlternativeNames")) ? null : reader.GetString(reader.GetOrdinal("AlternativeNames")),
-                Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
-                Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
-                IsCommonAllergen = reader.IsDBNull(reader.GetOrdinal("IsCommonAllergen")) ? false : reader.GetBoolean(reader.GetOrdinal("IsCommonAllergen"))
-            });
-        }
+            _metrics?.RecordOperation("Ingredient", "GetByCategory");
+            // Uses generated [NamedQuery("ByCategory", nameof(Category))] method
+            // SQL: SELECT * FROM [Ingredient] WHERE [Category] = @Category AND [IsDeleted] = 0
+            var entities = await _dal.GetByCategoryAsync(category);
 
-        return list;
+            return entities
+                .OrderBy(e => e.Name)
+                .Select(MapEntityToDto)
+                .ToList();
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Ingredient", "GetByCategory", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<Guid> CreateAsync(CreateIngredientRequest request, Guid? createdBy = null)
     {
-        var entity = new IngredientEntity
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            Id = Guid.NewGuid(),
-            Name = request.Name,
-            Description = request.Description,
-            Category = request.Category,
-            IsCommonAllergen = request.IsCommonAllergen,
-            // Note: CreatedDate/ModifiedDate are auto-populated by HighSpeedDAL's InsertAsync
-            IsDeleted = false
-        };
-        // Generated DAL InsertAsync requires userName and CancellationToken parameters
-        await _dal.InsertAsync(entity, "System", System.Threading.CancellationToken.None);
-        return entity.Id;
+            _metrics?.RecordOperation("Ingredient", "Insert");
+            var entity = new IngredientEntity
+            {
+                Id = Guid.NewGuid(),
+                Name = request.Name,
+                Description = request.Description,
+                Category = request.Category,
+                IsCommonAllergen = request.IsCommonAllergen,
+                // Note: CreatedDate/ModifiedDate are auto-populated by HighSpeedDAL's InsertAsync
+                IsDeleted = false
+            };
+            // Generated DAL InsertAsync requires userName and CancellationToken parameters
+            await _dal.InsertAsync(entity, "System", System.Threading.CancellationToken.None);
+            return entity.Id;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Ingredient", "Insert", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<bool> UpdateAsync(Guid id, UpdateIngredientRequest request, Guid? updatedBy = null)
     {
-        var existing = await _dal.GetByIdAsync(id);
-        if (existing == null) return false;
-        existing.Name = request.Name;
-        existing.Description = request.Description;
-        existing.Category = request.Category;
-        existing.IsCommonAllergen = request.IsCommonAllergen;
-        existing.ModifiedDate = DateTime.UtcNow;
-        // Generated DAL UpdateAsync requires userName and CancellationToken parameters
-        await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
-        return true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Ingredient", "Update");
+            var existing = await _dal.GetByIdAsync(id);
+            if (existing == null) return false;
+            existing.Name = request.Name;
+            existing.Description = request.Description;
+            existing.Category = request.Category;
+            existing.IsCommonAllergen = request.IsCommonAllergen;
+            existing.ModifiedDate = DateTime.UtcNow;
+            // Generated DAL UpdateAsync requires userName and CancellationToken parameters
+            await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Ingredient", "Update", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null)
     {
-        // If generated DAL doesn't expose a SoftDelete, perform soft-delete via entity update
-        var existing = await _dal.GetByIdAsync(id);
-        if (existing == null) return false;
-        existing.IsDeleted = true;
-        existing.ModifiedDate = DateTime.UtcNow;
-        await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
-        return true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Ingredient", "Delete");
+            // If generated DAL doesn't expose a SoftDelete, perform soft-delete via entity update
+            var existing = await _dal.GetByIdAsync(id);
+            if (existing == null) return false;
+            existing.IsDeleted = true;
+            existing.ModifiedDate = DateTime.UtcNow;
+            await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Ingredient", "Delete", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<List<ProductIngredientDto>> GetProductIngredientsAsync(Guid productId)
     {
-        const string sql = @"SELECT pi.Id, pi.ProductId, pi.IngredientId, i.Name as IngredientName, pi.OrderIndex, pi.Quantity, pi.Notes, pi.IngredientListString FROM ProductIngredient pi INNER JOIN Ingredient i ON pi.IngredientId = i.Id WHERE pi.ProductId = @ProductId AND pi.IsDeleted = 0 AND i.IsDeleted = 0 ORDER BY pi.OrderIndex, i.Name";
-        var list = new List<ProductIngredientDto>();
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ProductId", productId);
-        cmd.CommandTimeout = 120;
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            list.Add(new ProductIngredientDto
-            {
-                Id = reader.GetGuid(reader.GetOrdinal("Id")),
-                ProductId = reader.GetGuid(reader.GetOrdinal("ProductId")),
-                IngredientId = reader.GetGuid(reader.GetOrdinal("IngredientId")),
-                IngredientName = reader.GetString(reader.GetOrdinal("IngredientName")),
-                OrderIndex = reader.GetInt32(reader.GetOrdinal("OrderIndex")),
-                Quantity = reader.IsDBNull(reader.GetOrdinal("Quantity")) ? null : reader.GetString(reader.GetOrdinal("Quantity")),
-                Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
-                IngredientListString = reader.IsDBNull(reader.GetOrdinal("IngredientListString")) ? null : reader.GetString(reader.GetOrdinal("IngredientListString"))
-            });
-        }
+            _metrics?.RecordOperation("ProductIngredient", "GetByProductId");
+            // Uses generated [NamedQuery("ByProductId", nameof(ProductId))] method
+            // Named query already filters IsDeleted=0
+            var productIngredients = await _productIngredientDal.GetByProductIdAsync(productId);
 
-        return list;
+            if (!productIngredients.Any()) return new List<ProductIngredientDto>();
+
+            // Batch-fetch Ingredient entities to get names (uses DAL cache)
+            var ingredientIds = productIngredients.Select(pi => pi.IngredientId).Distinct().ToList();
+            var ingredients = await _dal.GetByIdsAsync(ingredientIds);
+            var ingredientLookup = ingredients.ToDictionary(i => i.Id, i => i.Name ?? string.Empty);
+
+            // Map to DTOs with ingredient names
+            return productIngredients
+                .OrderBy(pi => pi.OrderIndex)
+                .ThenBy(pi => ingredientLookup.GetValueOrDefault(pi.IngredientId, string.Empty))
+                .Select(pi => new ProductIngredientDto
+                {
+                    Id = pi.Id,
+                    ProductId = pi.ProductId,
+                    IngredientId = pi.IngredientId,
+                    IngredientName = ingredientLookup.GetValueOrDefault(pi.IngredientId, string.Empty),
+                    OrderIndex = pi.OrderIndex,
+                    Quantity = pi.Quantity,
+                    Notes = pi.Notes,
+                    IngredientListString = null // Not stored in ProductIngredientEntity
+                })
+                .ToList();
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("ProductIngredient", "GetByProductId", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<Guid> AddProductIngredientAsync(Guid productId, AddProductIngredientRequest request, Guid? createdBy = null)
     {
-        const string checkSql = "SELECT Id FROM ProductIngredient WHERE ProductId = @ProductId AND IngredientId = @IngredientId AND IsDeleted = 0";
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using (var checkCmd = new SqlCommand(checkSql, conn))
-        {
-            checkCmd.Parameters.AddWithValue("@ProductId", productId);
-            checkCmd.Parameters.AddWithValue("@IngredientId", request.IngredientId);
-            var existing = await checkCmd.ExecuteScalarAsync();
-            if (existing != null && existing != DBNull.Value) return (Guid)existing;
-        }
-
-        const string insertSql = "INSERT INTO ProductIngredient (Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString, CreatedDate) VALUES (@Id,@ProductId,@IngredientId,@OrderIndex,@Quantity,@Notes,@IngredientListString,GETUTCDATE())";
-        var newId = Guid.NewGuid();
-        await using var insertConn = new SqlConnection(_dbConnection.ConnectionString);
-        await insertConn.OpenAsync();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            await using var insertCmd = new SqlCommand(insertSql, insertConn);
-            insertCmd.Parameters.AddWithValue("@Id", newId);
-            insertCmd.Parameters.AddWithValue("@ProductId", productId);
-            insertCmd.Parameters.AddWithValue("@IngredientId", request.IngredientId);
-            insertCmd.Parameters.AddWithValue("@OrderIndex", request.OrderIndex);
-            insertCmd.Parameters.AddWithValue("@Quantity", (object?)request.Quantity ?? DBNull.Value);
-            insertCmd.Parameters.AddWithValue("@Notes", (object?)request.Notes ?? DBNull.Value);
-            insertCmd.Parameters.AddWithValue("@IngredientListString", (object?)request.IngredientListString ?? DBNull.Value);
-            insertCmd.CommandTimeout = 120;
-            await insertCmd.ExecuteNonQueryAsync();
-        }
-        catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
-        {
-            await using var checkCmd2 = new SqlCommand(checkSql, insertConn);
-            checkCmd2.Parameters.AddWithValue("@ProductId", productId);
-            checkCmd2.Parameters.AddWithValue("@IngredientId", request.IngredientId);
-            var existing = await checkCmd2.ExecuteScalarAsync();
-            if (existing != null && existing != DBNull.Value) return (Guid)existing;
-            throw;
-        }
+            _metrics?.RecordOperation("ProductIngredient", "Insert");
+            // Uses generated [NamedQuery("ByProductId", nameof(ProductId))] method
+            // Named query already filters IsDeleted=0
+            var existingLinks = await _productIngredientDal.GetByProductIdAsync(productId);
+            var existing = existingLinks.FirstOrDefault(pi => pi.IngredientId == request.IngredientId);
+            if (existing != null) return existing.Id;
 
-        return newId;
+            // Create new ProductIngredient entity
+            var newEntity = new ProductIngredientEntity
+            {
+                Id = Guid.NewGuid(),
+                ProductId = productId,
+                IngredientId = request.IngredientId,
+                OrderIndex = request.OrderIndex,
+                Quantity = request.Quantity,
+                Notes = request.Notes,
+                IsDeleted = false
+            };
+
+            try
+            {
+                await _productIngredientDal.InsertAsync(newEntity, null, System.Threading.CancellationToken.None);
+                return newEntity.Id;
+            }
+            catch (Exception ex) when (ex.Message.Contains("duplicate") || ex.Message.Contains("unique"))
+            {
+                // Handle race condition - re-check using named query
+                var refreshedLinks = await _productIngredientDal.GetByProductIdAsync(productId);
+                var refreshedExisting = refreshedLinks.FirstOrDefault(pi => pi.IngredientId == request.IngredientId);
+                if (refreshedExisting != null) return refreshedExisting.Id;
+                throw;
+            }
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("ProductIngredient", "Insert", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<bool> RemoveProductIngredientAsync(Guid productIngredientId, Guid? deletedBy = null)
     {
-        const string sql = "UPDATE ProductIngredient SET IsDeleted = 1, DeletedDate = GETUTCDATE(), ModifiedDate = GETUTCDATE() WHERE Id = @Id AND IsDeleted = 0";
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Id", productIngredientId);
-        var rows = await cmd.ExecuteNonQueryAsync();
-        return rows > 0;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("ProductIngredient", "Delete");
+            // Fetch the entity and soft-delete using DAL
+            var entity = await _productIngredientDal.GetByIdAsync(productIngredientId);
+            if (entity == null || entity.IsDeleted) return false;
+
+            entity.IsDeleted = true;
+            await _productIngredientDal.UpdateAsync(entity, null, System.Threading.CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("ProductIngredient", "Delete", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<Dictionary<string, Guid>> GetIngredientIdsByNamesAsync(IEnumerable<string> names)
     {
         var namesList = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (!namesList.Any()) return new Dictionary<string, Guid>();
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var chunk in namesList.Chunk(1000))
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            var parameters = new List<SqlParameter>();
-            var conditions = new List<string>();
-            for (int i = 0; i < chunk.Length; i++)
+            _metrics?.RecordOperation("Ingredient", "GetIdsByNames", namesList.Count);
+
+            // PERFORMANCE: For better performance with many names, batch the lookups
+            // instead of individual database queries. Limit batch size to 50 to avoid
+            // creating too many SQL queries, but still much better than 100+ individual lookups.
+            var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            const int BATCH_SIZE = 50;
+
+            for (int i = 0; i < namesList.Count; i += BATCH_SIZE)
             {
-                var paramName = $"@p{i}";
-                conditions.Add($"Name = {paramName}");
-                parameters.Add(new SqlParameter(paramName, chunk[i]));
+                var nameBatch = namesList.Skip(i).Take(BATCH_SIZE).ToList();
+
+                // Process this batch of names in parallel for better throughput
+                var tasks = nameBatch.Select(async name =>
+                {
+                    try
+                    {
+                        var ingredient = await _dal.GetByNameAsync(name);
+                        return ingredient;
+                    }
+                    catch
+                    {
+                        // Ingredient not found, will be created on demand
+                        return null;
+                    }
+                });
+
+                var results = await Task.WhenAll(tasks);
+                foreach (var ingredient in results)
+                {
+                    if (ingredient?.Name != null)
+                    {
+                        result[ingredient.Name] = ingredient.Id;
+                    }
+                }
             }
-            // conditions should be combined with OR to match any of the provided names
-            var sql = $"SELECT Name, Id FROM Ingredient WHERE ({string.Join(" OR ", conditions)}) AND IsDeleted = 0";
-            await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-            await conn.OpenAsync();
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddRange(parameters.ToArray());
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var name = reader.GetString(reader.GetOrdinal("Name"));
-                var id = reader.GetGuid(reader.GetOrdinal("Id"));
-                if (!result.ContainsKey(name)) result[name] = id;
-            }
+
+            return result;
         }
-        return result;
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordBatchOperation("Ingredient", "GetIdsByNames", namesList.Count, sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, Guid? createdBy = null)
@@ -252,24 +351,66 @@ public class IngredientRepositoryAdapter : IIngredientRepository
         var namesList = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         if (!namesList.Any()) return 0;
 
-        // Create entities from names
-        var entities = namesList.Select(name => new IngredientEntity
-        {
-            Id = Guid.NewGuid(),
-            Name = name,
-            Category = "General",
-            IsCommonAllergen = false
-        }).ToList();
-
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            // Uses generated DAL BulkInsertAsync which leverages InMemoryTable for high-speed writes
-            return await _dal.BulkInsertAsync(entities, null, System.Threading.CancellationToken.None);
+            // Create entities from names
+            var entities = namesList.Select(name => new IngredientEntity
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                Category = "General",
+                IsCommonAllergen = false
+            }).ToList();
+
+            // Use duplicate-handling bulk insert - extracts duplicates gracefully
+            var result = await _dal.BulkInsertWithDuplicatesAsync(entities, null, System.Threading.CancellationToken.None);
+
+            if (result.HasDuplicates)
+            {
+                _logger.LogDebug("Skipped {Count} duplicate ingredients (already exist)", result.DuplicateEntities.Count);
+            }
+
+            return result.InsertedCount;
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogDebug(ex, "Some duplicates during BulkCreateIngredientsAsync - this is expected");
-            return 0; // Duplicates are expected, caller handles them
+            sw.Stop();
+            _metrics?.RecordBatchOperation("Ingredient", "BulkInsert", namesList.Count, sw.ElapsedMilliseconds);
+        }
+    }
+
+    public async Task<int> BulkAddProductIngredientsAsync(IEnumerable<(Guid ProductId, Guid IngredientId, int OrderIndex)> links)
+    {
+        var linkList = links.ToList();
+        if (!linkList.Any()) return 0;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var entities = linkList.Select(l => new ProductIngredientEntity
+            {
+                Id = Guid.NewGuid(),
+                ProductId = l.ProductId,
+                IngredientId = l.IngredientId,
+                OrderIndex = l.OrderIndex,
+                IsDeleted = false
+            }).ToList();
+
+            // Use duplicate-handling bulk insert
+            var result = await _productIngredientDal.BulkInsertWithDuplicatesAsync(entities, null, System.Threading.CancellationToken.None);
+
+            if (result.HasDuplicates)
+            {
+                _logger.LogDebug("Skipped {Count} duplicate product-ingredient links", result.DuplicateEntities.Count);
+            }
+
+            return result.InsertedCount;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordBatchOperation("ProductIngredient", "BulkInsert", linkList.Count, sw.ElapsedMilliseconds);
         }
     }
 

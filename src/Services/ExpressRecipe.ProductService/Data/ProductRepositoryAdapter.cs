@@ -1,4 +1,5 @@
 using ExpressRecipe.Shared.DTOs.Product;
+using HighSpeedDAL.Core;
 using HighSpeedDAL.Core.Interfaces;
 using HighSpeedDAL.SqlServer;
 using ExpressRecipe.ProductService.Entities;
@@ -10,6 +11,7 @@ namespace ExpressRecipe.ProductService.Data;
 /// Adapter that implements IProductRepository but delegates CRUD to generated HighSpeedDAL DALs.
 /// Keeps legacy DTOs (ProductDto) for compatibility and maps between generated entities and DTOs.
 /// Advanced search and aggregated queries are delegated to ProductSearchAdapter.
+/// Records DAL operations to metrics for observability.
 /// </summary>
 public class ProductRepositoryAdapter : IProductRepository
 {
@@ -24,6 +26,7 @@ public class ProductRepositoryAdapter : IProductRepository
     private readonly ProductSearchAdapter _searchAdapter;
     private readonly IProductImageRepository _imageRepo;
     private readonly ILogger<ProductRepositoryAdapter> _logger;
+    private readonly DalMetricsCollector? _metrics;
 
     public ProductRepositoryAdapter(
         ProductEntityDal dal,
@@ -36,6 +39,7 @@ public class ProductRepositoryAdapter : IProductRepository
         ProductSearchAdapter searchAdapter,
         IProductImageRepository imageRepo,
         ProductDatabaseConnection dbConnection,
+        DalMetricsCollector? metrics,
         ILogger<ProductRepositoryAdapter> logger)
     {
         _dal = dal ?? throw new ArgumentNullException(nameof(dal));
@@ -48,62 +52,122 @@ public class ProductRepositoryAdapter : IProductRepository
         _searchAdapter = searchAdapter ?? throw new ArgumentNullException(nameof(searchAdapter));
         _imageRepo = imageRepo ?? throw new ArgumentNullException(nameof(imageRepo));
         _dbConnection = dbConnection ?? throw new ArgumentNullException(nameof(dbConnection));
+        _metrics = metrics;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<ProductDto?> GetByIdAsync(Guid id)
     {
-        var entity = await _dal.GetByIdAsync(id);
-        if (entity == null) return null;
-        var dto = MapEntityToDto(entity);
-        await LoadImagesAsync(dto);
-        return dto;
-    }
-
-    public async Task<ProductDto?> GetByBarcodeAsync(string barcode)
-    {
-        _logger.LogDebug("Searching for product by barcode '{Barcode}' using DAL.", barcode);
-        // This is not the most efficient way for a large dataset,
-        // but it removes raw SQL and leverages the DAL's caching.
-        // A future optimization would be to add a GetByBarcodeAsync method to the source generator.
-        var allProducts = await _dal.GetAllAsync();
-        var entity = allProducts.FirstOrDefault(p => p.Barcode == barcode);
-
-        if (entity != null)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            _logger.LogDebug("Found product with barcode '{Barcode}'.", barcode);
+            _metrics?.RecordOperation("Product", "GetById");
+            var entity = await _dal.GetByIdAsync(id);
+            if (entity == null) return null;
             var dto = MapEntityToDto(entity);
             await LoadImagesAsync(dto);
             return dto;
         }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "GetById", sw.ElapsedMilliseconds);
+        }
+    }
 
-        _logger.LogWarning("No product found with barcode '{Barcode}'.", barcode);
-        return null;
+    public async Task<ProductDto?> GetByBarcodeAsync(string barcode)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "GetByBarcode");
+            _logger.LogDebug("Searching for product by barcode '{Barcode}' using ProductSearchAdapter.", barcode);
+            var dto = await _searchAdapter.GetByBarcodeAsync(barcode);
+            if (dto != null)
+            {
+                await LoadImagesAsync(dto);
+            }
+            return dto;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "GetByBarcode", sw.ElapsedMilliseconds);
+        }
     }
 
     public Task<ProductDto?> GetProductByBarcodeAsync(string barcode) => GetByBarcodeAsync(barcode);
 
-    public Task<List<ProductDto>> SearchAsync(ProductSearchRequest request)
+    public async Task<List<ProductDto>> SearchAsync(ProductSearchRequest request)
     {
-        return _searchAdapter.SearchAsync(request);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "Search");
+            var products = await _searchAdapter.SearchAsync(request);
+
+            // Batch load images for all products instead of N+1 queries
+            if (products.Any())
+            {
+                await LoadImagesInBatchAsync(products);
+            }
+
+            return products;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "Search", sw.ElapsedMilliseconds);
+        }
     }
 
-    public Task<int> GetSearchCountAsync(ProductSearchRequest request)
+    public async Task<int> GetSearchCountAsync(ProductSearchRequest request)
     {
-        return _searchAdapter.GetSearchCountAsync(request);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "GetSearchCount");
+            return await _searchAdapter.GetSearchCountAsync(request);
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "GetSearchCount", sw.ElapsedMilliseconds);
+        }
     }
 
-    public Task<Dictionary<string,int>> GetLetterCountsAsync(ProductSearchRequest request)
+    public async Task<Dictionary<string,int>> GetLetterCountsAsync(ProductSearchRequest request)
     {
-        return _searchAdapter.GetLetterCountsAsync(request);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "GetLetterCounts");
+            return await _searchAdapter.GetLetterCountsAsync(request);
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "GetLetterCounts", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<Guid> CreateAsync(CreateProductRequest request, Guid? createdBy = null)
     {
-        var entity = MapCreateRequestToEntity(request);
-        // generated DAL InsertAsync requires userName and CancellationToken parameters
-        await _dal.InsertAsync(entity, null, System.Threading.CancellationToken.None);
-        return entity.Id;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "Insert");
+            var entity = MapCreateRequestToEntity(request);
+            entity.IsDeleted = false;
+            // generated DAL InsertAsync requires userName and CancellationToken parameters
+            await _dal.InsertAsync(entity, null, System.Threading.CancellationToken.None);
+            return entity.Id;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "Insert", sw.ElapsedMilliseconds);
+        }
     }
 
     public Task<Guid> CreateProductAsync(CreateProductRequest request) => CreateAsync(request, null);
@@ -113,16 +177,69 @@ public class ProductRepositoryAdapter : IProductRepository
         var entities = requests.Select(MapCreateRequestToEntity).ToList();
         if (entities.Count == 0) return 0;
 
-        // Uses generated DAL BulkInsertAsync which leverages InMemoryTable for high-speed writes
-        return await _dal.BulkInsertAsync(entities, null, System.Threading.CancellationToken.None);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+
+            foreach (var entity in entities)
+            {
+                entity.IsDeleted = false;
+            }
+
+            // Use duplicate-handling bulk insert - extracts duplicates for update processing
+            var result = await _dal.BulkInsertWithDuplicatesAsync(entities, null, System.Threading.CancellationToken.None);
+
+            // Handle duplicates by updating them
+            if (result.HasDuplicates)
+            {
+                _logger.LogInformation("Processing {Count} duplicate products for update", result.DuplicateEntities.Count);
+                int updated = 0;
+                foreach (var duplicate in result.DuplicateEntities)
+                {
+                    try
+                    {
+                        // Look up existing product by barcode
+                        var existing = await _searchAdapter.GetByBarcodeAsync(duplicate.Barcode ?? string.Empty);
+                        if (existing != null)
+                        {
+                            // Update existing product with new data (skip if identical)
+                            var updateRequest = new UpdateProductRequest
+                            {
+                                Name = duplicate.Name ?? string.Empty,
+                                Brand = duplicate.Brand,
+                                Barcode = duplicate.Barcode,
+                                BarcodeType = duplicate.BarcodeType,
+                                Description = duplicate.Description,
+                                Category = duplicate.Category,
+                                ServingSize = duplicate.ServingSize,
+                                ServingUnit = duplicate.ServingUnit,
+                                ImageUrl = duplicate.ImageUrl
+                            };
+                            await UpdateAsync(existing.Id, updateRequest, createdBy);
+                            updated++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to update duplicate product with barcode {Barcode}", duplicate.Barcode);
+                    }
+                }
+                _logger.LogInformation("Updated {Updated} of {Total} duplicate products", updated, result.DuplicateEntities.Count);
+            }
+
+            return result.InsertedCount + result.DuplicateEntities.Count;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordBatchOperation("Product", "BulkInsert", entities.Count, sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task AddIngredientToProductAsync(Guid productId, string ingredientName, int orderIndex = 0)
     {
-        // Find the ingredient by name. This is inefficient but removes raw SQL.
-        // A future optimization is to add [ReferenceTable] to IngredientEntity to get a GetByNameAsync method.
-        var allIngredients = await _ingredientDal.GetAllAsync();
-        var ingredient = allIngredients.FirstOrDefault(i => i.Name.Equals(ingredientName, StringComparison.OrdinalIgnoreCase));
+        _metrics?.RecordOperation("ProductIngredient", "Insert");
+        var ingredient = await _ingredientDal.GetByNameAsync(ingredientName);
 
         if (ingredient == null)
         {
@@ -145,130 +262,186 @@ public class ProductRepositoryAdapter : IProductRepository
 
     public async Task AddLabelToProductAsync(Guid productId, string label)
     {
+        _metrics?.RecordOperation("ProductLabel", "Insert");
         var productLabel = new ProductLabelEntity
         {
             Id = Guid.NewGuid(),
             ProductId = productId,
-            LabelName = label
+            LabelName = label,
+            IsDeleted = false
         };
-
         await _productLabelDal.InsertAsync(productLabel, null, System.Threading.CancellationToken.None);
         _logger.LogInformation("Added label '{Label}' to product '{ProductId}'.", label, productId);
     }
 
     public async Task AddAllergenToProductAsync(Guid productId, string allergen)
     {
+        _metrics?.RecordOperation("ProductAllergen", "Insert");
         var productAllergen = new ProductAllergenEntity
         {
             Id = Guid.NewGuid(),
             ProductId = productId,
-            AllergenName = allergen
+            AllergenName = allergen,
+            IsDeleted = false
         };
-
         await _productAllergenDal.InsertAsync(productAllergen, null, System.Threading.CancellationToken.None);
         _logger.LogInformation("Added allergen '{Allergen}' to product '{ProductId}'.", allergen, productId);
     }
 
     public async Task AddExternalLinkAsync(Guid productId, string source, string externalId)
     {
+        _metrics?.RecordOperation("ProductExternalLink", "Insert");
         var link = new ProductExternalLinkEntity
         {
             Id = Guid.NewGuid(),
             ProductId = productId,
             Source = source,
-            ExternalId = externalId
+            ExternalId = externalId,
+            IsDeleted = false
         };
-
         await _productExternalLinkDal.InsertAsync(link, null, System.Threading.CancellationToken.None);
         _logger.LogInformation("Added external link from source '{Source}' to product '{ProductId}'.", source, productId);
     }
 
     public async Task UpdateProductMetadataAsync(Guid productId, string key, string value)
     {
+        _metrics?.RecordOperation("ProductMetadata", "Insert");
         var metadata = new ProductMetadataEntity
         {
             Id = Guid.NewGuid(),
             ProductId = productId,
             MetaKey = key,
-            MetaValue = value
+            MetaValue = value,
+            IsDeleted = false
         };
-
         await _productMetadataDal.InsertAsync(metadata, null, System.Threading.CancellationToken.None);
         _logger.LogInformation("Added metadata with key '{Key}' to product '{ProductId}'.", key, productId);
     }
 
     public async Task<ProductDto?> GetProductByExternalIdAsync(string source, string externalId)
     {
-        // This is inefficient, but removes the incorrect raw SQL.
-        // A future optimization would be a custom query method in the generator for this lookup.
-        var allLinks = await _productExternalLinkDal.GetAllAsync();
-        var link = allLinks.FirstOrDefault(l => 
-            l.Source.Equals(source, StringComparison.OrdinalIgnoreCase) && 
-            l.ExternalId.Equals(externalId, StringComparison.OrdinalIgnoreCase));
-
-        if (link == null)
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            _logger.LogWarning("Could not find external link for source '{Source}' and external ID '{ExternalId}'.", source, externalId);
-            return null;
+            _metrics?.RecordOperation("Product", "GetByExternalId");
+            _logger.LogDebug("Searching for product by external ID '{ExternalId}' from source '{Source}' using ProductSearchAdapter.", externalId, source);
+            var dto = await _searchAdapter.GetByExternalIdAsync(source, externalId);
+            if (dto != null)
+            {
+                await LoadImagesAsync(dto);
+            }
+            return dto;
         }
-
-        // Now get the product using the ProductId from the link
-        return await GetByIdAsync(link.ProductId);
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "GetByExternalId", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<bool> UpdateAsync(Guid id, UpdateProductRequest request, Guid? updatedBy = null)
     {
-        var existing = await _dal.GetByIdAsync(id);
-        if (existing == null) return false;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "Update");
+            var existing = await _dal.GetByIdAsync(id);
+            if (existing == null) return false;
 
-        existing.Name = request.Name;
-        existing.Brand = request.Brand;
-        existing.Barcode = request.Barcode;
-        existing.BarcodeType = request.BarcodeType;
-        existing.Description = request.Description;
-        existing.Category = request.Category;
-        existing.ServingSize = request.ServingSize;
-        existing.ServingUnit = request.ServingUnit;
-        existing.ImageUrl = request.ImageUrl;
+            existing.Name = request.Name;
+            existing.Brand = request.Brand;
+            existing.Barcode = request.Barcode;
+            existing.BarcodeType = request.BarcodeType;
+            existing.Description = request.Description;
+            existing.Category = request.Category;
+            existing.ServingSize = request.ServingSize;
+            existing.ServingUnit = request.ServingUnit;
+            existing.ImageUrl = request.ImageUrl;
 
-        // generated DAL UpdateAsync requires userName and CancellationToken parameters
-        await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
-        return true;
+            // generated DAL UpdateAsync requires userName and CancellationToken parameters
+            await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "Update", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null)
     {
-        // If generated DAL does not expose SoftDeleteAsync, perform soft-delete via update
-        var existing = await _dal.GetByIdAsync(id);
-        if (existing == null) return false;
-        existing.IsDeleted = true;
-        existing.ModifiedDate = DateTime.UtcNow;
-        await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
-        return true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "Delete");
+            // If generated DAL does not expose SoftDeleteAsync, perform soft-delete via update
+            var existing = await _dal.GetByIdAsync(id);
+            if (existing == null) return false;
+            existing.IsDeleted = true;
+            existing.ModifiedDate = DateTime.UtcNow;
+            await _dal.UpdateAsync(existing, null, System.Threading.CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "Delete", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<bool> ApproveAsync(Guid id, bool approve, Guid approvedBy, string? rejectionReason = null)
     {
-        var entity = await _dal.GetByIdAsync(id);
-        if (entity == null) return false;
-        entity.ApprovalStatus = approve ? "Approved" : "Rejected";
-        entity.ApprovedBy = approvedBy;
-        entity.ApprovedAt = DateTime.UtcNow;
-        entity.RejectionReason = rejectionReason;
-        await _dal.UpdateAsync(entity, null, System.Threading.CancellationToken.None);
-        return true;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "Update");
+            var entity = await _dal.GetByIdAsync(id);
+            if (entity == null) return false;
+            entity.ApprovalStatus = approve ? "Approved" : "Rejected";
+            entity.ApprovedBy = approvedBy;
+            entity.ApprovedAt = DateTime.UtcNow;
+            entity.RejectionReason = rejectionReason;
+            await _dal.UpdateAsync(entity, null, System.Threading.CancellationToken.None);
+            return true;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "Update", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<bool> ProductExistsAsync(Guid id)
     {
-        var entity = await _dal.GetByIdAsync(id);
-        return entity != null && !entity.IsDeleted;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "Exists");
+            var entity = await _dal.GetByIdAsync(id);
+            return entity != null && !entity.IsDeleted;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "Exists", sw.ElapsedMilliseconds);
+        }
     }
 
     public async Task<int?> GetProductCountAsync()
     {
-        var count = await _dal.CountAsync();
-        return count;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "Count");
+            var count = await _dal.CountAsync();
+            return count;
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordOperationDuration("Product", "Count", sw.ElapsedMilliseconds);
+        }
     }
 
     private ProductDto MapEntityToDto(ProductEntity entity)
@@ -319,7 +492,37 @@ public class ProductRepositoryAdapter : IProductRepository
     {
         if (product == null) return;
         var images = await _imageRepo.GetImagesByProductIdAsync(product.Id);
-        product.Images = images.Select(img => new ProductImageDto
+        product.Images = images.Select(MapImageToDto).ToList();
+    }
+
+    private async Task LoadImagesInBatchAsync(List<ProductDto> products)
+    {
+        if (!products.Any()) return;
+
+        _logger.LogDebug("Batch loading images for {Count} products", products.Count);
+
+        // Get all images for all products at once (single DAL call, cached)
+        var imagesByProductId = await _imageRepo.GetImagesByProductIdsAsync(products.Select(p => p.Id));
+
+        // Assign images to products
+        foreach (var product in products)
+        {
+            if (imagesByProductId.TryGetValue(product.Id, out var images))
+            {
+                product.Images = images.Select(MapImageToDto).ToList();
+            }
+            else
+            {
+                product.Images = new List<ProductImageDto>();
+            }
+        }
+
+        _logger.LogDebug("Batch loaded images for {Count} products", products.Count);
+    }
+
+    private static ProductImageDto MapImageToDto(ProductImageModel img)
+    {
+        return new ProductImageDto
         {
             Id = img.Id,
             ProductId = img.ProductId,
@@ -337,6 +540,76 @@ public class ProductRepositoryAdapter : IProductRepository
             SourceSystem = img.SourceSystem,
             SourceId = img.SourceId,
             CreatedAt = img.CreatedAt
-        }).ToList();
+        };
+    }
+
+    // Bulk operations for batch processing
+    public async Task<IEnumerable<string>> GetExistingBarcodesAsync(IEnumerable<string> barcodes)
+    {
+        var barcodeList = barcodes.ToList();
+        if (!barcodeList.Any()) return Enumerable.Empty<string>();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "GetExistingBarcodes", barcodeList.Count);
+            return await _searchAdapter.GetExistingBarcodesAsync(barcodeList);
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordBatchOperation("Product", "GetExistingBarcodes", barcodeList.Count, sw.ElapsedMilliseconds);
+        }
+    }
+
+    public async Task<Dictionary<string, Guid>> GetProductIdsByBarcodesAsync(IEnumerable<string> barcodes)
+    {
+        var barcodeList = barcodes.ToList();
+        if (!barcodeList.Any()) return new Dictionary<string, Guid>();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _metrics?.RecordOperation("Product", "GetProductIdsByBarcodes", barcodeList.Count);
+            return await _searchAdapter.GetProductIdsByBarcodesAsync(barcodeList);
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordBatchOperation("Product", "GetProductIdsByBarcodes", barcodeList.Count, sw.ElapsedMilliseconds);
+        }
+    }
+
+    public async Task BulkAddExternalLinksAsync(IEnumerable<(Guid ProductId, string Source, string ExternalId)> links)
+    {
+        var linkList = links.ToList();
+        if (!linkList.Any()) return;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var entities = linkList.Select(l => new ProductExternalLinkEntity
+            {
+                Id = Guid.NewGuid(),
+                ProductId = l.ProductId,
+                Source = l.Source,
+                ExternalId = l.ExternalId,
+                IsDeleted = false
+            }).ToList();
+
+            var result = await _productExternalLinkDal.BulkInsertWithDuplicatesAsync(entities, null, System.Threading.CancellationToken.None);
+
+            if (result.HasDuplicates)
+            {
+                _logger.LogDebug("Skipped {Count} duplicate external links", result.DuplicateEntities.Count);
+            }
+
+            _logger.LogDebug("Bulk inserted {Count} external links", result.InsertedCount);
+        }
+        finally
+        {
+            sw.Stop();
+            _metrics?.RecordBatchOperation("ProductExternalLink", "BulkInsert", linkList.Count, sw.ElapsedMilliseconds);
+        }
     }
 }

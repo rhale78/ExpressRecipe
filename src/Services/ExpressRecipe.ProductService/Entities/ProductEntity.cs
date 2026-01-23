@@ -7,9 +7,21 @@ namespace ExpressRecipe.ProductService.Entities;
 [DalEntity]
 [Table("Product", PrimaryKeyType = PrimaryKeyType.Guid)]
 [Cache(CacheStrategy.TwoLayer, MaxSize = 10000, ExpirationSeconds = 900)]
-[InMemoryTable(FlushIntervalSeconds = 30, MaxRowCount = 100000)]
+[InMemoryTable(
+    FlushIntervalSeconds = 30,
+    MaxRowCount = 100000,
+    EnforceConstraints = false,    // Constraints enforced at DB
+    ValidateOnWrite = false,       // Mostly read operations
+    TrackOperations = false)]      // Operational tracking not critical
 [AutoAudit]
 [SoftDelete]
+// Named queries for common search patterns
+[NamedQuery("ByBarcode", nameof(Barcode), IsSingle = true)]
+[NamedQuery("ByBrand", nameof(Brand))]
+[NamedQuery("ByCategory", nameof(Category))]
+[NamedQuery("ByApprovalStatus", nameof(ApprovalStatus))]
+[NamedQuery("ByBrandAndCategory", nameof(Brand), nameof(Category))]
+[NamedQuery("ByCategoryAndApprovalStatus", nameof(Category), nameof(ApprovalStatus))]
 [MessagePackObject]
 public partial class ProductEntity
 {
@@ -19,14 +31,17 @@ public partial class ProductEntity
 
     [Key(1)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string Name { get; set; } = string.Empty;
 
     [Key(2)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string? Brand { get; set; }
 
     [Key(3)]
     [Index(IsUnique = true)]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string? Barcode { get; set; }
 
     [Key(4)]
@@ -37,6 +52,7 @@ public partial class ProductEntity
 
     [Key(6)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string? Category { get; set; }
 
     [Key(7)]
@@ -50,6 +66,7 @@ public partial class ProductEntity
 
     [Key(10)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string ApprovalStatus { get; set; } = "Pending";
 
     [Key(11)]

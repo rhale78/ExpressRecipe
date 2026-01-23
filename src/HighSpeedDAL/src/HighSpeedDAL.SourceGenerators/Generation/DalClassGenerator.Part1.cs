@@ -131,6 +131,9 @@ internal sealed partial class DalClassGenerator
         GenerateBulkInsertMethod(code);
         code.AppendLine();
 
+        GenerateBulkInsertWithDuplicatesMethod(code);
+        code.AppendLine();
+
         GenerateCountMethod(code);
         code.AppendLine();
 
@@ -168,6 +171,16 @@ internal sealed partial class DalClassGenerator
             code.AppendLine();
         }
 
+        // Named query methods
+        GenerateNamedQueryMethods(code);
+
+        // In-memory helper methods
+        if (_metadata.HasInMemoryTable)
+        {
+            GenerateGetAllFromDatabaseAsyncMethod(code);
+            code.AppendLine();
+        }
+
             // Helper methods
             GenerateMapFromReaderMethod(code);
             code.AppendLine();
@@ -194,6 +207,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("using System.Linq;");
         code.AppendLine("using System.Threading;");
         code.AppendLine("using System.Threading.Tasks;");
+        code.AppendLine("using HighSpeedDAL.Core;");
         code.AppendLine("using HighSpeedDAL.Core.Base;");
         code.AppendLine("using HighSpeedDAL.Core.Interfaces;");
         code.AppendLine("using HighSpeedDAL.Core.Resilience;");
@@ -209,17 +223,24 @@ internal sealed partial class DalClassGenerator
         }
 
         code.AppendLine("using Microsoft.Extensions.Logging;");
+        code.AppendLine("using ExpressRecipe.Data.Common;");
 
         if (_metadata.HasCache)
         {
             code.AppendLine("using HighSpeedDAL.Core.Caching;");
         }
 
-            if (_metadata.HasMemoryMappedTable)
-            {
-                code.AppendLine("using HighSpeedDAL.Core.InMemoryTable;");
-                code.AppendLine("using HighSpeedDAL.Core.Attributes;");
-            }
+        // In-memory table support (RAM-only, no persistence)
+        if (_metadata.HasInMemoryTable)
+        {
+            code.AppendLine("using HighSpeedDAL.Core.InMemoryTable;");
+        }
+
+        if (_metadata.HasMemoryMappedTable)
+        {
+            code.AppendLine("using HighSpeedDAL.Core.InMemoryTable;");
+            code.AppendLine("using HighSpeedDAL.Core.Attributes;");
+        }
 
             // Add connection class namespace if it's different from entity namespace
             if (!string.IsNullOrWhiteSpace(_connectionClassFullName))
@@ -240,6 +261,13 @@ internal sealed partial class DalClassGenerator
 
     private void GenerateFields(StringBuilder code)
     {
+        // In-memory table field (RAM-only, no persistence)
+        if (_metadata.HasInMemoryTable)
+        {
+            code.AppendLine($"    private InMemoryTable<{_metadata.ClassName}>? _inMemoryTable;");
+            code.AppendLine();
+        }
+
         if (_metadata.HasMemoryMappedTable)
         {
             code.AppendLine($"    private readonly MemoryMappedFileStore<{_metadata.ClassName}>? _memoryMappedStore;");
@@ -269,18 +297,19 @@ internal sealed partial class DalClassGenerator
         code.AppendLine($"        {_connectionClassName} connection,");
         code.AppendLine($"        ILogger<{_metadata.ClassName}Dal> logger,");
         code.AppendLine("        IDbConnectionFactory connectionFactory,");
+        code.AppendLine("        RetryPolicyFactory retryPolicyFactory,");
+        code.AppendLine("        DalMetricsCollector? metricsCollector = null");
 
         if (_metadata.HasMemoryMappedTable)
         {
-            code.AppendLine("        RetryPolicyFactory retryPolicyFactory,");
-            code.AppendLine("        ILoggerFactory loggerFactory)");
+            code.AppendLine("        , ILoggerFactory? loggerFactory = null)");
         }
         else
         {
-            code.AppendLine("        RetryPolicyFactory retryPolicyFactory)");
+            code.AppendLine(")");
         }
 
-        code.AppendLine($"        : base(connection, logger, connectionFactory, retryPolicyFactory.CreatePolicy())");
+        code.AppendLine($"        : base(connection, logger, connectionFactory, retryPolicyFactory.CreatePolicy(), metricsCollector)");
         code.AppendLine("    {");
 
         if (_metadata.HasMemoryMappedTable)
@@ -365,6 +394,37 @@ internal sealed partial class DalClassGenerator
             code.AppendLine();
         }
 
+        // In-memory table initialization
+        if (_metadata.HasInMemoryTable)
+        {
+            code.AppendLine("        // Initialize in-memory table (RAM-only, no persistence)");
+            code.AppendLine($"        _inMemoryTable = new InMemoryTable<{_metadata.ClassName}>(");
+            code.AppendLine("            logger,");
+            code.AppendLine("            null,");
+            code.AppendLine($"            \"{_metadata.TableName}\");");
+            code.AppendLine();
+            code.AppendLine("        // Load data from database on startup");
+            code.AppendLine("        Task.Run(async () =>");
+            code.AppendLine("        {");
+            code.AppendLine("            try");
+            code.AppendLine("            {");
+            code.AppendLine($"                logger.LogInformation(\"Loading {_metadata.TableName} data into memory...\");");
+            code.AppendLine("                var allRows = await GetAllFromDatabaseAsync(CancellationToken.None);");
+            code.AppendLine("                foreach (var row in allRows)");
+            code.AppendLine("                {");
+            code.AppendLine("                    await _inMemoryTable.InsertAsync(row);");
+            code.AppendLine("                }");
+            code.AppendLine($"                logger.LogInformation(\"Loaded {{Count}} rows into memory for {_metadata.TableName}\", allRows.Count);");
+            code.AppendLine("            }");
+            code.AppendLine("            catch (Exception ex)");
+            code.AppendLine("            {");
+            code.AppendLine($"                logger.LogError(ex, \"Failed to load {_metadata.TableName} into memory. Falling back to database.\");");
+            code.AppendLine("                _inMemoryTable = null; // Disable in-memory if load fails");
+            code.AppendLine("            }");
+            code.AppendLine("        }).Wait();");
+            code.AppendLine();
+        }
+
         code.AppendLine("        // Ensure schema is initialized");
         code.AppendLine("        Task.Run(() => EnsureSchemaAsync()).Wait();");
 
@@ -404,6 +464,9 @@ internal sealed partial class DalClassGenerator
 
         code.AppendLine();
         code.AppendLine($"    private const string SQL_CREATE_TABLE = @\"{_sqlGenerator.GenerateCreateTableSql().Replace("\"", "\"\"")}\";");
+
+        // Generate named query SQL constants
+        GenerateNamedQuerySqlConstants(code);
     }
 
     private void GenerateSchemaInitialization(StringBuilder code)
@@ -463,13 +526,43 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    /// </summary>");
         code.AppendLine($"    public async Task<{_metadata.ClassName}?> GetByIdAsync({PrimaryKeyType} id, CancellationToken cancellationToken = default)");
         code.AppendLine("    {");
+        code.AppendLine("        var stopwatch = System.Diagnostics.Stopwatch.StartNew();");
+
+        // In-memory table check (highest priority)
+        if (_metadata.HasInMemoryTable)
+        {
+            code.AppendLine("        // Check in-memory table FIRST (highest priority)");
+            code.AppendLine("        if (_inMemoryTable != null)");
+            code.AppendLine("        {");
+            code.AppendLine("            try");
+            code.AppendLine("            {");
+            code.AppendLine("                stopwatch.Restart();");
+            code.AppendLine("                var inMemoryResult = _inMemoryTable.GetById(id);");
+            code.AppendLine("                stopwatch.Stop();");
+            code.AppendLine("                if (inMemoryResult != null)");
+            code.AppendLine("                {");
+            code.AppendLine($"                    Logger.LogDebug(\"In-memory table hit for {_metadata.ClassName} ID: {{Id}} in {{ElapsedMs}}ms\", id, stopwatch.ElapsedMilliseconds);");
+            code.AppendLine($"                    MetricsCollector?.RecordCacheHit(\"{_metadata.TableName}\");");
+            code.AppendLine($"                    MetricsCollector?.RecordOperationDuration(\"{_metadata.TableName}\", \"GetById_Memory\", stopwatch.ElapsedMilliseconds);");
+            code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"GetByIdAsync\", id, 1);");
+            code.AppendLine("                    return inMemoryResult;");
+            code.AppendLine("                }");
+            code.AppendLine("            }");
+            code.AppendLine("            catch (Exception ex)");
+            code.AppendLine("            {");
+            code.AppendLine($"                Logger.LogWarning(ex, \"In-memory table lookup failed for {_metadata.ClassName} ID: {{Id}}, falling back to database\", id);");
+            code.AppendLine("            }");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
 
         if (_metadata.HasMemoryMappedTable)
         {
-            code.AppendLine("        // Check L0 cache (memory-mapped backed) first");
+            code.AppendLine("        // Check L0 cache (memory-mapped backed)");
             code.AppendLine("        if (_l0Cache.TryGetValue(id, out var l0Cached))");
             code.AppendLine("        {");
             code.AppendLine($"            Logger.LogDebug(\"L0 cache hit (memory-mapped) for {_metadata.ClassName} ID: {{Id}}\", id);");
+            code.AppendLine($"            MetricsCollector?.RecordCacheHit(\"{_metadata.TableName}\");");
             code.AppendLine("            return l0Cached;");
             code.AppendLine("        }");
             code.AppendLine();
@@ -482,8 +575,11 @@ internal sealed partial class DalClassGenerator
             code.AppendLine("        if (cached != null)");
             code.AppendLine("        {");
             code.AppendLine($"            Logger.LogDebug(\"Cache hit for {_metadata.ClassName} ID: {{Id}}\", id);");
+            code.AppendLine($"            MetricsCollector?.RecordCacheHit(\"{_metadata.TableName}\");");
             code.AppendLine("            return cached;");
             code.AppendLine("        }");
+            code.AppendLine();
+            code.AppendLine($"        MetricsCollector?.RecordCacheMiss(\"{_metadata.TableName}\");");
             code.AppendLine();
         }
 
@@ -494,14 +590,23 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("            { \"Id\", id }");
         code.AppendLine("        };");
         code.AppendLine();
+        code.AppendLine("        stopwatch.Restart();");
         code.AppendLine($"        List<{_metadata.ClassName}> results = await ExecuteQueryAsync(");
         code.AppendLine("            SQL_GET_BY_ID,");
         code.AppendLine("            MapFromReader,");
         code.AppendLine("            parameters,");
         code.AppendLine("            transaction: null,");
         code.AppendLine("            cancellationToken);");
+        code.AppendLine("        stopwatch.Stop();");
         code.AppendLine();
         code.AppendLine($"        {_metadata.ClassName}? entity = results.FirstOrDefault();");
+        code.AppendLine();
+        code.AppendLine("        // Log database read operation");
+        code.AppendLine($"        DataSourceLogger.LogDatabaseRead(Logger, \"{_metadata.TableName}\", \"GetByIdAsync\", id, entity != null ? 1 : 0);");
+        code.AppendLine();
+        code.AppendLine("        // Record metrics with timing and data source tag");
+        code.AppendLine($"        MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"GetById_Database\", entity != null ? 1 : 0);");
+        code.AppendLine($"        MetricsCollector?.RecordOperationDuration(\"{_metadata.TableName}\", \"GetById_Database\", stopwatch.ElapsedMilliseconds);");
 
             if (_metadata.HasCache)
             {
@@ -535,16 +640,58 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    /// </summary>");
         code.AppendLine($"    public async Task<List<{_metadata.ClassName}>> GetAllAsync(CancellationToken cancellationToken = default)");
         code.AppendLine("    {");
-        code.AppendLine($"        Logger.LogDebug(\"Retrieving all {_metadata.ClassName} entities\");");
+        code.AppendLine("        var stopwatch = System.Diagnostics.Stopwatch.StartNew();");
+
+        // Return from in-memory table if available
+        if (_metadata.HasInMemoryTable)
+        {
+            code.AppendLine("        // Return from in-memory table if available");
+            code.AppendLine("        if (_inMemoryTable != null)");
+            code.AppendLine("        {");
+            code.AppendLine("            try");
+            code.AppendLine("            {");
+            code.AppendLine("                stopwatch.Restart();");
+            code.AppendLine("                var allInMemory = _inMemoryTable.Select().ToList();");
+            code.AppendLine("                stopwatch.Stop();");
+            code.AppendLine($"                Logger.LogInformation(\"Returning {{Count}} rows from in-memory table for {_metadata.ClassName} in {{ElapsedMs}}ms\", allInMemory.Count, stopwatch.ElapsedMilliseconds);");
+            code.AppendLine($"                DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"GetAllAsync\", null, allInMemory.Count);");
+            code.AppendLine();
+            code.AppendLine("                // Record metrics with timing and data source tag");
+            code.AppendLine($"                MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"GetAll_Memory\", allInMemory.Count);");
+            code.AppendLine($"                MetricsCollector?.RecordOperationDuration(\"{_metadata.TableName}\", \"GetAll_Memory\", stopwatch.ElapsedMilliseconds);");
+            code.AppendLine($"                MetricsCollector?.SetItemCount(\"{_metadata.TableName}\", allInMemory.Count);");
+            code.AppendLine();
+            code.AppendLine("                return allInMemory;");
+            code.AppendLine("            }");
+            code.AppendLine("            catch (Exception ex)");
+            code.AppendLine("            {");
+            code.AppendLine($"                Logger.LogWarning(ex, \"Failed to retrieve from in-memory table, falling back to database\");");
+            code.AppendLine("            }");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
+
+        code.AppendLine($"        Logger.LogDebug(\"Retrieving all {_metadata.ClassName} entities from database\");");
         code.AppendLine();
+        code.AppendLine("        stopwatch.Restart();");
         code.AppendLine($"        List<{_metadata.ClassName}> results = await ExecuteQueryAsync(");
         code.AppendLine("            SQL_GET_ALL,");
         code.AppendLine("            MapFromReader,");
         code.AppendLine("            parameters: null,");
         code.AppendLine("            transaction: null,");
         code.AppendLine("            cancellationToken);");
+        code.AppendLine("        stopwatch.Stop();");
         code.AppendLine();
-        code.AppendLine($"        Logger.LogDebug(\"Retrieved {{Count}} {_metadata.ClassName} entities\", results.Count);");
+        code.AppendLine($"        Logger.LogDebug(\"Retrieved {{Count}} {_metadata.ClassName} entities from database in {{ElapsedMs}}ms\", results.Count, stopwatch.ElapsedMilliseconds);");
+        code.AppendLine();
+        code.AppendLine("        // Log database read operation");
+        code.AppendLine($"        DataSourceLogger.LogDatabaseRead(Logger, \"{_metadata.TableName}\", \"GetAllAsync\", null, results.Count);");
+        code.AppendLine();
+        code.AppendLine("        // Record metrics with timing and data source tag");
+        code.AppendLine($"        MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"GetAll_Database\", results.Count);");
+        code.AppendLine($"        MetricsCollector?.RecordOperationDuration(\"{_metadata.TableName}\", \"GetAll_Database\", stopwatch.ElapsedMilliseconds);");
+        code.AppendLine($"        MetricsCollector?.SetItemCount(\"{_metadata.TableName}\", results.Count);");
+        code.AppendLine();
         code.AppendLine("        return results;");
         code.AppendLine("    }");
     }

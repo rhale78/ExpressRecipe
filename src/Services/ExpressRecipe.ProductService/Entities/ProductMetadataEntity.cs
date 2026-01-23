@@ -10,6 +10,9 @@ namespace ExpressRecipe.ProductService.Entities;
 [DalEntity]
 [Table("ProductMetadata", PrimaryKeyType = PrimaryKeyType.Guid)]
 [AutoAudit]
+[SoftDelete]
+[NamedQuery("ByProductId", nameof(ProductId))]
+[NamedQuery("ByProductIdAndKey", nameof(ProductId), nameof(MetaKey), IsSingle = true)]
 [MessagePackObject]
 public partial class ProductMetadataEntity
 {
@@ -23,6 +26,7 @@ public partial class ProductMetadataEntity
 
     [Key(2)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string MetaKey { get; set; } = string.Empty;
 
     [Key(3)]

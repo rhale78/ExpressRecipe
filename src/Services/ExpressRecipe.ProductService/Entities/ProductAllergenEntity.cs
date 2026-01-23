@@ -11,6 +11,9 @@ namespace ExpressRecipe.ProductService.Entities;
 [DalEntity]
 [Table("ProductAllergen", PrimaryKeyType = PrimaryKeyType.Guid)]
 [AutoAudit]
+[SoftDelete]
+[NamedQuery("ByProductId", nameof(ProductId))]
+[NamedQuery("ByAllergenName", nameof(AllergenName))]
 [MessagePackObject]
 public partial class ProductAllergenEntity
 {
@@ -24,5 +27,6 @@ public partial class ProductAllergenEntity
 
     [Key(2)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string AllergenName { get; set; } = string.Empty;
 }

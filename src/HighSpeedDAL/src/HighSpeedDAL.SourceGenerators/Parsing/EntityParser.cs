@@ -328,6 +328,19 @@ internal sealed class EntityParser
                 });
             }
 
+            // Clone named queries
+            foreach (NamedQueryMetadata nq in source.NamedQueries)
+            {
+                clone.NamedQueries.Add(new NamedQueryMetadata
+                {
+                    Name = nq.Name,
+                    PropertyNames = nq.PropertyNames?.ToList() ?? new List<string>(),
+                    IsSingle = nq.IsSingle,
+                    AutoFilterDeleted = nq.AutoFilterDeleted,
+                    EnableCache = nq.EnableCache
+                });
+            }
+
             return clone;
         }
 
@@ -448,6 +461,11 @@ internal sealed class EntityParser
                                         case "MemoryMappedTable":
                                             metadata.HasMemoryMappedTable = true;
                                             ParseMemoryMappedTableAttribute(attribute, metadata);
+                                            break;
+
+                                        case "NamedQueryAttribute":
+                                        case "NamedQuery":
+                                            ParseNamedQueryAttribute(attribute, metadata);
                                             break;
                                     }
                                 }
@@ -828,6 +846,69 @@ internal sealed class EntityParser
                                     }
                                 }
                             }
+
+    private void ParseNamedQueryAttribute(AttributeData attribute, EntityMetadata metadata)
+    {
+        var namedQuery = new NamedQueryMetadata();
+
+        // First constructor argument is the query name
+        if (attribute.ConstructorArguments.Length > 0 &&
+            attribute.ConstructorArguments[0].Value is string queryName)
+        {
+            namedQuery.Name = queryName;
+        }
+
+        // Remaining constructor arguments are property names (params string[])
+        if (attribute.ConstructorArguments.Length > 1)
+        {
+            // The second argument is a params array
+            var propertiesArg = attribute.ConstructorArguments[1];
+            if (propertiesArg.Kind == TypedConstantKind.Array)
+            {
+                foreach (var propValue in propertiesArg.Values)
+                {
+                    if (propValue.Value is string propName)
+                    {
+                        namedQuery.PropertyNames.Add(propName);
+                    }
+                }
+            }
+        }
+
+        // Parse named arguments
+        foreach (KeyValuePair<string, TypedConstant> namedArg in attribute.NamedArguments)
+        {
+            switch (namedArg.Key)
+            {
+                case "IsSingle":
+                    if (namedArg.Value.Value is bool isSingle)
+                    {
+                        namedQuery.IsSingle = isSingle;
+                    }
+                    break;
+
+                case "AutoFilterDeleted":
+                    if (namedArg.Value.Value is bool autoFilterDeleted)
+                    {
+                        namedQuery.AutoFilterDeleted = autoFilterDeleted;
+                    }
+                    break;
+
+                case "EnableCache":
+                    if (namedArg.Value.Value is bool enableCache)
+                    {
+                        namedQuery.EnableCache = enableCache;
+                    }
+                    break;
+            }
+        }
+
+        // Only add if we have a valid query name and at least one property
+        if (!string.IsNullOrWhiteSpace(namedQuery.Name) && namedQuery.PropertyNames.Count > 0)
+        {
+            metadata.NamedQueries.Add(namedQuery);
+        }
+    }
 
                             private PropertyMetadata? ParseProperty(IPropertySymbol property)
     {

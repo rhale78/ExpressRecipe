@@ -6,9 +6,9 @@ CREATE TABLE ProductStaging (
     -- OpenFoodFacts core fields
     ExternalId NVARCHAR(100) NOT NULL, -- OpenFoodFacts product code
     Barcode NVARCHAR(50) NULL,
-    ProductName NVARCHAR(500) NULL,
-    GenericName NVARCHAR(500) NULL,
-    Brands NVARCHAR(500) NULL,
+    ProductName NVARCHAR(MAX) NULL,
+    GenericName NVARCHAR(MAX) NULL,
+    Brands NVARCHAR(MAX) NULL,
 
     -- Ingredient data (raw text from OpenFoodFacts)
     IngredientsText NVARCHAR(MAX) NULL,
@@ -26,12 +26,12 @@ CREATE TABLE ProductStaging (
     NutritionData NVARCHAR(MAX) NULL,
 
     -- Images
-    ImageUrl NVARCHAR(500) NULL,
-    ImageSmallUrl NVARCHAR(500) NULL,
+    ImageUrl NVARCHAR(MAX) NULL,
+    ImageSmallUrl NVARCHAR(MAX) NULL,
 
     -- Quality/metadata
     Lang NVARCHAR(10) NULL,
-    Countries NVARCHAR(200) NULL,
+    Countries NVARCHAR(MAX) NULL,
     NutriScore NVARCHAR(10) NULL,
     NovaGroup INT NULL,
     EcoScore NVARCHAR(10) NULL,

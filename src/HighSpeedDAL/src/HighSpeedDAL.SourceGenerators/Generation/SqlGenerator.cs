@@ -607,7 +607,7 @@ internal sealed class SqlGenerator
             public string GenerateBulkDeleteSql()
             {
                 StringBuilder sql = new StringBuilder();
-        
+
                 if (_metadata.HasSoftDelete)
                 {
                     sql.AppendLine($"UPDATE [{_metadata.TableName}]");
@@ -620,7 +620,92 @@ internal sealed class SqlGenerator
                     sql.AppendLine($"DELETE FROM [{_metadata.TableName}]");
                     sql.AppendLine($"WHERE [{_metadata.PrimaryKeyProperty?.ColumnName ?? "Id"}] IN (SELECT value FROM STRING_SPLIT(@Ids, ','));");
                 }
-        
+
                 return sql.ToString();
+            }
+
+            /// <summary>
+            /// Generates SQL for a named query based on specified property names
+            /// </summary>
+            /// <param name="namedQuery">The named query metadata</param>
+            /// <returns>SQL SELECT statement with WHERE clause for the specified properties</returns>
+            public string GenerateNamedQuerySql(NamedQueryMetadata namedQuery)
+            {
+                bool isSqlite = _provider == "Sqlite";
+                StringBuilder sql = new StringBuilder();
+
+                // Build the SELECT clause
+                if (namedQuery.IsSingle && !isSqlite)
+                {
+                    sql.AppendLine($"SELECT TOP 1 * FROM [{_metadata.TableName}]");
+                }
+                else
+                {
+                    sql.Append($"SELECT * FROM [{_metadata.TableName}]");
+                }
+
+                // Build WHERE clause from property names
+                List<string> conditions = new List<string>();
+
+                foreach (string propName in namedQuery.PropertyNames)
+                {
+                    // Find the property to get column name
+                    PropertyMetadata? prop = _metadata.Properties.FirstOrDefault(p =>
+                        p.PropertyName.Equals(propName, System.StringComparison.OrdinalIgnoreCase));
+
+                    string columnName = prop?.ColumnName ?? propName;
+                    conditions.Add($"[{columnName}] = @{propName}");
+                }
+
+                // Add soft delete filter if enabled and entity has soft delete
+                if (namedQuery.AutoFilterDeleted && _metadata.HasSoftDelete)
+                {
+                    // Don't add if IsDeleted is already in the query properties
+                    bool hasIsDeletedParam = namedQuery.PropertyNames.Any(p =>
+                        p.Equals("IsDeleted", System.StringComparison.OrdinalIgnoreCase));
+
+                    if (!hasIsDeletedParam)
+                    {
+                        conditions.Add($"[{_metadata.SoftDeleteColumn}] = 0");
+                    }
+                }
+
+                if (conditions.Count > 0)
+                {
+                    sql.AppendLine();
+                    sql.Append($"WHERE {string.Join(" AND ", conditions)}");
+                }
+
+                // For SQLite single result, use LIMIT 1
+                if (namedQuery.IsSingle && isSqlite)
+                {
+                    sql.AppendLine();
+                    sql.Append("LIMIT 1");
+                }
+
+                sql.AppendLine(";");
+
+                return sql.ToString();
+            }
+
+            /// <summary>
+            /// Generates SQL for a named query that explicitly filters by IsDeleted=0
+            /// (helper version for soft-delete entities that auto-filters deleted records)
+            /// </summary>
+            /// <param name="namedQuery">The named query metadata (will have AutoFilterDeleted=true)</param>
+            /// <returns>SQL SELECT statement with automatic IsDeleted=0 filter</returns>
+            public string GenerateNamedQueryActiveSql(NamedQueryMetadata namedQuery)
+            {
+                // Create a copy with AutoFilterDeleted forced to true
+                var activeQuery = new NamedQueryMetadata
+                {
+                    Name = namedQuery.Name,
+                    PropertyNames = namedQuery.PropertyNames.ToList(),
+                    IsSingle = namedQuery.IsSingle,
+                    AutoFilterDeleted = true, // Force filter for active records only
+                    EnableCache = namedQuery.EnableCache
+                };
+
+                return GenerateNamedQuerySql(activeQuery);
             }
         }

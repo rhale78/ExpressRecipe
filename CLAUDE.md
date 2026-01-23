@@ -690,4 +690,17 @@ Read these first when working on features:
 
 ---
 
+## User Preferences (Token Efficiency)
+
+- **Ask questions** if unclear or if there's a token-saving approach
+- **Use cached file contents** - don't re-read files already in context
+- **One class/interface per file** - suggest splits when violations found
+- **Prefer Explore/Task agents** for searches; validate if results seem off
+- **Keep responses short** unless full summaries requested
+- **Accuracy over speed** - working software > fast delivery with mistakes
+
+See `.claude/settings/preferences.md` for full details.
+
+---
+
 *This guide helps AI assistants understand the ExpressRecipe architecture and development practices. Update it when significant patterns or conventions change.*

@@ -11,6 +11,7 @@ public interface IProductStagingRepository
     Task<int> BulkAugmentStagingProductsAsync(IEnumerable<StagedProduct> products, string sourceLabel);
     Task<List<StagedProduct>> GetPendingProductsAsync(int limit = 100);
     Task UpdateProcessingStatusAsync(Guid id, string status, string? error = null);
+    Task BulkUpdateProcessingStatusAsync(IEnumerable<Guid> ids, string status, string? error = null);
     Task<int> GetPendingCountAsync();
 }
 
@@ -335,6 +336,11 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
             CreatedDate = reader.GetDateTime("CreatedDate"),
             ModifiedDate = reader.IsDBNull("UpdatedAt") ? null : reader.GetDateTime("UpdatedAt")
         };
+    }
+
+    public Task BulkUpdateProcessingStatusAsync(IEnumerable<Guid> ids, string status, string? error = null)
+    {
+        throw new NotImplementedException("Use ProductStagingRepositoryAdapter for bulk operations with HighSpeedDAL");
     }
 }
 

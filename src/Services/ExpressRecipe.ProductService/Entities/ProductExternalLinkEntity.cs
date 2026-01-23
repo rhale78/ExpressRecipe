@@ -10,6 +10,9 @@ namespace ExpressRecipe.ProductService.Entities;
 [DalEntity]
 [Table("ProductExternalLink", PrimaryKeyType = PrimaryKeyType.Guid)]
 [AutoAudit]
+[SoftDelete]
+[NamedQuery("ByProductId", nameof(ProductId))]
+[NamedQuery("BySourceAndExternalId", nameof(Source), nameof(ExternalId), IsSingle = true)]
 [MessagePackObject]
 public partial class ProductExternalLinkEntity
 {
@@ -23,9 +26,11 @@ public partial class ProductExternalLinkEntity
 
     [Key(2)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string Source { get; set; } = string.Empty;
 
     [Key(3)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string ExternalId { get; set; } = string.Empty;
 }

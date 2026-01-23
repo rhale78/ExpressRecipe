@@ -6,10 +6,21 @@ namespace ExpressRecipe.ProductService.Entities;
 
 [DalEntity]
 [Table("Ingredient", PrimaryKeyType = PrimaryKeyType.Guid)]
-[Cache(CacheStrategy.TwoLayer, MaxSize = 20000, ExpirationSeconds = 1800)]
-[InMemoryTable(FlushIntervalSeconds = 30, MaxRowCount = 100000)]
+[Cache(CacheStrategy.TwoLayer, MaxSize = 20000, ExpirationSeconds = 1800)]  // Keep aggressive caching for on-demand loading
+[InMemoryTable(
+    FlushIntervalSeconds = 30,
+    MaxRowCount = 100000,
+    EnforceConstraints = false,    // Data validated at DB; reference table
+    ValidateOnWrite = false,       // Read-heavy, write-rare
+    TrackOperations = false)]      // Operation history not needed
 [AutoAudit]
 [SoftDelete]
+// Named queries for efficient indexed lookups
+[NamedQuery("ByCategory", nameof(Category))]
+[NamedQuery("ByName", nameof(Name), IsSingle = true)]  // Single lookup by name
+[NamedQuery("ByNames", nameof(Name))]  // Batch lookup by names - supports IEnumerable<string>
+[NamedQuery("ByIsCommonAllergen", nameof(IsCommonAllergen))]
+[NamedQuery("ByCategoryAndAllergen", nameof(Category), nameof(IsCommonAllergen))]
 [MessagePackObject]
 public partial class IngredientEntity
 {
@@ -19,6 +30,7 @@ public partial class IngredientEntity
 
     [Key(1)]
     [Index(IsUnique = true)]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string Name { get; set; } = string.Empty;
 
     [Key(2)]
@@ -29,6 +41,7 @@ public partial class IngredientEntity
 
     [Key(4)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string? Category { get; set; }
 
     [Key(5)]

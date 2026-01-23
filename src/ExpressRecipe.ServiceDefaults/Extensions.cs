@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -42,42 +45,47 @@ public static class Extensions
     /// </summary>
     public static IHostApplicationBuilder ConfigureOpenTelemetry(this IHostApplicationBuilder builder)
     {
+        var enableOtel = builder.Configuration.GetValue<bool>("Features:EnableOpenTelemetry", defaultValue: true);
+
+        if (!enableOtel)
+        {
+            return builder;
+        }
+
+        var otelEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "http://localhost:4317";
+
+        var otelBuilder = builder.Services.AddOpenTelemetry()
+            .WithMetrics(metrics =>
+            {
+                metrics.AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation()
+                    .AddRuntimeInstrumentation()
+                    .AddMeter("ExpressRecipe")
+                    .AddMeter("ExpressRecipe.DAL")
+                    .AddOtlpExporter(otlpOptions =>
+                    {
+                        otlpOptions.Endpoint = new Uri(otelEndpoint);
+                    });
+            })
+            .WithTracing(tracing =>
+            {
+                tracing.AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation()
+                    .AddOtlpExporter(otlpOptions =>
+                    {
+                        otlpOptions.Endpoint = new Uri(otelEndpoint);
+                    });
+            });
+
         builder.Logging.AddOpenTelemetry(logging =>
         {
             logging.IncludeFormattedMessage = true;
             logging.IncludeScopes = true;
         });
 
-        builder.Services.AddOpenTelemetry()
-            .WithMetrics(metrics =>
-            {
-                metrics.AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
-            })
-            .WithTracing(tracing =>
-            {
-                tracing.AddAspNetCoreInstrumentation()
-                    .AddHttpClientInstrumentation();
-            });
-
-        builder.AddOpenTelemetryExporters();
-
         return builder;
     }
 
-    /// <summary>
-    /// Adds OpenTelemetry exporters (OTLP for Aspire dashboard).
-    /// </summary>
-    private static IHostApplicationBuilder AddOpenTelemetryExporters(this IHostApplicationBuilder builder)
-    {
-        var useOtlpExporter = !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
-
-        // OTLP exporter may be configured by OpenTelemetry packages at startup.
-        // Keep this method lightweight to avoid requiring additional OpenTelemetry extension packages here.
-
-        return builder;
-    }
 
     /// <summary>
     /// Adds default health checks.
@@ -107,19 +115,29 @@ public static class Extensions
 
     /// <summary>
     /// Configures Serilog for structured logging.
+    /// Keeps default providers so Aspire's dashboard log aggregation works with colors.
     /// </summary>
     public static IHostApplicationBuilder AddSerilog(this IHostApplicationBuilder builder)
     {
-        Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(builder.Configuration)
+        // Setup Serilog for enrichment and structured logging
+        var loggerConfig = new LoggerConfiguration()
+            .MinimumLevel.Information()
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Application", builder.Environment.ApplicationName)
-            .Enrich.WithProperty("Environment", builder.Environment.EnvironmentName)
-            .WriteTo.Console()
-            .WriteTo.OpenTelemetry()
-            .CreateLogger();
+            .Enrich.WithProperty("Environment", builder.Environment.EnvironmentName);
 
-        builder.Services.AddSerilog();
+        // In development, add console output for Serilog
+        if (builder.Environment.IsDevelopment())
+        {
+            loggerConfig.WriteTo.Console(
+                theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code,
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj}{NewLine}{Exception}");
+        }
+
+        Log.Logger = loggerConfig.CreateLogger();
+
+        // Add Serilog but keep default providers so Aspire can color logs
+        builder.Services.AddSerilog(Log.Logger, dispose: true);
 
         return builder;
     }

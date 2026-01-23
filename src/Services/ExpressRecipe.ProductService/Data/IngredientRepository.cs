@@ -476,4 +476,9 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
         return createdCount;
     }
+
+    public Task<int> BulkAddProductIngredientsAsync(IEnumerable<(Guid ProductId, Guid IngredientId, int OrderIndex)> links)
+    {
+        throw new NotImplementedException("Use IngredientRepositoryAdapter for bulk operations with HighSpeedDAL");
+    }
 }

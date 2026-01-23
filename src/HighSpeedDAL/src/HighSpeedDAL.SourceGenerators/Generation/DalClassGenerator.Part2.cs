@@ -52,17 +52,18 @@ internal sealed partial class DalClassGenerator
         if (_metadata.IsAuditable)
         {
             code.AppendLine();
-            code.AppendLine("        // Add audit fields");
+            code.AppendLine("        // Add audit fields (default to 'System' if userName is null)");
             code.AppendLine("        DateTime now = DateTime.UtcNow;");
-            code.AppendLine($"        parameters[\"{_metadata.CreatedByColumn}\"] = userName;");
+            code.AppendLine("        string auditUser = userName ?? \"System\";");
+            code.AppendLine($"        parameters[\"{_metadata.CreatedByColumn}\"] = auditUser;");
             code.AppendLine($"        parameters[\"{_metadata.CreatedDateColumn}\"] = now;");
-            code.AppendLine($"        parameters[\"{_metadata.ModifiedByColumn}\"] = userName;");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedByColumn}\"] = auditUser;");
             code.AppendLine($"        parameters[\"{_metadata.ModifiedDateColumn}\"] = now;");
             code.AppendLine();
             code.AppendLine("        // Populate audit fields on entity");
-            code.AppendLine("        entity.CreatedBy = userName;");
+            code.AppendLine("        entity.CreatedBy = auditUser;");
             code.AppendLine("        entity.CreatedDate = now;");
-            code.AppendLine("        entity.ModifiedBy = userName;");
+            code.AppendLine("        entity.ModifiedBy = auditUser;");
             code.AppendLine("        entity.ModifiedDate = now;");
             }
 
@@ -89,7 +90,26 @@ internal sealed partial class DalClassGenerator
                 code.AppendLine("        if (id.HasValue)");
                 code.AppendLine("        {");
                 code.AppendLine($"            entity.{_metadata.PrimaryKeyProperty.PropertyName} = id.Value;");
-                code.AppendLine($"            Logger.LogInformation(\"{_metadata.ClassName} inserted with ID: {{Id}}\", id.Value);");
+                code.AppendLine($"            Logger.LogDebug(\"{_metadata.ClassName} inserted with ID: {{Id}}\", id.Value);");
+
+                if (_metadata.HasInMemoryTable)
+                {
+                    code.AppendLine();
+                    code.AppendLine("            // Add to in-memory table");
+                    code.AppendLine("            if (_inMemoryTable != null)");
+                    code.AppendLine("            {");
+                    code.AppendLine("                try");
+                    code.AppendLine("                {");
+                    code.AppendLine("                    await _inMemoryTable.InsertAsync(entity, cancellationToken);");
+                    code.AppendLine($"                    DataSourceLogger.LogMemoryWrite(Logger, \"{_metadata.TableName}\", \"InsertAsync\", id.Value, 1);");
+                    code.AppendLine($"                    MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"Insert_Memory\", 1);");
+                    code.AppendLine("                }");
+                    code.AppendLine("                catch (Exception ex)");
+                    code.AppendLine("                {");
+                    code.AppendLine($"                    Logger.LogWarning(ex, \"Failed to insert into in-memory table for {_metadata.ClassName}\");");
+                    code.AppendLine("                }");
+                    code.AppendLine("            }");
+                }
 
                 if (_metadata.HasCache)
                 {
@@ -106,6 +126,9 @@ internal sealed partial class DalClassGenerator
                 }
 
                 code.AppendLine();
+                code.AppendLine("            // Record database metrics");
+                code.AppendLine($"            MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"Insert_Database\", 1);");
+                code.AppendLine();
                 code.AppendLine("            return entity;");
                 code.AppendLine("        }");
                 code.AppendLine();
@@ -120,7 +143,26 @@ internal sealed partial class DalClassGenerator
                 code.AppendLine("            transaction: null,");
                 code.AppendLine("            cancellationToken);");
                 code.AppendLine();
-                code.AppendLine($"        Logger.LogInformation(\"{_metadata.ClassName} inserted with ID: {{Id}}\", entity.{_metadata.PrimaryKeyProperty?.PropertyName ?? "Id"});");
+                code.AppendLine($"        Logger.LogDebug(\"{_metadata.ClassName} inserted with ID: {{Id}}\", entity.{_metadata.PrimaryKeyProperty?.PropertyName ?? "Id"});");
+
+                if (_metadata.HasInMemoryTable)
+                {
+                    code.AppendLine();
+                    code.AppendLine("        // Add to in-memory table");
+                    code.AppendLine("        if (_inMemoryTable != null)");
+                    code.AppendLine("        {");
+                    code.AppendLine("            try");
+                    code.AppendLine("            {");
+                    code.AppendLine("                await _inMemoryTable.InsertAsync(entity, cancellationToken);");
+                    code.AppendLine($"                DataSourceLogger.LogMemoryWrite(Logger, \"{_metadata.TableName}\", \"InsertAsync\", entity.{_metadata.PrimaryKeyProperty?.PropertyName ?? "Id"}, 1);");
+                    code.AppendLine($"                MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"Insert_Memory\", 1);");
+                    code.AppendLine("            }");
+                    code.AppendLine("            catch (Exception ex)");
+                    code.AppendLine("            {");
+                    code.AppendLine($"                Logger.LogWarning(ex, \"Failed to insert into in-memory table for {_metadata.ClassName}\");");
+                    code.AppendLine("            }");
+                    code.AppendLine("        }");
+                }
 
                 if (_metadata.HasCache)
                 {
@@ -136,6 +178,9 @@ internal sealed partial class DalClassGenerator
                     code.AppendLine("        await UpdateMemoryMappedCacheAsync(entity, cancellationToken);");
                 }
 
+                code.AppendLine();
+                code.AppendLine("        // Record metrics");
+                code.AppendLine($"        MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"Insert_Database\", 1);");
                 code.AppendLine();
                 code.AppendLine("        return entity;");
             }
@@ -171,13 +216,14 @@ internal sealed partial class DalClassGenerator
         if (_metadata.IsAuditable)
         {
             code.AppendLine();
-            code.AppendLine("        // Update audit fields");
+            code.AppendLine("        // Update audit fields (default to 'System' if userName is null)");
             code.AppendLine("        DateTime now = DateTime.UtcNow;");
-            code.AppendLine($"        parameters[\"{_metadata.ModifiedByColumn}\"] = userName;");
+            code.AppendLine("        string auditUser = userName ?? \"System\";");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedByColumn}\"] = auditUser;");
             code.AppendLine($"        parameters[\"{_metadata.ModifiedDateColumn}\"] = now;");
             code.AppendLine();
             code.AppendLine("        // Populate audit fields on entity");
-            code.AppendLine("        entity.ModifiedBy = userName;");
+            code.AppendLine("        entity.ModifiedBy = auditUser;");
             code.AppendLine("        entity.ModifiedDate = now;");
         }
 
@@ -215,6 +261,24 @@ internal sealed partial class DalClassGenerator
             code.AppendLine();
         }
 
+            if (_metadata.HasInMemoryTable)
+            {
+                code.AppendLine("        // Update in-memory table");
+                code.AppendLine("        if (_inMemoryTable != null)");
+                code.AppendLine("        {");
+                code.AppendLine("            try");
+                code.AppendLine("            {");
+                code.AppendLine("                await _inMemoryTable.UpdateAsync(entity, cancellationToken);");
+                code.AppendLine($"                DataSourceLogger.LogMemoryWrite(Logger, \"{_metadata.TableName}\", \"UpdateAsync\", entity.{_metadata.PrimaryKeyProperty?.PropertyName ?? "Id"}, 1);");
+                code.AppendLine("            }");
+                code.AppendLine("            catch (Exception ex)");
+                code.AppendLine("            {");
+                code.AppendLine($"                Logger.LogWarning(ex, \"Failed to update in-memory table for {_metadata.ClassName}\");");
+                code.AppendLine("            }");
+                code.AppendLine("        }");
+                code.AppendLine();
+            }
+
             if (_metadata.HasCache)
             {
                 code.AppendLine("        // Update L1/L2 cache");
@@ -229,7 +293,11 @@ internal sealed partial class DalClassGenerator
                 code.AppendLine();
             }
 
-            code.AppendLine($"        Logger.LogInformation(\"{_metadata.ClassName} updated. Rows affected: {{RowsAffected}}\", rowsAffected);");
+            code.AppendLine($"        Logger.LogDebug(\"{_metadata.ClassName} updated. Rows affected: {{RowsAffected}}\", rowsAffected);");
+            code.AppendLine();
+            code.AppendLine("        // Record metrics");
+            code.AppendLine($"        MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"Update_Database\", rowsAffected);");
+            code.AppendLine();
             code.AppendLine("        return entity;");
             code.AppendLine("    }");
         }
@@ -254,6 +322,24 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("            transaction: null,");
         code.AppendLine("            cancellationToken);");
         code.AppendLine();
+
+                if (_metadata.HasInMemoryTable)
+                {
+                    code.AppendLine("        // Delete from in-memory table");
+                    code.AppendLine("        if (_inMemoryTable != null)");
+                    code.AppendLine("        {");
+                    code.AppendLine("            try");
+                    code.AppendLine("            {");
+                    code.AppendLine("                await _inMemoryTable.DeleteAsync(id, cancellationToken);");
+                    code.AppendLine($"                DataSourceLogger.LogMemoryWrite(Logger, \"{_metadata.TableName}\", \"DeleteAsync\", id, 1);");
+                    code.AppendLine("            }");
+                    code.AppendLine("            catch (Exception ex)");
+                    code.AppendLine("            {");
+                    code.AppendLine($"                Logger.LogWarning(ex, \"Failed to delete from in-memory table for {_metadata.ClassName}\");");
+                    code.AppendLine("            }");
+                    code.AppendLine("        }");
+                    code.AppendLine();
+                }
 
                 if (_metadata.HasCache)
                 {
@@ -284,6 +370,10 @@ internal sealed partial class DalClassGenerator
                     code.AppendLine($"        Logger.LogInformation(\"{_metadata.ClassName} deleted. Rows affected: {{RowsAffected}}\", rowsAffected);");
                 }
 
+                code.AppendLine();
+                code.AppendLine("        // Record metrics");
+                code.AppendLine($"        MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"Delete_Database\", rowsAffected);");
+                code.AppendLine();
                 code.AppendLine("        return rowsAffected;");
                 code.AppendLine("    }");
             }
@@ -334,13 +424,14 @@ internal sealed partial class DalClassGenerator
 
         if (_metadata.IsAuditable)
         {
-            code.AppendLine("        // Populate audit fields for all entities");
+            code.AppendLine("        // Populate audit fields for all entities (default to 'System' if userName is null)");
             code.AppendLine("        DateTime now = DateTime.UtcNow;");
+            code.AppendLine("        string auditUser = userName ?? \"System\";");
             code.AppendLine("        foreach (var entity in entityList)");
             code.AppendLine("        {");
-            code.AppendLine("            entity.CreatedBy = userName;");
+            code.AppendLine("            entity.CreatedBy = auditUser;");
             code.AppendLine("            entity.CreatedDate = now;");
-            code.AppendLine("            entity.ModifiedBy = userName;");
+            code.AppendLine("            entity.ModifiedBy = auditUser;");
             code.AppendLine("            entity.ModifiedDate = now;");
             code.AppendLine("        }");
             code.AppendLine();
@@ -366,9 +457,261 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("            MapToParametersForBulk,");
         code.AppendLine("            cancellationToken);");
         code.AppendLine();
+
+        if (_metadata.HasInMemoryTable)
+        {
+            code.AppendLine("        // Bulk insert into in-memory table");
+            code.AppendLine("        if (_inMemoryTable != null)");
+            code.AppendLine("        {");
+            code.AppendLine("            try");
+            code.AppendLine("            {");
+            code.AppendLine("                foreach (var entity in entityList)");
+            code.AppendLine("                {");
+            code.AppendLine("                    await _inMemoryTable.InsertAsync(entity, cancellationToken);");
+            code.AppendLine("                }");
+            code.AppendLine($"                DataSourceLogger.LogMemoryWrite(Logger, \"{_metadata.TableName}\", \"BulkInsertAsync\", null, count);");
+            code.AppendLine("            }");
+            code.AppendLine("            catch (Exception ex)");
+            code.AppendLine("            {");
+            code.AppendLine($"                Logger.LogWarning(ex, \"Failed to bulk insert into in-memory table for {_metadata.ClassName}\");");
+            code.AppendLine("            }");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
+
         code.AppendLine($"        Logger.LogInformation(\"Bulk inserted {{Count}} {_metadata.ClassName} entities\", count);");
+        code.AppendLine();
+        code.AppendLine("        // Record metrics");
+        code.AppendLine($"        MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"BulkInsert_Database\", count);");
+        code.AppendLine();
         code.AppendLine("        return count;");
         code.AppendLine("    }");
+    }
+
+    private void GenerateBulkInsertWithDuplicatesMethod(StringBuilder code)
+    {
+        code.AppendLine();
+        code.AppendLine("    /// <summary>");
+        code.AppendLine($"    /// Bulk inserts multiple {_metadata.ClassName} entities with duplicate key handling.");
+        code.AppendLine("    /// Returns inserted count and any duplicate entities that need updating.");
+        code.AppendLine("    /// </summary>");
+
+        if (_metadata.IsAuditable)
+        {
+            code.AppendLine($"    public async Task<BulkInsertResult<{_metadata.ClassName}>> BulkInsertWithDuplicatesAsync(IEnumerable<{_metadata.ClassName}> entities, string userName, CancellationToken cancellationToken = default)");
+        }
+        else
+        {
+            code.AppendLine($"    public async Task<BulkInsertResult<{_metadata.ClassName}>> BulkInsertWithDuplicatesAsync(IEnumerable<{_metadata.ClassName}> entities, CancellationToken cancellationToken = default)");
+        }
+
+        code.AppendLine("    {");
+        code.AppendLine("        if (entities == null)");
+        code.AppendLine("        {");
+        code.AppendLine("            throw new ArgumentNullException(nameof(entities));");
+        code.AppendLine("        }");
+        code.AppendLine();
+        code.AppendLine($"        List<{_metadata.ClassName}> entityList = entities.ToList();");
+        code.AppendLine("        if (entityList.Count == 0)");
+        code.AppendLine("        {");
+        code.AppendLine($"            return new BulkInsertResult<{_metadata.ClassName}>();");
+        code.AppendLine("        }");
+        code.AppendLine();
+
+        // For Guid primary keys, generate Guids before bulk insert
+        if (_metadata.PrimaryKeyProperty != null &&
+            (_metadata.PrimaryKeyProperty.PropertyType == "Guid" || _metadata.PrimaryKeyProperty.PropertyType == "System.Guid") &&
+            !_metadata.PrimaryKeyProperty.IsAutoIncrement)
+        {
+            code.AppendLine("        // Generate Guid IDs for entities that don't have them");
+            code.AppendLine("        foreach (var entity in entityList)");
+            code.AppendLine("        {");
+            code.AppendLine($"            if (entity.{_metadata.PrimaryKeyProperty.PropertyName} == Guid.Empty)");
+            code.AppendLine("            {");
+            code.AppendLine($"                entity.{_metadata.PrimaryKeyProperty.PropertyName} = Guid.NewGuid();");
+            code.AppendLine("            }");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
+
+        if (_metadata.IsAuditable)
+        {
+            code.AppendLine("        // Populate audit fields for all entities (default to 'System' if userName is null)");
+            code.AppendLine("        DateTime now = DateTime.UtcNow;");
+            code.AppendLine("        string auditUser = userName ?? \"System\";");
+            code.AppendLine("        foreach (var entity in entityList)");
+            code.AppendLine("        {");
+            code.AppendLine("            entity.CreatedBy = auditUser;");
+            code.AppendLine("            entity.CreatedDate = now;");
+            code.AppendLine("            entity.ModifiedBy = auditUser;");
+            code.AppendLine("            entity.ModifiedDate = now;");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
+
+        if (_metadata.HasSoftDelete)
+        {
+            code.AppendLine("        // Initialize soft-delete fields for all entities");
+            code.AppendLine("        foreach (var entity in entityList)");
+            code.AppendLine("        {");
+            code.AppendLine("            entity.IsDeleted = false;");
+            code.AppendLine("            entity.DeletedDate = null;");
+            code.AppendLine("            entity.DeletedBy = null;");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
+
+        code.AppendLine($"        Logger.LogInformation(\"Bulk inserting {{Count}} {_metadata.ClassName} entities with duplicate handling\", entityList.Count);");
+        code.AppendLine();
+
+        // Generate the duplicate key matcher function
+        GenerateDuplicateKeyMatcher(code);
+
+        code.AppendLine();
+        code.AppendLine("        var result = await BulkInsertWithDuplicateHandlingAsync(");
+        code.AppendLine($"            \"{_metadata.TableName}\",");
+        code.AppendLine("            entityList,");
+        code.AppendLine("            MapToParametersForBulk,");
+        code.AppendLine("            duplicateKeyMatcher,");
+        code.AppendLine("            cancellationToken);");
+        code.AppendLine();
+        code.AppendLine("        // Record metrics");
+        code.AppendLine($"        MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"BulkInsert_Database\", result.InsertedCount);");
+        code.AppendLine($"        if (result.HasDuplicates)");
+        code.AppendLine("        {");
+        code.AppendLine($"            MetricsCollector?.RecordOperation(\"{_metadata.TableName}\", \"DuplicateKeyRetry_Database\", result.DuplicateEntities.Count);");
+        code.AppendLine("        }");
+        code.AppendLine();
+        code.AppendLine("        return result;");
+        code.AppendLine("    }");
+    }
+
+    private void GenerateDuplicateKeyMatcher(StringBuilder code)
+    {
+        // Build a matcher function that can match duplicate key values to entities
+        // based on unique indexes
+
+        code.AppendLine("        // Duplicate key matcher - matches entities by unique index columns");
+        code.AppendLine($"        Func<string, string, List<{_metadata.ClassName}>, List<{_metadata.ClassName}>> duplicateKeyMatcher = (indexName, duplicateValue, entities) =>");
+        code.AppendLine("        {");
+        code.AppendLine($"            var matches = new List<{_metadata.ClassName}>();");
+        code.AppendLine();
+
+        // Collect all unique indexed properties
+        var uniqueIndexedProps = _metadata.Properties
+            .Where(p => p.IsUniqueIndex || p.IsPrimaryKey)
+            .ToList();
+
+        // Also add composite indexes from Indexes collection
+        var compositeIndexes = _metadata.Indexes.Where(i => i.IsUnique).ToList();
+
+        // Track which index names we've already added to avoid duplicates
+        var addedIndexNames = new HashSet<string>();
+
+        if (uniqueIndexedProps.Count == 0 && compositeIndexes.Count == 0)
+        {
+            // No unique indexes defined - fallback to primary key only
+            if (_metadata.PrimaryKeyProperty != null)
+            {
+                code.AppendLine($"            // Fallback: match by primary key");
+                string pkConversion = GetDuplicateValueConversion(_metadata.PrimaryKeyProperty.PropertyType, "duplicateValue");
+                code.AppendLine($"            var pkValue = {pkConversion};");
+                code.AppendLine($"            matches.AddRange(entities.Where(e => e.{_metadata.PrimaryKeyProperty.PropertyName}?.ToString() == duplicateValue || e.{_metadata.PrimaryKeyProperty.PropertyName}.Equals(pkValue)));");
+            }
+        }
+        else
+        {
+            code.AppendLine("            switch (indexName)");
+            code.AppendLine("            {");
+
+            // Handle single-column unique indexes first
+            foreach (var prop in uniqueIndexedProps)
+            {
+                string indexName = prop.IndexName ?? $"IX_{_metadata.TableName}_{prop.ColumnName}";
+
+                // Skip if we've already added this index name
+                if (!addedIndexNames.Add(indexName))
+                    continue;
+
+                code.AppendLine($"                case \"{indexName}\":");
+
+                // Handle nullable properties
+                if (prop.IsNullable || prop.PropertyType == "string" || prop.PropertyType == "String")
+                {
+                    code.AppendLine($"                    matches.AddRange(entities.Where(e => e.{prop.PropertyName} != null && e.{prop.PropertyName}.ToString() == duplicateValue));");
+                }
+                else
+                {
+                    string conversion = GetDuplicateValueConversion(prop.PropertyType, "duplicateValue");
+                    code.AppendLine($"                    var val_{prop.PropertyName} = {conversion};");
+                    code.AppendLine($"                    matches.AddRange(entities.Where(e => e.{prop.PropertyName}.Equals(val_{prop.PropertyName})));");
+                }
+                code.AppendLine("                    break;");
+            }
+
+            // Handle composite indexes (multi-column) - skip if already added
+            foreach (var index in compositeIndexes)
+            {
+                // Skip if we've already added this index name
+                if (!addedIndexNames.Add(index.IndexName))
+                    continue;
+
+                code.AppendLine($"                case \"{index.IndexName}\":");
+                code.AppendLine("                    // Composite key - split by comma and match all columns");
+                code.AppendLine("                    var parts = duplicateValue.Split(',').Select(p => p.Trim()).ToArray();");
+                code.AppendLine($"                    if (parts.Length == {index.ColumnNames.Count})");
+                code.AppendLine("                    {");
+                code.AppendLine($"                        matches.AddRange(entities.Where(e =>");
+
+                var conditions = new List<string>();
+                for (int i = 0; i < index.ColumnNames.Count; i++)
+                {
+                    var colName = index.ColumnNames[i];
+                    var prop = _metadata.Properties.FirstOrDefault(p => p.ColumnName == colName || p.PropertyName == colName);
+                    if (prop != null)
+                    {
+                        conditions.Add($"e.{prop.PropertyName}?.ToString() == parts[{i}]");
+                    }
+                }
+                code.AppendLine($"                            {string.Join(" && ", conditions)}));");
+                code.AppendLine("                    }");
+                code.AppendLine("                    break;");
+            }
+
+            code.AppendLine("                default:");
+            code.AppendLine("                    // Unknown index - try to match any unique column by value");
+            foreach (var prop in uniqueIndexedProps.Take(3)) // Check first few unique props
+            {
+                if (prop.IsNullable || prop.PropertyType == "string" || prop.PropertyType == "String")
+                {
+                    code.AppendLine($"                    matches.AddRange(entities.Where(e => e.{prop.PropertyName} != null && e.{prop.PropertyName}.ToString() == duplicateValue));");
+                }
+            }
+            code.AppendLine("                    break;");
+            code.AppendLine("            }");
+        }
+
+        code.AppendLine();
+        code.AppendLine("            return matches;");
+        code.AppendLine("        };");
+    }
+
+    private string GetDuplicateValueConversion(string propertyType, string valueVar)
+    {
+        string baseType = propertyType.Replace("?", "").Trim();
+        if (baseType.StartsWith("System."))
+        {
+            baseType = baseType.Substring(7);
+        }
+
+        return baseType switch
+        {
+            "int" or "Int32" => $"int.TryParse({valueVar}, out var intVal) ? intVal : 0",
+            "long" or "Int64" => $"long.TryParse({valueVar}, out var longVal) ? longVal : 0L",
+            "Guid" => $"Guid.TryParse({valueVar}, out var guidVal) ? guidVal : Guid.Empty",
+            "string" or "String" => valueVar,
+            _ => valueVar
+        };
     }
 
     private void GenerateCountMethod(StringBuilder code)
@@ -493,6 +836,26 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    }");
     }
 
+    private void GenerateGetAllFromDatabaseAsyncMethod(StringBuilder code)
+    {
+        code.AppendLine("    /// <summary>");
+        code.AppendLine("    /// Fetches all rows from database, bypassing cache during initialization");
+        code.AppendLine("    /// </summary>");
+        code.AppendLine($"    private async Task<List<{_metadata.ClassName}>> GetAllFromDatabaseAsync(CancellationToken cancellationToken = default)");
+        code.AppendLine("    {");
+        code.AppendLine($"        Logger.LogDebug(\"Fetching all {_metadata.ClassName} rows from database (bypassing cache)\");");
+        code.AppendLine();
+        code.AppendLine($"        var results = await ExecuteQueryAsync(");
+        code.AppendLine("            SQL_GET_ALL,");
+        code.AppendLine("            MapFromReader,");
+        code.AppendLine("            parameters: null,");
+        code.AppendLine("            transaction: null,");
+        code.AppendLine("            cancellationToken);");
+        code.AppendLine();
+        code.AppendLine("        return results;");
+        code.AppendLine("    }");
+    }
+
     private void GenerateMapFromReaderMethod(StringBuilder code)
     {
         code.AppendLine("    /// <summary>");
@@ -500,7 +863,11 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    /// </summary>");
         code.AppendLine($"    private {_metadata.ClassName} MapFromReader(IDataReader reader)");
         code.AppendLine("    {");
-        code.AppendLine("        // Cache ordinals for performance - GetOrdinal is expensive");
+        code.AppendLine("        // Use ColumnOrdinalCache to cache GetOrdinal results for high performance");
+        code.AppendLine("        var ordinalCache = new ColumnOrdinalCache(reader);");
+        code.AppendLine();
+        code.AppendLine($"        {_metadata.ClassName} entity = new {_metadata.ClassName}();");
+        code.AppendLine();
 
         // Define audit and soft-delete property names to exclude
         HashSet<string> auditAndSoftDeleteProps = new HashSet<string>
@@ -509,44 +876,15 @@ internal sealed partial class DalClassGenerator
             "IsDeleted", "DeletedDate", "DeletedBy"
         };
 
-        // Generate ordinal caching - exclude audit/soft-delete properties to avoid duplicates
-        foreach (PropertyMetadata property in _metadata.Properties)
-        {
-            if (!auditAndSoftDeleteProps.Contains(property.PropertyName))
-            {
-                code.AppendLine($"        int ord{property.PropertyName} = reader.GetOrdinal(\"{property.ColumnName}\");");
-            }
-        }
-
-        if (_metadata.IsAuditable)
-        {
-            code.AppendLine($"        int ordCreatedBy = reader.GetOrdinal(\"{_metadata.CreatedByColumn}\");");
-            code.AppendLine($"        int ordCreatedDate = reader.GetOrdinal(\"{_metadata.CreatedDateColumn}\");");
-            code.AppendLine($"        int ordModifiedBy = reader.GetOrdinal(\"{_metadata.ModifiedByColumn}\");");
-            code.AppendLine($"        int ordModifiedDate = reader.GetOrdinal(\"{_metadata.ModifiedDateColumn}\");");
-        }
-
-        if (_metadata.HasSoftDelete)
-        {
-            code.AppendLine($"        int ordIsDeleted = reader.GetOrdinal(\"{_metadata.SoftDeleteColumn}\");");
-            code.AppendLine($"        int ordDeletedDate = reader.GetOrdinal(\"{_metadata.SoftDeleteDateColumn}\");");
-            code.AppendLine($"        int ordDeletedBy = reader.GetOrdinal(\"{_metadata.SoftDeleteByColumn}\");");
-        }
-
-        code.AppendLine();
-        code.AppendLine($"        {_metadata.ClassName} entity = new {_metadata.ClassName}();");
-        code.AppendLine();
-
-        // Generate property assignments using cached ordinals - exclude audit/soft-delete properties
+        // Generate property assignments using ordinal cache
         foreach (PropertyMetadata property in _metadata.Properties)
         {
             if (!auditAndSoftDeleteProps.Contains(property.PropertyName))
             {
                 string readerMethod = GetReaderMethod(property.PropertyType);
-                string ordinalVar = $"ord{property.PropertyName}";
-                string nullCheck = property.IsNullable ? $"reader.IsDBNull({ordinalVar}) ? null : " : "";
+                string nullCheck = property.IsNullable ? $"reader.IsDBNull(ordinalCache.GetOrdinal(\"{property.ColumnName}\")) ? null : " : "";
 
-                code.AppendLine($"        entity.{property.PropertyName} = {nullCheck}reader.{readerMethod}({ordinalVar});");
+                code.AppendLine($"        entity.{property.PropertyName} = {nullCheck}reader.{readerMethod}(ordinalCache.GetOrdinal(\"{property.ColumnName}\"));");
             }
         }
 
@@ -554,19 +892,19 @@ internal sealed partial class DalClassGenerator
         {
             code.AppendLine();
             code.AppendLine("        // Map audit columns (properties are auto-generated)");
-            code.AppendLine("        entity.CreatedBy = reader.GetString(ordCreatedBy);");
-            code.AppendLine("        entity.CreatedDate = reader.GetDateTime(ordCreatedDate);");
-            code.AppendLine("        entity.ModifiedBy = reader.GetString(ordModifiedBy);");
-            code.AppendLine("        entity.ModifiedDate = reader.GetDateTime(ordModifiedDate);");
+            code.AppendLine($"        entity.CreatedBy = reader.GetString(ordinalCache.GetOrdinal(\"{_metadata.CreatedByColumn}\"));");
+            code.AppendLine($"        entity.CreatedDate = reader.GetDateTime(ordinalCache.GetOrdinal(\"{_metadata.CreatedDateColumn}\"));");
+            code.AppendLine($"        entity.ModifiedBy = reader.GetString(ordinalCache.GetOrdinal(\"{_metadata.ModifiedByColumn}\"));");
+            code.AppendLine($"        entity.ModifiedDate = reader.GetDateTime(ordinalCache.GetOrdinal(\"{_metadata.ModifiedDateColumn}\"));");
         }
 
         if (_metadata.HasSoftDelete)
         {
             code.AppendLine();
             code.AppendLine("        // Map soft delete columns (properties are auto-generated)");
-            code.AppendLine("        entity.IsDeleted = reader.GetBoolean(ordIsDeleted);");
-            code.AppendLine("        entity.DeletedDate = reader.IsDBNull(ordDeletedDate) ? null : reader.GetDateTime(ordDeletedDate);");
-            code.AppendLine("        entity.DeletedBy = reader.IsDBNull(ordDeletedBy) ? null : reader.GetString(ordDeletedBy);");
+            code.AppendLine($"        entity.IsDeleted = reader.GetBoolean(ordinalCache.GetOrdinal(\"{_metadata.SoftDeleteColumn}\"));");
+            code.AppendLine($"        entity.DeletedDate = reader.IsDBNull(ordinalCache.GetOrdinal(\"{_metadata.SoftDeleteDateColumn}\")) ? null : reader.GetDateTime(ordinalCache.GetOrdinal(\"{_metadata.SoftDeleteDateColumn}\"));");
+            code.AppendLine($"        entity.DeletedBy = reader.IsDBNull(ordinalCache.GetOrdinal(\"{_metadata.SoftDeleteByColumn}\")) ? null : reader.GetString(ordinalCache.GetOrdinal(\"{_metadata.SoftDeleteByColumn}\"));");
         }
 
         code.AppendLine();
@@ -606,12 +944,34 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("    }");
         code.AppendLine();
         code.AppendLine("    /// <summary>");
-        code.AppendLine("    /// Maps an entity to dictionary for bulk operations");
+        code.AppendLine("    /// Maps an entity to dictionary for bulk operations (includes audit and soft-delete columns)");
         code.AppendLine("    /// </summary>");
         code.AppendLine($"    private Dictionary<string, object> MapToParametersForBulk({_metadata.ClassName} entity)");
         code.AppendLine("    {");
-        code.AppendLine("        // Same as MapToParameters for now");
-        code.AppendLine("        return MapToParameters(entity);");
+        code.AppendLine("        Dictionary<string, object> parameters = MapToParameters(entity);");
+        code.AppendLine();
+
+        // Add audit columns for bulk operations
+        if (_metadata.IsAuditable)
+        {
+            code.AppendLine("        // Add audit columns");
+            code.AppendLine($"        parameters[\"{_metadata.CreatedByColumn}\"] = entity.CreatedBy ?? (object)DBNull.Value;");
+            code.AppendLine($"        parameters[\"{_metadata.CreatedDateColumn}\"] = entity.CreatedDate;");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedByColumn}\"] = entity.ModifiedBy ?? (object)DBNull.Value;");
+            code.AppendLine($"        parameters[\"{_metadata.ModifiedDateColumn}\"] = entity.ModifiedDate;");
+        }
+
+        // Add soft-delete columns for bulk operations
+        if (_metadata.HasSoftDelete)
+        {
+            code.AppendLine("        // Add soft-delete columns");
+            code.AppendLine($"        parameters[\"{_metadata.SoftDeleteColumn}\"] = entity.IsDeleted;");
+            code.AppendLine($"        parameters[\"{_metadata.SoftDeleteDateColumn}\"] = entity.DeletedDate ?? (object)DBNull.Value;");
+            code.AppendLine($"        parameters[\"{_metadata.SoftDeleteByColumn}\"] = entity.DeletedBy ?? (object)DBNull.Value;");
+        }
+
+        code.AppendLine();
+        code.AppendLine("        return parameters;");
         code.AppendLine("    }");
     }
 

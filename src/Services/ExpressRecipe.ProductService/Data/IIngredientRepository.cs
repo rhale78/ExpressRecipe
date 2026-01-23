@@ -19,4 +19,5 @@ public interface IIngredientRepository
     Task<bool> RemoveProductIngredientAsync(Guid productIngredientId, Guid? deletedBy = null);
     Task<Dictionary<string, Guid>> GetIngredientIdsByNamesAsync(IEnumerable<string> names);
     Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, Guid? createdBy = null);
+    Task<int> BulkAddProductIngredientsAsync(IEnumerable<(Guid ProductId, Guid IngredientId, int OrderIndex)> links);
 }

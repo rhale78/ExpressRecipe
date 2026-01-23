@@ -1,6 +1,24 @@
 -- Create ProductImage table for storing multiple images per product
 -- Supports both external URLs (OpenFoodFacts, etc.) and uploaded files
 
+-- Drop stale indexes if they exist from a previous partial run
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductImage_ProductId' AND object_id = OBJECT_ID('ProductImage'))
+    DROP INDEX IX_ProductImage_ProductId ON ProductImage;
+GO
+
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductImage_ProductId_DisplayOrder' AND object_id = OBJECT_ID('ProductImage'))
+    DROP INDEX IX_ProductImage_ProductId_DisplayOrder ON ProductImage;
+GO
+
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductImage_Primary' AND object_id = OBJECT_ID('ProductImage'))
+    DROP INDEX IX_ProductImage_Primary ON ProductImage;
+GO
+
+-- Drop the table if it exists to allow clean re-creation
+IF OBJECT_ID('ProductImage', 'U') IS NOT NULL
+    DROP TABLE ProductImage;
+GO
+
 CREATE TABLE ProductImage (
     Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
     ProductId UNIQUEIDENTIFIER NOT NULL,

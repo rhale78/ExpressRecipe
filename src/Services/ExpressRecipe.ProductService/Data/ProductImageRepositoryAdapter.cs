@@ -1,17 +1,26 @@
-using System.Data;
-using Microsoft.Data.SqlClient;
+using System.Linq;
 using Microsoft.Extensions.Logging;
+using ExpressRecipe.ProductService.Entities;
 
 namespace ExpressRecipe.ProductService.Data;
 
+/// <summary>
+/// Adapter that implements IProductImageRepository using HighSpeedDAL generated DALs.
+/// All operations use the DAL's caching and in-memory table features.
+/// </summary>
 public class ProductImageRepositoryAdapter : IProductImageRepository
 {
-    private readonly ProductDatabaseConnection _dbConnection;
+    private readonly ProductImageEntityDal _dal;
+    private readonly ProductEntityDal _productDal;
     private readonly ILogger<ProductImageRepositoryAdapter> _logger;
 
-    public ProductImageRepositoryAdapter(ProductDatabaseConnection dbConnection, ILogger<ProductImageRepositoryAdapter> logger)
+    public ProductImageRepositoryAdapter(
+        ProductImageEntityDal dal,
+        ProductEntityDal productDal,
+        ILogger<ProductImageRepositoryAdapter> logger)
     {
-        _dbConnection = dbConnection ?? throw new ArgumentNullException(nameof(dbConnection));
+        _dal = dal ?? throw new ArgumentNullException(nameof(dal));
+        _productDal = productDal ?? throw new ArgumentNullException(nameof(productDal));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -19,78 +28,67 @@ public class ProductImageRepositoryAdapter : IProductImageRepository
         string? fileName, long? fileSize, string? mimeType, int? width, int? height,
         bool isPrimary, int displayOrder, bool isUserUploaded, string? sourceSystem, string? sourceId, Guid? userId)
     {
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        using var transaction = conn.BeginTransaction();
-
         try
         {
+            // If this is a primary image, clear other primary flags first
             if (isPrimary)
             {
-                const string clearPrimarySql = "UPDATE ProductImage SET IsPrimary = 0 WHERE ProductId = @ProductId AND IsDeleted = 0";
-                using var clearCommand = new SqlCommand(clearPrimarySql, conn, transaction);
-                clearCommand.Parameters.AddWithValue("@ProductId", productId);
-                await clearCommand.ExecuteNonQueryAsync();
+                // Uses generated [NamedQuery("ByProductIdAndPrimary", nameof(ProductId), nameof(IsPrimary))] method
+                // Gets only primary images for this product (already filters IsDeleted=0)
+                var imagesToUpdate = await _dal.GetByProductIdAndPrimaryAsync(productId, true);
+                if (imagesToUpdate.Any())
+                {
+                    foreach (var img in imagesToUpdate)
+                    {
+                        img.IsPrimary = false;
+                    }
+                    await _dal.BulkUpdateAsync(imagesToUpdate, "System", System.Threading.CancellationToken.None);
+                }
             }
 
-            const string insertSql = @"
-                INSERT INTO ProductImage (
-                    Id, ProductId, ImageType, ImageUrl, LocalFilePath, FileName, FileSize, MimeType,
-                    Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId,
-                    CreatedDate, CreatedBy, IsDeleted
-                )
-                OUTPUT INSERTED.Id
-                VALUES (
-                    NEWID(), @ProductId, @ImageType, @ImageUrl, @LocalFilePath, @FileName, @FileSize, @MimeType,
-                    @Width, @Height, @DisplayOrder, @IsPrimary, @IsUserUploaded, @SourceSystem, @SourceId,
-                    GETUTCDATE(), @UserId, 0
-                )";
-
-            Guid imageId;
-            using (var cmd = new SqlCommand(insertSql, conn, transaction))
+            // Create and insert new image entity
+            var newImage = new ProductImageEntity
             {
-                cmd.Parameters.AddWithValue("@ProductId", productId);
-                cmd.Parameters.AddWithValue("@ImageType", imageType ?? string.Empty);
-                cmd.Parameters.AddWithValue("@ImageUrl", (object?)imageUrl ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@LocalFilePath", (object?)localFilePath ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@FileName", (object?)fileName ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@FileSize", (object?)fileSize ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@MimeType", (object?)mimeType ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@Width", (object?)width ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@Height", (object?)height ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@DisplayOrder", displayOrder);
-                cmd.Parameters.AddWithValue("@IsPrimary", isPrimary);
-                cmd.Parameters.AddWithValue("@IsUserUploaded", isUserUploaded);
-                cmd.Parameters.AddWithValue("@SourceSystem", (object?)sourceSystem ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@SourceId", (object?)sourceId ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@UserId", (object?)userId ?? DBNull.Value);
+                Id = Guid.NewGuid(),
+                ProductId = productId,
+                ImageType = imageType ?? string.Empty,
+                ImageUrl = imageUrl,
+                LocalFilePath = localFilePath,
+                FileName = fileName,
+                FileSize = fileSize,
+                MimeType = mimeType,
+                Width = width,
+                Height = height,
+                DisplayOrder = displayOrder,
+                IsPrimary = isPrimary,
+                IsUserUploaded = isUserUploaded,
+                SourceSystem = sourceSystem,
+                SourceId = sourceId
+            };
 
-                var res = await cmd.ExecuteScalarAsync();
-                imageId = (Guid)res!;
-            }
+            await _dal.InsertAsync(newImage, userId?.ToString(), System.Threading.CancellationToken.None);
 
+            // Sync Product.ImageUrl for primary images
             if (isPrimary && !string.IsNullOrWhiteSpace(imageUrl))
             {
-                const string updateProductSql = "UPDATE Product SET ImageUrl = @ImageUrl, ModifiedDate = GETUTCDATE() WHERE Id = @ProductId";
-                using var updateCmd = new SqlCommand(updateProductSql, conn, transaction);
-                updateCmd.Parameters.AddWithValue("@ImageUrl", imageUrl);
-                updateCmd.Parameters.AddWithValue("@ProductId", productId);
-                await updateCmd.ExecuteNonQueryAsync();
+                var product = await _productDal.GetByIdAsync(productId);
+                if (product != null)
+                {
+                    product.ImageUrl = imageUrl;
+                    await _productDal.UpdateAsync(product, "System", System.Threading.CancellationToken.None);
 
-                _logger.LogDebug("Synced primary image to Product.ImageUrl for ProductId: {ProductId}, ImageType: {ImageType}, Source: {Source}",
-                    productId, imageType, sourceSystem ?? "Unknown");
+                    _logger.LogDebug("Synced primary image to Product.ImageUrl for ProductId: {ProductId}, ImageType: {ImageType}, Source: {Source}",
+                        productId, imageType, sourceSystem ?? "Unknown");
+                }
             }
 
-            await transaction.CommitAsync();
-
             _logger.LogDebug("Added image {ImageId} for product {ProductId}: Type={ImageType}, IsPrimary={IsPrimary}, Source={Source}",
-                imageId, productId, imageType, isPrimary, sourceSystem ?? "Unknown");
+                newImage.Id, productId, imageType, isPrimary, sourceSystem ?? "Unknown");
 
-            return imageId;
+            return newImage.Id;
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync();
             _logger.LogError(ex, "Failed to add image for product {ProductId}", productId);
             throw;
         }
@@ -98,131 +96,112 @@ public class ProductImageRepositoryAdapter : IProductImageRepository
 
     public async Task<List<ProductImageModel>> GetImagesByProductIdAsync(Guid productId)
     {
-        const string sql = @"
-            SELECT
-                Id, ProductId, ImageType, ImageUrl, LocalFilePath, FileName, FileSize, MimeType,
-                Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId, CreatedDate
-            FROM ProductImage
-            WHERE ProductId = @ProductId AND IsDeleted = 0
-            ORDER BY DisplayOrder, CreatedDate";
+        // Uses generated [NamedQuery("ByProductId", nameof(ProductId))] method
+        // Filters from cache - no database round-trip
+        var entities = await _dal.GetByProductIdAsync(productId);
 
-        var list = new List<ProductImageModel>();
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ProductId", productId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            list.Add(new ProductImageModel
-            {
-                Id = reader.GetGuid(0),
-                ProductId = reader.GetGuid(1),
-                ImageType = reader.GetString(2),
-                ImageUrl = reader.IsDBNull(3) ? null : reader.GetString(3),
-                LocalFilePath = reader.IsDBNull(4) ? null : reader.GetString(4),
-                FileName = reader.IsDBNull(5) ? null : reader.GetString(5),
-                FileSize = reader.IsDBNull(6) ? null : reader.GetInt64(6),
-                MimeType = reader.IsDBNull(7) ? null : reader.GetString(7),
-                Width = reader.IsDBNull(8) ? null : reader.GetInt32(8),
-                Height = reader.IsDBNull(9) ? null : reader.GetInt32(9),
-                DisplayOrder = reader.GetInt32(10),
-                IsPrimary = reader.GetBoolean(11),
-                IsUserUploaded = reader.GetBoolean(12),
-                SourceSystem = reader.IsDBNull(13) ? null : reader.GetString(13),
-                SourceId = reader.IsDBNull(14) ? null : reader.GetString(14),
-                CreatedAt = reader.GetDateTime(15)
-            });
-        }
+        return entities
+            .OrderBy(e => e.DisplayOrder)
+            .ThenBy(e => e.CreatedDate)
+            .Select(MapEntityToModel)
+            .ToList();
+    }
 
-        return list;
+    public async Task<Dictionary<Guid, List<ProductImageModel>>> GetImagesByProductIdsAsync(IEnumerable<Guid> productIds)
+    {
+        var productIdSet = productIds.ToHashSet();
+        if (!productIdSet.Any()) return new Dictionary<Guid, List<ProductImageModel>>();
+
+        _logger.LogDebug("Loading images for {ProductCount} products", productIdSet.Count);
+
+        // Fetch all images at once (leverages DAL caching - no DB hit if cached)
+        // Then group by ProductId to avoid N individual queries
+        // This uses the in-memory table or L1/L2 cache depending on DAL configuration
+        var allImages = await _dal.GetAllAsync(CancellationToken.None);
+
+        var result = new Dictionary<Guid, List<ProductImageModel>>();
+
+        // Filter to requested product IDs and group
+        var groupedByProduct = allImages
+            .Where(e => productIdSet.Contains(e.ProductId))
+            .GroupBy(e => e.ProductId)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderBy(e => e.DisplayOrder)
+                    .ThenBy(e => e.CreatedDate)
+                    .Select(MapEntityToModel)
+                    .ToList()
+            );
+
+        _logger.LogDebug("Loaded images for {ProductCount} products from cache/DB", groupedByProduct.Count);
+        return groupedByProduct;
     }
 
     public async Task<ProductImageModel?> GetPrimaryImageAsync(Guid productId)
     {
-        const string sql = @"
-            SELECT TOP 1
-                Id, ProductId, ImageType, ImageUrl, LocalFilePath, FileName, FileSize, MimeType,
-                Width, Height, DisplayOrder, IsPrimary, IsUserUploaded, SourceSystem, SourceId, CreatedDate
-            FROM ProductImage
-            WHERE ProductId = @ProductId AND IsDeleted = 0 AND IsPrimary = 1
-            ORDER BY DisplayOrder";
+        // Uses generated [NamedQuery("ByProductIdAndPrimary", nameof(ProductId), nameof(IsPrimary))] method
+        // Filters from cache - no database round-trip
+        var entities = await _dal.GetByProductIdAndPrimaryAsync(productId, true);
 
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ProductId", productId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            return new ProductImageModel
-            {
-                Id = reader.GetGuid(0),
-                ProductId = reader.GetGuid(1),
-                ImageType = reader.GetString(2),
-                ImageUrl = reader.IsDBNull(3) ? null : reader.GetString(3),
-                LocalFilePath = reader.IsDBNull(4) ? null : reader.GetString(4),
-                FileName = reader.IsDBNull(5) ? null : reader.GetString(5),
-                FileSize = reader.IsDBNull(6) ? null : reader.GetInt64(6),
-                MimeType = reader.IsDBNull(7) ? null : reader.GetString(7),
-                Width = reader.IsDBNull(8) ? null : reader.GetInt32(8),
-                Height = reader.IsDBNull(9) ? null : reader.GetInt32(9),
-                DisplayOrder = reader.GetInt32(10),
-                IsPrimary = reader.GetBoolean(11),
-                IsUserUploaded = reader.GetBoolean(12),
-                SourceSystem = reader.IsDBNull(13) ? null : reader.GetString(13),
-                SourceId = reader.IsDBNull(14) ? null : reader.GetString(14),
-                CreatedAt = reader.GetDateTime(15)
-            };
-        }
+        var primaryEntity = entities
+            .OrderBy(e => e.DisplayOrder)
+            .FirstOrDefault();
 
-        return null;
+        return primaryEntity != null ? MapEntityToModel(primaryEntity) : null;
     }
 
     public async Task SetPrimaryImageAsync(Guid productId, Guid imageId)
     {
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        using var transaction = conn.BeginTransaction();
-
         try
         {
-            const string clearSql = "UPDATE ProductImage SET IsPrimary = 0 WHERE ProductId = @ProductId AND IsDeleted = 0";
-            using (var clearCommand = new SqlCommand(clearSql, conn, transaction))
+            // Uses generated [NamedQuery("ByProductId", nameof(ProductId))] method
+            // Filters from cache - no database round-trip
+            var allImages = await _dal.GetByProductIdAsync(productId);
+
+            // Clear current primary flags and set new primary
+            var imagesToUpdate = new List<ProductImageEntity>();
+            ProductImageEntity? newPrimaryImage = null;
+
+            // Named query already filters IsDeleted=0
+            foreach (var img in allImages)
             {
-                clearCommand.Parameters.AddWithValue("@ProductId", productId);
-                await clearCommand.ExecuteNonQueryAsync();
+                if (img.Id == imageId)
+                {
+                    img.IsPrimary = true;
+                    img.DisplayOrder = 0;
+                    newPrimaryImage = img;
+                    imagesToUpdate.Add(img);
+                }
+                else if (img.IsPrimary)
+                {
+                    img.IsPrimary = false;
+                    imagesToUpdate.Add(img);
+                }
             }
 
-            const string setPrimarySql = "UPDATE ProductImage SET IsPrimary = 1, DisplayOrder = 0 WHERE Id = @ImageId AND IsDeleted = 0";
-            using (var setPrimaryCommand = new SqlCommand(setPrimarySql, conn, transaction))
+            // Bulk update all changed images
+            if (imagesToUpdate.Any())
             {
-                setPrimaryCommand.Parameters.AddWithValue("@ImageId", imageId);
-                await setPrimaryCommand.ExecuteNonQueryAsync();
+                await _dal.BulkUpdateAsync(imagesToUpdate, "System", System.Threading.CancellationToken.None);
             }
 
-            const string syncProductSql = @"
-                UPDATE Product
-                SET ImageUrl = COALESCE(pi.ImageUrl, pi.LocalFilePath),
-                    ModifiedDate = GETUTCDATE()
-                FROM Product p
-                INNER JOIN ProductImage pi ON p.Id = pi.ProductId
-                WHERE p.Id = @ProductId AND pi.Id = @ImageId AND pi.IsDeleted = 0";
-            using (var syncCommand = new SqlCommand(syncProductSql, conn, transaction))
+            // Sync Product.ImageUrl with the new primary image
+            if (newPrimaryImage != null)
             {
-                syncCommand.Parameters.AddWithValue("@ProductId", productId);
-                syncCommand.Parameters.AddWithValue("@ImageId", imageId);
-                await syncCommand.ExecuteNonQueryAsync();
+                var product = await _productDal.GetByIdAsync(productId);
+                if (product != null)
+                {
+                    product.ImageUrl = newPrimaryImage.ImageUrl ?? newPrimaryImage.LocalFilePath;
+                    await _productDal.UpdateAsync(product, "System", System.Threading.CancellationToken.None);
+                }
             }
-
-            await transaction.CommitAsync();
 
             _logger.LogDebug("Set primary image {ImageId} for product {ProductId} and synced to Product.ImageUrl",
                 imageId, productId);
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync();
             _logger.LogError(ex, "Failed to set primary image for product {ProductId}", productId);
             throw;
         }
@@ -230,27 +209,85 @@ public class ProductImageRepositoryAdapter : IProductImageRepository
 
     public async Task DeleteImageAsync(Guid imageId)
     {
-        const string sql = "UPDATE ProductImage SET IsDeleted = 1, DeletedDate = GETUTCDATE() WHERE Id = @ImageId";
+        var entity = await _dal.GetByIdAsync(imageId);
+        if (entity == null || entity.IsDeleted) return;
 
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-
-        using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ImageId", imageId);
-
-        await cmd.ExecuteNonQueryAsync();
+        entity.IsDeleted = true;
+        await _dal.UpdateAsync(entity, "System", System.Threading.CancellationToken.None);
     }
 
     public async Task DeleteAllProductImagesAsync(Guid productId)
     {
-        const string sql = "UPDATE ProductImage SET IsDeleted = 1, DeletedDate = GETUTCDATE() WHERE ProductId = @ProductId";
+        // Uses generated [NamedQuery("ByProductId", nameof(ProductId))] method
+        // Named query already filters IsDeleted=0
+        var toDelete = await _dal.GetByProductIdAsync(productId);
+        if (!toDelete.Any()) return;
 
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
+        foreach (var entity in toDelete)
+        {
+            entity.IsDeleted = true;
+        }
 
-        using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ProductId", productId);
+        await _dal.BulkUpdateAsync(toDelete, "System", System.Threading.CancellationToken.None);
+    }
 
-        await cmd.ExecuteNonQueryAsync();
+    public async Task<int> BulkAddImagesAsync(IEnumerable<ProductImageRequest> images)
+    {
+        var imageList = images.ToList();
+        if (!imageList.Any()) return 0;
+
+        // Convert to entities for HighSpeedDAL
+        var entities = imageList.Select(img => new ProductImageEntity
+        {
+            Id = Guid.NewGuid(),
+            ProductId = img.ProductId,
+            ImageType = img.ImageType,
+            ImageUrl = img.ImageUrl,
+            LocalFilePath = img.LocalFilePath,
+            FileName = img.FileName,
+            FileSize = img.FileSize,
+            MimeType = img.MimeType,
+            Width = img.Width,
+            Height = img.Height,
+            DisplayOrder = img.DisplayOrder,
+            IsPrimary = img.IsPrimary,
+            IsUserUploaded = img.IsUserUploaded,
+            SourceSystem = img.SourceSystem,
+            SourceId = img.SourceId
+        }).ToList();
+
+        // Use duplicate-handling bulk insert
+        var result = await _dal.BulkInsertWithDuplicatesAsync(entities, "System", System.Threading.CancellationToken.None);
+
+        if (result.HasDuplicates)
+        {
+            _logger.LogDebug("Skipped {Count} duplicate product images", result.DuplicateEntities.Count);
+        }
+
+        _logger.LogDebug("Bulk inserted {Count} product images via HighSpeedDAL", result.InsertedCount);
+        return result.InsertedCount;
+    }
+
+    private static ProductImageModel MapEntityToModel(ProductImageEntity e)
+    {
+        return new ProductImageModel
+        {
+            Id = e.Id,
+            ProductId = e.ProductId,
+            ImageType = e.ImageType,
+            ImageUrl = e.ImageUrl,
+            LocalFilePath = e.LocalFilePath,
+            FileName = e.FileName,
+            FileSize = e.FileSize,
+            MimeType = e.MimeType,
+            Width = e.Width,
+            Height = e.Height,
+            DisplayOrder = e.DisplayOrder,
+            IsPrimary = e.IsPrimary,
+            IsUserUploaded = e.IsUserUploaded,
+            SourceSystem = e.SourceSystem,
+            SourceId = e.SourceId,
+            CreatedAt = e.CreatedDate
+        };
     }
 }

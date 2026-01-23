@@ -17,7 +17,17 @@
       "Bash(dotnet list:*)",
       "Bash(dotnet --version:*)",
       "Bash(dotnet build-server:*)",
-      "Bash(sqlcmd:*)"
+      "Bash(sqlcmd:*)",
+      "Bash(del \"C:\\\\Users\\\\rhale\\\\source\\\\repos\\\\ExpressRecipe\\\\src\\\\Services\\\\ExpressRecipe.ProductService\\\\Data\\\\Migrations\\\\DIAGNOSTIC_CheckProductImages.sql\")",
+      "Bash(Remove-Item:*)",
+      "Bash(done)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(xargs -I {} bash -c 'echo \"\"=== {} ===\"\" && head -20 {}')",
+      "Bash(xargs -I {} bash -c 'echo \"\"=== {} ===\"\" && grep \"\"InMemoryTable\\\\|class\\\\|Table\"\" {} | head -3')",
+      "Bash(taskkill:*)",
+      "Bash(xargs:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

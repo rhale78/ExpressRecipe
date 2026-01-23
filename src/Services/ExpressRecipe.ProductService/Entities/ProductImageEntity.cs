@@ -7,9 +7,18 @@ namespace ExpressRecipe.ProductService.Entities;
 [DalEntity]
 [Table("ProductImage", PrimaryKeyType = PrimaryKeyType.Guid)]
 [Cache(CacheStrategy.TwoLayer, MaxSize = 50000, ExpirationSeconds = 900)]
-[InMemoryTable(FlushIntervalSeconds = 30, MaxRowCount = 200000)]
+[InMemoryTable(
+    FlushIntervalSeconds = 30,
+    MaxRowCount = 200000,
+    EnforceConstraints = false,    // Reference data constraints at DB
+    ValidateOnWrite = false,       // Read-heavy image metadata
+    TrackOperations = false)]      // No operation history needed
 [AutoAudit]
 [SoftDelete]
+// Named queries for efficient lookups
+[NamedQuery("ByProductId", nameof(ProductId))]
+[NamedQuery("ByProductIds", nameof(ProductId))]  // For batch loading - supports IEnumerable<Guid>
+[NamedQuery("ByProductIdAndPrimary", nameof(ProductId), nameof(IsPrimary))]
 [MessagePackObject]
 public partial class ProductImageEntity
 {
@@ -25,7 +34,7 @@ public partial class ProductImageEntity
     public string ImageType { get; set; } = string.Empty; // 'Front', 'Back', 'Side', 'Nutrition', 'Ingredients', 'Other'
 
     [Key(3)]
-    public string? ImageUrl { get; set; }
+    public string? ImageUrl { get; set; }  // Note: Add unique constraint via migration on (ProductId, ImageUrl)
 
     [Key(4)]
     public string? LocalFilePath { get; set; }
@@ -61,13 +70,4 @@ public partial class ProductImageEntity
     [Key(14)]
     public string? SourceId { get; set; }
 
-    [Key(15)]
-    [Index]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
-    [Key(16)]
-    public DateTime? UpdatedAt { get; set; }
-
-    [Key(17)]
-    public bool IsDeleted { get; set; } = false;
 }

@@ -1032,7 +1032,7 @@ public class OpenFoodFactsImportService
             int lineNumber = 0;
             int processedCount = 0;
             int skippedCount = 0;
-            var batchSize = 500;
+            var batchSize = 5000;
             var stagingBatch = new List<StagedProduct>();
 
             while (!reader.EndOfStream && processedCount < maxProducts && !cancellationToken.IsCancellationRequested)
@@ -1316,7 +1316,7 @@ public class OpenFoodFactsImportService
                 int recordNumber = 0;
                 int processedCount = 0;
                 int skippedCount = 0;
-                var batchSize = 500;
+                var batchSize = 5000;
                 var stagingBatch = new List<StagedProduct>();
 
                 // Read CSV records

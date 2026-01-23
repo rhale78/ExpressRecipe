@@ -7,9 +7,18 @@ namespace ExpressRecipe.ProductService.Entities;
 [DalEntity]
 [Table("ProductStaging", PrimaryKeyType = PrimaryKeyType.Guid)]
 [Cache(CacheStrategy.Memory, MaxSize = 10000, ExpirationSeconds = 300)]
-[InMemoryTable(FlushIntervalSeconds = 30, MaxRowCount = 50000)]
+[InMemoryTable(
+    FlushIntervalSeconds = 30,
+    MaxRowCount = 50000,
+    EnforceConstraints = false,    // Staging table is temporary
+    ValidateOnWrite = false,       // Data already validated before staging
+    TrackOperations = false)]      // Volatile processing buffer
 [AutoAudit]
 [SoftDelete]
+// Named queries for efficient lookups
+[NamedQuery("ByProcessingStatus", nameof(ProcessingStatus))]
+[NamedQuery("ByBarcode", nameof(Barcode), IsSingle = true)]
+[NamedQuery("ByExternalId", nameof(ExternalId), IsSingle = true)]
 [MessagePackObject]
 public partial class ProductStagingEntity
 {
@@ -19,10 +28,12 @@ public partial class ProductStagingEntity
 
     [Key(1)]
     [Index(IsUnique = true)]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string ExternalId { get; set; } = string.Empty;
 
     [Key(2)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string? Barcode { get; set; }
 
     [Key(3)]
@@ -81,6 +92,7 @@ public partial class ProductStagingEntity
 
     [Key(21)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string ProcessingStatus { get; set; } = "Pending"; // Pending, Processing, Completed, Failed
 
     [Key(22)]

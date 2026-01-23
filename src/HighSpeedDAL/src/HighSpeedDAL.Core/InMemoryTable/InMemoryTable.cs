@@ -94,7 +94,13 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
         _config.Validate();
 
         _schema = InMemoryTableSchema.FromEntityType<TEntity>(tableName);
-        _rows = new ConcurrentDictionary<object, InMemoryRow>();
+
+        // Pre-allocate capacity based on configured MaxRowCount to avoid resize overhead during load
+        int capacity = _config.MaxRowCount > 0 ? _config.MaxRowCount : 1000;
+        _rows = new ConcurrentDictionary<object, InMemoryRow>(
+            concurrencyLevel: Environment.ProcessorCount * 2,  // Higher concurrency for many cores
+            capacity: capacity);
+
         _whereParser = new WhereClauseParser(_schema);
         _indexLock = new ReaderWriterLockSlim();
         _nextId = 1;

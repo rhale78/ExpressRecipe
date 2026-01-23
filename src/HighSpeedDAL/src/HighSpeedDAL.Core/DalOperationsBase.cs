@@ -14,22 +14,25 @@ namespace HighSpeedDAL.Core.Base;
 /// </summary>
 /// <typeparam name="TEntity">The entity type</typeparam>
 /// <typeparam name="TConnection">The database connection type</typeparam>
-public abstract class DalOperationsBase<TEntity, TConnection> 
+public abstract class DalOperationsBase<TEntity, TConnection>
     where TEntity : class, new()
     where TConnection : DatabaseConnectionBase
 {
     protected readonly TConnection Connection;
     protected readonly ILogger Logger;
     protected readonly IDbConnectionFactory ConnectionFactory;
+    protected readonly DalMetricsCollector? MetricsCollector;
 
     protected DalOperationsBase(
         TConnection connection,
         ILogger logger,
-        IDbConnectionFactory connectionFactory)
+        IDbConnectionFactory connectionFactory,
+        DalMetricsCollector? metricsCollector = null)
     {
         Connection = connection ?? throw new ArgumentNullException(nameof(connection));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         ConnectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        MetricsCollector = metricsCollector;
     }
 
     /// <summary>

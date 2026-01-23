@@ -1,63 +1,30 @@
 using System;
-using System.Data;
 using System.Linq;
-using Microsoft.Data.SqlClient;
 using ExpressRecipe.ProductService.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.ProductService.Data;
 
+/// <summary>
+/// Adapter that implements IProductStagingRepository using HighSpeedDAL generated DAL.
+/// All operations use the DAL's in-memory table and caching features.
+/// </summary>
 public class ProductStagingRepositoryAdapter : IProductStagingRepository
 {
-    private readonly ProductDatabaseConnection _dbConnection;
     private readonly ProductStagingEntityDal _dal;
+    private readonly ILogger<ProductStagingRepositoryAdapter> _logger;
 
-    public ProductStagingRepositoryAdapter(ProductDatabaseConnection dbConnection, ProductStagingEntityDal dal)
+    public ProductStagingRepositoryAdapter(ProductStagingEntityDal dal, ILogger<ProductStagingRepositoryAdapter> logger)
     {
-        _dbConnection = dbConnection ?? throw new ArgumentNullException(nameof(dbConnection));
         _dal = dal ?? throw new ArgumentNullException(nameof(dal));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<Guid> InsertStagingProductAsync(StagedProduct product)
     {
-        const string sql = @"
-            INSERT INTO ProductStaging (
-                ExternalId, Barcode, ProductName, GenericName, Brands,
-                IngredientsText, IngredientsTextEn, Allergens, AllergensHierarchy,
-                Categories, CategoriesHierarchy, NutritionData,
-                ImageUrl, ImageSmallUrl, Lang, Countries,
-                NutriScore, NovaGroup, EcoScore, RawJson
-            )
-            OUTPUT INSERTED.Id
-            VALUES (
-                @ExternalId, @Barcode, @ProductName, @GenericName, @Brands,
-                @IngredientsText, @IngredientsTextEn, @Allergens, @AllergensHierarchy,
-                @Categories, @CategoriesHierarchy, @NutritionData,
-                @ImageUrl, @ImageSmallUrl, @Lang, @Countries,
-                @NutriScore, @NovaGroup, @EcoScore, @RawJson
-            );";
-
-        return await ExecuteScalarAsync<Guid>(sql,
-            new SqlParameter("@ExternalId", product.ExternalId),
-            new SqlParameter("@Barcode", (object?)product.Barcode ?? DBNull.Value),
-            new SqlParameter("@ProductName", (object?)product.ProductName ?? DBNull.Value),
-            new SqlParameter("@GenericName", (object?)product.GenericName ?? DBNull.Value),
-            new SqlParameter("@Brands", (object?)product.Brands ?? DBNull.Value),
-            new SqlParameter("@IngredientsText", (object?)product.IngredientsText ?? DBNull.Value),
-            new SqlParameter("@IngredientsTextEn", (object?)product.IngredientsTextEn ?? DBNull.Value),
-            new SqlParameter("@Allergens", (object?)product.Allergens ?? DBNull.Value),
-            new SqlParameter("@AllergensHierarchy", (object?)product.AllergensHierarchy ?? DBNull.Value),
-            new SqlParameter("@Categories", (object?)product.Categories ?? DBNull.Value),
-            new SqlParameter("@CategoriesHierarchy", (object?)product.CategoriesHierarchy ?? DBNull.Value),
-            new SqlParameter("@NutritionData", (object?)product.NutritionData ?? DBNull.Value),
-            new SqlParameter("@ImageUrl", (object?)product.ImageUrl ?? DBNull.Value),
-            new SqlParameter("@ImageSmallUrl", (object?)product.ImageSmallUrl ?? DBNull.Value),
-            new SqlParameter("@Lang", (object?)product.Lang ?? DBNull.Value),
-            new SqlParameter("@Countries", (object?)product.Countries ?? DBNull.Value),
-            new SqlParameter("@NutriScore", (object?)product.NutriScore ?? DBNull.Value),
-            new SqlParameter("@NovaGroup", (object?)product.NovaGroup ?? DBNull.Value),
-            new SqlParameter("@EcoScore", (object?)product.EcoScore ?? DBNull.Value),
-            new SqlParameter("@RawJson", (object?)product.RawJson ?? DBNull.Value)
-        );
+        var entity = MapStagedProductToEntity(product);
+        await _dal.InsertAsync(entity, "System", System.Threading.CancellationToken.None);
+        return entity.Id;
     }
 
     public async Task<int> BulkInsertStagingProductsAsync(IEnumerable<StagedProduct> products)
@@ -66,19 +33,306 @@ public class ProductStagingRepositoryAdapter : IProductStagingRepository
         if (!productList.Any()) return 0;
 
         // 1. Identify which products already exist to avoid Unique Key violations
+        // Use DAL's indexed GetByExternalIdAsync in batches
         var externalIds = productList.Select(p => p.ExternalId).Distinct().ToList();
         var existingIds = await GetExistingExternalIdsAsync(externalIds);
 
         // 2. Filter out duplicates
         var newProducts = productList
             .Where(p => !existingIds.Contains(p.ExternalId))
-            .DistinctBy(p => p.ExternalId) // Ensure no internal duplicates in the batch either
+            .DistinctBy(p => p.ExternalId)
             .ToList();
 
         if (!newProducts.Any()) return 0;
 
         // 3. Map StagedProduct POCOs to ProductStagingEntity for HighSpeedDAL
-        var entities = newProducts.Select(p => new ProductStagingEntity
+        var entities = newProducts.Select(MapStagedProductToEntity).ToList();
+        // Ensure IsDeleted is set to false for all entities (required for NOT NULL constraint)
+        foreach (var entity in entities)
+        {
+            entity.IsDeleted = false;
+        }
+        // 4. Use duplicate-handling bulk insert (handles race conditions)
+        var result = await _dal.BulkInsertWithDuplicatesAsync(entities, "System", System.Threading.CancellationToken.None);
+        return result.InsertedCount;
+    }
+
+    private async Task<HashSet<string>> GetExistingExternalIdsAsync(List<string> externalIds)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!externalIds.Any()) return existing;
+
+        // PERFORMANCE: Batch lookup by ExternalId using named query
+        // Instead of loading all 2.6M rows, lookup only the IDs we care about
+        // Batch size of 100 to avoid too many queries, but way better than GetAllAsync
+        const int BATCH_SIZE = 100;
+        for (int i = 0; i < externalIds.Count; i += BATCH_SIZE)
+        {
+            var batch = externalIds.Skip(i).Take(BATCH_SIZE).ToList();
+
+            foreach (var extId in batch)
+            {
+                try
+                {
+                    // Use single-result named query: GetByExternalIdAsync(externalId)
+                    var entity = await _dal.GetByExternalIdAsync(extId);
+                    if (entity != null && !entity.IsDeleted)
+                    {
+                        existing.Add(entity.ExternalId);
+                    }
+                }
+                catch
+                {
+                    // If named query fails, skip and continue (item will be inserted as new)
+                }
+            }
+        }
+
+        return existing;
+    }
+
+    private static string? SanitizeScore(string? score)
+    {
+        if (string.IsNullOrWhiteSpace(score)) return null;
+        if (score.Length > 10) return score.Substring(0, 10);
+        return score;
+    }
+
+    public async Task<int> BulkAugmentStagingProductsAsync(IEnumerable<StagedProduct> products, string sourceLabel)
+    {
+        var productList = products.ToList();
+        if (!productList.Any()) return 0;
+
+        int augmentedCount = 0;
+        var entitiesToUpdate = new List<ProductStagingEntity>();
+
+        // PERFORMANCE: Batch lookup by barcode instead of loading all 2.6M rows
+        // Get only the barcodes we need to check
+        var barcodes = productList
+            .Where(p => !string.IsNullOrWhiteSpace(p.Barcode))
+            .Select(p => p.Barcode!)
+            .Distinct()
+            .ToList();
+
+        // Batch lookup existing products by barcode (use named query: GetByBarcodeAsync)
+        var byBarcode = new Dictionary<string, ProductStagingEntity>(StringComparer.OrdinalIgnoreCase);
+        const int BATCH_SIZE = 50;
+        for (int i = 0; i < barcodes.Count; i += BATCH_SIZE)
+        {
+            var batch = barcodes.Skip(i).Take(BATCH_SIZE).ToList();
+            foreach (var barcode in batch)
+            {
+                try
+                {
+                    var entity = await _dal.GetByBarcodeAsync(barcode);
+                    if (entity != null && !entity.IsDeleted)
+                    {
+                        byBarcode[barcode] = entity;
+                    }
+                }
+                catch
+                {
+                    // If lookup fails, skip (entity won't be in dict and will be inserted as new)
+                }
+            }
+        }
+
+        // Apply COALESCE logic for each product
+        foreach (var product in productList)
+        {
+            if (string.IsNullOrWhiteSpace(product.Barcode)) continue;
+
+            if (!byBarcode.TryGetValue(product.Barcode, out var existing)) continue;
+
+            // Apply COALESCE logic - only fill in null/empty fields
+            bool updated = false;
+            if (string.IsNullOrEmpty(existing.ProductName) && !string.IsNullOrEmpty(product.ProductName)) { existing.ProductName = product.ProductName; updated = true; }
+            if (string.IsNullOrEmpty(existing.GenericName) && !string.IsNullOrEmpty(product.GenericName)) { existing.GenericName = product.GenericName; updated = true; }
+            if (string.IsNullOrEmpty(existing.Brands) && !string.IsNullOrEmpty(product.Brands)) { existing.Brands = product.Brands; updated = true; }
+            if (string.IsNullOrEmpty(existing.IngredientsText) && !string.IsNullOrEmpty(product.IngredientsText)) { existing.IngredientsText = product.IngredientsText; updated = true; }
+            if (string.IsNullOrEmpty(existing.IngredientsTextEn) && !string.IsNullOrEmpty(product.IngredientsTextEn)) { existing.IngredientsTextEn = product.IngredientsTextEn; updated = true; }
+            if (string.IsNullOrEmpty(existing.Allergens) && !string.IsNullOrEmpty(product.Allergens)) { existing.Allergens = product.Allergens; updated = true; }
+            if (string.IsNullOrEmpty(existing.AllergensHierarchy) && !string.IsNullOrEmpty(product.AllergensHierarchy)) { existing.AllergensHierarchy = product.AllergensHierarchy; updated = true; }
+            if (string.IsNullOrEmpty(existing.Categories) && !string.IsNullOrEmpty(product.Categories)) { existing.Categories = product.Categories; updated = true; }
+            if (string.IsNullOrEmpty(existing.CategoriesHierarchy) && !string.IsNullOrEmpty(product.CategoriesHierarchy)) { existing.CategoriesHierarchy = product.CategoriesHierarchy; updated = true; }
+            if (string.IsNullOrEmpty(existing.NutritionData) && !string.IsNullOrEmpty(product.NutritionData)) { existing.NutritionData = product.NutritionData; updated = true; }
+            if (string.IsNullOrEmpty(existing.ImageUrl) && !string.IsNullOrEmpty(product.ImageUrl)) { existing.ImageUrl = product.ImageUrl; updated = true; }
+            if (string.IsNullOrEmpty(existing.ImageSmallUrl) && !string.IsNullOrEmpty(product.ImageSmallUrl)) { existing.ImageSmallUrl = product.ImageSmallUrl; updated = true; }
+            if (string.IsNullOrEmpty(existing.Countries) && !string.IsNullOrEmpty(product.Countries)) { existing.Countries = product.Countries; updated = true; }
+            if (string.IsNullOrEmpty(existing.NutriScore) && !string.IsNullOrEmpty(product.NutriScore)) { existing.NutriScore = SanitizeScore(product.NutriScore); updated = true; }
+            if (existing.NovaGroup == null && product.NovaGroup != null) { existing.NovaGroup = product.NovaGroup; updated = true; }
+            if (string.IsNullOrEmpty(existing.EcoScore) && !string.IsNullOrEmpty(product.EcoScore)) { existing.EcoScore = SanitizeScore(product.EcoScore); updated = true; }
+
+            if (updated)
+            {
+                entitiesToUpdate.Add(existing);
+                augmentedCount++;
+            }
+        }
+
+        // Bulk update all modified entities using DAL (leverages in-memory table)
+        if (entitiesToUpdate.Any())
+        {
+            await _dal.BulkUpdateAsync(entitiesToUpdate, sourceLabel, System.Threading.CancellationToken.None);
+        }
+
+        _logger.LogInformation("Augmented {Count} staging products from source {Source}", augmentedCount, sourceLabel);
+        return augmentedCount;
+    }
+
+    public async Task<List<StagedProduct>> GetPendingProductsAsync(int limit = 100)
+    {
+        // PERFORMANCE: Use named query GetByProcessingStatusAsync instead of GetAllAsync
+        // This avoids loading 2.6M rows when only needing pending items (~100 at a time)
+        // Named query uses indexed database lookup and in-memory table partial load
+        try
+        {
+            // Try using generated named query for Pending status
+            var pendingEntities = await _dal.GetByProcessingStatusAsync("Pending");
+
+            // Filter in memory for additional criteria and apply limit
+            var filtered = pendingEntities
+                .Where(e => !e.IsDeleted && e.ProcessingAttempts < 3)
+                .OrderBy(e => e.CreatedDate)
+                .Take(limit)
+                .Select(MapEntityToStagedProduct)
+                .ToList();
+
+            return filtered;
+        }
+        catch
+        {
+            // Fallback if named query not available - filter in-memory using GetAllAsync
+            // Only reached if GetByProcessingStatusAsync is not generated
+            _logger.LogWarning("Named query GetByProcessingStatusAsync not available, falling back to GetAllAsync");
+            var allEntities = await _dal.GetAllAsync();
+
+            var filtered = allEntities
+                .Where(e => !e.IsDeleted && e.ProcessingStatus == "Pending" && e.ProcessingAttempts < 3)
+                .OrderBy(e => e.CreatedDate)
+                .Take(limit)
+                .Select(MapEntityToStagedProduct)
+                .ToList();
+
+            return filtered;
+        }
+    }
+
+    public async Task UpdateProcessingStatusAsync(Guid id, string status, string? error = null)
+    {
+        var entity = await _dal.GetByIdAsync(id);
+        if (entity == null) return;
+
+        entity.ProcessingStatus = status;
+        entity.ProcessingAttempts = entity.ProcessingAttempts + 1;
+        entity.ProcessingError = error;
+        if (status == "Completed")
+        {
+            entity.ProcessedAt = DateTime.UtcNow;
+        }
+
+        await _dal.UpdateAsync(entity, "System", System.Threading.CancellationToken.None);
+    }
+
+    public async Task BulkUpdateProcessingStatusAsync(IEnumerable<Guid> ids, string status, string? error = null)
+    {
+        var idList = ids.ToList();
+        if (!idList.Any()) return;
+
+        // Fetch entities using DAL (may use in-memory cache if available)
+        var entities = await _dal.GetByIdsAsync(idList);
+
+        // Update the status fields
+        var now = DateTime.UtcNow;
+        foreach (var entity in entities)
+        {
+            entity.ProcessingStatus = status;
+            entity.ProcessingAttempts = entity.ProcessingAttempts + 1;
+            entity.ProcessingError = error;
+            if (status == "Completed")
+            {
+                entity.ProcessedAt = now;
+            }
+        }
+
+        // Use HighSpeedDAL's BulkUpdateAsync which leverages in-memory table if configured
+        await _dal.BulkUpdateAsync(entities, "System", System.Threading.CancellationToken.None);
+    }
+
+    public async Task<int> GetPendingCountAsync()
+    {
+        // PERFORMANCE: Use named query GetByProcessingStatusAsync instead of GetAllAsync
+        // Avoids loading 2.6M rows when only need to count pending items
+        try
+        {
+            var pendingEntities = await _dal.GetByProcessingStatusAsync("Pending");
+            return pendingEntities.Count(e => !e.IsDeleted && e.ProcessingAttempts < 3);
+        }
+        catch
+        {
+            // Fallback if named query not available
+            _logger.LogWarning("Named query GetByProcessingStatusAsync not available, falling back to GetAllAsync");
+            var allEntities = await _dal.GetAllAsync();
+            return allEntities.Count(e => !e.IsDeleted && e.ProcessingStatus == "Pending" && e.ProcessingAttempts < 3);
+        }
+    }
+
+    /// <summary>
+    /// Cleans up old completed/failed ProductStaging records to prevent in-memory overflow.
+    /// Keeps only completed records from the last 7 days, deletes older ones.
+    /// This prevents the 2.6M row overflow issue when MaxRowCount is configured for 50K rows.
+    /// </summary>
+    public async Task<int> CleanupOldStagingRecordsAsync(int daysToKeep = 7)
+    {
+        _logger.LogInformation("Starting cleanup of ProductStaging records older than {DaysToKeep} days", daysToKeep);
+
+        // Fetch all entities from in-memory table
+        var allEntities = await _dal.GetAllAsync();
+        var cutoffDate = DateTime.UtcNow.AddDays(-daysToKeep);
+
+        // Find old completed/failed records
+        var oldRecords = allEntities
+            .Where(e => !e.IsDeleted &&
+                       (e.ProcessingStatus == "Completed" || e.ProcessingStatus == "Failed") &&
+                       e.ProcessedAt.HasValue &&
+                       e.ProcessedAt.Value < cutoffDate)
+            .ToList();
+
+        if (!oldRecords.Any())
+        {
+            _logger.LogInformation("No old staging records to clean up");
+            return 0;
+        }
+
+        _logger.LogInformation("Deleting {Count} old staging records", oldRecords.Count);
+
+        // Soft delete in batches of 100
+        int deleted = 0;
+        const int BATCH_SIZE = 100;
+
+        for (int i = 0; i < oldRecords.Count; i += BATCH_SIZE)
+        {
+            var batch = oldRecords.Skip(i).Take(BATCH_SIZE).ToList();
+            var idsToDelete = batch.Select(r => r.Id).ToList();
+
+            try
+            {
+                await _dal.BulkDeleteAsync(idsToDelete);
+                deleted += batch.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting batch of {BatchSize} staging records", batch.Count);
+            }
+        }
+
+        _logger.LogInformation("Cleanup completed: deleted {Count} old staging records", deleted);
+        return deleted;
+    }
+
+    private static ProductStagingEntity MapStagedProductToEntity(StagedProduct p)
+    {
+        return new ProductStagingEntity
         {
             Id = p.Id != Guid.Empty ? p.Id : Guid.NewGuid(),
             ExternalId = p.ExternalId,
@@ -101,284 +355,46 @@ public class ProductStagingRepositoryAdapter : IProductStagingRepository
             NovaGroup = p.NovaGroup,
             EcoScore = SanitizeScore(p.EcoScore),
             RawJson = p.RawJson,
-            ProcessingStatus = "Pending",
-            CreatedDate = DateTime.UtcNow,
+            ProcessingStatus = p.ProcessingStatus ?? "Pending",
+            ProcessedAt = p.ProcessedAt,
+            ProcessingError = p.ProcessingError,
+            ProcessingAttempts = p.ProcessingAttempts,
+            CreatedDate = p.CreatedDate != default ? p.CreatedDate : DateTime.UtcNow,
             IsDeleted = false
-        }).ToList();
-
-        // 4. Use HighSpeedDAL's bulk insert
-        return await _dal.BulkInsertAsync(entities, "System", System.Threading.CancellationToken.None);
-    }
-
-    private async Task<System.Collections.Generic.HashSet<string>> GetExistingExternalIdsAsync(System.Collections.Generic.List<string> externalIds)
-    {
-        var existing = new System.Collections.Generic.HashSet<string>();
-        if (!externalIds.Any()) return existing;
-
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-
-        // Create a temp table to hold the IDs we want to check
-        using (var cmd = new SqlCommand("CREATE TABLE #CheckIds (ExternalId NVARCHAR(100) COLLATE DATABASE_DEFAULT PRIMARY KEY)", conn))
-        {
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Bulk insert IDs into temp table
-        using (var bulk = new SqlBulkCopy(conn))
-        {
-            bulk.DestinationTableName = "#CheckIds";
-            var table = new DataTable();
-            table.Columns.Add("ExternalId", typeof(string));
-            foreach (var id in externalIds) table.Rows.Add(id);
-            await bulk.WriteToServerAsync(table);
-        }
-
-        // Query for matches
-        using (var cmd = new SqlCommand("SELECT p.ExternalId FROM ProductStaging p JOIN #CheckIds c ON p.ExternalId = c.ExternalId WHERE p.IsDeleted = 0", conn))
-        using (var reader = await cmd.ExecuteReaderAsync())
-        {
-            while (await reader.ReadAsync())
-            {
-                existing.Add(reader.GetString(0));
-            }
-        }
-
-        return existing;
-    }
-
-    private static string? SanitizeScore(string? score)
-    {
-        if (string.IsNullOrWhiteSpace(score)) return null;
-        if (score.Length > 10) return score.Substring(0, 10);
-        return score;
-    }
-
-    public async Task<int> BulkAugmentStagingProductsAsync(IEnumerable<StagedProduct> products, string sourceLabel)
-    {
-        var productList = products.ToList();
-        if (!productList.Any()) return 0;
-
-        await using var connection = new SqlConnection(_dbConnection.ConnectionString);
-        await connection.OpenAsync();
-
-        using var transaction = (SqlTransaction)connection.BeginTransaction();
-        try
-        {
-            int augmentedCount = 0;
-
-            const string sql = @"
-                        UPDATE ProductStaging
-                        SET 
-                            ProductName = COALESCE(ProductName, @ProductName),
-                            GenericName = COALESCE(GenericName, @GenericName),
-                            Brands = COALESCE(Brands, @Brands),
-                            IngredientsText = COALESCE(IngredientsText, @IngredientsText),
-                            IngredientsTextEn = COALESCE(IngredientsTextEn, @IngredientsTextEn),
-                            Allergens = COALESCE(Allergens, @Allergens),
-                            AllergensHierarchy = COALESCE(AllergensHierarchy, @AllergensHierarchy),
-                            Categories = COALESCE(Categories, @Categories),
-                            CategoriesHierarchy = COALESCE(CategoriesHierarchy, @CategoriesHierarchy),
-                            NutritionData = COALESCE(NutritionData, @NutritionData),
-                            ImageUrl = COALESCE(ImageUrl, @ImageUrl),
-                            ImageSmallUrl = COALESCE(ImageSmallUrl, @ImageSmallUrl),
-                            Countries = COALESCE(Countries, @Countries),
-                            NutriScore = COALESCE(NutriScore, @NutriScore),
-                            NovaGroup = COALESCE(NovaGroup, @NovaGroup),
-                            EcoScore = COALESCE(EcoScore, @EcoScore),
-                            ModifiedDate = GETUTCDATE()
-                        WHERE Barcode = @Barcode AND IsDeleted = 0";
-
-            using var command = new SqlCommand(sql, connection, transaction);
-            command.Parameters.Add("@Barcode", SqlDbType.NVarChar, 50);
-            command.Parameters.Add("@ProductName", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@GenericName", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@Brands", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@IngredientsText", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@IngredientsTextEn", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@Allergens", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@AllergensHierarchy", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@Categories", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@CategoriesHierarchy", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@NutritionData", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@ImageUrl", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@ImageSmallUrl", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@Countries", SqlDbType.NVarChar, 200);
-            command.Parameters.Add("@NutriScore", SqlDbType.NVarChar, 10);
-            command.Parameters.Add("@NovaGroup", SqlDbType.Int);
-            command.Parameters.Add("@EcoScore", SqlDbType.NVarChar, 10);
-
-            foreach (var product in productList)
-            {
-                if (string.IsNullOrWhiteSpace(product.Barcode))
-                    continue;
-
-                command.Parameters["@Barcode"].Value = product.Barcode;
-                command.Parameters["@ProductName"].Value = (object?)product.ProductName ?? DBNull.Value;
-                command.Parameters["@GenericName"].Value = (object?)product.GenericName ?? DBNull.Value;
-                command.Parameters["@Brands"].Value = (object?)product.Brands ?? DBNull.Value;
-                command.Parameters["@IngredientsText"].Value = (object?)product.IngredientsText ?? DBNull.Value;
-                command.Parameters["@IngredientsTextEn"].Value = (object?)product.IngredientsTextEn ?? DBNull.Value;
-                command.Parameters["@Allergens"].Value = (object?)product.Allergens ?? DBNull.Value;
-                command.Parameters["@AllergensHierarchy"].Value = (object?)product.AllergensHierarchy ?? DBNull.Value;
-                command.Parameters["@Categories"].Value = (object?)product.Categories ?? DBNull.Value;
-                command.Parameters["@CategoriesHierarchy"].Value = (object?)product.CategoriesHierarchy ?? DBNull.Value;
-                command.Parameters["@NutritionData"].Value = (object?)product.NutritionData ?? DBNull.Value;
-                command.Parameters["@ImageUrl"].Value = (object?)product.ImageUrl ?? DBNull.Value;
-                command.Parameters["@ImageSmallUrl"].Value = (object?)product.ImageSmallUrl ?? DBNull.Value;
-                command.Parameters["@Countries"].Value = (object?)product.Countries ?? DBNull.Value;
-                command.Parameters["@NutriScore"].Value = (object?)product.NutriScore ?? DBNull.Value;
-                command.Parameters["@NovaGroup"].Value = (object?)product.NovaGroup ?? DBNull.Value;
-                command.Parameters["@EcoScore"].Value = (object?)product.EcoScore ?? DBNull.Value;
-
-                    var rowsAffected = await command.ExecuteNonQueryAsync();
-                if (rowsAffected > 0)
-                    augmentedCount++;
-            }
-            transaction.Commit();
-            return augmentedCount;
-        }
-        catch
-        {
-            transaction.Rollback();
-            throw;
-        }
-    }
-
-    public async Task<List<StagedProduct>> GetPendingProductsAsync(int limit = 100)
-    {
-        const string sql = @"
-            SELECT TOP (@Limit)
-                Id, ExternalId, Barcode, ProductName, GenericName, Brands,
-                IngredientsText, IngredientsTextEn, Allergens, AllergensHierarchy,
-                Categories, CategoriesHierarchy, NutritionData,
-                ImageUrl, ImageSmallUrl, Lang, Countries,
-                NutriScore, NovaGroup, EcoScore, RawJson,
-                ProcessingStatus, ProcessedAt, ProcessingError, ProcessingAttempts,
-                CreatedDate, ModifiedDate
-            FROM ProductStaging WITH (UPDLOCK, READPAST)
-            WHERE ProcessingStatus = 'Pending'
-                AND IsDeleted = 0
-                AND ProcessingAttempts < 3
-            ORDER BY CreatedDate ASC";
-
-        // Use 120 second timeout during high-volume processing
-        return await ExecuteReaderAsync(sql, MapStagedProduct, 120, new SqlParameter("@Limit", limit));
-    }
-
-    public async Task UpdateProcessingStatusAsync(Guid id, string status, string? error = null)
-    {
-        const string sql = @"
-            UPDATE ProductStaging
-            SET ProcessingStatus = @Status,
-                ProcessedAt = CASE WHEN @Status = 'Completed' THEN GETUTCDATE() ELSE ProcessedAt END,
-                ProcessingError = @Error,
-                ProcessingAttempts = ProcessingAttempts + 1,
-                ModifiedDate = GETUTCDATE()
-            WHERE Id = @Id";
-
-        await ExecuteNonQueryAsync(sql,
-            new SqlParameter("@Id", id),
-            new SqlParameter("@Status", status),
-            new SqlParameter("@Error", (object?)error ?? DBNull.Value)
-        );
-    }
-
-    public async Task<int> GetPendingCountAsync()
-    {
-        const string sql = @"
-            SELECT COUNT(*)
-            FROM ProductStaging WITH (NOLOCK)
-            WHERE ProcessingStatus = 'Pending'
-                AND IsDeleted = 0
-                AND ProcessingAttempts < 3";
-
-        // Use 120 second timeout during high-volume processing
-        return await ExecuteScalarAsync<int>(sql);
-    }
-
-    public async Task<int> ExecuteNonQueryAsync(string sql, params SqlParameter[] parameters)
-    {
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        if (parameters?.Any() == true) cmd.Parameters.AddRange(parameters);
-        return await cmd.ExecuteNonQueryAsync();
-    }
-
-    private async Task<TResult> ExecuteScalarAsync<TResult>(string sql, params SqlParameter[] parameters)
-    {
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn)
-        {
-            CommandTimeout = 30
         };
-        if (parameters?.Any() == true) cmd.Parameters.AddRange(parameters);
-        var result = await cmd.ExecuteScalarAsync();
-        if (result == null || result == DBNull.Value)
-            return default!;
-
-        // Convert.ChangeType does not support Guid; handle common conversions explicitly
-        if (typeof(TResult) == typeof(Guid))
-        {
-            return (TResult)(object) (result is Guid g ? g : Guid.Parse(result.ToString()!));
-        }
-
-        return (TResult)Convert.ChangeType(result, typeof(TResult));
     }
 
-    private async Task<List<T>> ExecuteReaderAsync<T>(string sql, Func<SqlDataReader, T> map, int timeoutSeconds = 30, params SqlParameter[] parameters)
-    {
-        var list = new List<T>();
-        await using var conn = new SqlConnection(_dbConnection.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn)
-        {
-            CommandTimeout = timeoutSeconds
-        };
-        if (parameters?.Any() == true) cmd.Parameters.AddRange(parameters);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            list.Add(map(reader));
-        }
-        return list;
-    }
-
-    // timeout overload removed to avoid ambiguous overload resolution with params overload
-
-    private static StagedProduct MapStagedProduct(SqlDataReader reader)
+    private static StagedProduct MapEntityToStagedProduct(ProductStagingEntity e)
     {
         return new StagedProduct
         {
-            Id = reader.GetGuid(reader.GetOrdinal("Id")),
-            ExternalId = reader.GetString(reader.GetOrdinal("ExternalId")),
-            Barcode = reader.IsDBNull(reader.GetOrdinal("Barcode")) ? null : reader.GetString(reader.GetOrdinal("Barcode")),
-            ProductName = reader.IsDBNull(reader.GetOrdinal("ProductName")) ? null : reader.GetString(reader.GetOrdinal("ProductName")),
-            GenericName = reader.IsDBNull(reader.GetOrdinal("GenericName")) ? null : reader.GetString(reader.GetOrdinal("GenericName")),
-            Brands = reader.IsDBNull(reader.GetOrdinal("Brands")) ? null : reader.GetString(reader.GetOrdinal("Brands")),
-            IngredientsText = reader.IsDBNull(reader.GetOrdinal("IngredientsText")) ? null : reader.GetString(reader.GetOrdinal("IngredientsText")),
-            IngredientsTextEn = reader.IsDBNull(reader.GetOrdinal("IngredientsTextEn")) ? null : reader.GetString(reader.GetOrdinal("IngredientsTextEn")),
-            Allergens = reader.IsDBNull(reader.GetOrdinal("Allergens")) ? null : reader.GetString(reader.GetOrdinal("Allergens")),
-            AllergensHierarchy = reader.IsDBNull(reader.GetOrdinal("AllergensHierarchy")) ? null : reader.GetString(reader.GetOrdinal("AllergensHierarchy")),
-            Categories = reader.IsDBNull(reader.GetOrdinal("Categories")) ? null : reader.GetString(reader.GetOrdinal("Categories")),
-            CategoriesHierarchy = reader.IsDBNull(reader.GetOrdinal("CategoriesHierarchy")) ? null : reader.GetString(reader.GetOrdinal("CategoriesHierarchy")),
-            NutritionData = reader.IsDBNull(reader.GetOrdinal("NutritionData")) ? null : reader.GetString(reader.GetOrdinal("NutritionData")),
-            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
-            ImageSmallUrl = reader.IsDBNull(reader.GetOrdinal("ImageSmallUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageSmallUrl")),
-            Lang = reader.IsDBNull(reader.GetOrdinal("Lang")) ? null : reader.GetString(reader.GetOrdinal("Lang")),
-            Countries = reader.IsDBNull(reader.GetOrdinal("Countries")) ? null : reader.GetString(reader.GetOrdinal("Countries")),
-            NutriScore = reader.IsDBNull(reader.GetOrdinal("NutriScore")) ? null : reader.GetString(reader.GetOrdinal("NutriScore")),
-            NovaGroup = reader.IsDBNull(reader.GetOrdinal("NovaGroup")) ? null : reader.GetInt32(reader.GetOrdinal("NovaGroup")),
-            EcoScore = reader.IsDBNull(reader.GetOrdinal("EcoScore")) ? null : reader.GetString(reader.GetOrdinal("EcoScore")),
-            RawJson = reader.IsDBNull(reader.GetOrdinal("RawJson")) ? null : reader.GetString(reader.GetOrdinal("RawJson")),
-            ProcessingStatus = reader.GetString(reader.GetOrdinal("ProcessingStatus")),
-            ProcessedAt = reader.IsDBNull(reader.GetOrdinal("ProcessedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ProcessedAt")),
-            ProcessingError = reader.IsDBNull(reader.GetOrdinal("ProcessingError")) ? null : reader.GetString(reader.GetOrdinal("ProcessingError")),
-            ProcessingAttempts = reader.GetInt32(reader.GetOrdinal("ProcessingAttempts")),
-            CreatedDate = reader.GetDateTime(reader.GetOrdinal("CreatedDate")),
-            ModifiedDate = reader.IsDBNull(reader.GetOrdinal("ModifiedDate")) ? null : reader.GetDateTime(reader.GetOrdinal("ModifiedDate"))
+            Id = e.Id,
+            ExternalId = e.ExternalId,
+            Barcode = e.Barcode,
+            ProductName = e.ProductName,
+            GenericName = e.GenericName,
+            Brands = e.Brands,
+            IngredientsText = e.IngredientsText,
+            IngredientsTextEn = e.IngredientsTextEn,
+            Allergens = e.Allergens,
+            AllergensHierarchy = e.AllergensHierarchy,
+            Categories = e.Categories,
+            CategoriesHierarchy = e.CategoriesHierarchy,
+            NutritionData = e.NutritionData,
+            ImageUrl = e.ImageUrl,
+            ImageSmallUrl = e.ImageSmallUrl,
+            Lang = e.Lang,
+            Countries = e.Countries,
+            NutriScore = e.NutriScore,
+            NovaGroup = e.NovaGroup,
+            EcoScore = e.EcoScore,
+            RawJson = e.RawJson,
+            ProcessingStatus = e.ProcessingStatus,
+            ProcessedAt = e.ProcessedAt,
+            ProcessingError = e.ProcessingError,
+            ProcessingAttempts = e.ProcessingAttempts,
+            CreatedDate = e.CreatedDate,
+            ModifiedDate = e.ModifiedDate
         };
     }
 }

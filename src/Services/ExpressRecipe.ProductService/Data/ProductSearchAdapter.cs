@@ -35,6 +35,26 @@ public class ProductSearchAdapter
         return results.ToList();
     }
 
+    public async Task<ProductDto?> GetByBarcodeAsync(string barcode)
+    {
+        var sql = "SELECT * FROM Product WHERE Barcode = @Barcode AND IsDeleted = 0";
+        var parameters = new { Barcode = barcode };
+        var results = await _dalBase.ExecuteQueryPublicAsync<ProductDto>(sql, MapFromReader, parameters, null, CancellationToken.None);
+        return results.FirstOrDefault();
+    }
+
+    public async Task<ProductDto?> GetByExternalIdAsync(string source, string externalId)
+    {
+        var sql = @"
+            SELECT p.*
+            FROM Product p
+            JOIN ProductExternalLink l ON p.Id = l.ProductId
+            WHERE l.Source = @Source AND l.ExternalId = @ExternalId AND p.IsDeleted = 0";
+        var parameters = new { Source = source, ExternalId = externalId };
+        var results = await _dalBase.ExecuteQueryPublicAsync<ProductDto>(sql, MapFromReader, parameters, null, CancellationToken.None);
+        return results.FirstOrDefault();
+    }
+
     public async Task<int> GetSearchCountAsync(ProductSearchRequest request)
     {
         var sql = BuildCountSql(request, out object? parameters);
@@ -68,7 +88,7 @@ public class ProductSearchAdapter
             ApprovedAt = r.IsDBNull(r.GetOrdinal("ApprovedAt")) ? null : r.GetDateTime(r.GetOrdinal("ApprovedAt")),
             RejectionReason = r.IsDBNull(r.GetOrdinal("RejectionReason")) ? null : r.GetString(r.GetOrdinal("RejectionReason")),
             SubmittedBy = r.IsDBNull(r.GetOrdinal("SubmittedBy")) ? null : r.GetGuid(r.GetOrdinal("SubmittedBy")),
-            CreatedAt = r.IsDBNull(r.GetOrdinal("CreatedAt")) ? DateTime.UtcNow : r.GetDateTime(r.GetOrdinal("CreatedAt"))
+            CreatedAt = r.IsDBNull(r.GetOrdinal("CreatedDate")) ? DateTime.UtcNow : r.GetDateTime(r.GetOrdinal("CreatedDate"))
         };
     }
 
@@ -90,6 +110,55 @@ public class ProductSearchAdapter
     {
         parameters = new { };
         return $@"SELECT UPPER(SUBSTRING(Name,1,1)) AS FirstLetter, COUNT(*) AS ProductCount FROM Product WHERE IsDeleted = 0 GROUP BY UPPER(SUBSTRING(Name,1,1)) ORDER BY FirstLetter";
+    }
+
+    public async Task<IEnumerable<string>> GetExistingBarcodesAsync(IEnumerable<string> barcodes)
+    {
+        var barcodeList = barcodes.ToList();
+        if (!barcodeList.Any()) return Enumerable.Empty<string>();
+
+        // Use a temp table approach for large lists
+        var barcodeParams = string.Join(",", barcodeList.Select((_, i) => $"@b{i}"));
+        var sql = $"SELECT Barcode FROM Product WHERE Barcode IN ({barcodeParams}) AND IsDeleted = 0";
+
+        var parameters = new System.Dynamic.ExpandoObject() as IDictionary<string, object?>;
+        for (int i = 0; i < barcodeList.Count; i++)
+        {
+            parameters[$"b{i}"] = barcodeList[i];
+        }
+
+        var results = await _dalBase.ExecuteQueryPublicAsync<string>(
+            sql,
+            r => r.GetString(0),
+            parameters,
+            null,
+            CancellationToken.None);
+
+        return results;
+    }
+
+    public async Task<Dictionary<string, Guid>> GetProductIdsByBarcodesAsync(IEnumerable<string> barcodes)
+    {
+        var barcodeList = barcodes.ToList();
+        if (!barcodeList.Any()) return new Dictionary<string, Guid>();
+
+        var barcodeParams = string.Join(",", barcodeList.Select((_, i) => $"@b{i}"));
+        var sql = $"SELECT Barcode, Id FROM Product WHERE Barcode IN ({barcodeParams}) AND IsDeleted = 0";
+
+        var parameters = new System.Dynamic.ExpandoObject() as IDictionary<string, object?>;
+        for (int i = 0; i < barcodeList.Count; i++)
+        {
+            parameters[$"b{i}"] = barcodeList[i];
+        }
+
+        var results = await _dalBase.ExecuteQueryPublicAsync<(string Barcode, Guid Id)>(
+            sql,
+            r => (r.GetString(0), r.GetGuid(1)),
+            parameters,
+            null,
+            CancellationToken.None);
+
+        return results.ToDictionary(x => x.Barcode, x => x.Id, StringComparer.OrdinalIgnoreCase);
     }
 
     // Internal lightweight DalBase implementation to call protected Execute* methods

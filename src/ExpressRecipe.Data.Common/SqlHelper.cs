@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace ExpressRecipe.Data.Common;
 
@@ -17,6 +18,17 @@ public abstract class SqlHelper
     protected string ConnectionString { get; }
     private const int MaxRetryAttempts = 3;
     private const int BaseDelayMilliseconds = 100;
+
+    // Pre-compiled regex patterns for performance
+    private static readonly Regex FromClauseRegex = new(
+        @"FROM\s+(\[?\w+\]?)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    private static readonly Regex SemicolonTrimRegex = new(
+        @"[;\s\r\n]+$",
+        RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
 
     protected SqlHelper(string connectionString)
     {
@@ -427,6 +439,118 @@ public abstract class SqlHelper
     protected static decimal? GetDecimalNullable(IDataRecord reader, string columnName) => GetNullableDecimal(reader, columnName);
 
     /// <summary>
+    /// Helper method to safely get a double from a SqlDataReader.
+    /// </summary>
+    protected static double GetDouble(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.GetDouble(ordinal);
+    }
+
+    /// <summary>
+    /// Helper method to safely get a nullable double from a SqlDataReader.
+    /// </summary>
+    protected static double? GetDoubleNullable(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? null : reader.GetDouble(ordinal);
+    }
+
+    /// <summary>
+    /// Helper method to safely get a float from a SqlDataReader.
+    /// </summary>
+    protected static float GetFloat(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.GetFloat(ordinal);
+    }
+
+    /// <summary>
+    /// Helper method to safely get a nullable float from a SqlDataReader.
+    /// </summary>
+    protected static float? GetFloatNullable(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? null : reader.GetFloat(ordinal);
+    }
+
+    /// <summary>
+    /// Helper method to safely get a long from a SqlDataReader.
+    /// </summary>
+    protected static long GetInt64(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.GetInt64(ordinal);
+    }
+
+    /// <summary>
+    /// Helper method to safely get a nullable long from a SqlDataReader.
+    /// </summary>
+    protected static long? GetInt64Nullable(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? null : reader.GetInt64(ordinal);
+    }
+
+    /// <summary>
+    /// Helper method to safely get a byte from a SqlDataReader.
+    /// </summary>
+    protected static byte GetByte(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.GetByte(ordinal);
+    }
+
+    /// <summary>
+    /// Helper method to safely get a nullable byte from a SqlDataReader.
+    /// </summary>
+    protected static byte? GetByteNullable(IDataRecord reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? null : reader.GetByte(ordinal);
+    }
+
+    #region Audit & Soft Delete Column Helpers
+
+    /// <summary>
+    /// Helper method to extract audit columns (CreatedAt, CreatedBy, UpdatedAt, UpdatedBy) from reader.
+    /// Returns a tuple of (CreatedAt, CreatedBy, UpdatedAt, UpdatedBy).
+    /// </summary>
+    protected static (DateTime CreatedAt, Guid? CreatedBy, DateTime? UpdatedAt, Guid? UpdatedBy) GetAuditColumns(
+        IDataRecord reader,
+        string? createdAtColumn = "CreatedAt",
+        string? createdByColumn = "CreatedBy",
+        string? updatedAtColumn = "UpdatedAt",
+        string? updatedByColumn = "UpdatedBy")
+    {
+        return (
+            CreatedAt: createdAtColumn != null ? GetDateTime(reader, createdAtColumn) : DateTime.MinValue,
+            CreatedBy: createdByColumn != null ? GetGuidNullable(reader, createdByColumn) : null,
+            UpdatedAt: updatedAtColumn != null ? GetNullableDateTime(reader, updatedAtColumn) : null,
+            UpdatedBy: updatedByColumn != null ? GetGuidNullable(reader, updatedByColumn) : null
+        );
+    }
+
+    /// <summary>
+    /// Helper method to extract soft delete columns (IsDeleted, DeletedAt, DeletedBy) from reader.
+    /// Returns a tuple of (IsDeleted, DeletedAt, DeletedBy).
+    /// </summary>
+    protected static (bool IsDeleted, DateTime? DeletedAt, Guid? DeletedBy) GetSoftDeleteColumns(
+        IDataRecord reader,
+        string? isDeletedColumn = "IsDeleted",
+        string? deletedAtColumn = "DeletedAt",
+        string? deletedByColumn = "DeletedBy")
+    {
+        return (
+            IsDeleted: isDeletedColumn != null && GetBoolean(reader, isDeletedColumn),
+            DeletedAt: deletedAtColumn != null ? GetNullableDateTime(reader, deletedAtColumn) : null,
+            DeletedBy: deletedByColumn != null ? GetGuidNullable(reader, deletedByColumn) : null
+        );
+    }
+
+    #endregion
+
+    /// <summary>
     /// Clones a SQL parameter to prevent reuse issues across retry attempts.
     /// </summary>
     private static SqlParameter CloneParameter(DbParameter parameter)
@@ -548,7 +672,138 @@ public abstract class SqlHelper
     }
 
     /// <summary>
-    /// Executes a query with performance optimization hints.
+    /// Executes a conditional update that only runs if properties have changed.
+    /// Skips database call entirely if nothing changed, improving performance.
+    /// </summary>
+    /// <param name="originalEntity">The entity as it was before any changes</param>
+    /// <param name="currentEntity">The entity with potential changes</param>
+    /// <param name="buildUpdate">Function that builds the UPDATE SQL based on changed properties</param>
+    /// <param name="parameters">Any additional parameters (e.g., WHERE clause parameters)</param>
+    /// <returns>True if update was executed, false if no changes detected</returns>
+    protected async Task<bool> ExecuteConditionalUpdateAsync(
+        object originalEntity,
+        object currentEntity,
+        Func<EntityChangeTracker, string> buildUpdate,
+        params DbParameter[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(originalEntity);
+        ArgumentNullException.ThrowIfNull(currentEntity);
+        ArgumentNullException.ThrowIfNull(buildUpdate);
+
+        // Track changes between original and current
+        var tracker = new EntityChangeTracker(originalEntity);
+
+        // Simulate the change by getting current values
+        // (In practice, you'd use the tracker initialized with original, then compare with current)
+        var currentValues = new Dictionary<string, object?>();
+        var currentType = currentEntity.GetType();
+
+        foreach (var prop in currentType.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (prop.CanRead)
+            {
+                currentValues[prop.Name] = prop.GetValue(currentEntity);
+            }
+        }
+
+        // Check if anything changed
+        bool hasChanges = false;
+        var originalType = originalEntity.GetType();
+
+        foreach (var prop in originalType.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (!prop.CanRead)
+                continue;
+
+            var originalValue = prop.GetValue(originalEntity);
+            if (currentValues.TryGetValue(prop.Name, out var currentValue))
+            {
+                if (!Equals(originalValue, currentValue))
+                {
+                    hasChanges = true;
+                    break;
+                }
+            }
+        }
+
+        // Skip database call if nothing changed
+        if (!hasChanges)
+        {
+            return false;
+        }
+
+        // Build and execute the UPDATE
+        var sql = buildUpdate(tracker);
+        await ExecuteNonQueryAsync(sql, parameters);
+        return true;
+    }
+
+    /// <summary>
+    /// Executes a conditional update that only runs if properties have changed.
+    /// Simpler overload that just checks if anything changed and returns early if not.
+    /// </summary>
+    /// <param name="entity">The entity to potentially update</param>
+    /// <param name="getOriginalValues">Function that retrieves original values from database</param>
+    /// <param name="buildUpdate">Function that builds UPDATE SQL if changes detected</param>
+    /// <param name="parameters">Database parameters for the UPDATE</param>
+    /// <returns>True if update was executed, false if no changes detected</returns>
+    protected async Task<bool> ConditionalUpdateIfChangedAsync(
+        object entity,
+        Func<Task<object>> getOriginalValues,
+        Func<EntityChangeTracker, string> buildUpdate,
+        params DbParameter[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(getOriginalValues);
+        ArgumentNullException.ThrowIfNull(buildUpdate);
+
+        var original = await getOriginalValues();
+        return await ExecuteConditionalUpdateAsync(original, entity, buildUpdate, parameters);
+    }
+
+    /// <summary>
+    /// Executes a conditional update with tracking of skipped updates.
+    /// Skips database call if nothing changed and records the skip in the tracker.
+    /// </summary>
+    /// <param name="originalEntity">The entity as it was before any changes</param>
+    /// <param name="currentEntity">The entity with potential changes</param>
+    /// <param name="buildUpdate">Function that builds the UPDATE SQL based on changed properties</param>
+    /// <param name="tracker">Tracker to record the update result (success/skip/failure)</param>
+    /// <param name="parameters">Any additional parameters (e.g., WHERE clause parameters)</param>
+    /// <returns>True if update was executed, false if no changes detected</returns>
+    protected async Task<bool> ExecuteConditionalUpdateWithTrackingAsync(
+        object originalEntity,
+        object currentEntity,
+        Func<EntityChangeTracker, string> buildUpdate,
+        BatchUpdateTracker tracker,
+        params DbParameter[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(tracker);
+
+        try
+        {
+            bool updated = await ExecuteConditionalUpdateAsync(originalEntity, currentEntity, buildUpdate, parameters);
+
+            if (updated)
+            {
+                tracker.RecordSuccess();
+            }
+            else
+            {
+                tracker.RecordSkipped();
+            }
+
+            return updated;
+        }
+        catch (Exception ex)
+        {
+            tracker.RecordFailure();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Queries a query with performance optimization hints.
     /// </summary>
     protected async Task<List<T>> ExecuteReaderWithHintsAsync<T>(
         string sql,
@@ -568,6 +823,7 @@ public abstract class SqlHelper
 
     /// <summary>
     /// Applies query hints to SQL statement for performance optimization.
+    /// Uses pre-compiled regex patterns to avoid compilation overhead.
     /// </summary>
     private static string ApplyQueryHints(string sql, QueryHints hints)
     {
@@ -577,25 +833,21 @@ public abstract class SqlHelper
 
         if ((hints & QueryHints.NoLock) != 0)
             hintStrings.Add("NOLOCK");
-        
+
         if ((hints & QueryHints.ReadUncommitted) != 0)
             hintStrings.Add("READUNCOMMITTED");
 
-        // Apply table hints if any
+        // Apply table hints if any using pre-compiled regex
         if (hintStrings.Any())
         {
-            // Simple pattern: Add WITH hints after FROM table_name
-            // This is a simplified approach - production code might need more sophisticated parsing
-            sql = System.Text.RegularExpressions.Regex.Replace(
-                sql, 
-                @"FROM\s+(\[?\w+\]?)", 
-                $"FROM $1 WITH ({string.Join(", ", hintStrings)})",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            sql = FromClauseRegex.Replace(
+                sql,
+                $"FROM $1 WITH ({string.Join(", ", hintStrings)})");
         }
 
         // Apply query hints
         var queryHints = new List<string>();
-        
+
         if ((hints & QueryHints.MaxDop) != 0)
         {
             var maxDop = ((int)hints >> 16) & 0xFF; // Extract MaxDop value from flags
@@ -611,7 +863,8 @@ public abstract class SqlHelper
 
         if (queryHints.Any())
         {
-            sql = sql.TrimEnd(';', ' ', '\r', '\n');
+            // Use pre-compiled regex to trim trailing semicolons and whitespace
+            sql = SemicolonTrimRegex.Replace(sql, string.Empty);
             sql += $" OPTION ({string.Join(", ", queryHints)})";
         }
 

@@ -27,4 +27,9 @@ public interface IProductRepository
     Task UpdateProductMetadataAsync(Guid productId, string key, string value);
     Task<ProductDto?> GetProductByExternalIdAsync(string source, string externalId);
     Task<int?> GetProductCountAsync();
+
+    // Bulk operations for batch processing
+    Task<IEnumerable<string>> GetExistingBarcodesAsync(IEnumerable<string> barcodes);
+    Task<Dictionary<string, Guid>> GetProductIdsByBarcodesAsync(IEnumerable<string> barcodes);
+    Task BulkAddExternalLinksAsync(IEnumerable<(Guid ProductId, string Source, string ExternalId)> links);
 }

@@ -91,6 +91,9 @@ internal sealed class EntityMetadata
             /// Values: "Int" (default) or "Guid"
             /// </summary>
             public string PrimaryKeyType { get; set; } = "Int";
+
+            // Named queries
+            public List<NamedQueryMetadata> NamedQueries { get; set; } = new List<NamedQueryMetadata>();
         }
 
 /// <summary>
@@ -145,4 +148,35 @@ internal sealed class ConnectionMetadata
     public string Namespace { get; set; } = string.Empty;
     public string DatabaseProvider { get; set; } = "SqlServer";
     public List<EntityMetadata> Entities { get; set; } = new List<EntityMetadata>();
+}
+
+/// <summary>
+/// Metadata about a named query defined via [NamedQuery] attribute
+/// </summary>
+internal sealed class NamedQueryMetadata
+{
+    /// <summary>
+    /// The name of the query (used in method name: Get{Name}Async)
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The property names to include in the WHERE clause
+    /// </summary>
+    public List<string> PropertyNames { get; set; } = new List<string>();
+
+    /// <summary>
+    /// If true, the query returns a single result (FirstOrDefault)
+    /// </summary>
+    public bool IsSingle { get; set; }
+
+    /// <summary>
+    /// If true, automatically adds IsDeleted = 0 filter for [SoftDelete] entities
+    /// </summary>
+    public bool AutoFilterDeleted { get; set; } = true;
+
+    /// <summary>
+    /// If true, results are cached using the entity's cache strategy
+    /// </summary>
+    public bool EnableCache { get; set; } = true;
 }

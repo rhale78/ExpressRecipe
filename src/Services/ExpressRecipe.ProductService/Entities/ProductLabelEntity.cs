@@ -9,7 +9,10 @@ namespace ExpressRecipe.ProductService.Entities;
 /// </summary>
 [DalEntity]
 [Table("ProductLabel", PrimaryKeyType = PrimaryKeyType.Guid)]
-[AutoAudit] // Assumes CreatedDate, CreatedBy etc. are managed by the DAL
+[AutoAudit]
+[SoftDelete]
+[NamedQuery("ByProductId", nameof(ProductId))]
+[NamedQuery("ByLabelName", nameof(LabelName))]
 [MessagePackObject]
 public partial class ProductLabelEntity
 {
@@ -23,5 +26,6 @@ public partial class ProductLabelEntity
 
     [Key(2)]
     [Index]
+    [Column(TypeName = "NVARCHAR(450)")]
     public string LabelName { get; set; } = string.Empty;
 }

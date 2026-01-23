@@ -29,6 +29,45 @@ internal sealed partial class DalClassGenerator
         code.AppendLine();
         code.AppendLine($"        Logger.LogDebug(\"Retrieving {{Count}} {_metadata.ClassName} entities by IDs\", idList.Count);");
         code.AppendLine();
+
+        // Check in-memory table first
+        if (_metadata.HasInMemoryTable)
+        {
+            code.AppendLine("        // Try in-memory table first");
+            code.AppendLine("        if (_inMemoryTable != null)");
+            code.AppendLine("        {");
+            code.AppendLine("            try");
+            code.AppendLine("            {");
+            code.AppendLine($"                var inMemoryResults = new List<{_metadata.ClassName}>();");
+            code.AppendLine($"                var missingIds = new List<{PrimaryKeyType}>();");
+            code.AppendLine();
+            code.AppendLine("                foreach (var id in idList)");
+            code.AppendLine("                {");
+            code.AppendLine("                    var entity = _inMemoryTable.GetById(id);");
+            code.AppendLine("                    if (entity != null)");
+            code.AppendLine("                        inMemoryResults.Add(entity);");
+            code.AppendLine("                    else");
+            code.AppendLine("                        missingIds.Add(id);");
+            code.AppendLine("                }");
+            code.AppendLine();
+            code.AppendLine("                if (missingIds.Count == 0)");
+            code.AppendLine("                {");
+            code.AppendLine($"                    Logger.LogDebug(\"All {{Count}} entities found in in-memory table\", inMemoryResults.Count);");
+            code.AppendLine($"                    DataSourceLogger.LogMemoryRead(Logger, \"{_metadata.TableName}\", \"GetByIdsAsync\", null, inMemoryResults.Count);");
+            code.AppendLine("                    return inMemoryResults;");
+            code.AppendLine("                }");
+            code.AppendLine();
+            code.AppendLine($"                Logger.LogDebug(\"Found {{FoundCount}}/{{TotalCount}} in memory, fetching {{MissingCount}} from database\", inMemoryResults.Count, idList.Count, missingIds.Count);");
+            code.AppendLine("                idList = missingIds;");
+            code.AppendLine("            }");
+            code.AppendLine("            catch (Exception ex)");
+            code.AppendLine("            {");
+            code.AppendLine($"                Logger.LogWarning(ex, \"In-memory table lookup failed, falling back to database\");");
+            code.AppendLine("            }");
+            code.AppendLine("        }");
+            code.AppendLine();
+        }
+
         code.AppendLine("        string idsString = string.Join(\",\", idList);");
         code.AppendLine("        Dictionary<string, object> parameters = new Dictionary<string, object>");
         code.AppendLine("        {");
@@ -76,24 +115,36 @@ internal sealed partial class DalClassGenerator
         code.AppendLine();
         code.AppendLine($"        Logger.LogInformation(\"Bulk updating {{Count}} {_metadata.ClassName} entities\", entityList.Count);");
         code.AppendLine();
-            code.AppendLine("        int totalUpdated = 0;");
-            code.AppendLine($"        foreach ({_metadata.ClassName} entity in entityList)");
-            code.AppendLine("        {");
-
-            if (_metadata.IsAuditable)
-            {
-                code.AppendLine("            await UpdateAsync(entity, userName, cancellationToken);");
-            }
-            else
-            {
-                code.AppendLine("            await UpdateAsync(entity, cancellationToken);");
-            }
-
-            code.AppendLine("            totalUpdated++;");
-            code.AppendLine("        }");
-            code.AppendLine();
-            code.AppendLine($"        Logger.LogInformation(\"Bulk updated {{Count}} {_metadata.ClassName} entities\", totalUpdated);");
-            code.AppendLine("        return totalUpdated;");
+        code.AppendLine("        // Batch updates in parallel for better performance");
+        code.AppendLine("        const int BATCH_SIZE = 50;  // Update 50 entities at a time");
+        code.AppendLine("        int totalUpdated = 0;");
+        code.AppendLine();
+        code.AppendLine("        // Process entities in batches of parallel tasks");
+        code.AppendLine("        for (int i = 0; i < entityList.Count; i += BATCH_SIZE)");
+        code.AppendLine("        {");
+        code.AppendLine("            var batch = entityList.Skip(i).Take(BATCH_SIZE).ToList();");
+        code.AppendLine("            var updateTasks = new List<Task>();");
+        code.AppendLine();
+        code.AppendLine("            foreach (var entity in batch)");
+        code.AppendLine("            {");
+        code.AppendLine("                // Queue updates without awaiting each one");
+        if (_metadata.IsAuditable)
+        {
+            code.AppendLine("                updateTasks.Add(UpdateAsync(entity, userName, cancellationToken));");
+        }
+        else
+        {
+            code.AppendLine("                updateTasks.Add(UpdateAsync(entity, cancellationToken));");
+        }
+        code.AppendLine("            }");
+        code.AppendLine();
+        code.AppendLine("            // Wait for entire batch to complete before next batch");
+        code.AppendLine("            await Task.WhenAll(updateTasks);");
+        code.AppendLine("            totalUpdated += batch.Count;");
+        code.AppendLine("        }");
+        code.AppendLine();
+        code.AppendLine($"        Logger.LogInformation(\"Bulk updated {{Count}} {_metadata.ClassName} entities (batched)\", totalUpdated);");
+        code.AppendLine("        return totalUpdated;");
             code.AppendLine("    }");
         }
 

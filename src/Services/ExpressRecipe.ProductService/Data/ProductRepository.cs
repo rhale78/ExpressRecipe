@@ -819,4 +819,19 @@ public class ProductRepository : SqlHelper, IProductRepository
             await LoadImagesAsync(product);
         }
     }
+
+    public Task<IEnumerable<string>> GetExistingBarcodesAsync(IEnumerable<string> barcodes)
+    {
+        throw new NotImplementedException("Use ProductRepositoryAdapter for bulk operations with HighSpeedDAL");
+    }
+
+    public Task<Dictionary<string, Guid>> GetProductIdsByBarcodesAsync(IEnumerable<string> barcodes)
+    {
+        throw new NotImplementedException("Use ProductRepositoryAdapter for bulk operations with HighSpeedDAL");
+    }
+
+    public Task BulkAddExternalLinksAsync(IEnumerable<(Guid ProductId, string Source, string ExternalId)> links)
+    {
+        throw new NotImplementedException("Use ProductRepositoryAdapter for bulk operations with HighSpeedDAL");
+    }
     }
