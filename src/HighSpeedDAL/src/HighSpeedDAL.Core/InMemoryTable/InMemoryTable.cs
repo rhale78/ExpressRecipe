@@ -43,9 +43,11 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     private bool _disposed;
 
     // PERFORMANCE: Property value caches for O(1) lookups
-    // Dictionary<propertyName, Dictionary<propertyValue, entity>>
-    // e.g., Dictionary<"Name", Dictionary<"Sugar", IngredientEntity>>
-    private readonly Dictionary<string, Dictionary<string, TEntity>> _propertyValueCache = new(StringComparer.OrdinalIgnoreCase);
+    // Stores: Dictionary<propertyName, Dictionary<propertyValue, List<TEntity>>>
+    // e.g., Dictionary<"ProcessingStatus", Dictionary<"Pending", [Product1, Product2, ...]>>
+    // Single or multiple entities per property value - lookup is always O(1)
+    private readonly Dictionary<string, Dictionary<string, List<TEntity>>> _propertyValueCache =
+        new(StringComparer.OrdinalIgnoreCase);
     private readonly object _cacheLock = new();
 
     /// <summary>
@@ -423,6 +425,7 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     /// <summary>
     /// PERFORMANCE: Gets a single entity by property value with O(1) cached dictionary lookup
     /// Lazily builds property value cache on first access, subsequent lookups are instant
+    /// Returns first match or null
     /// </summary>
     public async Task<TEntity?> GetByPropertyAsync(string propertyName, object? value, CancellationToken cancellationToken = default)
     {
@@ -432,15 +435,15 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
             return null;
 
         // Get or build cache for this property
-        Dictionary<string, TEntity>? cache = EnsurePropertyCacheBuilt(propertyName);
+        Dictionary<string, List<TEntity>>? cache = EnsurePropertyCacheBuilt(propertyName);
         if (cache == null)
             return null;
 
         // O(1) dictionary lookup
         string cacheKey = GetCacheKey(value);
-        if (cache.TryGetValue(cacheKey, out var entity))
+        if (cache.TryGetValue(cacheKey, out var entities) && entities.Count > 0)
         {
-            return await Task.FromResult(entity);
+            return await Task.FromResult(entities[0]);  // Return first match
         }
 
         return null;
@@ -448,6 +451,7 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
 
     /// <summary>
     /// PERFORMANCE: Gets multiple entities by property value with O(1) cache lookup
+    /// Returns all entities matching the property value
     /// </summary>
     public async Task<List<TEntity>> GetByPropertyAsync(string propertyName, object? value, bool returnMultiple, CancellationToken cancellationToken = default)
     {
@@ -456,19 +460,14 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
         if (string.IsNullOrEmpty(propertyName) || value == null || !returnMultiple)
             return results;
 
-        // For "returnMultiple", this is typically for ByCategory/ByStatus queries where multiple rows match
-        // Still use the cache, but note: cache only stores ONE entity per value
-        // For queries that return multiple (list queries), fall back to LINQ with Select().Where()
-        // This method's returnMultiple parameter is misleading - see GenerateCachedGetAllFilter usage
-
-        Dictionary<string, TEntity>? cache = EnsurePropertyCacheBuilt(propertyName);
+        Dictionary<string, List<TEntity>>? cache = EnsurePropertyCacheBuilt(propertyName);
         if (cache == null)
             return results;
 
         string cacheKey = GetCacheKey(value);
-        if (cache.TryGetValue(cacheKey, out var entity))
+        if (cache.TryGetValue(cacheKey, out var entities))
         {
-            results.Add(entity);
+            results.AddRange(entities);  // Return ALL matching entities
         }
 
         return await Task.FromResult(results);
@@ -477,8 +476,9 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     /// <summary>
     /// PERFORMANCE: Builds or retrieves cached property value dictionary
     /// Lazy initialization: first access builds cache, subsequent accesses are O(1)
+    /// Stores all entities for each property value (handles both unique and non-unique properties)
     /// </summary>
-    private Dictionary<string, TEntity>? EnsurePropertyCacheBuilt(string propertyName)
+    private Dictionary<string, List<TEntity>>? EnsurePropertyCacheBuilt(string propertyName)
     {
         // Fast path: cache already built
         if (_propertyValueCache.TryGetValue(propertyName, out var existingCache))
@@ -502,7 +502,8 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
                 return null;
 
             // Build cache: iterate through all rows ONCE
-            var cache = new Dictionary<string, TEntity>(StringComparer.OrdinalIgnoreCase);
+            // Structure: Dictionary<propertyValue, List<allEntitiesWithThatValue>>
+            var cache = new Dictionary<string, List<TEntity>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var row in _rows.Values)
             {
@@ -518,12 +519,13 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
                     string cacheKey = GetCacheKey(propValue);
                     if (!string.IsNullOrEmpty(cacheKey))
                     {
-                        // Only store first occurrence (unique index assumption)
-                        // For non-unique properties, this stores the first match
+                        // Create list if doesn't exist, then add this entity
                         if (!cache.ContainsKey(cacheKey))
                         {
-                            cache[cacheKey] = row.ToEntity<TEntity>();
+                            cache[cacheKey] = new List<TEntity>();
                         }
+
+                        cache[cacheKey].Add(row.ToEntity<TEntity>());
                     }
                 }
                 catch
