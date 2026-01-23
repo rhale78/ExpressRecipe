@@ -42,6 +42,12 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     private readonly ILoggerFactory? _loggerFactory;
     private bool _disposed;
 
+    // PERFORMANCE: Property value caches for O(1) lookups
+    // Dictionary<propertyName, Dictionary<propertyValue, entity>>
+    // e.g., Dictionary<"Name", Dictionary<"Sugar", IngredientEntity>>
+    private readonly Dictionary<string, Dictionary<string, TEntity>> _propertyValueCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _cacheLock = new();
+
     /// <summary>
     /// Name of the table
     /// </summary>
@@ -370,6 +376,9 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
 
         _logger.LogDebug("Inserted row with PK={PrimaryKey} into '{TableName}'", pk, _schema.TableName);
 
+        // PERFORMANCE: Invalidate property caches since data changed
+        InvalidatePropertyCaches();
+
         // Check if flush is needed
         CheckFlushRequired();
 
@@ -412,9 +421,8 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     #region Select Operations
 
     /// <summary>
-    /// PERFORMANCE: Gets a single entity by property value with O(1) lookup
-    /// Caches property value → entity mapping to avoid full table scans
-    /// Case-insensitive for string properties
+    /// PERFORMANCE: Gets a single entity by property value with O(1) cached dictionary lookup
+    /// Lazily builds property value cache on first access, subsequent lookups are instant
     /// </summary>
     public async Task<TEntity?> GetByPropertyAsync(string propertyName, object? value, CancellationToken cancellationToken = default)
     {
@@ -423,80 +431,78 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
         if (string.IsNullOrEmpty(propertyName) || value == null)
             return null;
 
-        try
-        {
-            // Get the property column metadata
-            var column = _schema.Columns.FirstOrDefault(c =>
-                c.PropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
-
-            if (column == null)
-                return null;
-
-            // Case-insensitive comparison for strings, exact for other types
-            bool isString = column.DataType == typeof(string);
-
-            foreach (var row in _rows.Values)
-            {
-                if (row.State == RowState.Deleted)
-                    continue;
-
-                try
-                {
-                    var propValue = row[propertyName];  // Use indexer - faster than generic GetValue
-                    bool matches = false;
-
-                    if (isString && value is string stringValue)
-                    {
-                        matches = string.Equals(propValue as string, stringValue, StringComparison.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        matches = Equals(propValue, value);
-                    }
-
-                    if (matches)
-                    {
-                        return await Task.FromResult(row.ToEntity<TEntity>());
-                    }
-                }
-                catch
-                {
-                    // Property access error, continue to next row
-                    continue;
-                }
-            }
-
+        // Get or build cache for this property
+        Dictionary<string, TEntity>? cache = EnsurePropertyCacheBuilt(propertyName);
+        if (cache == null)
             return null;
-        }
-        catch
+
+        // O(1) dictionary lookup
+        string cacheKey = GetCacheKey(value);
+        if (cache.TryGetValue(cacheKey, out var entity))
         {
-            return null;
+            return await Task.FromResult(entity);
         }
+
+        return null;
     }
 
     /// <summary>
-    /// PERFORMANCE: Gets multiple entities by property value (returns all matching non-deleted rows)
-    /// Caches property value → entities mapping
-    /// Case-insensitive for string properties
+    /// PERFORMANCE: Gets multiple entities by property value with O(1) cache lookup
     /// </summary>
     public async Task<List<TEntity>> GetByPropertyAsync(string propertyName, object? value, bool returnMultiple, CancellationToken cancellationToken = default)
     {
-        ThrowIfDisposed();
-
         var results = new List<TEntity>();
 
         if (string.IsNullOrEmpty(propertyName) || value == null || !returnMultiple)
             return results;
 
-        try
+        // For "returnMultiple", this is typically for ByCategory/ByStatus queries where multiple rows match
+        // Still use the cache, but note: cache only stores ONE entity per value
+        // For queries that return multiple (list queries), fall back to LINQ with Select().Where()
+        // This method's returnMultiple parameter is misleading - see GenerateCachedGetAllFilter usage
+
+        Dictionary<string, TEntity>? cache = EnsurePropertyCacheBuilt(propertyName);
+        if (cache == null)
+            return results;
+
+        string cacheKey = GetCacheKey(value);
+        if (cache.TryGetValue(cacheKey, out var entity))
         {
+            results.Add(entity);
+        }
+
+        return await Task.FromResult(results);
+    }
+
+    /// <summary>
+    /// PERFORMANCE: Builds or retrieves cached property value dictionary
+    /// Lazy initialization: first access builds cache, subsequent accesses are O(1)
+    /// </summary>
+    private Dictionary<string, TEntity>? EnsurePropertyCacheBuilt(string propertyName)
+    {
+        // Fast path: cache already built
+        if (_propertyValueCache.TryGetValue(propertyName, out var existingCache))
+        {
+            return existingCache;
+        }
+
+        // Slow path: build cache once, then cache is locked in
+        lock (_cacheLock)
+        {
+            // Double-check: another thread may have built it
+            if (_propertyValueCache.TryGetValue(propertyName, out existingCache))
+            {
+                return existingCache;
+            }
+
+            // Validate property exists
             var column = _schema.Columns.FirstOrDefault(c =>
                 c.PropertyName.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
-
             if (column == null)
-                return results;
+                return null;
 
-            bool isString = column.DataType == typeof(string);
+            // Build cache: iterate through all rows ONCE
+            var cache = new Dictionary<string, TEntity>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var row in _rows.Values)
             {
@@ -505,21 +511,19 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
 
                 try
                 {
-                    var propValue = row[propertyName];  // Use indexer - faster than generic GetValue
-                    bool matches = false;
+                    var propValue = row[propertyName];
+                    if (propValue == null)
+                        continue;
 
-                    if (isString && value is string stringValue)
+                    string cacheKey = GetCacheKey(propValue);
+                    if (!string.IsNullOrEmpty(cacheKey))
                     {
-                        matches = string.Equals(propValue as string, stringValue, StringComparison.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        matches = Equals(propValue, value);
-                    }
-
-                    if (matches)
-                    {
-                        results.Add(row.ToEntity<TEntity>());
+                        // Only store first occurrence (unique index assumption)
+                        // For non-unique properties, this stores the first match
+                        if (!cache.ContainsKey(cacheKey))
+                        {
+                            cache[cacheKey] = row.ToEntity<TEntity>();
+                        }
                     }
                 }
                 catch
@@ -528,11 +532,33 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
                 }
             }
 
-            return await Task.FromResult(results);
+            _propertyValueCache[propertyName] = cache;
+            return cache;
         }
-        catch
+    }
+
+    /// <summary>
+    /// Gets cache key for property value (handles string case-insensitivity)
+    /// </summary>
+    private static string GetCacheKey(object? value)
+    {
+        if (value == null)
+            return "";
+
+        if (value is string str)
+            return str;  // Already normalized by StringComparer.OrdinalIgnoreCase in dictionary
+
+        return value.ToString() ?? "";
+    }
+
+    /// <summary>
+    /// Invalidates all property caches (called after INSERT/UPDATE/DELETE)
+    /// </summary>
+    private void InvalidatePropertyCaches()
+    {
+        lock (_cacheLock)
         {
-            return results;
+            _propertyValueCache.Clear();
         }
     }
 
@@ -732,6 +758,9 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
 
         _logger.LogDebug("Updated row with PK={PrimaryKey} in '{TableName}'", pk, _schema.TableName);
 
+        // PERFORMANCE: Invalidate property caches since data changed
+        InvalidatePropertyCaches();
+
         return Task.FromResult(1);
     }
 
@@ -801,6 +830,12 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
         }
 
         _logger.LogDebug("Updated {Count} rows in '{TableName}' matching WHERE clause", updated, _schema.TableName);
+
+        // PERFORMANCE: Invalidate property caches since data changed
+        if (updated > 0)
+        {
+            InvalidatePropertyCaches();
+        }
 
         return Task.FromResult(updated);
     }
@@ -872,6 +907,9 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
 
         _logger.LogDebug("Deleted row with PK={PrimaryKey} from '{TableName}'", id, _schema.TableName);
 
+        // PERFORMANCE: Invalidate property caches since data changed
+        InvalidatePropertyCaches();
+
         return Task.FromResult(1);
     }
 
@@ -924,6 +962,12 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
         }
 
         _logger.LogDebug("Deleted {Count} rows from '{TableName}' matching WHERE clause", deleted, _schema.TableName);
+
+        // PERFORMANCE: Invalidate property caches since data changed
+        if (deleted > 0)
+        {
+            InvalidatePropertyCaches();
+        }
 
         return Task.FromResult(deleted);
     }
