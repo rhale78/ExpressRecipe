@@ -93,7 +93,7 @@ internal sealed partial class DalClassGenerator
             code.AppendLine($"/// </summary>");
         }
 
-        code.AppendLine($"public sealed class {_metadata.ClassName}Dal : {baseClass}");
+        code.AppendLine($"public sealed partial class {_metadata.ClassName}Dal : {baseClass}");
         code.AppendLine("{");
 
         // Fields

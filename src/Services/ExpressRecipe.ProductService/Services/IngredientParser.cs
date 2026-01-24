@@ -12,6 +12,11 @@ public interface IIngredientParser
 
 public class IngredientParser : IIngredientParser
 {
+    // Pre-compiled regex patterns
+    private static readonly Regex ParenthesesRegex = new(@"^(.+?)\s*\((.+)\)$", RegexOptions.Compiled);
+    private static readonly Regex AndOrTrailingRegex = new(@"\s+(and/or|or)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PercentageInParenRegex = new(@"\s*\([<>]?\s*\d+%\s*\)", RegexOptions.Compiled);
+
     private readonly IBaseIngredientRepository _baseIngredientRepository;
     private readonly ILogger<IngredientParser> _logger;
 
@@ -143,7 +148,7 @@ public class IngredientParser : IIngredientParser
 
         // Check if component has parenthetical sub-components
         // Example: "Enriched Wheat Flour (Wheat Flour, Niacin, Iron)"
-        var match = Regex.Match(componentString, @"^(.+?)\s*\((.+)\)$");
+        var match = ParenthesesRegex.Match(componentString);
 
         if (match.Success)
         {
@@ -218,10 +223,10 @@ public class IngredientParser : IIngredientParser
         name = name.Trim();
 
         // Remove trailing qualifiers like "and/or", "less than 2% of"
-        name = Regex.Replace(name, @"\s+(and/or|or)\s*$", "", RegexOptions.IgnoreCase);
+        name = AndOrTrailingRegex.Replace(name, "");
 
         // Remove percentage indicators
-        name = Regex.Replace(name, @"\s*\([<>]?\s*\d+%\s*\)", "");
+        name = PercentageInParenRegex.Replace(name, "");
 
         // Remove asterisks and other markers
         name = name.Replace("*", "").Replace("†", "").Replace("‡", "");

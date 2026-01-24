@@ -13,6 +13,9 @@ namespace ExpressRecipe.PriceService.Services;
 /// </summary>
 public class PriceScraperService
 {
+    // Pre-compiled regex for price extraction
+    private static readonly Regex PriceCleaningRegex = new(@"[^\d\.]", RegexOptions.Compiled);
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<PriceScraperService> _logger;
 
@@ -251,7 +254,7 @@ public class PriceScraperService
         try
         {
             // Remove currency symbols and non-numeric characters except decimal point
-            var cleanText = Regex.Replace(priceText, @"[^\d\.]", "");
+            var cleanText = PriceCleaningRegex.Replace(priceText, "");
 
             if (string.IsNullOrWhiteSpace(cleanText))
                 return null;

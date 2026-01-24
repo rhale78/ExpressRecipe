@@ -62,31 +62,31 @@ public class LanguageDetector
         @"[\u0400-\u04FF\u0370-\u03FF\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u0E00-\u0E7F]",
         RegexOptions.Compiled);
 
-    // Patterns that indicate non-English content
-    private static readonly string[] NonEnglishPatterns = new[]
+    // Pre-compiled regex patterns
+    private static readonly Regex[] CompiledNonEnglishPatterns = new[]
     {
         // Common foreign phrases
-        @"\b(pour|avec|sans|contient|peut|peuvent)\s+\w+",
-        @"\b(für|mit|ohne|enthält|zutaten)\s+\w+",
-        @"\b(para|con|sin|contiene|ingredientes)\s+\w+",
-        @"\b(per|con|senza|contiene|ingredienti)\s+\w+",
-        @"\b(voor|met|zonder|bevat|ingrediënten)\s+\w+",
+        new Regex(@"\b(pour|avec|sans|contient|peut|peuvent)\s+\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"\b(für|mit|ohne|enthält|zutaten)\s+\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"\b(para|con|sin|contiene|ingredientes)\s+\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"\b(per|con|senza|contiene|ingredienti)\s+\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new Regex(@"\b(voor|met|zonder|bevat|ingrediënten)\s+\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
 
         // Accented characters clusters (strong indicator)
-        @"[àáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ]{3,}",
+        new Regex(@"[àáâãäåæçèéêëìíîïñòóôõöøùúûüýÿ]{3,}", RegexOptions.Compiled),
 
         // Common foreign endings
-        @"\w+(ción|sión|tés|dés|ità|età|heid|lijk|schap)$",
+        new Regex(@"\w+(ción|sión|tés|dés|ità|età|heid|lijk|schap)$", RegexOptions.Compiled),
 
         // Foreign measurements/codes
-        @"\b(kcal|kca)\b",
-        @"\be\s*\d{3}\b", // E-numbers with spaces (foreign style)
+        new Regex(@"\b(kcal|kca)\b", RegexOptions.Compiled),
+        new Regex(@"\be\s*\d{3}\b", RegexOptions.Compiled), // E-numbers with spaces (foreign style)
 
         // Multi-language indicators
-        @"nl\s+\w+|de\s+\w+|fr\s+\w+|it\s+\w+|es\s+\w+",
+        new Regex(@"nl\s+\w+|de\s+\w+|fr\s+\w+|it\s+\w+|es\s+\w+", RegexOptions.Compiled),
 
         // Foreign country codes
-        @"\b(luxembourg|republica\s+moldova|danmark|sverige|norge|polska)\b"
+        new Regex(@"\b(luxembourg|republica\s+moldova|danmark|sverige|norge|polska)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)
     };
 
     /// <summary>
@@ -122,9 +122,9 @@ public class LanguageDetector
             return false;
 
         // Check for non-English patterns
-        foreach (var pattern in NonEnglishPatterns)
+        foreach (var pattern in CompiledNonEnglishPatterns)
         {
-            if (Regex.IsMatch(lowerText, pattern, RegexOptions.IgnoreCase))
+            if (pattern.IsMatch(lowerText))
                 return false;
         }
 
@@ -192,7 +192,7 @@ public class LanguageDetector
         }
 
         // Penalty for non-English patterns
-        int patternMatches = NonEnglishPatterns.Count(p => Regex.IsMatch(lowerText, p, RegexOptions.IgnoreCase));
+        int patternMatches = CompiledNonEnglishPatterns.Count(p => p.IsMatch(lowerText));
         score -= patternMatches * 10;
 
         return Math.Max(0, score);

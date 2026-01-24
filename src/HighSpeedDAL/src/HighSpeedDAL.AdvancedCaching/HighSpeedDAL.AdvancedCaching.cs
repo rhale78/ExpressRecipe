@@ -1510,7 +1510,7 @@ namespace HighSpeedDAL.AdvancedCaching
         {
             // Simple wildcard matching (* and ?)
             string regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$";
-            return System.Text.RegularExpressions.Regex.IsMatch(key, regexPattern);
+            return System.Text.RegularExpressions.Regex.IsMatch(key, regexPattern, System.Text.RegularExpressions.RegexOptions.Compiled);
         }
 
         /// <summary>

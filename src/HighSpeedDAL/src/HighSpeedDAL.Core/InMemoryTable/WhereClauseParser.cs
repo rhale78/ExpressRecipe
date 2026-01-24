@@ -27,6 +27,15 @@ public sealed class WhereClauseParser
     private readonly InMemoryTableSchema _schema;
     private readonly Dictionary<string, object?> _parameters;
 
+    // Pre-compiled regex patterns
+    private static readonly Regex NotPrefixRegex = new(@"^NOT ", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex BetweenCheckRegex = new(@"^\s*(\w+)\s+BETWEEN\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex IsNullRegex = new(@"^(\w+)\s+IS\s+(NOT\s+)?NULL$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex BetweenRegex = new(@"^(\w+)\s+BETWEEN\s+(.+)\s+AND\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex InRegex = new(@"^(\w+)\s+IN\s*\((.+)\)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex LikeRegex = new(@"^(\w+)\s+LIKE\s+(.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ComparisonRegex = new(@"^(\w+)\s*(=|!=|<>|<=|>=|<|>)\s*(.+)$", RegexOptions.Compiled);
+
     public WhereClauseParser(InMemoryTableSchema schema)
     {
         _schema = schema ?? throw new ArgumentNullException(nameof(schema));
@@ -88,9 +97,9 @@ public sealed class WhereClauseParser
     {
         // Handle parentheses first
         clause = clause.Trim();
-        
+
         // Check for NOT prefix
-        if (clause.StartsWith("NOT ", StringComparison.OrdinalIgnoreCase))
+        if (NotPrefixRegex.IsMatch(clause))
         {
             return new NotExpression(ParseExpression(clause.Substring(4).Trim()));
         }
@@ -127,7 +136,7 @@ public sealed class WhereClauseParser
 
             // Check for BETWEEN...AND before treating AND as a logical operator
             // This prevents "Age BETWEEN 25 AND 35" from being split at " AND "
-            Match betweenCheck = Regex.Match(clause, @"^\s*(\w+)\s+BETWEEN\s+", RegexOptions.IgnoreCase);
+            Match betweenCheck = BetweenCheckRegex.Match(clause);
             if (!betweenCheck.Success)
             {
                 // Find top-level AND only if it's not part of a BETWEEN clause
@@ -178,7 +187,7 @@ public sealed class WhereClauseParser
         condition = condition.Trim();
 
         // IS NULL / IS NOT NULL
-        Match isNullMatch = Regex.Match(condition, @"^(\w+)\s+IS\s+(NOT\s+)?NULL$", RegexOptions.IgnoreCase);
+        Match isNullMatch = IsNullRegex.Match(condition);
         if (isNullMatch.Success)
         {
             string column = isNullMatch.Groups[1].Value;
@@ -187,8 +196,7 @@ public sealed class WhereClauseParser
         }
 
         // BETWEEN
-        Match betweenMatch = Regex.Match(condition, 
-            @"^(\w+)\s+BETWEEN\s+(.+)\s+AND\s+(.+)$", RegexOptions.IgnoreCase);
+        Match betweenMatch = BetweenRegex.Match(condition);
         if (betweenMatch.Success)
         {
             string column = betweenMatch.Groups[1].Value;
@@ -198,7 +206,7 @@ public sealed class WhereClauseParser
         }
 
         // IN
-        Match inMatch = Regex.Match(condition, @"^(\w+)\s+IN\s*\((.+)\)$", RegexOptions.IgnoreCase);
+        Match inMatch = InRegex.Match(condition);
         if (inMatch.Success)
         {
             string column = inMatch.Groups[1].Value;
@@ -208,7 +216,7 @@ public sealed class WhereClauseParser
         }
 
         // LIKE
-        Match likeMatch = Regex.Match(condition, @"^(\w+)\s+LIKE\s+(.+)$", RegexOptions.IgnoreCase);
+        Match likeMatch = LikeRegex.Match(condition);
         if (likeMatch.Success)
         {
             string column = likeMatch.Groups[1].Value;
@@ -217,7 +225,7 @@ public sealed class WhereClauseParser
         }
 
         // Comparison operators
-        Match compMatch = Regex.Match(condition, @"^(\w+)\s*(=|!=|<>|<=|>=|<|>)\s*(.+)$");
+        Match compMatch = ComparisonRegex.Match(condition);
         if (compMatch.Success)
         {
             string column = compMatch.Groups[1].Value;
@@ -504,12 +512,13 @@ internal sealed class LikeExpression : WhereExpression
     {
         _column = column;
         _pattern = pattern;
-        
+
         // Convert SQL LIKE pattern to regex
         string regexPattern = "^" + Regex.Escape(pattern)
             .Replace("%", ".*")
             .Replace("_", ".")
             + "$";
+        // Compile this specific pattern since it's unique per instance
         _regex = new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 

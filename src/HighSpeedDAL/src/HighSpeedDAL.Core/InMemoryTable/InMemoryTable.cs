@@ -394,22 +394,110 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     }
 
     /// <summary>
-    /// Bulk inserts multiple entities
+    /// Bulk inserts multiple entities (OPTIMIZED: batches operations to avoid per-entity overhead)
+    /// Defers property cache invalidation and flush checks until after all inserts
     /// </summary>
     public Task<int> BulkInsertAsync(IEnumerable<TEntity> entities, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
 
         int count = 0;
-        foreach (TEntity entity in entities)
+        var entityList = entities.ToList();  // Materialize to get count and allow batch operations
+
+        if (entityList.Count == 0)
+            return Task.FromResult(0);
+
+        // Batch insert without per-entity overhead
+        foreach (TEntity entity in entityList)
         {
-            InsertAsync(entity, cancellationToken).GetAwaiter().GetResult();
+            if (entity == null)
+                throw new ArgumentNullException(nameof(entity));
+
+            InMemoryRow row = new InMemoryRow(_schema);
+            row.FromEntity(entity);
+
+            // Generate ID if needed
+            if (_config.AutoGenerateId && _schema.PrimaryKeyColumn != null)
+            {
+                object? currentPk = row.PrimaryKeyValue;
+                bool needsId = currentPk == null ||
+                              (currentPk is int intPk && intPk == 0) ||
+                              (currentPk is long longPk && longPk == 0);
+
+                if (needsId)
+                {
+                    long newId = Interlocked.Increment(ref _nextId);
+                    Type pkType = _schema.PrimaryKeyColumn.DataType;
+                    object idValue = pkType == typeof(long) ? newId :
+                                    pkType == typeof(int) ? (int)newId :
+                                    Convert.ChangeType(newId, pkType);
+
+                    row.SetValue(_schema.PrimaryKeyColumn.Name, idValue);
+                    _schema.PrimaryKeyColumn.SetPropertyValue(entity, idValue);
+                }
+            }
+
+            // Validate if configured
+            if (_config.ValidateOnWrite)
+            {
+                ValidationResult validation = row.Validate();
+                if (!validation.IsValid)
+                    throw new InvalidOperationException($"Insert validation failed: {string.Join("; ", validation.Errors)}");
+            }
+
+            // Enforce constraints
+            if (_config.EnforceConstraints)
+            {
+                _indexLock.EnterWriteLock();
+                try
+                {
+                    foreach (InMemoryIndex index in _schema.Indexes)
+                    {
+                        if (index.IsUnique)
+                        {
+                            IndexKey key = index.CreateKey(row);
+                            if (index.ContainsKey(key.Values))
+                                throw new InvalidOperationException($"Unique constraint violation on index '{index.Name}' for key {key}");
+                        }
+                    }
+
+                    foreach (InMemoryIndex index in _schema.Indexes)
+                    {
+                        index.Add(row);
+                    }
+                }
+                finally
+                {
+                    _indexLock.ExitWriteLock();
+                }
+            }
+
+            // Add to main storage
+            object pk = row.PrimaryKeyValue!;
+            if (!_rows.TryAdd(pk, row))
+                throw new InvalidOperationException($"Row with primary key '{pk}' already exists");
+
+            // Track operation (batch logging)
+            if (_config.TrackOperations)
+            {
+                lock (_operationLogLock)
+                {
+                    _operationLog.Add(new OperationRecord(OperationType.Insert, pk, row.Clone()));
+                }
+            }
+
             count++;
         }
 
         _logger.LogInformation("Bulk inserted {Count} rows into '{TableName}'", count, _schema.TableName);
 
-        // Flush to memory-mapped file if configured for immediate mode
+        // OPTIMIZATION: Invalidate caches ONCE after all inserts, not per-insert
+        InvalidatePropertyCaches();
+
+        // Check flush requirement ONCE after all inserts
+        CheckFlushRequired();
+
+        // Flush to memory-mapped file ONCE at the end, not per-insert
         if (_memoryMappedStore != null && _config.SyncMode == MemoryMappedSyncMode.Immediate)
         {
             FlushToMemoryMappedFileAsync(cancellationToken).GetAwaiter().GetResult();

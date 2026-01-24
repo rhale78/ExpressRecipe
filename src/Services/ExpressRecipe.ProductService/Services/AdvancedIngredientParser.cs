@@ -26,6 +26,63 @@ public interface IIngredientListParser
 
 public class AdvancedIngredientParser : IIngredientListParser
 {
+    // Pre-compiled regex patterns to avoid recompilation
+    private static readonly Regex RepeatedSeparatorRegex = new(@"([.\-/])\s+\1", RegexOptions.Compiled);
+    private static readonly Regex LongIngredientRegex = new(@"enriched\s+(wheat\s+)?flour|bleached\s+(wheat\s+)?flour|unbleached\s+(wheat\s+)?flour|enriched\s+durum\s+(wheat\s+)?semolina|low\s+moisture\s+part[- ]skim\s+mozzarella|pasteurized\s+process(ed)?\s+cheese|mono\s+and\s+diglycerides|sodium\s+acid\s+pyrophosphate|calcium\s+disodium\s+edta|high\s+fructose\s+corn\s+syrup", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex CompoundIngredientRegex = new(@"mono\s+and\s+diglycerides|mono-\s+and\s+diglycerides|salt\s+and\s+pepper|peanut\s+and/or\s+|canola\s+and/or\s+|soybean\s+and/or\s+|contains\s+one\s+or\s+more|red\s+and\s+green|black\s+and\s+white|\w+\s+oil\s+and/or\s+\w+\s+oil", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex AsteriskRemovalRegex = new(@"\*+|\†+|‡+", RegexOptions.Compiled);
+    private static readonly Regex UrlRegex = new(@"https?://[^\s,)]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex WwwRegex = new(@"www\.[^\s,)]+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex NonIngredientContentRegex = new(@"\b(questions?\s+or\s+comments?\??[^,.)]*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex WebsiteContactRegex = new(@"\b(call|visit|email|contact|careline)\s+[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PackagingRecyclingRegex = new(@"\b(how2recycle|recyclable|raccolta\s+differenziata|plastica|metal\s+can)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex DailyValueRegex = new(@"%\s*daily\s+value[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ServingSizeRegex = new(@"serving\s+size[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex CaloriesRegex = new(@"\bcalories\b[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex NutritionFatCarbProteinRegex = new(@"total\s+(fat|carb|protein)\s+\d+g", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ReferenceIntakeRegex = new(@"reference\s+intake\s+of[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex FrenchNutritionRegex = new(@"valeurs\s+nutritionnelles[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex NutritionFactsRegex = new(@"nutrition\s+facts?[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex BarcodeRegex = new(@"\b\d{12,13}\b", RegexOptions.Compiled);
+    private static readonly Regex SkuRegex = new(@"\bsku#?\s*\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ProductCodeRegex = new(@"\b[A-Z]{2,}\d{4,}", RegexOptions.Compiled);
+    private static readonly Regex StorageInstructionsRegex = new(@"\b(rinse\s+and\s+insert|conservar|conserver|lagern|store\s+in)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ConsumptionDateRegex = new(@"\b(à\s+consommer\s+avant|consume\s+within|termen\s+limită)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex OriginRegex = new(@"\b(product\s+of|made\s+in|manufactured\s+in|produit\s+en|origine|origin)\s*:?\s*\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex CountryOriginRegex = new(@"\b(turkey|france|italia|deutschland|nederland|republica\s+moldova)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex CertificationRegex = new(@"\bcertified\s+(organic|gluten\s+free)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex BioRegex = new(@"\b(bio|fr-bio-\d+|agriculture\s+ue)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex AddedSugarsRegex = new(@"includes\s+\d+g?\s+added\s+sugars[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex AddressRegex = new(@"\b\d{1,5}\s+[A-Z][a-z]+\s+(st|street|ave|avenue|rd|road|blvd|boulevard)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PoBoxRegex = new(@"\bp\.?o\.?\s+box\s+\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PostalCodeRegex = new(@"\b\d{5}(-\d{4})?\s+(paris|dublin|milano|luxembourg|chisinau|lakes)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex DirectionsRegex = new(@"\b(directions?|conseils?|indicații)[^,.)]*:", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex UsageInstructionsRegex = new(@"\b(to\s+ensure|pour\s+assurer|shake\s+well|drink|mix)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex AllergyWarningRegex = new(@"\b(allergy\s+advice|allergen\s+information|pour\s+les\s+allergènes)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex MayContainRegex = new(@"\b(may\s+contain|peut\s+contenir|puede\s+contener|può\s+contenere)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex AllergenLabelRegex = new(@"\b(for\s+allergens|see\s+ingredients\s+in\s+bold)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ServingSuggestionRegex = new(@"\b(serving\s+suggestion|suggestion\s+de\s+présentation)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PromotionalTextRegex = new(@"\b(scan\s+to|get\s+in\s+touch|refill\s+your)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex MedicalDisclaimerRegex = new(@"\b(not\s+intended\s+to|prevent\s+any\s+disease|medicinale|farmaco)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PackagingInfoRegex = new(@"\b(packaged\s+in|packed\s+in|jar\s+recycle|lid\s+recycle)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ManufacturingInfoRegex = new(@"\b(manufactured\s+for|distributed\s+by|importat\s+si\s+distribuit)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ExpiryDateRegex = new(@"\b(best\s+before|use\s+by|fecha\s+de\s+caducidad|data\s+di\s+scadenza)[^,.)]*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex WeightRegex = new(@"poids\s+net\s*:\s*\d+\s*g", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex NetWeightRegex = new(@"net\s+wt\.?\s*\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex MultipleSpacesRegex = new(@"\s+", RegexOptions.Compiled);
+    private static readonly Regex ExcessiveCommasRegex = new(@",\s*,+", RegexOptions.Compiled);
+    private static readonly Regex AndOrRegex = new(@"\s+(and/or|or)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex PercentageInParenRegex = new(@"\s*\([<>]?\s*\d+%\s*\)", RegexOptions.Compiled);
+    private static readonly Regex ContainsPatternRegex = new(@"(contains?\s+(?:\d+%?\s+)?(?:or\s+)?(?:less|more)\s+(?:than\s+)?(?:\d+%?\s+)?of[:\s]*)(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex ParenthesesComponentRegex = new(@"^([^(]+)\s*\(([^)]+)\)(.*)$", RegexOptions.Compiled);
+    private static readonly Regex MetaInformationPercentRegex = new(@"^\d+%?\.?$", RegexOptions.Compiled);
+    private static readonly Regex EtcRegex = new(@"\betc\.?$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex VowelsRegex = new(@"[aeiou]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex AndOrCenteredRegex = new(@"\s+and\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex OrCenteredRegex = new(@"\s+or\s+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex DescriptorPatternsRegex = new(@"^(emulsifier|stabilizer|thickener|preservative|antioxidant|coloring|flavoring|sweetener|enzymes?|cultures|protein\s+\d+g|sodium\s+\d+mg|vitamin\s+[a-z](\s+and\s+[a-z])?|ingredient.*|ingredienti.*|ingrédient.*|zutat.*|ingrediente.*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex NumberOnlyRegex = new(@"^\d+\.?\d*%?$", RegexOptions.Compiled);
+
     private static readonly HashSet<string> StopPhrases = new(StringComparer.OrdinalIgnoreCase)
     {
         "contains 2% or less of",
@@ -149,7 +206,7 @@ public class AdvancedIngredientParser : IIngredientListParser
         }
 
         // Check for repeated separators (e.g., "- -", ". .", "/ /")
-        if (Regex.IsMatch(ingredient, @"([.\-/])\s+\1"))
+        if (RepeatedSeparatorRegex.IsMatch(ingredient))
         {
             return new IngredientValidationResult
             {
@@ -199,8 +256,7 @@ public class AdvancedIngredientParser : IIngredientListParser
         }
 
         // Check for "and" or "or" in middle (may indicate multiple ingredients)
-        if (Regex.IsMatch(ingredient, @"\s+and\s+", RegexOptions.IgnoreCase) ||
-            Regex.IsMatch(ingredient, @"\s+or\s+", RegexOptions.IgnoreCase))
+        if (AndOrCenteredRegex.IsMatch(ingredient) || OrCenteredRegex.IsMatch(ingredient))
         {
             // Allow certain patterns like "mono and diglycerides"
             if (!IsRecognizedCompoundIngredient(ingredient))
@@ -224,45 +280,14 @@ public class AdvancedIngredientParser : IIngredientListParser
 
     private bool IsRecognizedLongIngredient(string ingredient)
     {
-        // Common legitimate long ingredient patterns
-        var patterns = new[]
-        {
-            @"enriched\s+(wheat\s+)?flour",
-            @"bleached\s+(wheat\s+)?flour",
-            @"unbleached\s+(wheat\s+)?flour",
-            @"enriched\s+durum\s+(wheat\s+)?semolina",
-            @"low\s+moisture\s+part[- ]skim\s+mozzarella",
-            @"pasteurized\s+process(ed)?\s+cheese",
-            @"mono\s+and\s+diglycerides",
-            @"sodium\s+acid\s+pyrophosphate",
-            @"calcium\s+disodium\s+edta",
-            @"high\s+fructose\s+corn\s+syrup"
-        };
-
         var lowerIngredient = ingredient.ToLowerInvariant();
-        return patterns.Any(pattern => Regex.IsMatch(lowerIngredient, pattern));
+        return LongIngredientRegex.IsMatch(lowerIngredient);
     }
 
     private bool IsRecognizedCompoundIngredient(string ingredient)
     {
-        // Known compound ingredients that contain "and" or "or"
         var lowerIngredient = ingredient.ToLowerInvariant();
-
-        var compoundPatterns = new[]
-        {
-            @"mono\s+and\s+diglycerides",
-            @"mono-\s+and\s+diglycerides",
-            @"salt\s+and\s+pepper",
-            @"peanut\s+and/or\s+",
-            @"canola\s+and/or\s+",
-            @"soybean\s+and/or\s+",
-            @"contains\s+one\s+or\s+more",
-            @"red\s+and\s+green",
-            @"black\s+and\s+white",
-            @"\w+\s+oil\s+and/or\s+\w+\s+oil"
-        };
-
-        return compoundPatterns.Any(pattern => Regex.IsMatch(lowerIngredient, pattern));
+        return CompoundIngredientRegex.IsMatch(lowerIngredient);
     }
 
     private string NormalizeText(string text)
@@ -280,12 +305,11 @@ public class AdvancedIngredientParser : IIngredientListParser
         text = text.Replace(';', ',');
 
         // Remove asterisks and other symbols used for annotations
-        text = Regex.Replace(text, @"\*+|\†+|‡+", "");
+        text = AsteriskRemovalRegex.Replace(text, "");
 
         // Remove URLs
-        text = Regex.Replace(text, @"https?://[^\s,)]+", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"www\.[^\s,)]+", "", RegexOptions.IgnoreCase);
-
+        text = UrlRegex.Replace(text, "");
+        text = WwwRegex.Replace(text, "");
         // Remove common non-ingredient patterns
         text = RemoveNonIngredientContent(text);
 
@@ -293,10 +317,10 @@ public class AdvancedIngredientParser : IIngredientListParser
         text = BalanceParentheses(text);
 
         // Replace multiple spaces with single space
-        text = Regex.Replace(text, @"\s+", " ");
+        text = MultipleSpacesRegex.Replace(text, " ");
 
         // Remove excessive commas
-        text = Regex.Replace(text, @",\s*,+", ",");
+        text = ExcessiveCommasRegex.Replace(text, ",");
 
         return text.Trim();
     }
@@ -304,81 +328,76 @@ public class AdvancedIngredientParser : IIngredientListParser
     private string RemoveNonIngredientContent(string text)
     {
         // Remove questions/comments prompts
-        text = Regex.Replace(text, @"\b(questions?\s+or\s+comments?\??[^,.)]*)", "", RegexOptions.IgnoreCase);
+        text = NonIngredientContentRegex.Replace(text, "");
 
         // Remove website/contact info
-        text = Regex.Replace(text, @"\b(call|visit|email|contact|careline)\s+[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = WebsiteContactRegex.Replace(text, "");
 
         // Remove packaging/recycling info
-        text = Regex.Replace(text, @"\b(how2recycle|recyclable|raccolta\s+differenziata|plastica|metal\s+can)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = PackagingRecyclingRegex.Replace(text, "");
 
         // Remove nutritional facts patterns
-        text = Regex.Replace(text, @"%\s*daily\s+value[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"serving\s+size[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\bcalories\b[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"total\s+(fat|carb|protein)\s+\d+g", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"reference\s+intake\s+of[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"valeurs\s+nutritionnelles[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"nutrition\s+facts?[^,.)]*", "", RegexOptions.IgnoreCase);
-
+        text = DailyValueRegex.Replace(text, "");
+        text = ServingSizeRegex.Replace(text, "");
+        text = CaloriesRegex.Replace(text, "");
+        text = NutritionFatCarbProteinRegex.Replace(text, "");
+        text = ReferenceIntakeRegex.Replace(text, "");
+        text = FrenchNutritionRegex.Replace(text, "");
+        text = NutritionFactsRegex.Replace(text, "");
         // Remove barcode/UPC patterns
-        text = Regex.Replace(text, @"\b\d{12,13}\b", "");
+        text = BarcodeRegex.Replace(text, "");
 
         // Remove product codes and SKUs
-        text = Regex.Replace(text, @"\bsku#?\s*\d+", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b[A-Z]{2,}\d{4,}", ""); // Codes like TX78704, EC1N2HT
+        text = SkuRegex.Replace(text, "");
+        text = ProductCodeRegex.Replace(text, "");
 
         // Remove storage instructions (multi-language)
-        text = Regex.Replace(text, @"\b(rinse\s+and\s+insert|conservar|conserver|lagern|store\s+in)[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b(à\s+consommer\s+avant|consume\s+within|termen\s+limită)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = StorageInstructionsRegex.Replace(text, "");
+        text = ConsumptionDateRegex.Replace(text, "");
 
         // Remove country/origin info
-        text = Regex.Replace(text, @"\b(product\s+of|made\s+in|manufactured\s+in|produit\s+en|origine|origin)\s*:?\s*\w+", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b(turkey|france|italia|deutschland|nederland|republica\s+moldova)[^,.)]*", "", RegexOptions.IgnoreCase);
-
+        text = OriginRegex.Replace(text, "");
+        text = CountryOriginRegex.Replace(text, "");
         // Remove certification info
-        text = Regex.Replace(text, @"\bcertified\s+(organic|gluten\s+free)[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b(bio|fr-bio-\d+|agriculture\s+ue)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = CertificationRegex.Replace(text, "");
+        text = BioRegex.Replace(text, "");
 
         // Remove "includes" added sugars pattern
-        text = Regex.Replace(text, @"includes\s+\d+g?\s+added\s+sugars[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = AddedSugarsRegex.Replace(text, "");
 
         // Remove addresses and postal codes
-        text = Regex.Replace(text, @"\b\d{1,5}\s+[A-Z][a-z]+\s+(st|street|ave|avenue|rd|road|blvd|boulevard)[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\bp\.?o\.?\s+box\s+\d+", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b\d{5}(-\d{4})?\s+(paris|dublin|milano|luxembourg|chisinau|lakes)", "", RegexOptions.IgnoreCase);
+        text = AddressRegex.Replace(text, "");
+        text = PoBoxRegex.Replace(text, "");
+        text = PostalCodeRegex.Replace(text, "");
 
         // Remove directions for use
-        text = Regex.Replace(text, @"\b(directions?|conseils?|indicații)[^,.)]*:", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b(to\s+ensure|pour\s+assurer|shake\s+well|drink|mix)[^,.)]*", "", RegexOptions.IgnoreCase);
-
+        text = DirectionsRegex.Replace(text, "");
+        text = UsageInstructionsRegex.Replace(text, "");
         // Remove allergy warnings
-        text = Regex.Replace(text, @"\b(allergy\s+advice|allergen\s+information|pour\s+les\s+allergènes)[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b(may\s+contain|peut\s+contenir|puede\s+contener|può\s+contenere)[^,.)]*", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"\b(for\s+allergens|see\s+ingredients\s+in\s+bold)[^,.)]*", "", RegexOptions.IgnoreCase);
-
+        text = AllergyWarningRegex.Replace(text, "");
+        text = MayContainRegex.Replace(text, "");
+        text = AllergenLabelRegex.Replace(text, "");
         // Remove serving suggestions
-        text = Regex.Replace(text, @"\b(serving\s+suggestion|suggestion\s+de\s+présentation)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = ServingSuggestionRegex.Replace(text, "");
 
         // Remove promotional text
-        text = Regex.Replace(text, @"\b(scan\s+to|get\s+in\s+touch|refill\s+your)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = PromotionalTextRegex.Replace(text, "");
 
         // Remove medical disclaimers
-        text = Regex.Replace(text, @"\b(not\s+intended\s+to|prevent\s+any\s+disease|medicinale|farmaco)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = MedicalDisclaimerRegex.Replace(text, "");
 
         // Remove packaging info
-        text = Regex.Replace(text, @"\b(packaged\s+in|packed\s+in|jar\s+recycle|lid\s+recycle)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = PackagingInfoRegex.Replace(text, "");
 
         // Remove manufacturing info
-        text = Regex.Replace(text, @"\b(manufactured\s+for|distributed\s+by|importat\s+si\s+distribuit)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = ManufacturingInfoRegex.Replace(text, "");
 
         // Remove expiry date info
-        text = Regex.Replace(text, @"\b(best\s+before|use\s+by|fecha\s+de\s+caducidad|data\s+di\s+scadenza)[^,.)]*", "", RegexOptions.IgnoreCase);
+        text = ExpiryDateRegex.Replace(text, "");
 
         // Remove weight/quantity info
-        text = Regex.Replace(text, @"poids\s+net\s*:\s*\d+\s*g", "", RegexOptions.IgnoreCase);
-        text = Regex.Replace(text, @"net\s+wt\.?\s*\d+", "", RegexOptions.IgnoreCase);
-
+        text = WeightRegex.Replace(text, "");
+        text = NetWeightRegex.Replace(text, "");
         // Remove HTML entities
         text = text.Replace("&quot;", "").Replace("&lt;", "").Replace("&gt;", "");
 
@@ -421,8 +440,7 @@ public class AdvancedIngredientParser : IIngredientListParser
     private void ExtractIngredients(string text, HashSet<string> ingredients)
     {
         // Handle "contains X% or less of: ..." pattern
-        var containsMatch = Regex.Match(text, @"(contains?\s+(?:\d+%?\s+)?(?:or\s+)?(?:less|more)\s+(?:than\s+)?(?:\d+%?\s+)?of[:\s]*)(.*)",
-            RegexOptions.IgnoreCase);
+        var containsMatch = ContainsPatternRegex.Match(text);
 
         if (containsMatch.Success)
         {
@@ -543,7 +561,6 @@ public class AdvancedIngredientParser : IIngredientListParser
 
         // Remove "édulcorant de source naturelle" type phrases
         ingredient = Regex.Replace(ingredient, @"^édulcorant\s+de\s+source\s+naturelle", "", RegexOptions.IgnoreCase);
-
         // Remove quantity indicators at the start (but not E-numbers like E450)
         ingredient = Regex.Replace(ingredient, @"^(?!E\d+)\d+%?\s*", "", RegexOptions.IgnoreCase);
 
@@ -553,7 +570,7 @@ public class AdvancedIngredientParser : IIngredientListParser
         // Remove trailing periods, colons, etc.
         ingredient = ingredient.Trim(' ', '.', ',', ':', '-', '_', ')');
 
-        // Clean up "includes" pattern
+        // Clean up "includes" pattern (og is Norwegian for "and")
         ingredient = Regex.Replace(ingredient, @"\bincludes\s+og\b", "", RegexOptions.IgnoreCase);
 
         // Remove "Traces éventuelles" and similar
@@ -577,8 +594,7 @@ public class AdvancedIngredientParser : IIngredientListParser
         }).Trim();
 
         // Remove double spaces
-        ingredient = Regex.Replace(ingredient, @"\s{2,}", " ");
-
+        ingredient = MultipleSpacesRegex.Replace(ingredient, " ");
         // Don't capitalize E-numbers or all-caps abbreviations
         if (ingredient.Length > 0)
         {
@@ -604,15 +620,15 @@ public class AdvancedIngredientParser : IIngredientListParser
     private bool IsMetaInformation(string text)
     {
         // Check if it's just a number or percentage
-        if (Regex.IsMatch(text, @"^\d+%?\.?$"))
+        if (MetaInformationPercentRegex.IsMatch(text))
             return true;
 
         // Check if it ends with "etc" or "etc." - indicates incomplete list
-        if (Regex.IsMatch(text, @"\betc\.?$", RegexOptions.IgnoreCase))
+        if (EtcRegex.IsMatch(text))
             return true;
 
         // Check for truncated/incomplete patterns (no vowels except at start, or very short)
-        if (text.Length <= 3 && !Regex.IsMatch(text, @"[aeiou]", RegexOptions.IgnoreCase))
+        if (text.Length <= 3 && !VowelsRegex.IsMatch(text))
             return true;
 
         var lowerText = text.ToLowerInvariant();
@@ -665,7 +681,7 @@ public class AdvancedIngredientParser : IIngredientListParser
 
         foreach (var pattern in descriptorOnlyPatterns)
         {
-            if (Regex.IsMatch(lowerText, pattern))
+            if (DescriptorPatternsRegex.IsMatch(lowerText))
                 return true;
         }
 
@@ -686,7 +702,7 @@ public class AdvancedIngredientParser : IIngredientListParser
             return false;
 
         // Must not be just numbers
-        if (Regex.IsMatch(ingredient, @"^\d+\.?\d*%?$"))
+        if (NumberOnlyRegex.IsMatch(ingredient))
             return false;
 
         var lowerIngredient = ingredient.ToLowerInvariant();
@@ -784,6 +800,8 @@ public class AdvancedIngredientParser : IIngredientListParser
 
         foreach (var pattern in rejectPatterns)
         {
+            // Note: These patterns are only checked once per ingredient, and creating a static regex for each
+            // would require significantly more memory. The performance impact is minimal here.
             if (Regex.IsMatch(lowerIngredient, pattern))
                 return false;
         }

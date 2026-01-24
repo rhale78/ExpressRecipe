@@ -115,8 +115,8 @@ internal sealed partial class DalClassGenerator
         code.AppendLine();
         code.AppendLine($"        Logger.LogInformation(\"Bulk updating {{Count}} {_metadata.ClassName} entities\", entityList.Count);");
         code.AppendLine();
-        code.AppendLine("        // Batch updates in parallel for better performance");
-        code.AppendLine("        const int BATCH_SIZE = 50;  // Update 50 entities at a time");
+        code.AppendLine("        // OPTIMIZATION: Batch updates in parallel (50 at a time) for better performance");
+        code.AppendLine("        const int BATCH_SIZE = 50;");
         code.AppendLine("        int totalUpdated = 0;");
         code.AppendLine();
         code.AppendLine("        // Process entities in batches of parallel tasks");
@@ -145,7 +145,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine();
         code.AppendLine($"        Logger.LogInformation(\"Bulk updated {{Count}} {_metadata.ClassName} entities (batched)\", totalUpdated);");
         code.AppendLine("        return totalUpdated;");
-            code.AppendLine("    }");
+        code.AppendLine("    }");
         }
 
     private void GenerateBulkDeleteMethod(StringBuilder code)
