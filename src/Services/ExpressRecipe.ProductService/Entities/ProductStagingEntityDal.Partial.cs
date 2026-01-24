@@ -238,8 +238,7 @@ public sealed partial class ProductStagingEntityDal
     }
 
     /// <summary>
-    /// Gets a single staging product by external ID
-    /// Returns null if not found or soft-deleted
+    /// Gets a single staging product by external ID using indexed database query
     /// </summary>
     public async Task<ProductStagingEntity?> GetByExternalIdAsync(
         string externalId,
@@ -248,42 +247,17 @@ public sealed partial class ProductStagingEntityDal
         if (string.IsNullOrWhiteSpace(externalId))
             return null;
 
-        Logger.LogInformation("Getting staging product by external ID: {ExternalId}", externalId);
+        const string sql = @"
+            SELECT TOP 1 * FROM [ProductStaging]
+            WHERE [ExternalId] = @ExternalId AND [IsDeleted] = 0";
 
-        try
-        {
-            // Use WHERE clause to find matching entity
-            var whereClause = $"[ExternalId] = '{externalId.Replace("'", "''")}'";
-            var result = new List<ProductStagingEntity>();
-
-            // Check if InMemoryTable is configured
-            if (_inMemoryTable != null)
-            {
-                await _inMemoryTable.ExecuteQueryAsync(result, whereClause);
-                var entity = result.FirstOrDefault(e => !e.IsDeleted);
-                if (entity != null)
-                    return entity;
-            }
-
-            // Fall back to database query
-            const string sql = @"
-                SELECT TOP 1 * FROM [ProductStaging]
-                WHERE [ExternalId] = @ExternalId AND [IsDeleted] = 0";
-
-            var parameters = new[] { CreateSqlParameter("@ExternalId", externalId) };
-            var results = await ExecuteReaderAsync(sql, MapDataReaderToEntity, parameters);
-            return results.FirstOrDefault();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error getting staging product by external ID {ExternalId}", externalId);
-            throw;
-        }
+        var parameters = new { ExternalId = externalId };
+        var results = await ExecuteQueryAsync(sql, MapFromReader, parameters, cancellationToken: cancellationToken);
+        return results.FirstOrDefault();
     }
 
     /// <summary>
-    /// Gets a single staging product by barcode
-    /// Returns null if not found or soft-deleted
+    /// Gets a single staging product by barcode using indexed database query
     /// </summary>
     public async Task<ProductStagingEntity?> GetByBarcodeAsync(
         string barcode,
@@ -292,42 +266,17 @@ public sealed partial class ProductStagingEntityDal
         if (string.IsNullOrWhiteSpace(barcode))
             return null;
 
-        Logger.LogInformation("Getting staging product by barcode: {Barcode}", barcode);
+        const string sql = @"
+            SELECT TOP 1 * FROM [ProductStaging]
+            WHERE [Barcode] = @Barcode AND [IsDeleted] = 0";
 
-        try
-        {
-            // Use WHERE clause to find matching entity
-            var whereClause = $"[Barcode] = '{barcode.Replace("'", "''")}'";
-            var result = new List<ProductStagingEntity>();
-
-            // Check if InMemoryTable is configured
-            if (_inMemoryTable != null)
-            {
-                await _inMemoryTable.ExecuteQueryAsync(result, whereClause);
-                var entity = result.FirstOrDefault(e => !e.IsDeleted);
-                if (entity != null)
-                    return entity;
-            }
-
-            // Fall back to database query
-            const string sql = @"
-                SELECT TOP 1 * FROM [ProductStaging]
-                WHERE [Barcode] = @Barcode AND [IsDeleted] = 0";
-
-            var parameters = new[] { CreateSqlParameter("@Barcode", barcode) };
-            var results = await ExecuteReaderAsync(sql, MapDataReaderToEntity, parameters);
-            return results.FirstOrDefault();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error getting staging product by barcode {Barcode}", barcode);
-            throw;
-        }
+        var parameters = new { Barcode = barcode };
+        var results = await ExecuteQueryAsync(sql, MapFromReader, parameters, cancellationToken: cancellationToken);
+        return results.FirstOrDefault();
     }
 
     /// <summary>
-    /// Gets all staging products with a specific processing status
-    /// Filters out soft-deleted entities
+    /// Gets all staging products with a specific processing status using indexed database query
     /// </summary>
     public async Task<List<ProductStagingEntity>> GetByProcessingStatusAsync(
         string status,
@@ -336,35 +285,12 @@ public sealed partial class ProductStagingEntityDal
         if (string.IsNullOrWhiteSpace(status))
             return new List<ProductStagingEntity>();
 
-        Logger.LogInformation("Getting staging products by status: {Status}", status);
+        const string sql = @"
+            SELECT * FROM [ProductStaging]
+            WHERE [ProcessingStatus] = @Status AND [IsDeleted] = 0
+            ORDER BY [CreatedDate]";
 
-        try
-        {
-            // Use WHERE clause to find all matching entities
-            var whereClause = $"[ProcessingStatus] = '{status.Replace("'", "''")}'";
-            var result = new List<ProductStagingEntity>();
-
-            // Check if InMemoryTable is configured
-            if (_inMemoryTable != null)
-            {
-                await _inMemoryTable.ExecuteQueryAsync(result, whereClause);
-                return result.Where(e => !e.IsDeleted).ToList();
-            }
-
-            // Fall back to database query
-            const string sql = @"
-                SELECT * FROM [ProductStaging]
-                WHERE [ProcessingStatus] = @Status AND [IsDeleted] = 0
-                ORDER BY [CreatedDate]";
-
-            var parameters = new[] { CreateSqlParameter("@Status", status) };
-            result = await ExecuteReaderAsync(sql, MapDataReaderToEntity, parameters);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error getting staging products by status {Status}", status);
-            throw;
-        }
+        var parameters = new { Status = status };
+        return await ExecuteQueryAsync(sql, MapFromReader, parameters, cancellationToken: cancellationToken);
     }
 }
