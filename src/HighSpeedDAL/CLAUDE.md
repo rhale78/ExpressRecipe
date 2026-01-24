@@ -148,6 +148,15 @@ HighSpeedDAL.Core (base abstractions)
 - Auto-flush to database (staging or main table)
 - Index support and constraint validation
 - SQL-like WHERE clause parsing
+- Pluggable flush strategies for atomic table swap operations
+
+**InMemory Table Flush Strategies**:
+- `IFlushStrategy<TEntity>`: Interface for implementing custom flush patterns
+- `TableSwapFlushStrategy<TEntity>`: Atomic table swap (CREATE TEMP → BULK INSERT → SWAP)
+- Configurable via `SetFlushStrategy()` and periodic flush via `ConfigurePeriodicFlush()`
+- Manual triggers via `TriggerFlushAsync()` after batch operations
+- Entity-specific optimization via partial class `BulkInsertToTempTableAsync()` override
+- Serializable isolation level ensures all-or-nothing semantics
 
 **Reference Tables** (`[ReferenceTable]`):
 - Preload lookup data on startup
@@ -198,6 +207,151 @@ The source generator matches entities to connections by namespace:
 - No schema support
 - Autoincrement via `AUTOINCREMENT` keyword
 - Limited bulk operation optimization
+
+### InMemory Table Flush Strategy Implementation
+
+The framework supports pluggable flush strategies for high-performance bulk writes to database. This pattern addresses the scenario where in-memory data must be atomically written to the backing store.
+
+**When to Use**:
+- Accumulating writes in memory and periodically flushing to database
+- Requiring atomic all-or-nothing semantics (either all rows written or none)
+- High-volume batch operations (1000+ rows) needing optimized bulk insert
+
+**Core Components**:
+
+1. **IFlushStrategy<TEntity>** (Core/InMemoryTable/IFlushStrategy.cs):
+   - `string StrategyName { get; }`: Identifies the strategy
+   - `Task<int> FlushAsync(List<TEntity> entities, CancellationToken cancellationToken)`: Executes flush, returns count flushed
+
+2. **TableSwapFlushStrategy<TEntity>** (Core/InMemoryTable/TableSwapFlushStrategy.cs):
+   - Default implementation using atomic table swap pattern
+   - Pattern: CREATE TEMP TABLE → BULK INSERT → (within transaction) DROP original + RENAME temp
+   - Configurable isolation level (default: Serializable)
+   - Supports 300s timeout for bulk operations
+
+3. **InMemoryTable<TEntity>** Enhanced Methods:
+   - `SetFlushStrategy(IFlushStrategy<TEntity> strategy)`: Configure strategy
+   - `ConfigurePeriodicFlush(int flushIntervalSeconds)`: Start timer for periodic flush
+   - `TriggerFlushAsync()`: Manually trigger flush and clear table
+   - `Dispose()`: Final flush on shutdown
+
+**Implementation Example - SQL Server with SqlBulkCopy**:
+
+```csharp
+// Entity-specific partial DAL (ProductStagingEntityDal.Partial.cs)
+public sealed partial class ProductStagingEntityDal
+{
+    /// <summary>
+    /// Implements table swap bulk insert using SqlBulkCopy (50-100x faster than individual INSERTs)
+    /// Called by TableSwapFlushStrategy during atomic flush operation
+    /// </summary>
+    public async Task<int> BulkInsertToTempTableAsync(
+        List<ProductStagingEntity> entities,
+        string tempTableName)
+    {
+        const int BATCH_SIZE = 1000; // Process in 1000-row batches for memory efficiency
+        int totalInserted = 0;
+
+        for (int i = 0; i < entities.Count; i += BATCH_SIZE)
+        {
+            var batch = entities.Skip(i).Take(BATCH_SIZE).ToList();
+
+            using var connection = new SqlConnection(Connection.ConnectionString);
+            await connection.OpenAsync();
+
+            using var bulkCopy = new SqlBulkCopy(connection)
+            {
+                DestinationTableName = $"[{tempTableName}]",
+                BatchSize = BATCH_SIZE,
+                BulkCopyTimeout = 300 // 5 minutes for large batches
+            };
+
+            // Create schema-matching DataTable
+            var dataTable = CreateProductStagingDataTable(batch);
+
+            // Map columns
+            AddBulkCopyColumnMappings(bulkCopy);
+
+            // Execute bulk insert (single operation for entire batch)
+            await bulkCopy.WriteToServerAsync(dataTable);
+            totalInserted += batch.Count;
+        }
+
+        return totalInserted;
+    }
+
+    private DataTable CreateProductStagingDataTable(List<ProductStagingEntity> entities)
+    {
+        var dt = new DataTable("ProductStaging");
+
+        // Add columns matching entity schema
+        dt.Columns.Add("Id", typeof(Guid));
+        dt.Columns.Add("ExternalId", typeof(string));
+        dt.Columns.Add("ProductName", typeof(string));
+        // ... (all 31 columns of ProductStagingEntity)
+
+        // Populate rows with null handling
+        foreach (var entity in entities)
+        {
+            var row = dt.NewRow();
+            row["Id"] = entity.Id;
+            row["ExternalId"] = (object?)entity.ExternalId ?? DBNull.Value;
+            row["ProductName"] = (object?)entity.ProductName ?? DBNull.Value;
+            // ... (all properties)
+            dt.Rows.Add(row);
+        }
+
+        return dt;
+    }
+
+    private void AddBulkCopyColumnMappings(SqlBulkCopy bulkCopy)
+    {
+        bulkCopy.ColumnMappings.Add("Id", "Id");
+        bulkCopy.ColumnMappings.Add("ExternalId", "ExternalId");
+        bulkCopy.ColumnMappings.Add("ProductName", "ProductName");
+        // ... (all columns)
+    }
+}
+```
+
+**Usage Pattern**:
+
+```csharp
+// In service or background job
+var inMemoryTable = new InMemoryTable<ProductStagingEntity>(_logger, config);
+
+// Configure atomic table swap flush strategy
+var flushStrategy = new TableSwapFlushStrategy<ProductStagingEntity>(
+    _logger,
+    _connection,
+    _retryPolicy);
+inMemoryTable.SetFlushStrategy(flushStrategy);
+
+// Option 1: Periodic automatic flush every 30 seconds
+inMemoryTable.ConfigurePeriodicFlush(flushIntervalSeconds: 30);
+
+// Option 2: Manual flush after batch insert
+for (int i = 0; i < 2000; i++)
+{
+    await inMemoryTable.InsertAsync(new ProductStagingEntity { ... });
+}
+var flushedCount = await inMemoryTable.TriggerFlushAsync(); // Atomic write of all 2000 rows
+
+// Performance: ~100-200ms for 2000 rows (vs 9+ seconds with individual updates)
+```
+
+**Key Design Decisions**:
+
+1. **Partial Class Override Pattern**: Generated DAL creates `public sealed partial class {Entity}Dal`. Entity-specific optimizations override `BulkInsertToTempTableAsync()` in partial class, allowing schema-specific implementations without regenerating base code.
+
+2. **Atomic Semantics**: Transaction wraps DROP + RENAME to guarantee all-or-nothing write. If flush fails mid-operation, original table is untouched.
+
+3. **Source Generator Integration**: `DalClassGenerator.Part4.cs` generates:
+   - SQL constants (CREATE TEMP, DROP, RENAME SQL)
+   - `ConfigurePeriodicFlush()` method
+   - Note: `BulkInsertToTempTableAsync()` NOT generated; implemented in entity-specific partial
+
+4. **No Cache Bypass**: Flush writes to backing store but doesn't touch L1/L2/L3 caches (memory cache, .NET cache, Redis). Query caches (WHERE clauses, named queries) preserved.
 
 ## Common Development Patterns
 
