@@ -171,21 +171,30 @@ internal sealed partial class DalClassGenerator
             code.AppendLine();
         }
 
-        // Named query methods
-        GenerateNamedQueryMethods(code);
+        // Named query methods (not currently implemented)
 
         // In-memory helper methods
         if (_metadata.HasInMemoryTable)
         {
             GenerateGetAllFromDatabaseAsyncMethod(code);
             code.AppendLine();
-        }
 
-            // Helper methods
-            GenerateMapFromReaderMethod(code);
+            // Periodic flush with table swap strategy
+            GenerateFlushSqlConstants(code);
             code.AppendLine();
 
-            GenerateMapToParametersMethod(code);
+            GenerateFlushStrategyConfiguration(code);
+            code.AppendLine();
+
+            GenerateBulkInsertToTempTableMethod(code);
+            code.AppendLine();
+        }
+
+        // Helper methods
+        GenerateMapFromReaderMethod(code);
+        code.AppendLine();
+
+        GenerateMapToParametersMethod(code);
 
             if (_metadata.HasMemoryMappedTable)
             {
@@ -209,6 +218,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine("using System.Threading.Tasks;");
         code.AppendLine("using HighSpeedDAL.Core;");
         code.AppendLine("using HighSpeedDAL.Core.Base;");
+        code.AppendLine("using HighSpeedDAL.Core.InMemoryTable;");
         code.AppendLine("using HighSpeedDAL.Core.Interfaces;");
         code.AppendLine("using HighSpeedDAL.Core.Resilience;");
 
@@ -220,6 +230,7 @@ internal sealed partial class DalClassGenerator
         else
         {
             code.AppendLine("using HighSpeedDAL.SqlServer;");
+            code.AppendLine("using Microsoft.Data.SqlClient;");
         }
 
         code.AppendLine("using Microsoft.Extensions.Logging;");
@@ -465,8 +476,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine();
         code.AppendLine($"    private const string SQL_CREATE_TABLE = @\"{_sqlGenerator.GenerateCreateTableSql().Replace("\"", "\"\"")}\";");
 
-        // Generate named query SQL constants
-        GenerateNamedQuerySqlConstants(code);
+        // Named query SQL constants (not currently implemented)
     }
 
     private void GenerateSchemaInitialization(StringBuilder code)

@@ -50,6 +50,11 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
         new(StringComparer.OrdinalIgnoreCase);
     private readonly object _cacheLock = new();
 
+    // Periodic flush strategy for backing database
+    private IFlushStrategy<TEntity>? _flushStrategy;
+    private Timer? _flushTimer;
+    private int _flushIntervalSeconds = 300; // Default 5 minutes
+
     /// <summary>
     /// Name of the table
     /// </summary>
@@ -74,6 +79,91 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
     /// Event raised when a flush is required (max rows reached, etc.)
     /// </summary>
     public event EventHandler<FlushRequiredEventArgs>? FlushRequired;
+
+    /// <summary>
+    /// Sets the flush strategy for periodic database flushes
+    /// </summary>
+    public void SetFlushStrategy(IFlushStrategy<TEntity> flushStrategy, int flushIntervalSeconds = 300)
+    {
+        _flushStrategy = flushStrategy;
+        _flushIntervalSeconds = flushIntervalSeconds;
+        _logger.LogInformation("Flush strategy configured: {Strategy} with interval {Seconds}s",
+            flushStrategy.StrategyName, flushIntervalSeconds);
+    }
+
+    /// <summary>
+    /// Configures periodic flush to database at specified interval
+    /// </summary>
+    public void ConfigurePeriodicFlush(int flushIntervalSeconds = 300)
+    {
+        if (_flushStrategy == null)
+        {
+            _logger.LogWarning("Cannot configure periodic flush: no flush strategy set");
+            return;
+        }
+
+        _flushIntervalSeconds = flushIntervalSeconds;
+
+        // Dispose existing timer if any
+        _flushTimer?.Dispose();
+
+        // Create new timer that periodically calls flush
+        _flushTimer = new Timer(
+            _ => TriggerFlushAsync(CancellationToken.None).GetAwaiter().GetResult(),
+            null,
+            TimeSpan.FromSeconds(_flushIntervalSeconds),
+            TimeSpan.FromSeconds(_flushIntervalSeconds));
+
+        _logger.LogInformation("Periodic flush configured: every {Seconds}s using {Strategy} strategy",
+            _flushIntervalSeconds, _flushStrategy.StrategyName);
+    }
+
+    /// <summary>
+    /// Manually triggers a flush to the backing database using the configured strategy
+    /// </summary>
+    public async Task<int> TriggerFlushAsync(CancellationToken cancellationToken = default)
+    {
+        if (_flushStrategy == null)
+        {
+            _logger.LogDebug("No flush strategy configured, skipping flush");
+            return 0;
+        }
+
+        ThrowIfDisposed();
+
+        try
+        {
+            // Get all active (non-deleted) entities
+            var entitiesToFlush = _rows.Values
+                .Where(r => r.State != RowState.Deleted)
+                .Select(r => r.ToEntity<TEntity>())
+                .ToList();
+
+            if (entitiesToFlush.Count == 0)
+            {
+                _logger.LogDebug("No entities to flush");
+                return 0;
+            }
+
+            _logger.LogInformation("Flushing {Count} entities using {Strategy} strategy",
+                entitiesToFlush.Count, _flushStrategy.StrategyName);
+
+            // Execute flush via strategy
+            int flushedCount = await _flushStrategy.FlushAsync(entitiesToFlush, cancellationToken);
+
+            // Clear in-memory table after successful flush (table swap already replaced table)
+            _rows.Clear();
+            InvalidatePropertyCaches();
+
+            _logger.LogInformation("Successfully flushed {Count} entities", flushedCount);
+            return flushedCount;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Flush operation failed");
+            throw;
+        }
+    }
 
     /// <summary>
     /// Creates a new in-memory table
@@ -1418,18 +1508,25 @@ public sealed class InMemoryTable<TEntity> : IDisposable where TEntity : class, 
             try
             {
                 // Flush one last time if configured for immediate or batched mode
-                if (_memoryMappedStore != null && 
+                if (_memoryMappedStore != null &&
                     (_config.SyncMode == MemoryMappedSyncMode.Immediate || _config.SyncMode == MemoryMappedSyncMode.Batched))
                 {
                     FlushToMemoryMappedFileAsync().GetAwaiter().GetResult();
                 }
+
+                // Trigger final flush to backing database if strategy configured
+                if (_flushStrategy != null)
+                {
+                    TriggerFlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to flush memory-mapped file on dispose");
+                _logger.LogWarning(ex, "Failed to flush on dispose");
             }
 
             _syncTimer?.Dispose();
+            _flushTimer?.Dispose();
             _memoryMappedStore?.Dispose();
             _indexLock.Dispose();
             _disposed = true;
