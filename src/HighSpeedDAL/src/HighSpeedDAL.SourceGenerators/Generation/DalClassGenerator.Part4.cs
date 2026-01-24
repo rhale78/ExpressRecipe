@@ -46,18 +46,7 @@ internal sealed partial class DalClassGenerator
         code.AppendLine();
     }
 
-    private void GenerateBulkInsertToTempTableMethod(StringBuilder code)
-    {
-        code.AppendLine("    /// <summary>");
-        code.AppendLine("    /// Placeholder for bulk insert to temporary table");
-        code.AppendLine("    /// Override in partial class with actual SqlBulkCopy implementation");
-        code.AppendLine("    /// </summary>");
-        code.AppendLine($"    private async Task<int> BulkInsertToTempTableAsync(List<{_metadata.ClassName}> entities, string tempTableName)");
-        code.AppendLine("    {");
-        code.AppendLine("        // This is a placeholder - override in partial DAL class for production use");
-        code.AppendLine("        Logger.LogWarning(\"BulkInsertToTempTableAsync not implemented - using default insert\");");
-        code.AppendLine("        return await Task.FromResult(entities?.Count ?? 0);");
-        code.AppendLine("    }");
-        code.AppendLine();
-    }
+    // NOTE: BulkInsertToTempTableAsync is NOT generated here
+    // Each entity-specific DAL provides its own implementation in a partial class
+    // This allows for optimized SqlBulkCopy with the exact entity schema
 }

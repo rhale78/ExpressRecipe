@@ -186,8 +186,8 @@ internal sealed partial class DalClassGenerator
             GenerateFlushStrategyConfiguration(code);
             code.AppendLine();
 
-            GenerateBulkInsertToTempTableMethod(code);
-            code.AppendLine();
+            // NOTE: BulkInsertToTempTableAsync is implemented in entity-specific partial DAL classes
+            // Not generated here because each entity has unique schema for SqlBulkCopy
         }
 
         // Helper methods
