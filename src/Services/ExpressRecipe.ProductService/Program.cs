@@ -14,13 +14,14 @@ using HighSpeedDAL.Core.InMemoryTable;
 using HighSpeedDAL.Core.Interfaces;
 using HighSpeedDAL.Core.Resilience;
 using HighSpeedDAL.SqlServer;
+using Microsoft.Data.SqlClient;
 
 try
 {
     Trace.WriteLine("[ProductService] ===== STARTUP BEGIN =====");
     Trace.WriteLine("[ProductService] Creating builder...");
 
-    var builder = WebApplication.CreateBuilder(args);
+    WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
     Trace.WriteLine("[ProductService] Loading configuration...");
     builder.AddLayeredConfiguration(args);
@@ -44,13 +45,13 @@ try
 
     builder.Services.AddSingleton<RetryPolicyFactory>(sp =>
     {
-        var logger = sp.GetRequiredService<ILogger<RetryPolicyFactory>>();
+        ILogger<RetryPolicyFactory> logger = sp.GetRequiredService<ILogger<RetryPolicyFactory>>();
         return new RetryPolicyFactory(logger, maxRetryAttempts: 3, delayMilliseconds: 100);
     });
 
     builder.Services.AddSingleton<HighSpeedDAL.Core.Resilience.DatabaseRetryPolicy>(sp =>
     {
-        var factory = sp.GetRequiredService<RetryPolicyFactory>();
+        RetryPolicyFactory factory = sp.GetRequiredService<RetryPolicyFactory>();
         return factory.CreatePolicy();
     });
 
@@ -74,11 +75,11 @@ try
 
     builder.Services.AddSingleton<InMemoryTableManager>(sp =>
     {
-        var logger = sp.GetRequiredService<ILogger<InMemoryTableManager>>();
-        var connectionFactory = sp.GetRequiredService<ProductDatabaseConnection>();
+        ILogger<InMemoryTableManager> logger = sp.GetRequiredService<ILogger<InMemoryTableManager>>();
+        ProductDatabaseConnection connectionFactory = sp.GetRequiredService<ProductDatabaseConnection>();
         return new InMemoryTableManager(logger, () =>
         {
-            var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionFactory.ConnectionString);
+            SqlConnection conn = new Microsoft.Data.SqlClient.SqlConnection(connectionFactory.ConnectionString);
             return conn;
         });
     });
@@ -93,7 +94,7 @@ try
     builder.Services.AddSingleton<ProductAllergenEntityDal>();
 
     Trace.WriteLine("[ProductService] Configuring authentication...");
-    var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+    IConfigurationSection jwtSettings = builder.Configuration.GetSection("JwtSettings");
     var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
 
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -143,13 +144,13 @@ try
     builder.Services.AddHttpClient<OpenFoodFactsImportService>();
     builder.Services.AddScoped<OpenFoodFactsImportService>(sp =>
     {
-        var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(OpenFoodFactsImportService));
-        var productRepo = sp.GetRequiredService<IProductRepository>();
-        var stagingRepo = sp.GetRequiredService<IProductStagingRepository>();
-        var imageRepo = sp.GetRequiredService<IProductImageRepository>();
-        var logger = sp.GetRequiredService<ILogger<OpenFoodFactsImportService>>();
-        var ingredientParser = sp.GetRequiredService<IIngredientListParser>();
-        var configuration = sp.GetRequiredService<IConfiguration>();
+        HttpClient httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(OpenFoodFactsImportService));
+        IProductRepository productRepo = sp.GetRequiredService<IProductRepository>();
+        IProductStagingRepository stagingRepo = sp.GetRequiredService<IProductStagingRepository>();
+        IProductImageRepository imageRepo = sp.GetRequiredService<IProductImageRepository>();
+        ILogger<OpenFoodFactsImportService> logger = sp.GetRequiredService<ILogger<OpenFoodFactsImportService>>();
+        IIngredientListParser ingredientParser = sp.GetRequiredService<IIngredientListParser>();
+        IConfiguration configuration = sp.GetRequiredService<IConfiguration>();
         return new OpenFoodFactsImportService(httpClient, productRepo, stagingRepo, imageRepo, logger, ingredientParser, configuration);
     });
     builder.Services.AddScoped<USDAFoodDataImportService>();
@@ -171,6 +172,8 @@ try
     builder.Services.AddSingleton<EventPublisher>();
     builder.Services.AddControllers();
 
+    builder.Services.AddHostedService<ExpressRecipe.ProductService.Services.ProductTableInitializer>();
+
     builder.Services.AddCors(options =>
     {
         options.AddDefaultPolicy(policy =>
@@ -183,12 +186,12 @@ try
     });
 
     Trace.WriteLine("[ProductService] Building application...");
-    var app = builder.Build();
+    WebApplication app = builder.Build();
 
     Trace.WriteLine("[ProductService] Application built successfully");
 
     Trace.WriteLine("[ProductService] Running database management tasks...");
-    var dbMgmtTask = app.RunDatabaseManagementAsync("ProductService", "productdb");
+    Task dbMgmtTask = app.RunDatabaseManagementAsync("ProductService", "productdb");
     if (await Task.WhenAny(dbMgmtTask, Task.Delay(TimeSpan.FromSeconds(30))) == dbMgmtTask)
     {
         await dbMgmtTask;
@@ -199,7 +202,7 @@ try
         Trace.WriteLine("[ProductService] Database management timed out, continuing...");
     }
 
-    var dbMgmtSection = app.Configuration.GetSection("DatabaseManagement");
+    IConfigurationSection dbMgmtSection = app.Configuration.GetSection("DatabaseManagement");
     var enableMigrationRunner = dbMgmtSection.GetValue<bool>("EnableMigrationRunner");
     if (enableMigrationRunner)
     {
@@ -209,8 +212,8 @@ try
         {
             migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
         }
-        var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
-        var migrationsTask = app.RunMigrationsAsync(connectionString, migrations);
+        Dictionary<string, string> migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+        Task migrationsTask = app.RunMigrationsAsync(connectionString, migrations);
         if (await Task.WhenAny(migrationsTask, Task.Delay(TimeSpan.FromSeconds(30))) == migrationsTask)
         {
             await migrationsTask;
