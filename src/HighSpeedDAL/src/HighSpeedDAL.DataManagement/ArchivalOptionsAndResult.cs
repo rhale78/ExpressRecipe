@@ -98,7 +98,7 @@ namespace HighSpeedDAL.DataManagement.Archival
         /// <summary>
         /// Gets or sets the list of archived record IDs.
         /// </summary>
-        public List<object> ArchivedRecordIds { get; set; } = new List<object>();
+        public List<object> ArchivedRecordIds { get; set; } = [];
 
         /// <summary>
         /// Gets or sets the archive table name.

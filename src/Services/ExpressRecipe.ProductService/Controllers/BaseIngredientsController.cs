@@ -5,281 +5,273 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
-namespace ExpressRecipe.ProductService.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class BaseIngredientsController : ControllerBase
+namespace ExpressRecipe.ProductService.Controllers
 {
-    private readonly IBaseIngredientRepository _repository;
-    private readonly IIngredientParser _parser;
-    private readonly ILogger<BaseIngredientsController> _logger;
-
-    public BaseIngredientsController(
-        IBaseIngredientRepository repository,
-        IIngredientParser parser,
-        ILogger<BaseIngredientsController> logger)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class BaseIngredientsController : ControllerBase
     {
-        _repository = repository;
-        _parser = parser;
-        _logger = logger;
-    }
+        private readonly IBaseIngredientRepository _repository;
+        private readonly IIngredientParser _parser;
+        private readonly ILogger<BaseIngredientsController> _logger;
 
-    private Guid? GetCurrentUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        public BaseIngredientsController(
+            IBaseIngredientRepository repository,
+            IIngredientParser parser,
+            ILogger<BaseIngredientsController> logger)
         {
-            return null;
+            _repository = repository;
+            _parser = parser;
+            _logger = logger;
         }
-        return userId;
-    }
 
-    /// <summary>
-    /// Search for base ingredients
-    /// </summary>
-    [HttpGet("search")]
-    public async Task<ActionResult<List<BaseIngredientDto>>> Search([FromQuery] BaseIngredientSearchRequest request)
-    {
-        try
+        private Guid? GetCurrentUserId()
         {
-            var ingredients = await _repository.SearchAsync(request);
-            return Ok(ingredients);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out Guid userId) ? null : userId;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error searching base ingredients");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
 
-    /// <summary>
-    /// Get base ingredient by ID
-    /// </summary>
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<BaseIngredientDto>> GetById(Guid id)
-    {
-        try
+        /// <summary>
+        /// Search for base ingredients
+        /// </summary>
+        [HttpGet("search")]
+        public async Task<ActionResult<List<BaseIngredientDto>>> Search([FromQuery] BaseIngredientSearchRequest request)
         {
-            var ingredient = await _repository.GetByIdAsync(id);
-
-            if (ingredient == null)
+            try
             {
-                return NotFound(new { message = "Base ingredient not found" });
+                List<BaseIngredientDto> ingredients = await _repository.SearchAsync(request);
+                return Ok(ingredients);
             }
-
-            return Ok(ingredient);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving base ingredient {IngredientId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Get base ingredients by category
-    /// </summary>
-    [HttpGet("category/{category}")]
-    public async Task<ActionResult<List<BaseIngredientDto>>> GetByCategory(string category)
-    {
-        try
-        {
-            var ingredients = await _repository.GetByCategoryAsync(category);
-            return Ok(ingredients);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving base ingredients by category {Category}", category);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Get all allergen base ingredients
-    /// </summary>
-    [HttpGet("allergens")]
-    public async Task<ActionResult<List<BaseIngredientDto>>> GetAllergens()
-    {
-        try
-        {
-            var allergens = await _repository.GetAllergensAsync();
-            return Ok(allergens);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving allergen base ingredients");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Get all additive base ingredients
-    /// </summary>
-    [HttpGet("additives")]
-    public async Task<ActionResult<List<BaseIngredientDto>>> GetAdditives()
-    {
-        try
-        {
-            var additives = await _repository.GetAdditivesAsync();
-            return Ok(additives);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving additive base ingredients");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Create a new base ingredient
-    /// </summary>
-    [HttpPost]
-    [Authorize]
-    public async Task<ActionResult<BaseIngredientDto>> Create([FromBody] CreateBaseIngredientRequest request)
-    {
-        try
-        {
-            var userId = GetCurrentUserId();
-            if (userId == null)
+            catch (Exception ex)
             {
-                return Unauthorized();
+                _logger.LogError(ex, "Error searching base ingredients");
+                return StatusCode(500, new { message = "An error occurred" });
             }
-
-            var ingredientId = await _repository.CreateAsync(request, userId.Value);
-            var ingredient = await _repository.GetByIdAsync(ingredientId);
-
-            _logger.LogInformation("Base ingredient {IngredientId} created by user {UserId}", ingredientId, userId);
-
-            return CreatedAtAction(nameof(GetById), new { id = ingredientId }, ingredient);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating base ingredient");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
 
-    /// <summary>
-    /// Update a base ingredient
-    /// </summary>
-    [HttpPut("{id:guid}")]
-    [Authorize]
-    public async Task<ActionResult<BaseIngredientDto>> Update(Guid id, [FromBody] UpdateBaseIngredientRequest request)
-    {
-        try
+        /// <summary>
+        /// Get base ingredient by ID
+        /// </summary>
+        [HttpGet("{id:guid}")]
+        public async Task<ActionResult<BaseIngredientDto>> GetById(Guid id)
         {
-            var userId = GetCurrentUserId();
-            if (userId == null)
+            try
             {
-                return Unauthorized();
+                BaseIngredientDto? ingredient = await _repository.GetByIdAsync(id);
+
+                return ingredient == null ? (ActionResult<BaseIngredientDto>)NotFound(new { message = "Base ingredient not found" }) : (ActionResult<BaseIngredientDto>)Ok(ingredient);
             }
-
-            var success = await _repository.UpdateAsync(id, request, userId.Value);
-
-            if (!success)
+            catch (Exception ex)
             {
-                return NotFound(new { message = "Base ingredient not found" });
+                _logger.LogError(ex, "Error retrieving base ingredient {IngredientId}", id);
+                return StatusCode(500, new { message = "An error occurred" });
             }
-
-            var ingredient = await _repository.GetByIdAsync(id);
-
-            _logger.LogInformation("Base ingredient {IngredientId} updated by user {UserId}", id, userId);
-
-            return Ok(ingredient);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating base ingredient {IngredientId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
 
-    /// <summary>
-    /// Delete a base ingredient
-    /// </summary>
-    [HttpDelete("{id:guid}")]
-    [Authorize]
-    public async Task<ActionResult> Delete(Guid id)
-    {
-        try
+        /// <summary>
+        /// Get base ingredients by category
+        /// </summary>
+        [HttpGet("category/{category}")]
+        public async Task<ActionResult<List<BaseIngredientDto>>> GetByCategory(string category)
         {
-            var userId = GetCurrentUserId();
-            if (userId == null)
+            try
             {
-                return Unauthorized();
+                List<BaseIngredientDto> ingredients = await _repository.GetByCategoryAsync(category);
+                return Ok(ingredients);
             }
-
-            var success = await _repository.DeleteAsync(id, userId.Value);
-
-            if (!success)
+            catch (Exception ex)
             {
-                return NotFound(new { message = "Base ingredient not found" });
+                _logger.LogError(ex, "Error retrieving base ingredients by category {Category}", category);
+                return StatusCode(500, new { message = "An error occurred" });
             }
-
-            _logger.LogInformation("Base ingredient {IngredientId} deleted by user {UserId}", id, userId);
-
-            return NoContent();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting base ingredient {IngredientId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
 
-    /// <summary>
-    /// Approve or reject a base ingredient (admin only)
-    /// </summary>
-    [HttpPost("{id:guid}/approve")]
-    [Authorize] // TODO: Add admin role check
-    public async Task<ActionResult> Approve(Guid id, [FromQuery] bool approve, [FromQuery] string? rejectionReason = null)
-    {
-        try
+        /// <summary>
+        /// Get all allergen base ingredients
+        /// </summary>
+        [HttpGet("allergens")]
+        public async Task<ActionResult<List<BaseIngredientDto>>> GetAllergens()
         {
-            var userId = GetCurrentUserId();
-            if (userId == null)
+            try
             {
-                return Unauthorized();
+                List<BaseIngredientDto> allergens = await _repository.GetAllergensAsync();
+                return Ok(allergens);
             }
-
-            var success = await _repository.ApproveAsync(id, approve, userId.Value, rejectionReason);
-
-            if (!success)
+            catch (Exception ex)
             {
-                return NotFound(new { message = "Base ingredient not found" });
+                _logger.LogError(ex, "Error retrieving allergen base ingredients");
+                return StatusCode(500, new { message = "An error occurred" });
             }
-
-            _logger.LogInformation(
-                "Base ingredient {IngredientId} {Action} by user {UserId}",
-                id,
-                approve ? "approved" : "rejected",
-                userId);
-
-            return NoContent();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error approving base ingredient {IngredientId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
 
-    /// <summary>
-    /// Parse an ingredient string into base components
-    /// </summary>
-    [HttpPost("parse")]
-    public async Task<ActionResult<ParsedIngredientResult>> ParseIngredientString([FromBody] string ingredientString)
-    {
-        try
+        /// <summary>
+        /// Get all additive base ingredients
+        /// </summary>
+        [HttpGet("additives")]
+        public async Task<ActionResult<List<BaseIngredientDto>>> GetAdditives()
         {
-            var result = await _parser.ParseIngredientStringAsync(ingredientString);
-            return Ok(result);
+            try
+            {
+                List<BaseIngredientDto> additives = await _repository.GetAdditivesAsync();
+                return Ok(additives);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving additive base ingredients");
+                return StatusCode(500, new { message = "An error occurred" });
+            }
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Create a new base ingredient
+        /// </summary>
+        [HttpPost]
+        [Authorize]
+        public async Task<ActionResult<BaseIngredientDto>> Create([FromBody] CreateBaseIngredientRequest request)
         {
-            _logger.LogError(ex, "Error parsing ingredient string");
-            return StatusCode(500, new { message = "An error occurred" });
+            try
+            {
+                Guid? userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized();
+                }
+
+                Guid ingredientId = await _repository.CreateAsync(request, userId.Value);
+                BaseIngredientDto? ingredient = await _repository.GetByIdAsync(ingredientId);
+
+                _logger.LogInformation("Base ingredient {IngredientId} created by user {UserId}", ingredientId, userId);
+
+                return CreatedAtAction(nameof(GetById), new { id = ingredientId }, ingredient);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating base ingredient");
+                return StatusCode(500, new { message = "An error occurred" });
+            }
+        }
+
+        /// <summary>
+        /// Update a base ingredient
+        /// </summary>
+        [HttpPut("{id:guid}")]
+        [Authorize]
+        public async Task<ActionResult<BaseIngredientDto>> Update(Guid id, [FromBody] UpdateBaseIngredientRequest request)
+        {
+            try
+            {
+                Guid? userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized();
+                }
+
+                var success = await _repository.UpdateAsync(id, request, userId.Value);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Base ingredient not found" });
+                }
+
+                BaseIngredientDto? ingredient = await _repository.GetByIdAsync(id);
+
+                _logger.LogInformation("Base ingredient {IngredientId} updated by user {UserId}", id, userId);
+
+                return Ok(ingredient);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating base ingredient {IngredientId}", id);
+                return StatusCode(500, new { message = "An error occurred" });
+            }
+        }
+
+        /// <summary>
+        /// Delete a base ingredient
+        /// </summary>
+        [HttpDelete("{id:guid}")]
+        [Authorize]
+        public async Task<ActionResult> Delete(Guid id)
+        {
+            try
+            {
+                Guid? userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized();
+                }
+
+                var success = await _repository.DeleteAsync(id, userId.Value);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Base ingredient not found" });
+                }
+
+                _logger.LogInformation("Base ingredient {IngredientId} deleted by user {UserId}", id, userId);
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting base ingredient {IngredientId}", id);
+                return StatusCode(500, new { message = "An error occurred" });
+            }
+        }
+
+        /// <summary>
+        /// Approve or reject a base ingredient (admin only)
+        /// </summary>
+        [HttpPost("{id:guid}/approve")]
+        [Authorize] // TODO: Add admin role check
+        public async Task<ActionResult> Approve(Guid id, [FromQuery] bool approve, [FromQuery] string? rejectionReason = null)
+        {
+            try
+            {
+                Guid? userId = GetCurrentUserId();
+                if (userId == null)
+                {
+                    return Unauthorized();
+                }
+
+                var success = await _repository.ApproveAsync(id, approve, userId.Value, rejectionReason);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Base ingredient not found" });
+                }
+
+                _logger.LogInformation(
+                    "Base ingredient {IngredientId} {Action} by user {UserId}",
+                    id,
+                    approve ? "approved" : "rejected",
+                    userId);
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error approving base ingredient {IngredientId}", id);
+                return StatusCode(500, new { message = "An error occurred" });
+            }
+        }
+
+        /// <summary>
+        /// Parse an ingredient string into base components
+        /// </summary>
+        [HttpPost("parse")]
+        public async Task<ActionResult<ParsedIngredientResult>> ParseIngredientString([FromBody] string ingredientString)
+        {
+            try
+            {
+                ParsedIngredientResult result = await _parser.ParseIngredientStringAsync(ingredientString);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error parsing ingredient string");
+                return StatusCode(500, new { message = "An error occurred" });
+            }
         }
     }
 }

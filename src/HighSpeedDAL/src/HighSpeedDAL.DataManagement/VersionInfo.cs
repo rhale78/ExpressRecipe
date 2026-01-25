@@ -93,12 +93,9 @@ namespace HighSpeedDAL.DataManagement.Versioning
         /// <returns>True if versions are equal, false otherwise.</returns>
         public bool EqualsVersion(VersionInfo? other)
         {
-            if (other == null || Strategy != other.Strategy)
-            {
-                return false;
-            }
-
-            return Strategy switch
+            return other == null || Strategy != other.Strategy
+                ? false
+                : Strategy switch
             {
                 VersionStrategy.RowVersion => ByteArrayEquals(RowVersionValue, other.RowVersionValue),
                 VersionStrategy.Timestamp => TimestampValue == other.TimestampValue,

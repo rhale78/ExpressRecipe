@@ -597,12 +597,12 @@ namespace HighSpeedDAL.AdvancedCaching
             List<string> keyList = keys.ToList();
             if (keyList.Count == 0)
             {
-                return new Dictionary<string, TEntity>();
+                return [];
             }
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            Dictionary<string, TEntity> result = new Dictionary<string, TEntity>();
-            List<string> missingKeys = new List<string>();
+            Dictionary<string, TEntity> result = [];
+            List<string> missingKeys = [];
 
             try
             {
@@ -794,7 +794,7 @@ namespace HighSpeedDAL.AdvancedCaching
             try
             {
                 DateTime now = DateTime.UtcNow;
-                List<string> keysToRefresh = new List<string>();
+                List<string> keysToRefresh = [];
 
                 foreach (KeyValuePair<string, DateTime> kvp in _refreshSchedule)
                 {
@@ -1014,7 +1014,7 @@ namespace HighSpeedDAL.AdvancedCaching
             }
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            List<string> successfulKeys = new List<string>();
+            List<string> successfulKeys = [];
 
             try
             {
@@ -1384,7 +1384,7 @@ namespace HighSpeedDAL.AdvancedCaching
 
             try
             {
-                List<string> keysToRemove = new List<string>();
+                List<string> keysToRemove = [];
 
                 foreach (string key in _cache.Keys)
                 {
@@ -1783,7 +1783,7 @@ namespace HighSpeedDAL.AdvancedCaching
             }
 
             Stopwatch stopwatch = Stopwatch.StartNew();
-            List<PendingWrite<object>> batch = new List<PendingWrite<object>>();
+            List<PendingWrite<object>> batch = [];
 
             try
             {

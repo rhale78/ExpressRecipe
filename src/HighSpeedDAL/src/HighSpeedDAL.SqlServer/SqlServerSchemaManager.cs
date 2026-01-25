@@ -9,113 +9,113 @@ using HighSpeedDAL.Core.Interfaces;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 
-namespace HighSpeedDAL.SqlServer.Schema;
-
-/// <summary>
-/// Manages database schema operations for SQL Server
-/// </summary>
-public sealed class SqlServerSchemaManager : ISchemaManager
+namespace HighSpeedDAL.SqlServer.Schema
 {
-    private readonly string _connectionString;
-    private readonly ILogger _logger;
-
-    public SqlServerSchemaManager(string connectionString, ILogger logger)
+    /// <summary>
+    /// Manages database schema operations for SQL Server
+    /// </summary>
+    public sealed class SqlServerSchemaManager : ISchemaManager
     {
-        _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+        private readonly string _connectionString;
+        private readonly ILogger _logger;
 
-    public async Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default)
-    {
-        string sql = @"
+        public SqlServerSchemaManager(string connectionString, ILogger logger)
+        {
+            _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public async Task<bool> TableExistsAsync(string tableName, CancellationToken cancellationToken = default)
+        {
+            string sql = @"
             SELECT COUNT(*)
             FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_NAME = @TableName AND TABLE_SCHEMA = 'dbo'";
 
-        using (SqlConnection connection = new SqlConnection(_connectionString))
-        {
-            await connection.OpenAsync(cancellationToken);
-
-            using (SqlCommand command = new SqlCommand(sql, connection))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                command.Parameters.AddWithValue("@TableName", tableName);
-                int count = (int)await command.ExecuteScalarAsync(cancellationToken);
-                return count > 0;
+                await connection.OpenAsync(cancellationToken);
+
+                using (SqlCommand command = new SqlCommand(sql, connection))
+                {
+                    command.Parameters.AddWithValue("@TableName", tableName);
+                    int count = (int)await command.ExecuteScalarAsync(cancellationToken);
+                    return count > 0;
+                }
             }
         }
-    }
 
-    public async Task<bool> ColumnExistsAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
-    {
-        string sql = @"
+        public async Task<bool> ColumnExistsAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
+        {
+            string sql = @"
             SELECT COUNT(*)
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ColumnName AND TABLE_SCHEMA = 'dbo'";
 
-        using (SqlConnection connection = new SqlConnection(_connectionString))
-        {
-            await connection.OpenAsync(cancellationToken);
-
-            using (SqlCommand command = new SqlCommand(sql, connection))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                command.Parameters.AddWithValue("@TableName", tableName);
-                command.Parameters.AddWithValue("@ColumnName", columnName);
-                int count = (int)await command.ExecuteScalarAsync(cancellationToken);
-                return count > 0;
+                await connection.OpenAsync(cancellationToken);
+
+                using (SqlCommand command = new SqlCommand(sql, connection))
+                {
+                    command.Parameters.AddWithValue("@TableName", tableName);
+                    command.Parameters.AddWithValue("@ColumnName", columnName);
+                    int count = (int)await command.ExecuteScalarAsync(cancellationToken);
+                    return count > 0;
+                }
             }
         }
-    }
 
-    public async Task CreateTableAsync(string createSql, CancellationToken cancellationToken = default)
-    {
-        using (SqlConnection connection = new SqlConnection(_connectionString))
+        public async Task CreateTableAsync(string createSql, CancellationToken cancellationToken = default)
         {
-            await connection.OpenAsync(cancellationToken);
-
-            using (SqlCommand command = new SqlCommand(createSql, connection))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                _logger.LogInformation("Creating table with SQL: {Sql}", createSql);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-                _logger.LogInformation("Table created successfully");
+                await connection.OpenAsync(cancellationToken);
+
+                using (SqlCommand command = new SqlCommand(createSql, connection))
+                {
+                    _logger.LogInformation("Creating table with SQL: {Sql}", createSql);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                    _logger.LogInformation("Table created successfully");
+                }
             }
         }
-    }
 
-    public async Task DropTableAsync(string tableName, CancellationToken cancellationToken = default)
-    {
-        string sql = $"DROP TABLE IF EXISTS [{tableName}]";
-
-        using (SqlConnection connection = new SqlConnection(_connectionString))
+        public async Task DropTableAsync(string tableName, CancellationToken cancellationToken = default)
         {
-            await connection.OpenAsync(cancellationToken);
+            string sql = $"DROP TABLE IF EXISTS [{tableName}]";
 
-            using (SqlCommand command = new SqlCommand(sql, connection))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                _logger.LogWarning("Dropping table: {TableName}", tableName);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-                _logger.LogInformation("Table {TableName} dropped successfully", tableName);
+                await connection.OpenAsync(cancellationToken);
+
+                using (SqlCommand command = new SqlCommand(sql, connection))
+                {
+                    _logger.LogWarning("Dropping table: {TableName}", tableName);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                    _logger.LogInformation("Table {TableName} dropped successfully", tableName);
+                }
             }
         }
-    }
 
-    public async Task<TableSchema> GetTableSchemaAsync(string tableName, CancellationToken cancellationToken = default)
-    {
-        TableSchema schema = new TableSchema { TableName = tableName };
+        public async Task<TableSchema> GetTableSchemaAsync(string tableName, CancellationToken cancellationToken = default)
+        {
+            TableSchema schema = new TableSchema { TableName = tableName };
 
-        // Get columns
-        schema.Columns = await GetColumnsAsync(tableName, cancellationToken);
+            // Get columns
+            schema.Columns = await GetColumnsAsync(tableName, cancellationToken);
 
-        // Get indexes
-        schema.Indexes = await GetIndexesAsync(tableName, cancellationToken);
+            // Get indexes
+            schema.Indexes = await GetIndexesAsync(tableName, cancellationToken);
 
-        return schema;
-    }
+            return schema;
+        }
 
-    private async Task<List<ColumnSchema>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
-    {
-        List<ColumnSchema> columns = new List<ColumnSchema>();
+        private async Task<List<ColumnSchema>> GetColumnsAsync(string tableName, CancellationToken cancellationToken)
+        {
+            List<ColumnSchema> columns = [];
 
-        string sql = @"
+            string sql = @"
             SELECT 
                 c.COLUMN_NAME,
                 c.DATA_TYPE,
@@ -137,44 +137,44 @@ public sealed class SqlServerSchemaManager : ISchemaManager
             WHERE c.TABLE_NAME = @TableName AND c.TABLE_SCHEMA = 'dbo'
             ORDER BY c.ORDINAL_POSITION";
 
-        using (SqlConnection connection = new SqlConnection(_connectionString))
-        {
-            await connection.OpenAsync(cancellationToken);
-
-            using (SqlCommand command = new SqlCommand(sql, connection))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                command.Parameters.AddWithValue("@TableName", tableName);
+                await connection.OpenAsync(cancellationToken);
 
-                using (SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
+                using (SqlCommand command = new SqlCommand(sql, connection))
                 {
-                    while (await reader.ReadAsync(cancellationToken))
-                    {
-                        ColumnSchema column = new ColumnSchema
-                        {
-                            ColumnName = reader.GetString(0),
-                            DataType = reader.GetString(1),
-                            IsNullable = reader.GetString(2) == "YES",
-                            MaxLength = reader.IsDBNull(3) ? null : reader.GetInt32(3),
-                            Precision = reader.IsDBNull(4) ? null : reader.GetByte(4),
-                            Scale = reader.IsDBNull(5) ? null : reader.GetInt32(5),
-                            IsPrimaryKey = reader.GetInt32(6) == 1,
-                            IsIdentity = reader.GetInt32(7) == 1
-                        };
+                    command.Parameters.AddWithValue("@TableName", tableName);
 
-                        columns.Add(column);
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
+                    {
+                        while (await reader.ReadAsync(cancellationToken))
+                        {
+                            ColumnSchema column = new ColumnSchema
+                            {
+                                ColumnName = reader.GetString(0),
+                                DataType = reader.GetString(1),
+                                IsNullable = reader.GetString(2) == "YES",
+                                MaxLength = reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                                Precision = reader.IsDBNull(4) ? null : reader.GetByte(4),
+                                Scale = reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                                IsPrimaryKey = reader.GetInt32(6) == 1,
+                                IsIdentity = reader.GetInt32(7) == 1
+                            };
+
+                            columns.Add(column);
+                        }
                     }
                 }
             }
+
+            return columns;
         }
 
-        return columns;
-    }
+        private async Task<List<IndexSchema>> GetIndexesAsync(string tableName, CancellationToken cancellationToken)
+        {
+            List<IndexSchema> indexes = [];
 
-    private async Task<List<IndexSchema>> GetIndexesAsync(string tableName, CancellationToken cancellationToken)
-    {
-        List<IndexSchema> indexes = new List<IndexSchema>();
-
-        string sql = @"
+            string sql = @"
             SELECT 
                 i.name AS INDEX_NAME,
                 i.is_unique AS IS_UNIQUE,
@@ -186,105 +186,106 @@ public sealed class SqlServerSchemaManager : ISchemaManager
             WHERE OBJECT_NAME(i.object_id) = @TableName
             ORDER BY i.name, ic.index_column_id";
 
-        using (SqlConnection connection = new SqlConnection(_connectionString))
-        {
-            await connection.OpenAsync(cancellationToken);
-
-            using (SqlCommand command = new SqlCommand(sql, connection))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                command.Parameters.AddWithValue("@TableName", tableName);
+                await connection.OpenAsync(cancellationToken);
 
-                using (SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
+                using (SqlCommand command = new SqlCommand(sql, connection))
                 {
-                    Dictionary<string, IndexSchema> indexDict = new Dictionary<string, IndexSchema>();
+                    command.Parameters.AddWithValue("@TableName", tableName);
 
-                    while (await reader.ReadAsync(cancellationToken))
+                    using (SqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
                     {
-                        string indexName = reader.GetString(0);
+                        Dictionary<string, IndexSchema> indexDict = [];
 
-                        if (!indexDict.ContainsKey(indexName))
+                        while (await reader.ReadAsync(cancellationToken))
                         {
-                            indexDict[indexName] = new IndexSchema
+                            string indexName = reader.GetString(0);
+
+                            if (!indexDict.ContainsKey(indexName))
                             {
-                                IndexName = indexName,
-                                IsUnique = reader.GetBoolean(1),
-                                IsPrimaryKey = reader.GetBoolean(2),
-                                Columns = new List<string>()
-                            };
+                                indexDict[indexName] = new IndexSchema
+                                {
+                                    IndexName = indexName,
+                                    IsUnique = reader.GetBoolean(1),
+                                    IsPrimaryKey = reader.GetBoolean(2),
+                                    Columns = []
+                                };
+                            }
+
+                            indexDict[indexName].Columns.Add(reader.GetString(3));
                         }
 
-                        indexDict[indexName].Columns.Add(reader.GetString(3));
+                        indexes.AddRange(indexDict.Values);
                     }
+                }
+            }
 
-                    indexes.AddRange(indexDict.Values);
+            return indexes;
+        }
+
+        public async Task EnsureSchemaAsync(Type entityType, CancellationToken cancellationToken = default)
+        {
+            // This will be implemented by source generators
+            await Task.CompletedTask;
+            throw new NotImplementedException("Schema creation is handled by source generators");
+        }
+
+        public async Task MigrateSchemaAsync(Type entityType, TableSchema currentSchema, CancellationToken cancellationToken = default)
+        {
+            // This will be implemented by source generators
+            await Task.CompletedTask;
+            throw new NotImplementedException("Schema migration is handled by source generators");
+        }
+
+        /// <summary>
+        /// Adds a column to an existing table
+        /// </summary>
+        public async Task AddColumnAsync(
+            string tableName,
+            string columnName,
+            string dataType,
+            bool isNullable,
+            CancellationToken cancellationToken = default)
+        {
+            StringBuilder sql = new StringBuilder();
+            sql.Append($"ALTER TABLE [{tableName}] ADD [{columnName}] {dataType}");
+
+            if (!isNullable)
+            {
+                sql.Append(" NOT NULL");
+            }
+
+            using (SqlConnection connection = new SqlConnection(_connectionString))
+            {
+                await connection.OpenAsync(cancellationToken);
+
+                using (SqlCommand command = new SqlCommand(sql.ToString(), connection))
+                {
+                    _logger.LogInformation("Adding column {ColumnName} to table {TableName}", columnName, tableName);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                    _logger.LogInformation("Column added successfully");
                 }
             }
         }
 
-        return indexes;
-    }
-
-    public async Task EnsureSchemaAsync(Type entityType, CancellationToken cancellationToken = default)
-    {
-        // This will be implemented by source generators
-        await Task.CompletedTask;
-        throw new NotImplementedException("Schema creation is handled by source generators");
-    }
-
-    public async Task MigrateSchemaAsync(Type entityType, TableSchema currentSchema, CancellationToken cancellationToken = default)
-    {
-        // This will be implemented by source generators
-        await Task.CompletedTask;
-        throw new NotImplementedException("Schema migration is handled by source generators");
-    }
-
-    /// <summary>
-    /// Adds a column to an existing table
-    /// </summary>
-    public async Task AddColumnAsync(
-        string tableName,
-        string columnName,
-        string dataType,
-        bool isNullable,
-        CancellationToken cancellationToken = default)
-    {
-        StringBuilder sql = new StringBuilder();
-        sql.Append($"ALTER TABLE [{tableName}] ADD [{columnName}] {dataType}");
-
-        if (!isNullable)
+        /// <summary>
+        /// Removes a column from an existing table
+        /// </summary>
+        public async Task DropColumnAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
         {
-            sql.Append(" NOT NULL");
-        }
+            string sql = $"ALTER TABLE [{tableName}] DROP COLUMN [{columnName}]";
 
-        using (SqlConnection connection = new SqlConnection(_connectionString))
-        {
-            await connection.OpenAsync(cancellationToken);
-
-            using (SqlCommand command = new SqlCommand(sql.ToString(), connection))
+            using (SqlConnection connection = new SqlConnection(_connectionString))
             {
-                _logger.LogInformation("Adding column {ColumnName} to table {TableName}", columnName, tableName);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-                _logger.LogInformation("Column added successfully");
-            }
-        }
-    }
+                await connection.OpenAsync(cancellationToken);
 
-    /// <summary>
-    /// Removes a column from an existing table
-    /// </summary>
-    public async Task DropColumnAsync(string tableName, string columnName, CancellationToken cancellationToken = default)
-    {
-        string sql = $"ALTER TABLE [{tableName}] DROP COLUMN [{columnName}]";
-
-        using (SqlConnection connection = new SqlConnection(_connectionString))
-        {
-            await connection.OpenAsync(cancellationToken);
-
-            using (SqlCommand command = new SqlCommand(sql, connection))
-            {
-                _logger.LogWarning("Dropping column {ColumnName} from table {TableName}", columnName, tableName);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-                _logger.LogInformation("Column dropped successfully");
+                using (SqlCommand command = new SqlCommand(sql, connection))
+                {
+                    _logger.LogWarning("Dropping column {ColumnName} from table {TableName}", columnName, tableName);
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                    _logger.LogInformation("Column dropped successfully");
+                }
             }
         }
     }

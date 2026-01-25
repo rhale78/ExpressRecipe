@@ -1,10 +1,11 @@
-namespace HighSpeedDAL.SourceGenerators;
-
-/// <summary>
-/// Database provider types for DAL generation
-/// </summary>
-internal enum DatabaseProvider
+namespace HighSpeedDAL.SourceGenerators
 {
-    SqlServer,
-    Sqlite
+    /// <summary>
+    /// Database provider types for DAL generation
+    /// </summary>
+    internal enum DatabaseProvider
+    {
+        SqlServer,
+        Sqlite
+    }
 }

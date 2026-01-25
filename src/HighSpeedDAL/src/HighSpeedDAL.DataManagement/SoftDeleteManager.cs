@@ -173,12 +173,9 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
             }
 
             object? entityId = idProperty.GetValue(entity);
-            if (entityId == null)
-            {
-                throw new InvalidOperationException("Entity ID is null");
-            }
-
-            return await SoftDeleteAsync<T>(entityId, cascadeToRelated, deletedBy, cancellationToken);
+            return entityId == null
+                ? throw new InvalidOperationException("Entity ID is null")
+                : await SoftDeleteAsync<T>(entityId, cascadeToRelated, deletedBy, cancellationToken);
         }
 
         /// <inheritdoc/>
@@ -195,7 +192,7 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
 
             int totalDeleted = 0;
             int totalCascaded = 0;
-            List<object> deletedIds = new List<object>();
+            List<object> deletedIds = [];
 
             foreach (object entityId in entityIds)
             {
@@ -439,7 +436,7 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
             SoftDeleteAttribute? attribute = GetSoftDeleteAttribute<T>();
             if (attribute == null)
             {
-                return new List<T>();
+                return [];
             }
 
             string tableName = GetTableName<T>();
@@ -460,7 +457,7 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
             SoftDeleteAttribute? attribute = GetSoftDeleteAttribute<T>();
             if (attribute == null)
             {
-                return new List<T>();
+                return [];
             }
 
             string tableName = GetTableName<T>();
@@ -573,7 +570,7 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
             }
 
             Type entityType = typeof(T);
-            List<string> missingProperties = new List<string>();
+            List<string> missingProperties = [];
 
             // Check IsDeleted property
             PropertyInfo? isDeletedProp = entityType.GetProperty(
@@ -668,14 +665,7 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
 
         private DbConnection CreateConnection()
         {
-            if (_isSqlServer)
-            {
-                return new SqlConnection(_connectionString);
-            }
-            else
-            {
-                return new SqliteConnection(_connectionString);
-            }
+            return _isSqlServer ? new SqlConnection(_connectionString) : new SqliteConnection(_connectionString);
         }
 
         private void AddParameter(DbCommand command, string parameterName, object value)
@@ -691,7 +681,7 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
             Dictionary<string, object>? parameters,
             CancellationToken cancellationToken) where T : class
         {
-            List<T> results = new List<T>();
+            List<T> results = [];
 
             using (DbConnection connection = CreateConnection())
             {

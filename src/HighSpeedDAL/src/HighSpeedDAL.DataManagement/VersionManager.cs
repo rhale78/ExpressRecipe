@@ -304,7 +304,7 @@ namespace HighSpeedDAL.DataManagement.Versioning
                 throw new ArgumentNullException(nameof(entities));
             }
 
-            Dictionary<T, bool> results = new Dictionary<T, bool>();
+            Dictionary<T, bool> results = [];
 
             foreach (T entity in entities)
             {
@@ -473,7 +473,7 @@ namespace HighSpeedDAL.DataManagement.Versioning
             }
 
             string idColumnName = idProperty.Name;
-            List<string> whereClauses = new List<string> { $"{idColumnName} = @Id" };
+            List<string> whereClauses = [$"{idColumnName} = @Id"];
 
             if (startDate.HasValue)
             {
@@ -492,7 +492,7 @@ namespace HighSpeedDAL.DataManagement.Versioning
                 WHERE {whereClause}
                 ORDER BY ValidFrom DESC";
 
-            List<T> history = new List<T>();
+            List<T> history = [];
 
             using (DbConnection connection = CreateConnection())
             {
@@ -559,8 +559,8 @@ namespace HighSpeedDAL.DataManagement.Versioning
                 .Where(p => p.CanRead)
                 .ToArray();
 
-            List<string> columnNames = new List<string>();
-            List<string> parameterNames = new List<string>();
+            List<string> columnNames = [];
+            List<string> parameterNames = [];
 
             foreach (PropertyInfo property in properties)
             {
@@ -724,17 +724,11 @@ namespace HighSpeedDAL.DataManagement.Versioning
         /// <inheritdoc/>
         public bool VersionsEqual(object? version1, object? version2, VersionStrategy strategy)
         {
-            if (version1 == null && version2 == null)
-            {
-                return true;
-            }
-
-            if (version1 == null || version2 == null)
-            {
-                return false;
-            }
-
-            return strategy switch
+            return version1 == null && version2 == null
+                ? true
+                : version1 == null || version2 == null
+                ? false
+                : strategy switch
             {
                 VersionStrategy.RowVersion => ByteArrayEquals(version1 as byte[], version2 as byte[]),
                 VersionStrategy.Timestamp => Equals(version1, version2),
@@ -798,14 +792,7 @@ namespace HighSpeedDAL.DataManagement.Versioning
         /// </summary>
         private DbConnection CreateConnection()
         {
-            if (_isSqlServer)
-            {
-                return new SqlConnection(_connectionString);
-            }
-            else
-            {
-                return new SqliteConnection(_connectionString);
-            }
+            return _isSqlServer ? new SqlConnection(_connectionString) : new SqliteConnection(_connectionString);
         }
 
         /// <summary>
@@ -841,7 +828,7 @@ namespace HighSpeedDAL.DataManagement.Versioning
                 .Where(p => p.CanWrite && p.Name != idProperty.Name)
                 .ToArray();
 
-            List<string> setClauses = new List<string>();
+            List<string> setClauses = [];
             foreach (PropertyInfo property in properties)
             {
                 setClauses.Add($"{property.Name} = @{property.Name}");

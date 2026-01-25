@@ -56,12 +56,9 @@ namespace HighSpeedDAL.DataManagement.Archival
             CancellationToken cancellationToken = default) where T : class
         {
             ArchivalAttribute? attribute = GetArchivalAttribute<T>();
-            if (attribute == null)
-            {
-                throw new InvalidOperationException($"{typeof(T).Name} is not configured for archival");
-            }
-
-            return attribute.Strategy switch
+            return attribute == null
+                ? throw new InvalidOperationException($"{typeof(T).Name} is not configured for archival")
+                : attribute.Strategy switch
             {
                 ArchivalStrategy.ByAge => await ArchiveByAgeAsync<T>(attribute.AgeDays, cancellationToken),
                 ArchivalStrategy.ByCount => await ArchiveByCountAsync<T>(attribute.MaxRecordsToKeep, cancellationToken),
@@ -293,7 +290,7 @@ namespace HighSpeedDAL.DataManagement.Archival
             ArchivalAttribute? attribute = GetArchivalAttribute<T>();
             if (attribute == null)
             {
-                return new List<T>();
+                return [];
             }
 
             string archiveTableName = GetArchiveTableName<T>();
@@ -311,7 +308,7 @@ namespace HighSpeedDAL.DataManagement.Archival
             ArchivalAttribute? attribute = GetArchivalAttribute<T>();
             if (attribute == null)
             {
-                return new List<T>();
+                return [];
             }
 
             string archiveTableName = GetArchiveTableName<T>();
@@ -541,7 +538,7 @@ namespace HighSpeedDAL.DataManagement.Archival
                     LIMIT {batchSize}";
             }
 
-            List<object> ids = new List<object>();
+            List<object> ids = [];
 
             using (DbConnection connection = CreateConnection())
             {
@@ -595,7 +592,7 @@ namespace HighSpeedDAL.DataManagement.Archival
                     LIMIT {count}";
             }
 
-            List<object> ids = new List<object>();
+            List<object> ids = [];
 
             using (DbConnection connection = CreateConnection())
             {
@@ -748,12 +745,7 @@ namespace HighSpeedDAL.DataManagement.Archival
             return _idPropertyCache.GetOrAdd(typeof(T), type =>
             {
                 PropertyInfo? idProp = type.GetProperty("Id", BindingFlags.Public | BindingFlags.Instance);
-                if (idProp != null)
-                {
-                    return idProp;
-                }
-
-                return type.GetProperty($"{type.Name}Id", BindingFlags.Public | BindingFlags.Instance);
+                return idProp != null ? idProp : type.GetProperty($"{type.Name}Id", BindingFlags.Public | BindingFlags.Instance);
             });
         }
 
@@ -767,25 +759,15 @@ namespace HighSpeedDAL.DataManagement.Archival
             return _archiveTableNameCache.GetOrAdd(typeof(T), type =>
             {
                 ArchivalAttribute? attribute = GetArchivalAttribute<T>();
-                if (attribute != null && !string.IsNullOrEmpty(attribute.ArchiveTableName))
-                {
-                    return attribute.ArchiveTableName;
-                }
-
-                return $"{GetTableName<T>()}Archive";
+                return attribute != null && !string.IsNullOrEmpty(attribute.ArchiveTableName)
+                    ? attribute.ArchiveTableName
+                    : $"{GetTableName<T>()}Archive";
             });
         }
 
         private DbConnection CreateConnection()
         {
-            if (_isSqlServer)
-            {
-                return new SqlConnection(_connectionString);
-            }
-            else
-            {
-                return new SqliteConnection(_connectionString);
-            }
+            return _isSqlServer ? new SqlConnection(_connectionString) : new SqliteConnection(_connectionString);
         }
 
         private void AddParameter(DbCommand command, string parameterName, object value)
@@ -801,7 +783,7 @@ namespace HighSpeedDAL.DataManagement.Archival
             Dictionary<string, object>? parameters,
             CancellationToken cancellationToken) where T : class
         {
-            List<T> results = new List<T>();
+            List<T> results = [];
 
             using (DbConnection connection = CreateConnection())
             {

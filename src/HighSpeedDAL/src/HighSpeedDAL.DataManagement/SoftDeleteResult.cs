@@ -46,12 +46,12 @@ namespace HighSpeedDAL.DataManagement.SoftDelete
         /// <summary>
         /// Gets or sets the list of entity IDs that were deleted.
         /// </summary>
-        public List<object> DeletedEntityIds { get; set; } = new List<object>();
+        public List<object> DeletedEntityIds { get; set; } = [];
 
         /// <summary>
         /// Gets or sets the list of related entity IDs that were cascade deleted.
         /// </summary>
-        public List<object> CascadeDeletedEntityIds { get; set; } = new List<object>();
+        public List<object> CascadeDeletedEntityIds { get; set; } = [];
 
         /// <summary>
         /// Creates a successful result.

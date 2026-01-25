@@ -125,17 +125,7 @@ namespace HighSpeedDAL.DataManagement.Versioning
         /// <returns>The formatted version string.</returns>
         private static string FormatVersion(object? version)
         {
-            if (version == null)
-            {
-                return "<null>";
-            }
-
-            if (version is byte[] bytes)
-            {
-                return BitConverter.ToString(bytes);
-            }
-
-            return version.ToString() ?? "<unknown>";
+            return version == null ? "<null>" : version is byte[] bytes ? BitConverter.ToString(bytes) : version.ToString() ?? "<unknown>";
         }
     }
 }
