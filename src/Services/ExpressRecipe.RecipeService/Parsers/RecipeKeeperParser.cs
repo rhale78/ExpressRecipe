@@ -1,331 +1,338 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
-namespace ExpressRecipe.RecipeService.Parsers;
-
-/// <summary>
-/// Parser for Recipe Keeper export format
-/// Recipe Keeper uses a specific JSON structure
-/// </summary>
-public class RecipeKeeperParser : JsonRecipeParser
+namespace ExpressRecipe.RecipeService.Parsers
 {
-    public override string ParserName => "RecipeKeeperParser";
-    public override string SourceType => "JSON";
-
-    public override bool CanParse(string content, ParserContext context)
+    /// <summary>
+    /// Parser for Recipe Keeper export format
+    /// Recipe Keeper uses a specific JSON structure
+    /// </summary>
+    public class RecipeKeeperParser : JsonRecipeParser
     {
-        try
+        public override string ParserName => "RecipeKeeperParser";
+        public override string SourceType => "JSON";
+
+        public override bool CanParse(string content, ParserContext context)
         {
-            var doc = JsonDocument.Parse(content);
-            var root = doc.RootElement;
-
-            // Recipe Keeper exports typically have these fields
-            return root.TryGetProperty("recipeName", out _) ||
-                   root.TryGetProperty("recipeIngredients", out _) ||
-                   (root.TryGetProperty("version", out var version) &&
-                    version.GetString()?.Contains("RecipeKeeper") == true);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public override async Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
-    {
-        // Recipe Keeper format is similar to generic JSON but with specific field names
-        // We can leverage the base JsonRecipeParser but might need custom handling
-
-        var recipes = await base.ParseAsync(content, context);
-
-        // Post-process to handle Recipe Keeper specifics
-        foreach (var recipe in recipes)
-        {
-            recipe.Source = "Recipe Keeper";
-        }
-
-        return recipes;
-    }
-}
-
-/// <summary>
-/// Parser for Paprika recipe manager format
-/// Paprika uses .paprikarecipe files (JSON-based)
-/// </summary>
-public class PaprikaParser : JsonRecipeParser
-{
-    public override string ParserName => "PaprikaParser";
-    public override string SourceType => "JSON";
-
-    public override bool CanParse(string content, ParserContext context)
-    {
-        // Check for .paprikarecipe extension
-        if (context.FileName?.EndsWith(".paprikarecipe", StringComparison.OrdinalIgnoreCase) == true)
-            return true;
-
-        try
-        {
-            var doc = JsonDocument.Parse(content);
-            var root = doc.RootElement;
-
-            // Paprika recipes have specific fields
-            return root.TryGetProperty("uid", out _) &&
-                   root.TryGetProperty("name", out _) &&
-                   root.TryGetProperty("ingredients", out _);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public override async Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
-    {
-        var recipes = await base.ParseAsync(content, context);
-
-        // Post-process to handle Paprika specifics
-        foreach (var recipe in recipes)
-        {
-            recipe.Source = "Paprika";
-
-            // Paprika stores ingredients as single string, need to split
-            if (recipe.Ingredients.Count == 1 &&
-                recipe.Ingredients[0].IngredientName.Contains('\n'))
+            try
             {
-                var ingredients = new List<ParsedIngredient>();
-                var lines = recipe.Ingredients[0].IngredientName.Split('\n');
-                var order = 0;
+                JsonDocument doc = JsonDocument.Parse(content);
+                JsonElement root = doc.RootElement;
 
-                foreach (var line in lines)
-                {
-                    if (!string.IsNullOrWhiteSpace(line))
-                    {
-                        var (quantity, unit, remaining) = ParseQuantityAndUnit(line.Trim());
-                        var (ingredient, preparation) = ExtractPreparation(remaining);
-
-                        ingredients.Add(new ParsedIngredient
-                        {
-                            Order = order++,
-                            Quantity = quantity,
-                            Unit = unit,
-                            IngredientName = ingredient,
-                            Preparation = preparation,
-                            IsOptional = IsOptionalIngredient(line),
-                            OriginalText = line.Trim()
-                        });
-                    }
-                }
-
-                recipe.Ingredients = ingredients;
+                // Recipe Keeper exports typically have these fields
+                return root.TryGetProperty("recipeName", out _) ||
+                       root.TryGetProperty("recipeIngredients", out _) ||
+                       (root.TryGetProperty("version", out JsonElement version) &&
+                        version.GetString()?.Contains("RecipeKeeper") == true);
             }
-
-            // Paprika stores directions as single string, need to split
-            if (recipe.Instructions.Count == 1 &&
-                recipe.Instructions[0].InstructionText.Contains('\n'))
+            catch
             {
-                var instructions = new List<ParsedInstruction>();
-                var lines = recipe.Instructions[0].InstructionText.Split('\n');
-                var stepNumber = 0;
-
-                foreach (var line in lines)
-                {
-                    if (!string.IsNullOrWhiteSpace(line))
-                    {
-                        instructions.Add(new ParsedInstruction
-                        {
-                            StepNumber = ++stepNumber,
-                            InstructionText = CleanText(line)
-                        });
-                    }
-                }
-
-                recipe.Instructions = instructions;
+                return false;
             }
         }
 
-        return recipes;
-    }
-}
-
-/// <summary>
-/// Parser for MasterCook MX2/MXP format
-/// Uses XML parsing for MasterCook's proprietary XML format
-/// </summary>
-public class MasterCookParser : RecipeParserBase
-{
-    public override string ParserName => "MasterCookParser";
-    public override string SourceType => "MealMaster";
-
-    public override bool CanParse(string content, ParserContext context)
-    {
-        // Check for XML structure or .mx2/.mxp extension
-        return (context.FileName?.EndsWith(".mx2", StringComparison.OrdinalIgnoreCase) == true ||
-                context.FileName?.EndsWith(".mxp", StringComparison.OrdinalIgnoreCase) == true ||
-                content.TrimStart().StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)) &&
-               content.Contains("<Recipe>", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public override Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
-    {
-        var recipes = new List<ParsedRecipe>();
-
-        try
+        public override async Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
         {
-            var doc = System.Xml.Linq.XDocument.Parse(content);
+            // Recipe Keeper format is similar to generic JSON but with specific field names
+            // We can leverage the base JsonRecipeParser but might need custom handling
 
-            // MasterCook files can contain multiple recipes
-            var recipeElements = doc.Descendants("Recipe");
+            List<ParsedRecipe> recipes = await base.ParseAsync(content, context);
 
-            foreach (var recipeElement in recipeElements)
+            // Post-process to handle Recipe Keeper specifics
+            foreach (ParsedRecipe recipe in recipes)
             {
-                var recipe = new ParsedRecipe
+                recipe.Source = "Recipe Keeper";
+            }
+
+            return recipes;
+        }
+    }
+
+    /// <summary>
+    /// Parser for Paprika recipe manager format
+    /// Paprika uses .paprikarecipe files (JSON-based)
+    /// </summary>
+    public class PaprikaParser : JsonRecipeParser
+    {
+        public override string ParserName => "PaprikaParser";
+        public override string SourceType => "JSON";
+
+        public override bool CanParse(string content, ParserContext context)
+        {
+            // Check for .paprikarecipe extension
+            if (context.FileName?.EndsWith(".paprikarecipe", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return true;
+            }
+
+            try
+            {
+                JsonDocument doc = JsonDocument.Parse(content);
+                JsonElement root = doc.RootElement;
+
+                // Paprika recipes have specific fields
+                return root.TryGetProperty("uid", out _) &&
+                       root.TryGetProperty("name", out _) &&
+                       root.TryGetProperty("ingredients", out _);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public override async Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
+        {
+            List<ParsedRecipe> recipes = await base.ParseAsync(content, context);
+
+            // Post-process to handle Paprika specifics
+            foreach (ParsedRecipe recipe in recipes)
+            {
+                recipe.Source = "Paprika";
+
+                // Paprika stores ingredients as single string, need to split
+                if (recipe.Ingredients.Count == 1 &&
+                    recipe.Ingredients[0].IngredientName.Contains('\n'))
                 {
-                    Source = "MasterCook"
-                };
-
-                // Extract recipe name
-                recipe.Name = recipeElement.Element("Name")?.Value ?? "Untitled Recipe";
-
-                // Extract description/comments
-                recipe.Description = recipeElement.Element("Description")?.Value ??
-                                   recipeElement.Element("Comments")?.Value;
-
-                // Extract category
-                recipe.Category = recipeElement.Element("Category")?.Value;
-
-                // Extract cuisine
-                recipe.Cuisine = recipeElement.Element("Cuisine")?.Value;
-
-                // Extract servings
-                var servingsText = recipeElement.Element("Servings")?.Value ??
-                                 recipeElement.Element("Yield")?.Value;
-                if (!string.IsNullOrWhiteSpace(servingsText))
-                {
-                    var match = System.Text.RegularExpressions.Regex.Match(servingsText, @"\d+");
-                    if (match.Success && int.TryParse(match.Value, out var servings))
-                    {
-                        recipe.Servings = servings;
-                    }
-                }
-
-                // Extract prep time
-                recipe.PrepTimeMinutes = ParseTime(recipeElement.Element("PrepTime")?.Value);
-
-                // Extract cook time
-                recipe.CookTimeMinutes = ParseTime(recipeElement.Element("CookTime")?.Value);
-
-                // Extract ingredients
-                var ingredientsElement = recipeElement.Element("Ingredients");
-                if (ingredientsElement != null)
-                {
+                    List<ParsedIngredient> ingredients = [];
+                    var lines = recipe.Ingredients[0].IngredientName.Split('\n');
                     var order = 0;
-                    foreach (var ingredientElement in ingredientsElement.Elements())
+
+                    foreach (var line in lines)
                     {
-                        var ingredientText = ingredientElement.Value.Trim();
-                        if (string.IsNullOrWhiteSpace(ingredientText))
-                            continue;
-
-                        // Check if it's a section header
-                        if (ingredientElement.Name.LocalName == "IngredientSection" ||
-                            ingredientElement.Name.LocalName == "Section")
+                        if (!string.IsNullOrWhiteSpace(line))
                         {
-                            // Section header - could add as a comment or skip
-                            continue;
-                        }
+                            (decimal? quantity, string? unit, string? remaining) = ParseQuantityAndUnit(line.Trim());
+                            (string? ingredient, string? preparation) = ExtractPreparation(remaining);
 
-                        // Parse ingredient text
-                        var (quantity, unit, remaining) = ParseQuantityAndUnit(ingredientText);
-                        var (ingredient, preparation) = ExtractPreparation(remaining);
-
-                        recipe.Ingredients.Add(new ParsedIngredient
-                        {
-                            Order = order++,
-                            Quantity = quantity,
-                            Unit = unit,
-                            IngredientName = ingredient,
-                            Preparation = preparation,
-                            IsOptional = IsOptionalIngredient(ingredientText),
-                            OriginalText = ingredientText
-                        });
-                    }
-                }
-
-                // Extract instructions
-                var instructionsElement = recipeElement.Element("Instructions") ??
-                                        recipeElement.Element("Directions") ??
-                                        recipeElement.Element("Steps");
-
-                if (instructionsElement != null)
-                {
-                    var instructionText = instructionsElement.Value;
-
-                    // Split into steps (by newline, numbered steps, or step elements)
-                    var stepElements = instructionsElement.Elements("Step");
-                    if (stepElements.Any())
-                    {
-                        var stepNumber = 0;
-                        foreach (var stepElement in stepElements)
-                        {
-                            var text = CleanText(stepElement.Value);
-                            if (!string.IsNullOrWhiteSpace(text))
+                            ingredients.Add(new ParsedIngredient
                             {
-                                recipe.Instructions.Add(new ParsedInstruction
-                                {
-                                    StepNumber = ++stepNumber,
-                                    InstructionText = text
-                                });
-                            }
+                                Order = order++,
+                                Quantity = quantity,
+                                Unit = unit,
+                                IngredientName = ingredient,
+                                Preparation = preparation,
+                                IsOptional = IsOptionalIngredient(line),
+                                OriginalText = line.Trim()
+                            });
                         }
                     }
-                    else
-                    {
-                        // Split by paragraph or numbered list
-                        var lines = instructionText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-                        var stepNumber = 0;
 
-                        foreach (var line in lines)
-                        {
-                            var cleanLine = CleanText(line);
-                            if (!string.IsNullOrWhiteSpace(cleanLine) && cleanLine.Length > 5)
-                            {
-                                // Remove leading numbers (e.g., "1. " or "1) ")
-                                cleanLine = System.Text.RegularExpressions.Regex.Replace(
-                                    cleanLine, @"^\d+[\.\)]\s*", "");
-
-                                recipe.Instructions.Add(new ParsedInstruction
-                                {
-                                    StepNumber = ++stepNumber,
-                                    InstructionText = cleanLine
-                                });
-                            }
-                        }
-                    }
+                    recipe.Ingredients = ingredients;
                 }
 
-                // Extract notes
-                recipe.Notes = recipeElement.Element("Notes")?.Value ??
-                             recipeElement.Element("ChefNotes")?.Value;
-
-                // Extract nutrition if available
-                var nutritionElement = recipeElement.Element("Nutrition");
-                if (nutritionElement != null)
+                // Paprika stores directions as single string, need to split
+                if (recipe.Instructions.Count == 1 &&
+                    recipe.Instructions[0].InstructionText.Contains('\n'))
                 {
-                    recipe.Nutrition = nutritionElement.Value;
-                }
+                    List<ParsedInstruction> instructions = [];
+                    var lines = recipe.Instructions[0].InstructionText.Split('\n');
+                    var stepNumber = 0;
 
-                recipes.Add(recipe);
+                    foreach (var line in lines)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                        {
+                            instructions.Add(new ParsedInstruction
+                            {
+                                StepNumber = ++stepNumber,
+                                InstructionText = CleanText(line)
+                            });
+                        }
+                    }
+
+                    recipe.Instructions = instructions;
+                }
             }
+
+            return recipes;
         }
-        catch (Exception ex)
+    }
+
+    /// <summary>
+    /// Parser for MasterCook MX2/MXP format
+    /// Uses XML parsing for MasterCook's proprietary XML format
+    /// </summary>
+    public class MasterCookParser : RecipeParserBase
+    {
+        public override string ParserName => "MasterCookParser";
+        public override string SourceType => "MealMaster";
+
+        public override bool CanParse(string content, ParserContext context)
         {
-            // If XML parsing fails, return a placeholder
-            recipes.Add(new ParsedRecipe
-            {
-                Name = "MasterCook Recipe",
-                Description = $"Failed to parse MasterCook XML: {ex.Message}",
-                Source = "MasterCook"
-            });
+            // Check for XML structure or .mx2/.mxp extension
+            return (context.FileName?.EndsWith(".mx2", StringComparison.OrdinalIgnoreCase) == true ||
+                    context.FileName?.EndsWith(".mxp", StringComparison.OrdinalIgnoreCase) == true ||
+                    content.TrimStart().StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)) &&
+                   content.Contains("<Recipe>", StringComparison.OrdinalIgnoreCase);
         }
 
-        return Task.FromResult(recipes);
+        public override Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
+        {
+            List<ParsedRecipe> recipes = [];
+
+            try
+            {
+                XDocument doc = System.Xml.Linq.XDocument.Parse(content);
+
+                // MasterCook files can contain multiple recipes
+                IEnumerable<XElement> recipeElements = doc.Descendants("Recipe");
+
+                foreach (XElement recipeElement in recipeElements)
+                {
+                    ParsedRecipe recipe = new ParsedRecipe
+                    {
+                        Source = "MasterCook"
+                    };
+
+                    // Extract recipe name
+                    recipe.Name = recipeElement.Element("Name")?.Value ?? "Untitled Recipe";
+
+                    // Extract description/comments
+                    recipe.Description = recipeElement.Element("Description")?.Value ??
+                                       recipeElement.Element("Comments")?.Value;
+
+                    // Extract category
+                    recipe.Category = recipeElement.Element("Category")?.Value;
+
+                    // Extract cuisine
+                    recipe.Cuisine = recipeElement.Element("Cuisine")?.Value;
+
+                    // Extract servings
+                    var servingsText = recipeElement.Element("Servings")?.Value ??
+                                     recipeElement.Element("Yield")?.Value;
+                    if (!string.IsNullOrWhiteSpace(servingsText))
+                    {
+                        Match match = System.Text.RegularExpressions.Regex.Match(servingsText, @"\d+");
+                        if (match.Success && int.TryParse(match.Value, out var servings))
+                        {
+                            recipe.Servings = servings;
+                        }
+                    }
+
+                    // Extract prep time
+                    recipe.PrepTimeMinutes = ParseTime(recipeElement.Element("PrepTime")?.Value);
+
+                    // Extract cook time
+                    recipe.CookTimeMinutes = ParseTime(recipeElement.Element("CookTime")?.Value);
+
+                    // Extract ingredients
+                    XElement? ingredientsElement = recipeElement.Element("Ingredients");
+                    if (ingredientsElement != null)
+                    {
+                        var order = 0;
+                        foreach (XElement ingredientElement in ingredientsElement.Elements())
+                        {
+                            var ingredientText = ingredientElement.Value.Trim();
+                            if (string.IsNullOrWhiteSpace(ingredientText))
+                            {
+                                continue;
+                            }
+
+                            // Check if it's a section header
+                            if (ingredientElement.Name.LocalName == "IngredientSection" ||
+                                ingredientElement.Name.LocalName == "Section")
+                            {
+                                // Section header - could add as a comment or skip
+                                continue;
+                            }
+
+                            // Parse ingredient text
+                            (decimal? quantity, string? unit, string? remaining) = ParseQuantityAndUnit(ingredientText);
+                            (string? ingredient, string? preparation) = ExtractPreparation(remaining);
+
+                            recipe.Ingredients.Add(new ParsedIngredient
+                            {
+                                Order = order++,
+                                Quantity = quantity,
+                                Unit = unit,
+                                IngredientName = ingredient,
+                                Preparation = preparation,
+                                IsOptional = IsOptionalIngredient(ingredientText),
+                                OriginalText = ingredientText
+                            });
+                        }
+                    }
+
+                    // Extract instructions
+                    XElement? instructionsElement = recipeElement.Element("Instructions") ??
+                                            recipeElement.Element("Directions") ??
+                                            recipeElement.Element("Steps");
+
+                    if (instructionsElement != null)
+                    {
+                        var instructionText = instructionsElement.Value;
+
+                        // Split into steps (by newline, numbered steps, or step elements)
+                        IEnumerable<XElement> stepElements = instructionsElement.Elements("Step");
+                        if (stepElements.Any())
+                        {
+                            var stepNumber = 0;
+                            foreach (XElement stepElement in stepElements)
+                            {
+                                var text = CleanText(stepElement.Value);
+                                if (!string.IsNullOrWhiteSpace(text))
+                                {
+                                    recipe.Instructions.Add(new ParsedInstruction
+                                    {
+                                        StepNumber = ++stepNumber,
+                                        InstructionText = text
+                                    });
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Split by paragraph or numbered list
+                            var lines = instructionText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                            var stepNumber = 0;
+
+                            foreach (var line in lines)
+                            {
+                                var cleanLine = CleanText(line);
+                                if (!string.IsNullOrWhiteSpace(cleanLine) && cleanLine.Length > 5)
+                                {
+                                    // Remove leading numbers (e.g., "1. " or "1) ")
+                                    cleanLine = System.Text.RegularExpressions.Regex.Replace(
+                                        cleanLine, @"^\d+[\.\)]\s*", "");
+
+                                    recipe.Instructions.Add(new ParsedInstruction
+                                    {
+                                        StepNumber = ++stepNumber,
+                                        InstructionText = cleanLine
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    // Extract notes
+                    recipe.Notes = recipeElement.Element("Notes")?.Value ??
+                                 recipeElement.Element("ChefNotes")?.Value;
+
+                    // Extract nutrition if available
+                    XElement? nutritionElement = recipeElement.Element("Nutrition");
+                    if (nutritionElement != null)
+                    {
+                        recipe.Nutrition = nutritionElement.Value;
+                    }
+
+                    recipes.Add(recipe);
+                }
+            }
+            catch (Exception ex)
+            {
+                // If XML parsing fails, return a placeholder
+                recipes.Add(new ParsedRecipe
+                {
+                    Name = "MasterCook Recipe",
+                    Description = $"Failed to parse MasterCook XML: {ex.Message}",
+                    Source = "MasterCook"
+                });
+            }
+
+            return Task.FromResult(recipes);
+        }
     }
 }

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Load layered configuration (global + env + local)
 builder.AddLayeredConfiguration(args);
@@ -24,7 +24,7 @@ builder.Services.AddControllers();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var jwt = builder.Configuration.GetSection("JwtSettings");
+        IConfigurationSection jwt = builder.Configuration.GetSection("JwtSettings");
         var secretKey = jwt["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -74,7 +74,7 @@ builder.Services.AddScoped<IOllamaService, OllamaService>();
 // Health checks
 builder.Services.AddHealthChecks();
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 // Configure middleware pipeline
 // app.MapDefaultEndpoints(); // If ServiceDefaults referenced

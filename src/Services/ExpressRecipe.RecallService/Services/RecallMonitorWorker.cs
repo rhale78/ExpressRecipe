@@ -1,78 +1,79 @@
 using ExpressRecipe.RecallService.Data;
 using ExpressRecipe.RecallService.Services;
 
-namespace ExpressRecipe.RecallService.Services;
-
-public class RecallMonitorWorker : BackgroundService
+namespace ExpressRecipe.RecallService.Services
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<RecallMonitorWorker> _logger;
-    private readonly TimeSpan _interval = TimeSpan.FromHours(1); // Check every hour
-
-    public RecallMonitorWorker(IServiceProvider serviceProvider, ILogger<RecallMonitorWorker> logger)
+    public class RecallMonitorWorker : BackgroundService
     {
-        _serviceProvider = serviceProvider;
-        _logger = logger;
-    }
+        private readonly IServiceProvider _serviceProvider;
+        private readonly ILogger<RecallMonitorWorker> _logger;
+        private readonly TimeSpan _interval = TimeSpan.FromHours(1); // Check every hour
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Recall Monitor Worker started");
-
-        // Wait 1 minute before first run to allow services to initialize
-        await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        public RecallMonitorWorker(IServiceProvider serviceProvider, ILogger<RecallMonitorWorker> logger)
         {
-            try
-            {
-                await CheckForNewRecallsAsync(stoppingToken);
-                await Task.Delay(_interval, stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex, "Error in Recall Monitor Worker");
-                await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
-            }
+            _serviceProvider = serviceProvider;
+            _logger = logger;
         }
 
-        _logger.LogInformation("Recall Monitor Worker stopped");
-    }
-
-    private async Task CheckForNewRecallsAsync(CancellationToken cancellationToken)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IRecallRepository>();
-        var importService = scope.ServiceProvider.GetService<FDARecallImportService>();
-
-        _logger.LogInformation("Checking for new recalls...");
-
-        if (importService != null)
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            try
+            _logger.LogInformation("Recall Monitor Worker started");
+
+            // Wait 1 minute before first run to allow services to initialize
+            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+
+            while (!stoppingToken.IsCancellationRequested)
             {
-                // Import recent recalls from FDA
-                var result = await importService.ImportRecentRecallsAsync(limit: 50);
-                _logger.LogInformation("Imported {Count} new FDA recalls, {Errors} errors",
-                    result.SuccessCount, result.FailureCount);
-
-                // Import meat/poultry recalls from FDA (includes USDA-regulated products)
-                var meatPoultryResult = await importService.ImportMeatPoultryRecallsFromFDAAsync(limit: 50);
-                _logger.LogInformation("Imported {Count} meat/poultry recalls, {Errors} errors",
-                    meatPoultryResult.SuccessCount, meatPoultryResult.FailureCount);
-
-                // Note: ImportUSDARecallsAsync() is deprecated - no public USDA API exists
-                // Meat/poultry recalls are now imported from FDA API above
-
-                // TODO: Check user subscriptions and send alerts
-                // This would require cross-service communication with NotificationService
+                try
+                {
+                    await CheckForNewRecallsAsync(stoppingToken);
+                    await Task.Delay(_interval, stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Error in Recall Monitor Worker");
+                    await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error importing recalls");
-            }
+
+            _logger.LogInformation("Recall Monitor Worker stopped");
         }
 
-        _logger.LogInformation("Recall check completed");
+        private async Task CheckForNewRecallsAsync(CancellationToken cancellationToken)
+        {
+            using IServiceScope scope = _serviceProvider.CreateScope();
+            IRecallRepository repository = scope.ServiceProvider.GetRequiredService<IRecallRepository>();
+            FDARecallImportService? importService = scope.ServiceProvider.GetService<FDARecallImportService>();
+
+            _logger.LogInformation("Checking for new recalls...");
+
+            if (importService != null)
+            {
+                try
+                {
+                    // Import recent recalls from FDA
+                    RecallImportResult result = await importService.ImportRecentRecallsAsync(limit: 50);
+                    _logger.LogInformation("Imported {Count} new FDA recalls, {Errors} errors",
+                        result.SuccessCount, result.FailureCount);
+
+                    // Import meat/poultry recalls from FDA (includes USDA-regulated products)
+                    RecallImportResult meatPoultryResult = await importService.ImportMeatPoultryRecallsFromFDAAsync(limit: 50);
+                    _logger.LogInformation("Imported {Count} meat/poultry recalls, {Errors} errors",
+                        meatPoultryResult.SuccessCount, meatPoultryResult.FailureCount);
+
+                    // Note: ImportUSDARecallsAsync() is deprecated - no public USDA API exists
+                    // Meat/poultry recalls are now imported from FDA API above
+
+                    // TODO: Check user subscriptions and send alerts
+                    // This would require cross-service communication with NotificationService
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error importing recalls");
+                }
+            }
+
+            _logger.LogInformation("Recall check completed");
+        }
     }
 }

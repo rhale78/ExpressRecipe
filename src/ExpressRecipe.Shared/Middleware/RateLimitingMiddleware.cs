@@ -5,109 +5,110 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 
-namespace ExpressRecipe.Shared.Middleware;
-
-/// <summary>
-/// Rate limiting middleware with per-user and per-endpoint limits
-/// </summary>
-public class RateLimitingMiddleware
+namespace ExpressRecipe.Shared.Middleware
 {
-    private readonly RequestDelegate _next;
-    private readonly IMemoryCache _cache;
-    private readonly ILogger<RateLimitingMiddleware> _logger;
-    private readonly RateLimitOptions _options;
-
-    public RateLimitingMiddleware(
-        RequestDelegate next,
-        IMemoryCache cache,
-        ILogger<RateLimitingMiddleware> logger,
-        RateLimitOptions options)
+    /// <summary>
+    /// Rate limiting middleware with per-user and per-endpoint limits
+    /// </summary>
+    public class RateLimitingMiddleware
     {
-        _next = next;
-        _cache = cache;
-        _logger = logger;
-        _options = options;
-    }
+        private readonly RequestDelegate _next;
+        private readonly IMemoryCache _cache;
+        private readonly ILogger<RateLimitingMiddleware> _logger;
+        private readonly RateLimitOptions _options;
 
-    public async Task InvokeAsync(HttpContext context)
-    {
-        if (!_options.Enabled)
+        public RateLimitingMiddleware(
+            RequestDelegate next,
+            IMemoryCache cache,
+            ILogger<RateLimitingMiddleware> logger,
+            RateLimitOptions options)
         {
-            await _next(context);
-            return;
+            _next = next;
+            _cache = cache;
+            _logger = logger;
+            _options = options;
         }
 
-        var endpoint = context.Request.Path.ToString();
-        var userId = GetUserId(context);
-        var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-
-        var cacheKey = $"ratelimit:{userId ?? ipAddress}:{endpoint}";
-
-        if (_cache.TryGetValue(cacheKey, out RateLimitCounter? counter))
+        public async Task InvokeAsync(HttpContext context)
         {
-            if (counter!.RequestCount >= _options.MaxRequestsPerWindow)
+            if (!_options.Enabled)
             {
-                _logger.LogWarning("Rate limit exceeded for {UserId} on {Endpoint}", userId ?? ipAddress, endpoint);
-
-                context.Response.StatusCode = 429; // Too Many Requests
-                context.Response.Headers["Retry-After"] = _options.WindowSeconds.ToString();
-
-                context.Response.ContentType = "application/json";
-                var payload = new
-                {
-                    error = "Rate limit exceeded",
-                    retryAfter = _options.WindowSeconds,
-                    limit = _options.MaxRequestsPerWindow
-                };
-
-                await context.Response.WriteAsync(JsonSerializer.Serialize(payload));
-
+                await _next(context);
                 return;
             }
 
-            counter.RequestCount++;
-        }
-        else
-        {
-            _cache.Set(cacheKey, new RateLimitCounter { RequestCount = 1 },
-                TimeSpan.FromSeconds(_options.WindowSeconds));
+            var endpoint = context.Request.Path.ToString();
+            var userId = GetUserId(context);
+            var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+            var cacheKey = $"ratelimit:{userId ?? ipAddress}:{endpoint}";
+
+            if (_cache.TryGetValue(cacheKey, out RateLimitCounter? counter))
+            {
+                if (counter!.RequestCount >= _options.MaxRequestsPerWindow)
+                {
+                    _logger.LogWarning("Rate limit exceeded for {UserId} on {Endpoint}", userId ?? ipAddress, endpoint);
+
+                    context.Response.StatusCode = 429; // Too Many Requests
+                    context.Response.Headers["Retry-After"] = _options.WindowSeconds.ToString();
+
+                    context.Response.ContentType = "application/json";
+                    var payload = new
+                    {
+                        error = "Rate limit exceeded",
+                        retryAfter = _options.WindowSeconds,
+                        limit = _options.MaxRequestsPerWindow
+                    };
+
+                    await context.Response.WriteAsync(JsonSerializer.Serialize(payload));
+
+                    return;
+                }
+
+                counter.RequestCount++;
+            }
+            else
+            {
+                _cache.Set(cacheKey, new RateLimitCounter { RequestCount = 1 },
+                    TimeSpan.FromSeconds(_options.WindowSeconds));
+            }
+
+            // Add rate limit headers
+            context.Response.Headers["X-RateLimit-Limit"] = _options.MaxRequestsPerWindow.ToString();
+            if (_cache.TryGetValue(cacheKey, out counter))
+            {
+                context.Response.Headers["X-RateLimit-Remaining"] =
+                    (_options.MaxRequestsPerWindow - counter!.RequestCount).ToString();
+            }
+
+            await _next(context);
         }
 
-        // Add rate limit headers
-        context.Response.Headers["X-RateLimit-Limit"] = _options.MaxRequestsPerWindow.ToString();
-        if (_cache.TryGetValue(cacheKey, out counter))
+        private string? GetUserId(HttpContext context)
         {
-            context.Response.Headers["X-RateLimit-Remaining"] =
-                (_options.MaxRequestsPerWindow - counter!.RequestCount).ToString();
+            return context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         }
-
-        await _next(context);
     }
 
-    private string? GetUserId(HttpContext context)
+    public class RateLimitCounter
     {
-        return context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        public int RequestCount { get; set; }
     }
-}
 
-public class RateLimitCounter
-{
-    public int RequestCount { get; set; }
-}
-
-public class RateLimitOptions
-{
-    public bool Enabled { get; set; } = true;
-    public int MaxRequestsPerWindow { get; set; } = 100; // requests
-    public int WindowSeconds { get; set; } = 60; // 1 minute window
-}
-
-// Extension method for easy registration
-public static class RateLimitingExtensions
-{
-    public static IApplicationBuilder UseRateLimiting(this IApplicationBuilder app, RateLimitOptions? options = null)
+    public class RateLimitOptions
     {
-        options ??= new RateLimitOptions();
-        return app.UseMiddleware<RateLimitingMiddleware>(options);
+        public bool Enabled { get; set; } = true;
+        public int MaxRequestsPerWindow { get; set; } = 100; // requests
+        public int WindowSeconds { get; set; } = 60; // 1 minute window
+    }
+
+    // Extension method for easy registration
+    public static class RateLimitingExtensions
+    {
+        public static IApplicationBuilder UseRateLimiting(this IApplicationBuilder app, RateLimitOptions? options = null)
+        {
+            options ??= new RateLimitOptions();
+            return app.UseMiddleware<RateLimitingMiddleware>(options);
+        }
     }
 }

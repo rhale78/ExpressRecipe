@@ -1,101 +1,104 @@
+using ExpressRecipe.Client.Shared.Models.Auth;
+
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
 using System.Security.Claims;
 
-namespace ExpressRecipe.Client.Shared.Services;
-
-public class CustomAuthenticationStateProvider : AuthenticationStateProvider
+namespace ExpressRecipe.Client.Shared.Services
 {
-    private readonly IAuthService _authService;
-    private readonly ITokenProvider _tokenProvider;
-    private ClaimsPrincipal _currentUser = new ClaimsPrincipal(new ClaimsIdentity());
-
-    public CustomAuthenticationStateProvider(IAuthService authService, ITokenProvider tokenProvider)
+    public class CustomAuthenticationStateProvider : AuthenticationStateProvider
     {
-        _authService = authService;
-        _tokenProvider = tokenProvider;
+        private readonly IAuthService _authService;
+        private readonly ITokenProvider _tokenProvider;
+        private ClaimsPrincipal _currentUser = new ClaimsPrincipal(new ClaimsIdentity());
 
-        // Subscribe to authentication state changes
-        _authService.AuthenticationStateChanged += OnAuthenticationStateChanged;
-    }
-
-    public override async Task<AuthenticationState> GetAuthenticationStateAsync()
-    {
-        try
+        public CustomAuthenticationStateProvider(IAuthService authService, ITokenProvider tokenProvider)
         {
-            var token = await _tokenProvider.GetAccessTokenAsync();
+            _authService = authService;
+            _tokenProvider = tokenProvider;
 
-            if (string.IsNullOrEmpty(token))
+            // Subscribe to authentication state changes
+            _authService.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        }
+
+        public override async Task<AuthenticationState> GetAuthenticationStateAsync()
+        {
+            try
             {
+                var token = await _tokenProvider.GetAccessTokenAsync();
+
+                if (string.IsNullOrEmpty(token))
+                {
+                    return new AuthenticationState(_currentUser);
+                }
+
+                UserProfile? userProfile = await _authService.GetCurrentUserAsync();
+
+                if (userProfile == null || !userProfile.IsAuthenticated)
+                {
+                    return new AuthenticationState(_currentUser);
+                }
+
+                ClaimsIdentity identity = new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.NameIdentifier, userProfile.UserId.ToString()),
+                    new Claim(ClaimTypes.Name, userProfile.FullName),
+                    new Claim(ClaimTypes.Email, userProfile.Email),
+                    new Claim(ClaimTypes.GivenName, userProfile.FirstName),
+                    new Claim(ClaimTypes.Surname, userProfile.LastName)
+                }, "jwt");
+
+                _currentUser = new ClaimsPrincipal(identity);
+
                 return new AuthenticationState(_currentUser);
             }
-
-            var userProfile = await _authService.GetCurrentUserAsync();
-
-            if (userProfile == null || !userProfile.IsAuthenticated)
+            catch (JSException)
             {
-                return new AuthenticationState(_currentUser);
+                // JavaScript interop not available during prerendering
+                // Return unauthenticated state
+                return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
             }
-
-            var identity = new ClaimsIdentity(new[]
+            catch (InvalidOperationException)
             {
-                new Claim(ClaimTypes.NameIdentifier, userProfile.UserId.ToString()),
-                new Claim(ClaimTypes.Name, userProfile.FullName),
-                new Claim(ClaimTypes.Email, userProfile.Email),
-                new Claim(ClaimTypes.GivenName, userProfile.FirstName),
-                new Claim(ClaimTypes.Surname, userProfile.LastName)
+                // JavaScript interop not available during prerendering
+                // Return unauthenticated state
+                return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+            }
+        }
+
+        public async Task MarkUserAsAuthenticated(string email, string firstName, string lastName, Guid userId)
+        {
+            ClaimsIdentity identity = new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                new Claim(ClaimTypes.Name, $"{firstName} {lastName}"),
+                new Claim(ClaimTypes.Email, email),
+                new Claim(ClaimTypes.GivenName, firstName),
+                new Claim(ClaimTypes.Surname, lastName)
             }, "jwt");
 
             _currentUser = new ClaimsPrincipal(identity);
 
-            return new AuthenticationState(_currentUser);
+            NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(_currentUser)));
         }
-        catch (JSException)
+
+        public void MarkUserAsLoggedOut()
         {
-            // JavaScript interop not available during prerendering
-            // Return unauthenticated state
-            return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
+            Console.WriteLine("[AuthStateProvider] MarkUserAsLoggedOut called");
+            _currentUser = new ClaimsPrincipal(new ClaimsIdentity());
+
+            Console.WriteLine("[AuthStateProvider] Notifying authentication state changed");
+            NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(_currentUser)));
+            Console.WriteLine("[AuthStateProvider] User marked as logged out");
         }
-        catch (InvalidOperationException)
+
+        private void OnAuthenticationStateChanged(object? sender, bool isAuthenticated)
         {
-            // JavaScript interop not available during prerendering
-            // Return unauthenticated state
-            return new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()));
-        }
-    }
-
-    public async Task MarkUserAsAuthenticated(string email, string firstName, string lastName, Guid userId)
-    {
-        var identity = new ClaimsIdentity(new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(ClaimTypes.Name, $"{firstName} {lastName}"),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(ClaimTypes.GivenName, firstName),
-            new Claim(ClaimTypes.Surname, lastName)
-        }, "jwt");
-
-        _currentUser = new ClaimsPrincipal(identity);
-
-        NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(_currentUser)));
-    }
-
-    public void MarkUserAsLoggedOut()
-    {
-        Console.WriteLine("[AuthStateProvider] MarkUserAsLoggedOut called");
-        _currentUser = new ClaimsPrincipal(new ClaimsIdentity());
-
-        Console.WriteLine("[AuthStateProvider] Notifying authentication state changed");
-        NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(_currentUser)));
-        Console.WriteLine("[AuthStateProvider] User marked as logged out");
-    }
-
-    private void OnAuthenticationStateChanged(object? sender, bool isAuthenticated)
-    {
-        Console.WriteLine($"[AuthStateProvider] OnAuthenticationStateChanged event received: isAuthenticated={isAuthenticated}");
-        if (!isAuthenticated)
-        {
-            MarkUserAsLoggedOut();
+            Console.WriteLine($"[AuthStateProvider] OnAuthenticationStateChanged event received: isAuthenticated={isAuthenticated}");
+            if (!isAuthenticated)
+            {
+                MarkUserAsLoggedOut();
+            }
         }
     }
 }

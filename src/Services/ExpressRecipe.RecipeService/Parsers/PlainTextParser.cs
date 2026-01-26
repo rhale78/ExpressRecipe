@@ -1,199 +1,203 @@
 using System.Text.RegularExpressions;
 
-namespace ExpressRecipe.RecipeService.Parsers;
-
-/// <summary>
-/// Parser for plain text recipes
-/// Uses heuristics to identify recipe components
-/// </summary>
-public class PlainTextParser : RecipeParserBase
+namespace ExpressRecipe.RecipeService.Parsers
 {
-    public override string ParserName => "PlainTextParser";
-    public override string SourceType => "Text";
-
-    public override bool CanParse(string content, ParserContext context)
+    /// <summary>
+    /// Parser for plain text recipes
+    /// Uses heuristics to identify recipe components
+    /// </summary>
+    public class PlainTextParser : RecipeParserBase
     {
-        // Always can attempt to parse plain text
-        return !string.IsNullOrWhiteSpace(content);
-    }
+        public override string ParserName => "PlainTextParser";
+        public override string SourceType => "Text";
 
-    public override Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
-    {
-        var recipe = new ParsedRecipe
+        public override bool CanParse(string content, ParserContext context)
         {
-            Name = context.FileName ?? "Imported Recipe"
-        };
-
-        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(l => l.Trim())
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .ToList();
-
-        if (lines.Count == 0)
-        {
-            return Task.FromResult(new List<ParsedRecipe>());
+            // Always can attempt to parse plain text
+            return !string.IsNullOrWhiteSpace(content);
         }
 
-        // First non-empty line is likely the title
-        recipe.Name = lines[0];
-
-        var currentSection = DetectSection(lines[0]);
-        var ingredientOrder = 0;
-        var stepNumber = 0;
-
-        for (int i = 1; i < lines.Count; i++)
+        public override Task<List<ParsedRecipe>> ParseAsync(string content, ParserContext context)
         {
-            var line = lines[i];
-
-            // Check for section headers
-            var newSection = DetectSection(line);
-            if (newSection != "unknown")
+            ParsedRecipe recipe = new ParsedRecipe
             {
-                currentSection = newSection;
-                continue;
+                Name = context.FileName ?? "Imported Recipe"
+            };
+
+            List<string> lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(l => l.Trim())
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .ToList();
+
+            if (lines.Count == 0)
+            {
+                return Task.FromResult(new List<ParsedRecipe>());
             }
 
-            // Parse based on current section
-            if (currentSection == "ingredients" || IsLikelyIngredient(line))
+            // First non-empty line is likely the title
+            recipe.Name = lines[0];
+
+            var currentSection = DetectSection(lines[0]);
+            var ingredientOrder = 0;
+            var stepNumber = 0;
+
+            for (int i = 1; i < lines.Count; i++)
             {
-                var ingredient = ParseIngredientLine(line, ingredientOrder++);
-                if (ingredient != null)
+                var line = lines[i];
+
+                // Check for section headers
+                var newSection = DetectSection(line);
+                if (newSection != "unknown")
                 {
-                    recipe.Ingredients.Add(ingredient);
+                    currentSection = newSection;
+                    continue;
+                }
+
+                // Parse based on current section
+                if (currentSection == "ingredients" || IsLikelyIngredient(line))
+                {
+                    ParsedIngredient? ingredient = ParseIngredientLine(line, ingredientOrder++);
+                    if (ingredient != null)
+                    {
+                        recipe.Ingredients.Add(ingredient);
+                    }
+                }
+                else if (currentSection == "instructions" || IsLikelyInstruction(line))
+                {
+                    recipe.Instructions.Add(new ParsedInstruction
+                    {
+                        StepNumber = ++stepNumber,
+                        InstructionText = CleanText(line)
+                    });
+                }
+                else if (currentSection == "description")
+                {
+                    recipe.Description = (recipe.Description ?? "") + " " + line;
+                }
+                else if (line.Contains("servings", StringComparison.OrdinalIgnoreCase) ||
+                         line.Contains("serves", StringComparison.OrdinalIgnoreCase))
+                {
+                    Match match = Regex.Match(line, @"(\d+)\s*(?:servings?|serves)", RegexOptions.IgnoreCase);
+                    if (match.Success && int.TryParse(match.Groups[1].Value, out var servings))
+                    {
+                        recipe.Servings = servings;
+                    }
+                }
+                else if (line.Contains("prep", StringComparison.OrdinalIgnoreCase) ||
+                         line.Contains("preparation", StringComparison.OrdinalIgnoreCase))
+                {
+                    recipe.PrepTimeMinutes = ParseTime(line);
+                }
+                else if (line.Contains("cook", StringComparison.OrdinalIgnoreCase) &&
+                         !line.Contains("cookbook", StringComparison.OrdinalIgnoreCase))
+                {
+                    recipe.CookTimeMinutes = ParseTime(line);
                 }
             }
-            else if (currentSection == "instructions" || IsLikelyInstruction(line))
+
+            // Calculate total time
+            if (recipe.PrepTimeMinutes.HasValue || recipe.CookTimeMinutes.HasValue)
             {
-                recipe.Instructions.Add(new ParsedInstruction
-                {
-                    StepNumber = ++stepNumber,
-                    InstructionText = CleanText(line)
-                });
+                recipe.TotalTimeMinutes = (recipe.PrepTimeMinutes ?? 0) + (recipe.CookTimeMinutes ?? 0);
             }
-            else if (currentSection == "description")
+
+            return Task.FromResult(new List<ParsedRecipe> { recipe });
+        }
+
+        private string DetectSection(string line)
+        {
+            var lower = line.ToLower();
+
+            return Regex.IsMatch(lower, @"^ingredients?:?\s*$")
+                ? "ingredients"
+                : Regex.IsMatch(lower, @"^(?:instructions?|directions?|steps?|method|procedure):?\s*$")
+                ? "instructions"
+                : Regex.IsMatch(lower, @"^(?:description|about|intro):?\s*$") ? "description" : "unknown";
+        }
+
+        private bool IsLikelyIngredient(string line)
+        {
+            // Ingredients typically start with a quantity
+            if (char.IsDigit(line[0]))
             {
-                recipe.Description = (recipe.Description ?? "") + " " + line;
+                return true;
             }
-            else if (line.Contains("servings", StringComparison.OrdinalIgnoreCase) ||
-                     line.Contains("serves", StringComparison.OrdinalIgnoreCase))
+
+            // Or common quantity words
+            if (Regex.IsMatch(line, @"^\s*(?:a|an|the|some|half|quarter)\s+", RegexOptions.IgnoreCase))
             {
-                var match = Regex.Match(line, @"(\d+)\s*(?:servings?|serves)", RegexOptions.IgnoreCase);
-                if (match.Success && int.TryParse(match.Groups[1].Value, out var servings))
+                return true;
+            }
+
+            // Or have measurement units
+            var units = new[] { "cup", "tsp", "tbsp", "oz", "lb", "gram", "liter", "ml", "kg", "pinch", "dash" };
+            foreach (var unit in units)
+            {
+                if (line.Contains(unit, StringComparison.OrdinalIgnoreCase))
                 {
-                    recipe.Servings = servings;
+                    return true;
                 }
             }
-            else if (line.Contains("prep", StringComparison.OrdinalIgnoreCase) ||
-                     line.Contains("preparation", StringComparison.OrdinalIgnoreCase))
+
+            return false;
+        }
+
+        private bool IsLikelyInstruction(string line)
+        {
+            // Instructions often start with action verbs
+            var verbs = new[]
             {
-                recipe.PrepTimeMinutes = ParseTime(line);
-            }
-            else if (line.Contains("cook", StringComparison.OrdinalIgnoreCase) &&
-                     !line.Contains("cookbook", StringComparison.OrdinalIgnoreCase))
+                "preheat", "heat", "cook", "bake", "boil", "simmer", "fry", "sauté",
+                "mix", "stir", "whisk", "blend", "combine", "add", "pour", "spread",
+                "place", "arrange", "transfer", "remove", "drain", "rinse", "wash",
+                "chop", "dice", "mince", "slice", "cut", "peel", "grate", "shred"
+            };
+
+            var lower = line.ToLower();
+            foreach (var verb in verbs)
             {
-                recipe.CookTimeMinutes = ParseTime(line);
+                if (lower.StartsWith(verb))
+                {
+                    return true;
+                }
             }
-        }
 
-        // Calculate total time
-        if (recipe.PrepTimeMinutes.HasValue || recipe.CookTimeMinutes.HasValue)
-        {
-            recipe.TotalTimeMinutes = (recipe.PrepTimeMinutes ?? 0) + (recipe.CookTimeMinutes ?? 0);
-        }
-
-        return Task.FromResult(new List<ParsedRecipe> { recipe });
-    }
-
-    private string DetectSection(string line)
-    {
-        var lower = line.ToLower();
-
-        if (Regex.IsMatch(lower, @"^ingredients?:?\s*$"))
-            return "ingredients";
-
-        if (Regex.IsMatch(lower, @"^(?:instructions?|directions?|steps?|method|procedure):?\s*$"))
-            return "instructions";
-
-        if (Regex.IsMatch(lower, @"^(?:description|about|intro):?\s*$"))
-            return "description";
-
-        return "unknown";
-    }
-
-    private bool IsLikelyIngredient(string line)
-    {
-        // Ingredients typically start with a quantity
-        if (char.IsDigit(line[0]))
-            return true;
-
-        // Or common quantity words
-        if (Regex.IsMatch(line, @"^\s*(?:a|an|the|some|half|quarter)\s+", RegexOptions.IgnoreCase))
-            return true;
-
-        // Or have measurement units
-        var units = new[] { "cup", "tsp", "tbsp", "oz", "lb", "gram", "liter", "ml", "kg", "pinch", "dash" };
-        foreach (var unit in units)
-        {
-            if (line.Contains(unit, StringComparison.OrdinalIgnoreCase))
+            // Or numbered steps
+            if (Regex.IsMatch(line, @"^\d+\.\s"))
+            {
                 return true;
+            }
+
+            // Or descriptive cooking instructions
+            return line.Length > 40 && (line.Contains("until") || line.Contains("for") && line.Contains("minute"));
         }
 
-        return false;
-    }
-
-    private bool IsLikelyInstruction(string line)
-    {
-        // Instructions often start with action verbs
-        var verbs = new[]
+        private ParsedIngredient? ParseIngredientLine(string line, int order)
         {
-            "preheat", "heat", "cook", "bake", "boil", "simmer", "fry", "sauté",
-            "mix", "stir", "whisk", "blend", "combine", "add", "pour", "spread",
-            "place", "arrange", "transfer", "remove", "drain", "rinse", "wash",
-            "chop", "dice", "mince", "slice", "cut", "peel", "grate", "shred"
-        };
+            // Remove leading bullet points or dashes
+            line = Regex.Replace(line, @"^[-•*]\s+", "");
 
-        var lower = line.ToLower();
-        foreach (var verb in verbs)
-        {
-            if (lower.StartsWith(verb))
-                return true;
+            (decimal? quantity, string? unit, string? remaining) = ParseQuantityAndUnit(line);
+
+            if (string.IsNullOrWhiteSpace(remaining))
+            {
+                remaining = line; // Use full line if we couldn't parse quantity
+            }
+
+            (string? ingredient, string? preparation) = ExtractPreparation(remaining);
+
+            return string.IsNullOrWhiteSpace(ingredient)
+                ? null
+                : new ParsedIngredient
+            {
+                Order = order,
+                Quantity = quantity,
+                Unit = unit,
+                IngredientName = ingredient,
+                Preparation = preparation,
+                IsOptional = IsOptionalIngredient(line),
+                OriginalText = line
+            };
         }
-
-        // Or numbered steps
-        if (Regex.IsMatch(line, @"^\d+\.\s"))
-            return true;
-
-        // Or descriptive cooking instructions
-        if (line.Length > 40 && (line.Contains("until") || line.Contains("for") && line.Contains("minute")))
-            return true;
-
-        return false;
-    }
-
-    private ParsedIngredient? ParseIngredientLine(string line, int order)
-    {
-        // Remove leading bullet points or dashes
-        line = Regex.Replace(line, @"^[-•*]\s+", "");
-
-        var (quantity, unit, remaining) = ParseQuantityAndUnit(line);
-
-        if (string.IsNullOrWhiteSpace(remaining))
-            remaining = line; // Use full line if we couldn't parse quantity
-
-        var (ingredient, preparation) = ExtractPreparation(remaining);
-
-        if (string.IsNullOrWhiteSpace(ingredient))
-            return null;
-
-        return new ParsedIngredient
-        {
-            Order = order,
-            Quantity = quantity,
-            Unit = unit,
-            IngredientName = ingredient,
-            Preparation = preparation,
-            IsOptional = IsOptionalIngredient(line),
-            OriginalText = line
-        };
     }
 }

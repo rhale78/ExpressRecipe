@@ -1,68 +1,69 @@
 using Microsoft.JSInterop;
 
-namespace ExpressRecipe.Client.Shared.Services.LocalStorage;
-
-/// <summary>
-/// Service for detecting online/offline status
-/// </summary>
-public class OfflineDetectionService : IAsyncDisposable
+namespace ExpressRecipe.Client.Shared.Services.LocalStorage
 {
-    private readonly IJSRuntime _jsRuntime;
-    private DotNetObjectReference<OfflineDetectionService>? _objectReference;
-    private IJSObjectReference? _module;
-
-    public event Action<bool>? OnlineStatusChanged;
-
-    public bool IsOnline { get; private set; } = true;
-
-    public OfflineDetectionService(IJSRuntime jsRuntime)
-    {
-        _jsRuntime = jsRuntime;
-    }
-
     /// <summary>
-    /// Initialize offline detection
+    /// Service for detecting online/offline status
     /// </summary>
-    public async Task InitializeAsync()
+    public class OfflineDetectionService : IAsyncDisposable
     {
-        try
-        {
-            _objectReference = DotNetObjectReference.Create(this);
+        private readonly IJSRuntime _jsRuntime;
+        private DotNetObjectReference<OfflineDetectionService>? _objectReference;
+        private IJSObjectReference? _module;
 
-            // Load JavaScript module for offline detection
-            _module = await _jsRuntime.InvokeAsync<IJSObjectReference>(
-                "import", "./js/offline-detection.js");
+        public event Action<bool>? OnlineStatusChanged;
 
-            // Initialize and get current status
-            IsOnline = await _module.InvokeAsync<bool>("initialize", _objectReference);
-        }
-        catch
-        {
-            // Assume online if detection fails
-            IsOnline = true;
-        }
-    }
+        public bool IsOnline { get; private set; } = true;
 
-    /// <summary>
-    /// Called from JavaScript when online status changes
-    /// </summary>
-    [JSInvokable]
-    public void UpdateOnlineStatus(bool isOnline)
-    {
-        if (IsOnline != isOnline)
+        public OfflineDetectionService(IJSRuntime jsRuntime)
         {
-            IsOnline = isOnline;
-            OnlineStatusChanged?.Invoke(isOnline);
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_module != null)
-        {
-            await _module.DisposeAsync();
+            _jsRuntime = jsRuntime;
         }
 
-        _objectReference?.Dispose();
+        /// <summary>
+        /// Initialize offline detection
+        /// </summary>
+        public async Task InitializeAsync()
+        {
+            try
+            {
+                _objectReference = DotNetObjectReference.Create(this);
+
+                // Load JavaScript module for offline detection
+                _module = await _jsRuntime.InvokeAsync<IJSObjectReference>(
+                    "import", "./js/offline-detection.js");
+
+                // Initialize and get current status
+                IsOnline = await _module.InvokeAsync<bool>("initialize", _objectReference);
+            }
+            catch
+            {
+                // Assume online if detection fails
+                IsOnline = true;
+            }
+        }
+
+        /// <summary>
+        /// Called from JavaScript when online status changes
+        /// </summary>
+        [JSInvokable]
+        public void UpdateOnlineStatus(bool isOnline)
+        {
+            if (IsOnline != isOnline)
+            {
+                IsOnline = isOnline;
+                OnlineStatusChanged?.Invoke(isOnline);
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_module != null)
+            {
+                await _module.DisposeAsync();
+            }
+
+            _objectReference?.Dispose();
+        }
     }
 }

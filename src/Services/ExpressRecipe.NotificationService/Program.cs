@@ -7,7 +7,7 @@ using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using RabbitMQ.Client;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Load layered configuration (global + env + local)
 builder.AddLayeredConfiguration(args);
@@ -49,8 +49,8 @@ builder.Services.AddScoped<NotificationBroadcastService>();
 // Register repositories
 builder.Services.AddScoped<INotificationRepository>(sp =>
 {
-    var logger = sp.GetRequiredService<ILogger<NotificationRepository>>();
-    var broadcastService = sp.GetRequiredService<NotificationBroadcastService>();
+    ILogger<NotificationRepository> logger = sp.GetRequiredService<ILogger<NotificationRepository>>();
+    NotificationBroadcastService broadcastService = sp.GetRequiredService<NotificationBroadcastService>();
     return new NotificationRepository(connectionString, logger, broadcastService);
 });
 
@@ -67,12 +67,9 @@ if (rabbitEnabled)
         var uri = builder.Configuration["RabbitMQ:ConnectionString"]
                   ?? builder.Configuration.GetConnectionString("messaging"); // Aspire provides this when referenced
 
-        if (!string.IsNullOrWhiteSpace(uri))
-        {
-            return new ConnectionFactory { Uri = new Uri(uri) };
-        }
-
-        return new ConnectionFactory
+        return !string.IsNullOrWhiteSpace(uri)
+            ? new ConnectionFactory { Uri = new Uri(uri) }
+            : new ConnectionFactory
         {
             HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
             Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
@@ -103,7 +100,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 // Run database management (drop db/tables if configured)
 await app.RunDatabaseManagementAsync("NotificationService", "notificationdb");
@@ -114,7 +111,7 @@ if (!Directory.Exists(migrationsPath))
 {
     migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
 }
-var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+Dictionary<string, string> migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
 await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline

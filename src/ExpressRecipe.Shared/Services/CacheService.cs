@@ -2,84 +2,91 @@ using StackExchange.Redis;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
-namespace ExpressRecipe.Shared.Services;
-
-/// <summary>
-/// Redis caching service wrapper
-/// </summary>
-public class CacheService
+namespace ExpressRecipe.Shared.Services
 {
-    private readonly IConnectionMultiplexer? _redis;
-    private readonly ILogger<CacheService> _logger;
-    private readonly IDatabase? _db;
-
-    public CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
+    /// <summary>
+    /// Redis caching service wrapper
+    /// </summary>
+    public class CacheService
     {
-        _redis = redis;
-        _logger = logger;
-        _db = redis?.GetDatabase();
-    }
+        private readonly IConnectionMultiplexer? _redis;
+        private readonly ILogger<CacheService> _logger;
+        private readonly IDatabase? _db;
 
-    public async Task<T?> GetAsync<T>(string key)
-    {
-        if (_db == null) return default;
-
-        try
+        public CacheService(IConnectionMultiplexer redis, ILogger<CacheService> logger)
         {
-            var value = await _db.StringGetAsync(key);
-            if (value.IsNullOrEmpty) return default;
-
-            return JsonSerializer.Deserialize<T>((string)value!);
+            _redis = redis;
+            _logger = logger;
+            _db = redis?.GetDatabase();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting cached value for key {Key}", key);
-            return default;
-        }
-    }
 
-    public async Task<bool> SetAsync<T>(string key, T value, TimeSpan? expiry = null)
-    {
-        if (_db == null) return false;
-
-        try
+        public async Task<T?> GetAsync<T>(string key)
         {
-            var serialized = JsonSerializer.Serialize(value);
-            if (expiry.HasValue)
+            if (_db == null)
             {
-                return await _db.StringSetAsync(key, serialized, expiry.Value);
+                return default;
             }
-            return await _db.StringSetAsync(key, serialized);
+
+            try
+            {
+                RedisValue value = await _db.StringGetAsync(key);
+                return value.IsNullOrEmpty ? default : JsonSerializer.Deserialize<T>((string)value!);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting cached value for key {Key}", key);
+                return default;
+            }
         }
-        catch (Exception ex)
+
+        public async Task<bool> SetAsync<T>(string key, T value, TimeSpan? expiry = null)
         {
-            _logger.LogError(ex, "Error setting cached value for key {Key}", key);
-            return false;
+            if (_db == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                var serialized = JsonSerializer.Serialize(value);
+                return expiry.HasValue ? await _db.StringSetAsync(key, serialized, expiry.Value) : await _db.StringSetAsync(key, serialized);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error setting cached value for key {Key}", key);
+                return false;
+            }
         }
-    }
 
-    public async Task<bool> DeleteAsync(string key)
-    {
-        if (_db == null) return false;
-
-        try
+        public async Task<bool> DeleteAsync(string key)
         {
-            return await _db.KeyDeleteAsync(key);
+            if (_db == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return await _db.KeyDeleteAsync(key);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting cached key {Key}", key);
+                return false;
+            }
         }
-        catch (Exception ex)
+
+        public async Task<T> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan? expiry = null)
         {
-            _logger.LogError(ex, "Error deleting cached key {Key}", key);
-            return false;
+            T? cached = await GetAsync<T>(key);
+            if (cached != null)
+            {
+                return cached;
+            }
+
+            T? value = await factory();
+            await SetAsync(key, value, expiry);
+            return value;
         }
-    }
-
-    public async Task<T> GetOrSetAsync<T>(string key, Func<Task<T>> factory, TimeSpan? expiry = null)
-    {
-        var cached = await GetAsync<T>(key);
-        if (cached != null) return cached;
-
-        var value = await factory();
-        await SetAsync(key, value, expiry);
-        return value;
     }
 }

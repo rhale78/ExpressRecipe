@@ -2,155 +2,171 @@ using ExpressRecipe.NotificationService.Data;
 using ExpressRecipe.Shared.Services;
 using RabbitMQ.Client;
 
-namespace ExpressRecipe.NotificationService.Services;
-
-/// <summary>
-/// Subscribes to events and creates notifications for users
-/// </summary>
-public class NotificationEventSubscriber : EventSubscriber
+namespace ExpressRecipe.NotificationService.Services
 {
-    private readonly IServiceProvider _serviceProvider;
-
-    public NotificationEventSubscriber(
-        IConnectionFactory connectionFactory,
-        ILogger<NotificationEventSubscriber> logger,
-        IServiceProvider serviceProvider)
-        : base(connectionFactory, logger)
+    /// <summary>
+    /// Subscribes to events and creates notifications for users
+    /// </summary>
+    public class NotificationEventSubscriber : EventSubscriber
     {
-        _serviceProvider = serviceProvider;
-    }
+        private readonly IServiceProvider _serviceProvider;
 
-    protected override string QueueName => "notification-service-queue";
-
-    protected override List<string> RoutingKeys => new()
-    {
-        "inventory.item.expiring",
-        "recall.published",
-        "price.changed",
-        "product.created",
-        "recipe.created"
-    };
-
-    protected override async Task ProcessEventAsync(string routingKey, string message, CancellationToken cancellationToken)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<INotificationRepository>();
-
-        switch (routingKey)
+        public NotificationEventSubscriber(
+            IConnectionFactory connectionFactory,
+            ILogger<NotificationEventSubscriber> logger,
+            IServiceProvider serviceProvider)
+            : base(connectionFactory, logger)
         {
-            case "inventory.item.expiring":
-                await HandleInventoryExpiringAsync(message, repository);
-                break;
+            _serviceProvider = serviceProvider;
+        }
 
-            case "recall.published":
-                await HandleRecallPublishedAsync(message, repository);
-                break;
+        protected override string QueueName => "notification-service-queue";
 
-            case "price.changed":
-                await HandlePriceChangedAsync(message, repository);
-                break;
+        protected override List<string> RoutingKeys =>
+        [
+            "inventory.item.expiring",
+            "recall.published",
+            "price.changed",
+            "product.created",
+            "recipe.created"
+        ];
 
-            case "product.created":
-                await HandleProductCreatedAsync(message, repository);
-                break;
+        protected override async Task ProcessEventAsync(string routingKey, string message, CancellationToken cancellationToken)
+        {
+            using IServiceScope scope = _serviceProvider.CreateScope();
+            INotificationRepository repository = scope.ServiceProvider.GetRequiredService<INotificationRepository>();
 
-            case "recipe.created":
-                await HandleRecipeCreatedAsync(message, repository);
-                break;
+            switch (routingKey)
+            {
+                case "inventory.item.expiring":
+                    await HandleInventoryExpiringAsync(message, repository);
+                    break;
 
-            default:
-                Logger.LogWarning("Unknown routing key: {RoutingKey}", routingKey);
-                break;
+                case "recall.published":
+                    await HandleRecallPublishedAsync(message, repository);
+                    break;
+
+                case "price.changed":
+                    await HandlePriceChangedAsync(message, repository);
+                    break;
+
+                case "product.created":
+                    await HandleProductCreatedAsync(message, repository);
+                    break;
+
+                case "recipe.created":
+                    await HandleRecipeCreatedAsync(message, repository);
+                    break;
+
+                default:
+                    Logger.LogWarning("Unknown routing key: {RoutingKey}", routingKey);
+                    break;
+            }
+        }
+
+        private async Task HandleInventoryExpiringAsync(string message, INotificationRepository repository)
+        {
+            InventoryExpiringEvent? @event = DeserializeEvent<InventoryExpiringEvent>(message);
+            if (@event == null)
+            {
+                return;
+            }
+
+            await repository.CreateNotificationAsync(
+                @event.UserId,
+                "InventoryExpiring",
+                "Items Expiring Soon",
+                $"{@event.ItemCount} items in your inventory are expiring in the next {@event.DaysUntilExpiration} days.",
+                "/inventory/expiring",
+                new Dictionary<string, string> { ["itemCount"] = @event.ItemCount.ToString() }
+            );
+
+            Logger.LogInformation("Created expiring notification for user {UserId}", @event.UserId);
+        }
+
+        private async Task HandleRecallPublishedAsync(string message, INotificationRepository repository)
+        {
+            RecallPublishedEvent? @event = DeserializeEvent<RecallPublishedEvent>(message);
+            if (@event == null)
+            {
+                return;
+            }
+
+            // TODO: Query users who have affected products in their inventory
+            // For now, this is a placeholder
+            Logger.LogInformation("Recall published: {RecallId} - {Severity}", @event.RecallId, @event.Severity);
+        }
+
+        private async Task HandlePriceChangedAsync(string message, INotificationRepository repository)
+        {
+            PriceChangedEvent? @event = DeserializeEvent<PriceChangedEvent>(message);
+            if (@event == null)
+            {
+                return;
+            }
+
+            if (@event.PercentChange <= -10) // 10% price drop
+            {
+                // TODO: Notify users who have this product in their shopping lists
+                Logger.LogInformation("Price dropped {Percent}% for product {ProductId}", @event.PercentChange, @event.ProductId);
+            }
+        }
+
+        private async Task HandleProductCreatedAsync(string message, INotificationRepository repository)
+        {
+            ProductCreatedEvent? @event = DeserializeEvent<ProductCreatedEvent>(message);
+            if (@event == null)
+            {
+                return;
+            }
+
+            Logger.LogInformation("Product created: {ProductId}", @event.ProductId);
+        }
+
+        private async Task HandleRecipeCreatedAsync(string message, INotificationRepository repository)
+        {
+            RecipeCreatedEvent? @event = DeserializeEvent<RecipeCreatedEvent>(message);
+            if (@event == null)
+            {
+                return;
+            }
+
+            Logger.LogInformation("Recipe created: {RecipeId}", @event.RecipeId);
         }
     }
 
-    private async Task HandleInventoryExpiringAsync(string message, INotificationRepository repository)
+    // Event DTOs
+    public class InventoryExpiringEvent
     {
-        var @event = DeserializeEvent<InventoryExpiringEvent>(message);
-        if (@event == null) return;
-
-        await repository.CreateNotificationAsync(
-            @event.UserId,
-            "InventoryExpiring",
-            "Items Expiring Soon",
-            $"{@event.ItemCount} items in your inventory are expiring in the next {@event.DaysUntilExpiration} days.",
-            "/inventory/expiring",
-            new Dictionary<string, string> { ["itemCount"] = @event.ItemCount.ToString() }
-        );
-
-        Logger.LogInformation("Created expiring notification for user {UserId}", @event.UserId);
+        public Guid UserId { get; set; }
+        public int ItemCount { get; set; }
+        public int DaysUntilExpiration { get; set; }
     }
 
-    private async Task HandleRecallPublishedAsync(string message, INotificationRepository repository)
+    public class RecallPublishedEvent
     {
-        var @event = DeserializeEvent<RecallPublishedEvent>(message);
-        if (@event == null) return;
-
-        // TODO: Query users who have affected products in their inventory
-        // For now, this is a placeholder
-        Logger.LogInformation("Recall published: {RecallId} - {Severity}", @event.RecallId, @event.Severity);
+        public Guid RecallId { get; set; }
+        public string Severity { get; set; } = string.Empty;
+        public List<Guid> ProductIds { get; set; } = [];
     }
 
-    private async Task HandlePriceChangedAsync(string message, INotificationRepository repository)
+    public class PriceChangedEvent
     {
-        var @event = DeserializeEvent<PriceChangedEvent>(message);
-        if (@event == null) return;
-
-        if (@event.PercentChange <= -10) // 10% price drop
-        {
-            // TODO: Notify users who have this product in their shopping lists
-            Logger.LogInformation("Price dropped {Percent}% for product {ProductId}", @event.PercentChange, @event.ProductId);
-        }
+        public Guid ProductId { get; set; }
+        public decimal OldPrice { get; set; }
+        public decimal NewPrice { get; set; }
+        public decimal PercentChange { get; set; }
     }
 
-    private async Task HandleProductCreatedAsync(string message, INotificationRepository repository)
+    public class ProductCreatedEvent
     {
-        var @event = DeserializeEvent<ProductCreatedEvent>(message);
-        if (@event == null) return;
-
-        Logger.LogInformation("Product created: {ProductId}", @event.ProductId);
+        public Guid ProductId { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
 
-    private async Task HandleRecipeCreatedAsync(string message, INotificationRepository repository)
+    public class RecipeCreatedEvent
     {
-        var @event = DeserializeEvent<RecipeCreatedEvent>(message);
-        if (@event == null) return;
-
-        Logger.LogInformation("Recipe created: {RecipeId}", @event.RecipeId);
+        public Guid RecipeId { get; set; }
+        public string Name { get; set; } = string.Empty;
     }
-}
-
-// Event DTOs
-public class InventoryExpiringEvent
-{
-    public Guid UserId { get; set; }
-    public int ItemCount { get; set; }
-    public int DaysUntilExpiration { get; set; }
-}
-
-public class RecallPublishedEvent
-{
-    public Guid RecallId { get; set; }
-    public string Severity { get; set; } = string.Empty;
-    public List<Guid> ProductIds { get; set; } = new();
-}
-
-public class PriceChangedEvent
-{
-    public Guid ProductId { get; set; }
-    public decimal OldPrice { get; set; }
-    public decimal NewPrice { get; set; }
-    public decimal PercentChange { get; set; }
-}
-
-public class ProductCreatedEvent
-{
-    public Guid ProductId { get; set; }
-    public string Name { get; set; } = string.Empty;
-}
-
-public class RecipeCreatedEvent
-{
-    public Guid RecipeId { get; set; }
-    public string Name { get; set; } = string.Empty;
 }

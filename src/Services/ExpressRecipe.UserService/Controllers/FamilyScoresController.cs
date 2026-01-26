@@ -4,331 +4,303 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
-namespace ExpressRecipe.UserService.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-[Authorize]
-public class FamilyScoresController : ControllerBase
+namespace ExpressRecipe.UserService.Controllers
 {
-    private readonly IFamilyScoreRepository _familyScoreRepository;
-    private readonly ILogger<FamilyScoresController> _logger;
-
-    public FamilyScoresController(
-        IFamilyScoreRepository familyScoreRepository,
-        ILogger<FamilyScoresController> logger)
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class FamilyScoresController : ControllerBase
     {
-        _familyScoreRepository = familyScoreRepository;
-        _logger = logger;
-    }
+        private readonly IFamilyScoreRepository _familyScoreRepository;
+        private readonly ILogger<FamilyScoresController> _logger;
 
-    private Guid? GetCurrentUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        public FamilyScoresController(
+            IFamilyScoreRepository familyScoreRepository,
+            ILogger<FamilyScoresController> logger)
         {
-            return null;
+            _familyScoreRepository = familyScoreRepository;
+            _logger = logger;
         }
-        return userId;
-    }
 
-    /// <summary>
-    /// Get user's family scores
-    /// </summary>
-    [HttpGet]
-    public async Task<ActionResult<List<FamilyScoreDto>>> GetScores(
-        [FromQuery] string? entityType = null,
-        [FromQuery] bool? favoritesOnly = null)
-    {
-        try
+        private Guid? GetCurrentUserId()
         {
-            var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out Guid userId) ? null : userId;
+        }
+
+        /// <summary>
+        /// Get user's family scores
+        /// </summary>
+        [HttpGet]
+        public async Task<ActionResult<List<FamilyScoreDto>>> GetScores(
+            [FromQuery] string? entityType = null,
+            [FromQuery] bool? favoritesOnly = null)
+        {
+            try
             {
-                return Unauthorized(new { message = "User not authenticated" });
+                Guid? userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { message = "User not authenticated" });
+                }
+
+                List<FamilyScoreDto> scores = await _familyScoreRepository.GetUserFamilyScoresAsync(userId.Value, entityType, favoritesOnly);
+                return Ok(scores);
             }
-
-            var scores = await _familyScoreRepository.GetUserFamilyScoresAsync(userId.Value, entityType, favoritesOnly);
-            return Ok(scores);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving family scores");
-            return StatusCode(500, new { message = "An error occurred while retrieving family scores" });
-        }
-    }
-
-    /// <summary>
-    /// Get family score for a specific entity
-    /// </summary>
-    [HttpGet("{entityType}/{entityId:guid}")]
-    public async Task<ActionResult<FamilyScoreDto>> GetScore(string entityType, Guid entityId)
-    {
-        try
-        {
-            var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            catch (Exception ex)
             {
-                return Unauthorized(new { message = "User not authenticated" });
+                _logger.LogError(ex, "Error retrieving family scores");
+                return StatusCode(500, new { message = "An error occurred while retrieving family scores" });
             }
+        }
 
-            var score = await _familyScoreRepository.GetFamilyScoreAsync(userId.Value, entityType, entityId);
-
-            if (score == null)
+        /// <summary>
+        /// Get family score for a specific entity
+        /// </summary>
+        [HttpGet("{entityType}/{entityId:guid}")]
+        public async Task<ActionResult<FamilyScoreDto>> GetScore(string entityType, Guid entityId)
+        {
+            try
             {
-                return NotFound(new { message = "Family score not found" });
+                Guid? userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { message = "User not authenticated" });
+                }
+
+                FamilyScoreDto? score = await _familyScoreRepository.GetFamilyScoreAsync(userId.Value, entityType, entityId);
+
+                return score == null ? (ActionResult<FamilyScoreDto>)NotFound(new { message = "Family score not found" }) : (ActionResult<FamilyScoreDto>)Ok(score);
             }
-
-            return Ok(score);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving family score for {EntityType} {EntityId}", entityType, entityId);
-            return StatusCode(500, new { message = "An error occurred while retrieving the family score" });
-        }
-    }
-
-    /// <summary>
-    /// Get user's favorites
-    /// </summary>
-    [HttpGet("favorites")]
-    public async Task<ActionResult<List<FamilyScoreDto>>> GetFavorites([FromQuery] string? entityType = null)
-    {
-        try
-        {
-            var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            catch (Exception ex)
             {
-                return Unauthorized(new { message = "User not authenticated" });
+                _logger.LogError(ex, "Error retrieving family score for {EntityType} {EntityId}", entityType, entityId);
+                return StatusCode(500, new { message = "An error occurred while retrieving the family score" });
             }
-
-            var favorites = await _familyScoreRepository.GetFavoritesAsync(userId.Value, entityType);
-            return Ok(favorites);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving favorites");
-            return StatusCode(500, new { message = "An error occurred while retrieving your favorites" });
-        }
-    }
 
-    /// <summary>
-    /// Get user's blacklisted items
-    /// </summary>
-    [HttpGet("blacklisted")]
-    public async Task<ActionResult<List<FamilyScoreDto>>> GetBlacklisted([FromQuery] string? entityType = null)
-    {
-        try
+        /// <summary>
+        /// Get user's favorites
+        /// </summary>
+        [HttpGet("favorites")]
+        public async Task<ActionResult<List<FamilyScoreDto>>> GetFavorites([FromQuery] string? entityType = null)
         {
-            var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            try
             {
-                return Unauthorized(new { message = "User not authenticated" });
+                Guid? userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { message = "User not authenticated" });
+                }
+
+                List<FamilyScoreDto> favorites = await _familyScoreRepository.GetFavoritesAsync(userId.Value, entityType);
+                return Ok(favorites);
             }
-
-            var blacklisted = await _familyScoreRepository.GetBlacklistedAsync(userId.Value, entityType);
-            return Ok(blacklisted);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving blacklisted items");
-            return StatusCode(500, new { message = "An error occurred while retrieving your blacklisted items" });
-        }
-    }
-
-    /// <summary>
-    /// Create a family score
-    /// </summary>
-    [HttpPost]
-    public async Task<ActionResult<Guid>> CreateScore([FromBody] CreateFamilyScoreRequest request)
-    {
-        try
-        {
-            var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            catch (Exception ex)
             {
-                return Unauthorized(new { message = "User not authenticated" });
+                _logger.LogError(ex, "Error retrieving favorites");
+                return StatusCode(500, new { message = "An error occurred while retrieving your favorites" });
             }
-
-            var scoreId = await _familyScoreRepository.CreateFamilyScoreAsync(userId.Value, request);
-
-            return CreatedAtAction(
-                nameof(GetScore),
-                new { entityType = request.EntityType, entityId = request.EntityId },
-                new { id = scoreId });
         }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Failed to create family score");
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating family score");
-            return StatusCode(500, new { message = "An error occurred while creating the family score" });
-        }
-    }
 
-    /// <summary>
-    /// Update a family score
-    /// </summary>
-    [HttpPut("{id:guid}")]
-    public async Task<ActionResult> UpdateScore(Guid id, [FromBody] UpdateFamilyScoreRequest request)
-    {
-        try
+        /// <summary>
+        /// Get user's blacklisted items
+        /// </summary>
+        [HttpGet("blacklisted")]
+        public async Task<ActionResult<List<FamilyScoreDto>>> GetBlacklisted([FromQuery] string? entityType = null)
         {
-            var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            try
             {
-                return Unauthorized(new { message = "User not authenticated" });
+                Guid? userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { message = "User not authenticated" });
+                }
+
+                List<FamilyScoreDto> blacklisted = await _familyScoreRepository.GetBlacklistedAsync(userId.Value, entityType);
+                return Ok(blacklisted);
             }
-
-            var success = await _familyScoreRepository.UpdateFamilyScoreAsync(id, userId.Value, request);
-
-            if (!success)
+            catch (Exception ex)
             {
-                return NotFound(new { message = "Family score not found or could not be updated" });
+                _logger.LogError(ex, "Error retrieving blacklisted items");
+                return StatusCode(500, new { message = "An error occurred while retrieving your blacklisted items" });
             }
-
-            return NoContent();
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating family score {FamilyScoreId}", id);
-            return StatusCode(500, new { message = "An error occurred while updating the family score" });
-        }
-    }
 
-    /// <summary>
-    /// Delete a family score
-    /// </summary>
-    [HttpDelete("{id:guid}")]
-    public async Task<ActionResult> DeleteScore(Guid id)
-    {
-        try
+        /// <summary>
+        /// Create a family score
+        /// </summary>
+        [HttpPost]
+        public async Task<ActionResult<Guid>> CreateScore([FromBody] CreateFamilyScoreRequest request)
         {
-            var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            try
             {
-                return Unauthorized(new { message = "User not authenticated" });
+                Guid? userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { message = "User not authenticated" });
+                }
+
+                Guid scoreId = await _familyScoreRepository.CreateFamilyScoreAsync(userId.Value, request);
+
+                return CreatedAtAction(
+                    nameof(GetScore),
+                    new { entityType = request.EntityType, entityId = request.EntityId },
+                    new { id = scoreId });
             }
-
-            var success = await _familyScoreRepository.DeleteFamilyScoreAsync(id, userId.Value);
-
-            if (!success)
+            catch (InvalidOperationException ex)
             {
-                return NotFound(new { message = "Family score not found" });
+                _logger.LogWarning(ex, "Failed to create family score");
+                return BadRequest(new { message = ex.Message });
             }
-
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting family score {FamilyScoreId}", id);
-            return StatusCode(500, new { message = "An error occurred while deleting the family score" });
-        }
-    }
-
-    /// <summary>
-    /// Add a member score
-    /// </summary>
-    [HttpPost("{familyScoreId:guid}/members")]
-    public async Task<ActionResult<Guid>> AddMemberScore(
-        Guid familyScoreId,
-        [FromBody] CreateFamilyMemberScoreRequest request)
-    {
-        try
-        {
-            var memberScoreId = await _familyScoreRepository.AddMemberScoreAsync(
-                familyScoreId,
-                request.FamilyMemberId,
-                request.IndividualScore,
-                request.Notes);
-
-            return Ok(new { id = memberScoreId, message = "Member score added successfully" });
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogWarning(ex, "Invalid member score value");
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error adding member score");
-            return StatusCode(500, new { message = "An error occurred while adding the member score" });
-        }
-    }
-
-    /// <summary>
-    /// Update a member score
-    /// </summary>
-    [HttpPut("members/{memberScoreId:guid}")]
-    public async Task<ActionResult> UpdateMemberScore(
-        Guid memberScoreId,
-        [FromBody] UpdateFamilyMemberScoreRequest request)
-    {
-        try
-        {
-            var success = await _familyScoreRepository.UpdateMemberScoreAsync(memberScoreId, request);
-
-            if (!success)
+            catch (Exception ex)
             {
-                return NotFound(new { message = "Member score not found" });
+                _logger.LogError(ex, "Error creating family score");
+                return StatusCode(500, new { message = "An error occurred while creating the family score" });
             }
-
-            return NoContent();
         }
-        catch (ArgumentException ex)
-        {
-            _logger.LogWarning(ex, "Invalid member score value");
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating member score {MemberScoreId}", memberScoreId);
-            return StatusCode(500, new { message = "An error occurred while updating the member score" });
-        }
-    }
 
-    /// <summary>
-    /// Delete a member score
-    /// </summary>
-    [HttpDelete("members/{memberScoreId:guid}")]
-    public async Task<ActionResult> DeleteMemberScore(Guid memberScoreId)
-    {
-        try
+        /// <summary>
+        /// Update a family score
+        /// </summary>
+        [HttpPut("{id:guid}")]
+        public async Task<ActionResult> UpdateScore(Guid id, [FromBody] UpdateFamilyScoreRequest request)
         {
-            var success = await _familyScoreRepository.DeleteMemberScoreAsync(memberScoreId);
-
-            if (!success)
+            try
             {
-                return NotFound(new { message = "Member score not found" });
+                Guid? userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { message = "User not authenticated" });
+                }
+
+                var success = await _familyScoreRepository.UpdateFamilyScoreAsync(id, userId.Value, request);
+
+                return !success ? NotFound(new { message = "Family score not found or could not be updated" }) : NoContent();
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating family score {FamilyScoreId}", id);
+                return StatusCode(500, new { message = "An error occurred while updating the family score" });
+            }
+        }
 
-            return NoContent();
-        }
-        catch (Exception ex)
+        /// <summary>
+        /// Delete a family score
+        /// </summary>
+        [HttpDelete("{id:guid}")]
+        public async Task<ActionResult> DeleteScore(Guid id)
         {
-            _logger.LogError(ex, "Error deleting member score {MemberScoreId}", memberScoreId);
-            return StatusCode(500, new { message = "An error occurred while deleting the member score" });
-        }
-    }
+            try
+            {
+                Guid? userId = GetCurrentUserId();
+                if (!userId.HasValue)
+                {
+                    return Unauthorized(new { message = "User not authenticated" });
+                }
 
-    /// <summary>
-    /// Get member scores for a family score
-    /// </summary>
-    [HttpGet("{familyScoreId:guid}/members")]
-    public async Task<ActionResult<List<FamilyMemberScoreDto>>> GetMemberScores(Guid familyScoreId)
-    {
-        try
-        {
-            var memberScores = await _familyScoreRepository.GetMemberScoresAsync(familyScoreId);
-            return Ok(memberScores);
+                var success = await _familyScoreRepository.DeleteFamilyScoreAsync(id, userId.Value);
+
+                return !success ? NotFound(new { message = "Family score not found" }) : NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting family score {FamilyScoreId}", id);
+                return StatusCode(500, new { message = "An error occurred while deleting the family score" });
+            }
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Add a member score
+        /// </summary>
+        [HttpPost("{familyScoreId:guid}/members")]
+        public async Task<ActionResult<Guid>> AddMemberScore(
+            Guid familyScoreId,
+            [FromBody] CreateFamilyMemberScoreRequest request)
         {
-            _logger.LogError(ex, "Error retrieving member scores for {FamilyScoreId}", familyScoreId);
-            return StatusCode(500, new { message = "An error occurred while retrieving member scores" });
+            try
+            {
+                Guid memberScoreId = await _familyScoreRepository.AddMemberScoreAsync(
+                    familyScoreId,
+                    request.FamilyMemberId,
+                    request.IndividualScore,
+                    request.Notes);
+
+                return Ok(new { id = memberScoreId, message = "Member score added successfully" });
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Invalid member score value");
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding member score");
+                return StatusCode(500, new { message = "An error occurred while adding the member score" });
+            }
+        }
+
+        /// <summary>
+        /// Update a member score
+        /// </summary>
+        [HttpPut("members/{memberScoreId:guid}")]
+        public async Task<ActionResult> UpdateMemberScore(
+            Guid memberScoreId,
+            [FromBody] UpdateFamilyMemberScoreRequest request)
+        {
+            try
+            {
+                var success = await _familyScoreRepository.UpdateMemberScoreAsync(memberScoreId, request);
+
+                return !success ? NotFound(new { message = "Member score not found" }) : NoContent();
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.LogWarning(ex, "Invalid member score value");
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating member score {MemberScoreId}", memberScoreId);
+                return StatusCode(500, new { message = "An error occurred while updating the member score" });
+            }
+        }
+
+        /// <summary>
+        /// Delete a member score
+        /// </summary>
+        [HttpDelete("members/{memberScoreId:guid}")]
+        public async Task<ActionResult> DeleteMemberScore(Guid memberScoreId)
+        {
+            try
+            {
+                var success = await _familyScoreRepository.DeleteMemberScoreAsync(memberScoreId);
+
+                return !success ? NotFound(new { message = "Member score not found" }) : NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting member score {MemberScoreId}", memberScoreId);
+                return StatusCode(500, new { message = "An error occurred while deleting the member score" });
+            }
+        }
+
+        /// <summary>
+        /// Get member scores for a family score
+        /// </summary>
+        [HttpGet("{familyScoreId:guid}/members")]
+        public async Task<ActionResult<List<FamilyMemberScoreDto>>> GetMemberScores(Guid familyScoreId)
+        {
+            try
+            {
+                List<FamilyMemberScoreDto> memberScores = await _familyScoreRepository.GetMemberScoresAsync(familyScoreId);
+                return Ok(memberScores);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving member scores for {FamilyScoreId}", familyScoreId);
+                return StatusCode(500, new { message = "An error occurred while retrieving member scores" });
+            }
         }
     }
 }

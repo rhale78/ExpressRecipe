@@ -1,191 +1,210 @@
 using System.Net.Http.Json;
 using ExpressRecipe.Client.Shared.Models.AI;
 
-namespace ExpressRecipe.Client.Shared.Services;
-
-public interface IAIApiClient
+namespace ExpressRecipe.Client.Shared.Services
 {
-    // Recipe Suggestions
-    Task<List<RecipeSuggestionDto>> GetRecipeSuggestionsAsync(RecipeSuggestionRequest request);
-
-    // Ingredient Substitutions
-    Task<IngredientSubstitutionDto?> GetIngredientSubstitutionsAsync(IngredientSubstitutionRequest request);
-
-    // Recipe Extraction
-    Task<ExtractedRecipeDto?> ExtractRecipeAsync(RecipeExtractionRequest request);
-
-    // Meal Planning
-    Task<MealPlanSuggestionDto?> GetMealPlanSuggestionsAsync(MealPlanSuggestionRequest request);
-
-    // Allergen Detection
-    Task<AllergenDetectionResult?> DetectAllergensAsync(AllergenDetectionRequest request);
-
-    // Shopping Optimization
-    Task<ShoppingOptimizationResult?> OptimizeShoppingListAsync(ShoppingOptimizationRequest request);
-
-    // Dietary Analysis
-    Task<DietaryAnalysisResult?> AnalyzeDietAsync(DietaryAnalysisRequest request);
-
-    // AI Chat Assistant
-    Task<AIChatResponse?> ChatAsync(AIChatRequest request);
-}
-
-public class AIApiClient : IAIApiClient
-{
-    private readonly HttpClient _httpClient;
-    private readonly ITokenProvider _tokenProvider;
-
-    public AIApiClient(HttpClient httpClient, ITokenProvider tokenProvider)
+    public interface IAIApiClient
     {
-        _httpClient = httpClient;
-        _tokenProvider = tokenProvider;
+        // Recipe Suggestions
+        Task<List<RecipeSuggestionDto>> GetRecipeSuggestionsAsync(RecipeSuggestionRequest request);
+
+        // Ingredient Substitutions
+        Task<IngredientSubstitutionDto?> GetIngredientSubstitutionsAsync(IngredientSubstitutionRequest request);
+
+        // Recipe Extraction
+        Task<ExtractedRecipeDto?> ExtractRecipeAsync(RecipeExtractionRequest request);
+
+        // Meal Planning
+        Task<MealPlanSuggestionDto?> GetMealPlanSuggestionsAsync(MealPlanSuggestionRequest request);
+
+        // Allergen Detection
+        Task<AllergenDetectionResult?> DetectAllergensAsync(AllergenDetectionRequest request);
+
+        // Shopping Optimization
+        Task<ShoppingOptimizationResult?> OptimizeShoppingListAsync(ShoppingOptimizationRequest request);
+
+        // Dietary Analysis
+        Task<DietaryAnalysisResult?> AnalyzeDietAsync(DietaryAnalysisRequest request);
+
+        // AI Chat Assistant
+        Task<AIChatResponse?> ChatAsync(AIChatRequest request);
     }
 
-    private async Task<bool> EnsureAuthenticatedAsync()
+    public class AIApiClient : IAIApiClient
     {
-        var token = await _tokenProvider.GetAccessTokenAsync();
-        if (string.IsNullOrEmpty(token))
-            return false;
+        private readonly HttpClient _httpClient;
+        private readonly ITokenProvider _tokenProvider;
 
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        return true;
-    }
-
-    public async Task<List<RecipeSuggestionDto>> GetRecipeSuggestionsAsync(RecipeSuggestionRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return new List<RecipeSuggestionDto>();
-
-        try
+        public AIApiClient(HttpClient httpClient, ITokenProvider tokenProvider)
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/recipes/suggest", request);
-            response.EnsureSuccessStatusCode();
-            var suggestions = await response.Content.ReadFromJsonAsync<List<RecipeSuggestionDto>>();
-            return suggestions ?? new List<RecipeSuggestionDto>();
+            _httpClient = httpClient;
+            _tokenProvider = tokenProvider;
         }
-        catch
-        {
-            return new List<RecipeSuggestionDto>();
-        }
-    }
 
-    public async Task<IngredientSubstitutionDto?> GetIngredientSubstitutionsAsync(IngredientSubstitutionRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return null;
+        private async Task<bool> EnsureAuthenticatedAsync()
+        {
+            var token = await _tokenProvider.GetAccessTokenAsync();
+            if (string.IsNullOrEmpty(token))
+            {
+                return false;
+            }
 
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/ingredients/substitute", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<IngredientSubstitutionDto>();
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            return true;
         }
-        catch
-        {
-            return null;
-        }
-    }
 
-    public async Task<ExtractedRecipeDto?> ExtractRecipeAsync(RecipeExtractionRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return null;
+        public async Task<List<RecipeSuggestionDto>> GetRecipeSuggestionsAsync(RecipeSuggestionRequest request)
+        {
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return [];
+            }
 
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/recipes/extract", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<ExtractedRecipeDto>();
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/recipes/suggest", request);
+                response.EnsureSuccessStatusCode();
+                List<RecipeSuggestionDto>? suggestions = await response.Content.ReadFromJsonAsync<List<RecipeSuggestionDto>>();
+                return suggestions ?? [];
+            }
+            catch
+            {
+                return [];
+            }
         }
-        catch
-        {
-            return null;
-        }
-    }
 
-    public async Task<MealPlanSuggestionDto?> GetMealPlanSuggestionsAsync(MealPlanSuggestionRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return null;
+        public async Task<IngredientSubstitutionDto?> GetIngredientSubstitutionsAsync(IngredientSubstitutionRequest request)
+        {
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return null;
+            }
 
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/meal-plans/suggest", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<MealPlanSuggestionDto>();
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/ingredients/substitute", request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<IngredientSubstitutionDto>();
+            }
+            catch
+            {
+                return null;
+            }
         }
-        catch
-        {
-            return null;
-        }
-    }
 
-    public async Task<AllergenDetectionResult?> DetectAllergensAsync(AllergenDetectionRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return null;
+        public async Task<ExtractedRecipeDto?> ExtractRecipeAsync(RecipeExtractionRequest request)
+        {
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return null;
+            }
 
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/allergens/detect", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<AllergenDetectionResult>();
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/recipes/extract", request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<ExtractedRecipeDto>();
+            }
+            catch
+            {
+                return null;
+            }
         }
-        catch
-        {
-            return null;
-        }
-    }
 
-    public async Task<ShoppingOptimizationResult?> OptimizeShoppingListAsync(ShoppingOptimizationRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return null;
+        public async Task<MealPlanSuggestionDto?> GetMealPlanSuggestionsAsync(MealPlanSuggestionRequest request)
+        {
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return null;
+            }
 
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/shopping/optimize", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<ShoppingOptimizationResult>();
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/meal-plans/suggest", request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<MealPlanSuggestionDto>();
+            }
+            catch
+            {
+                return null;
+            }
         }
-        catch
-        {
-            return null;
-        }
-    }
 
-    public async Task<DietaryAnalysisResult?> AnalyzeDietAsync(DietaryAnalysisRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return null;
+        public async Task<AllergenDetectionResult?> DetectAllergensAsync(AllergenDetectionRequest request)
+        {
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return null;
+            }
 
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/dietary/analyze", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<DietaryAnalysisResult>();
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/allergens/detect", request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<AllergenDetectionResult>();
+            }
+            catch
+            {
+                return null;
+            }
         }
-        catch
-        {
-            return null;
-        }
-    }
 
-    public async Task<AIChatResponse?> ChatAsync(AIChatRequest request)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return null;
+        public async Task<ShoppingOptimizationResult?> OptimizeShoppingListAsync(ShoppingOptimizationRequest request)
+        {
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return null;
+            }
 
-        try
-        {
-            var response = await _httpClient.PostAsJsonAsync("/api/ai/chat", request);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<AIChatResponse>();
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/shopping/optimize", request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<ShoppingOptimizationResult>();
+            }
+            catch
+            {
+                return null;
+            }
         }
-        catch
+
+        public async Task<DietaryAnalysisResult?> AnalyzeDietAsync(DietaryAnalysisRequest request)
         {
-            return null;
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return null;
+            }
+
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/dietary/analyze", request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<DietaryAnalysisResult>();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public async Task<AIChatResponse?> ChatAsync(AIChatRequest request)
+        {
+            if (!await EnsureAuthenticatedAsync())
+            {
+                return null;
+            }
+
+            try
+            {
+                HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/ai/chat", request);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<AIChatResponse>();
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

@@ -3,144 +3,145 @@ using Microsoft.AspNetCore.Authorization;
 using ExpressRecipe.Client.Shared.Models.AI;
 using ExpressRecipe.AIService.Services;
 
-namespace ExpressRecipe.AIService.Controllers;
-
-[ApiController]
-[Route("api/ai")]
-[Authorize]
-public class AIController : ControllerBase
+namespace ExpressRecipe.AIService.Controllers
 {
-    private readonly IOllamaService _ollamaService;
-    private readonly ILogger<AIController> _logger;
-
-    public AIController(IOllamaService ollamaService, ILogger<AIController> logger)
+    [ApiController]
+    [Route("api/ai")]
+    [Authorize]
+    public class AIController : ControllerBase
     {
-        _ollamaService = ollamaService;
-        _logger = logger;
-    }
+        private readonly IOllamaService _ollamaService;
+        private readonly ILogger<AIController> _logger;
 
-    [HttpPost("recipes/suggest")]
-    public async Task<ActionResult<List<RecipeSuggestionDto>>> GetRecipeSuggestions([FromBody] RecipeSuggestionRequest request)
-    {
-        try
+        public AIController(IOllamaService ollamaService, ILogger<AIController> logger)
         {
-            var suggestions = await _ollamaService.GenerateRecipeSuggestionsAsync(request);
-            return Ok(suggestions);
+            _ollamaService = ollamaService;
+            _logger = logger;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating recipe suggestions");
-            return StatusCode(500, "Failed to generate recipe suggestions");
-        }
-    }
 
-    [HttpPost("ingredients/substitute")]
-    public async Task<ActionResult<IngredientSubstitutionDto>> GetIngredientSubstitutions([FromBody] IngredientSubstitutionRequest request)
-    {
-        try
+        [HttpPost("recipes/suggest")]
+        public async Task<ActionResult<List<RecipeSuggestionDto>>> GetRecipeSuggestions([FromBody] RecipeSuggestionRequest request)
         {
-            var substitutions = await _ollamaService.GenerateSubstitutionsAsync(request);
-            return Ok(substitutions);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating ingredient substitutions");
-            return StatusCode(500, "Failed to generate substitutions");
-        }
-    }
-
-    [HttpPost("recipes/extract")]
-    public async Task<ActionResult<ExtractedRecipeDto>> ExtractRecipe([FromBody] RecipeExtractionRequest request)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(request.RecipeText))
+            try
             {
-                return BadRequest("Recipe text is required");
+                List<RecipeSuggestionDto> suggestions = await _ollamaService.GenerateRecipeSuggestionsAsync(request);
+                return Ok(suggestions);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating recipe suggestions");
+                return StatusCode(500, "Failed to generate recipe suggestions");
+            }
+        }
 
-            var extractedRecipe = await _ollamaService.ExtractRecipeFromTextAsync(request.RecipeText);
-            return Ok(extractedRecipe);
-        }
-        catch (Exception ex)
+        [HttpPost("ingredients/substitute")]
+        public async Task<ActionResult<IngredientSubstitutionDto>> GetIngredientSubstitutions([FromBody] IngredientSubstitutionRequest request)
         {
-            _logger.LogError(ex, "Error extracting recipe");
-            return StatusCode(500, "Failed to extract recipe");
+            try
+            {
+                IngredientSubstitutionDto substitutions = await _ollamaService.GenerateSubstitutionsAsync(request);
+                return Ok(substitutions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating ingredient substitutions");
+                return StatusCode(500, "Failed to generate substitutions");
+            }
         }
-    }
 
-    [HttpPost("meal-plans/suggest")]
-    public async Task<ActionResult<MealPlanSuggestionDto>> GetMealPlanSuggestions([FromBody] MealPlanSuggestionRequest request)
-    {
-        try
+        [HttpPost("recipes/extract")]
+        public async Task<ActionResult<ExtractedRecipeDto>> ExtractRecipe([FromBody] RecipeExtractionRequest request)
         {
-            var mealPlan = await _ollamaService.GenerateMealPlanAsync(request);
-            return Ok(mealPlan);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error generating meal plan");
-            return StatusCode(500, "Failed to generate meal plan");
-        }
-    }
+            try
+            {
+                if (string.IsNullOrEmpty(request.RecipeText))
+                {
+                    return BadRequest("Recipe text is required");
+                }
 
-    [HttpPost("allergens/detect")]
-    public async Task<ActionResult<AllergenDetectionResult>> DetectAllergens([FromBody] AllergenDetectionRequest request)
-    {
-        try
-        {
-            var result = await _ollamaService.DetectAllergensAsync(request);
-            return Ok(result);
+                ExtractedRecipeDto extractedRecipe = await _ollamaService.ExtractRecipeFromTextAsync(request.RecipeText);
+                return Ok(extractedRecipe);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error extracting recipe");
+                return StatusCode(500, "Failed to extract recipe");
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error detecting allergens");
-            return StatusCode(500, "Failed to detect allergens");
-        }
-    }
 
-    [HttpPost("shopping/optimize")]
-    public async Task<ActionResult<ShoppingOptimizationResult>> OptimizeShoppingList([FromBody] ShoppingOptimizationRequest request)
-    {
-        try
+        [HttpPost("meal-plans/suggest")]
+        public async Task<ActionResult<MealPlanSuggestionDto>> GetMealPlanSuggestions([FromBody] MealPlanSuggestionRequest request)
         {
-            // TODO: Implement shopping optimization
-            return Ok(new ShoppingOptimizationResult());
+            try
+            {
+                MealPlanSuggestionDto mealPlan = await _ollamaService.GenerateMealPlanAsync(request);
+                return Ok(mealPlan);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating meal plan");
+                return StatusCode(500, "Failed to generate meal plan");
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error optimizing shopping list");
-            return StatusCode(500, "Failed to optimize shopping list");
-        }
-    }
 
-    [HttpPost("dietary/analyze")]
-    public async Task<ActionResult<DietaryAnalysisResult>> AnalyzeDiet([FromBody] DietaryAnalysisRequest request)
-    {
-        try
+        [HttpPost("allergens/detect")]
+        public async Task<ActionResult<AllergenDetectionResult>> DetectAllergens([FromBody] AllergenDetectionRequest request)
         {
-            var analysis = await _ollamaService.AnalyzeDietAsync(request);
-            return Ok(analysis);
+            try
+            {
+                AllergenDetectionResult result = await _ollamaService.DetectAllergensAsync(request);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error detecting allergens");
+                return StatusCode(500, "Failed to detect allergens");
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error analyzing diet");
-            return StatusCode(500, "Failed to analyze diet");
-        }
-    }
 
-    [HttpPost("chat")]
-    public async Task<ActionResult<AIChatResponse>> Chat([FromBody] AIChatRequest request)
-    {
-        try
+        [HttpPost("shopping/optimize")]
+        public async Task<ActionResult<ShoppingOptimizationResult>> OptimizeShoppingList([FromBody] ShoppingOptimizationRequest request)
         {
-            var response = await _ollamaService.ChatAsync(request);
-            return Ok(response);
+            try
+            {
+                // TODO: Implement shopping optimization
+                return Ok(new ShoppingOptimizationResult());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error optimizing shopping list");
+                return StatusCode(500, "Failed to optimize shopping list");
+            }
         }
-        catch (Exception ex)
+
+        [HttpPost("dietary/analyze")]
+        public async Task<ActionResult<DietaryAnalysisResult>> AnalyzeDiet([FromBody] DietaryAnalysisRequest request)
         {
-            _logger.LogError(ex, "Error in AI chat");
-            return StatusCode(500, "Failed to process chat message");
+            try
+            {
+                DietaryAnalysisResult analysis = await _ollamaService.AnalyzeDietAsync(request);
+                return Ok(analysis);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing diet");
+                return StatusCode(500, "Failed to analyze diet");
+            }
+        }
+
+        [HttpPost("chat")]
+        public async Task<ActionResult<AIChatResponse>> Chat([FromBody] AIChatRequest request)
+        {
+            try
+            {
+                AIChatResponse response = await _ollamaService.ChatAsync(request);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in AI chat");
+                return StatusCode(500, "Failed to process chat message");
+            }
         }
     }
 }

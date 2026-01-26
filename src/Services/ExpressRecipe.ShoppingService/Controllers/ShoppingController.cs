@@ -3,215 +3,213 @@ using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.ShoppingService.Data;
 
-namespace ExpressRecipe.ShoppingService.Controllers;
-
-[Authorize]
-[ApiController]
-[Route("api/[controller]")]
-public class ShoppingController : ControllerBase
+namespace ExpressRecipe.ShoppingService.Controllers
 {
-    private readonly ILogger<ShoppingController> _logger;
-    private readonly IShoppingRepository _repository;
-
-    public ShoppingController(ILogger<ShoppingController> logger, IShoppingRepository repository)
+    [Authorize]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ShoppingController : ControllerBase
     {
-        _logger = logger;
-        _repository = repository;
+        private readonly ILogger<ShoppingController> _logger;
+        private readonly IShoppingRepository _repository;
+
+        public ShoppingController(ILogger<ShoppingController> logger, IShoppingRepository repository)
+        {
+            _logger = logger;
+            _repository = repository;
+        }
+
+        private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        /// <summary>
+        /// Get all shopping lists for user
+        /// </summary>
+        [HttpGet("lists")]
+        public async Task<IActionResult> GetLists()
+        {
+            Guid userId = GetUserId();
+            List<ShoppingListDto> lists = await _repository.GetUserListsAsync(userId);
+            return Ok(lists);
+        }
+
+        /// <summary>
+        /// Create new shopping list
+        /// </summary>
+        [HttpPost("lists")]
+        public async Task<IActionResult> CreateList([FromBody] CreateListRequest request)
+        {
+            Guid userId = GetUserId();
+            Guid listId = await _repository.CreateShoppingListAsync(userId, request.Name, request.Description);
+            ShoppingListDto? list = await _repository.GetShoppingListAsync(listId, userId);
+            return CreatedAtAction(nameof(GetList), new { id = listId }, list);
+        }
+
+        /// <summary>
+        /// Get shopping list by ID
+        /// </summary>
+        [HttpGet("lists/{id}")]
+        public async Task<IActionResult> GetList(Guid id)
+        {
+            Guid userId = GetUserId();
+            ShoppingListDto? list = await _repository.GetShoppingListAsync(id, userId);
+            return list == null ? NotFound() : Ok(list);
+        }
+
+        /// <summary>
+        /// Update shopping list
+        /// </summary>
+        [HttpPut("lists/{id}")]
+        public async Task<IActionResult> UpdateList(Guid id, [FromBody] UpdateListRequest request)
+        {
+            await _repository.UpdateShoppingListAsync(id, request.Name, request.Description);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Delete shopping list
+        /// </summary>
+        [HttpDelete("lists/{id}")]
+        public async Task<IActionResult> DeleteList(Guid id)
+        {
+            Guid userId = GetUserId();
+            await _repository.DeleteShoppingListAsync(id, userId);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Get items in shopping list
+        /// </summary>
+        [HttpGet("lists/{id}/items")]
+        public async Task<IActionResult> GetListItems(Guid id)
+        {
+            Guid userId = GetUserId();
+            List<ShoppingListItemDto> items = await _repository.GetListItemsAsync(id, userId);
+            return Ok(items);
+        }
+
+        /// <summary>
+        /// Add item to shopping list
+        /// </summary>
+        [HttpPost("lists/{id}/items")]
+        public async Task<IActionResult> AddItem(Guid id, [FromBody] AddItemRequest request)
+        {
+            Guid userId = GetUserId();
+            Guid itemId = await _repository.AddItemToListAsync(
+                id, userId, request.ProductId, request.CustomName, request.Quantity, request.Unit, request.Category);
+
+            return Ok(new { id = itemId });
+        }
+
+        /// <summary>
+        /// Update item quantity
+        /// </summary>
+        [HttpPut("items/{id}/quantity")]
+        public async Task<IActionResult> UpdateQuantity(Guid id, [FromBody] UpdateQuantityRequest request)
+        {
+            await _repository.UpdateItemQuantityAsync(id, request.Quantity);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Toggle item checked status
+        /// </summary>
+        [HttpPut("items/{id}/toggle")]
+        public async Task<IActionResult> ToggleChecked(Guid id)
+        {
+            await _repository.ToggleItemCheckedAsync(id);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Remove item from list
+        /// </summary>
+        [HttpDelete("items/{id}")]
+        public async Task<IActionResult> RemoveItem(Guid id)
+        {
+            await _repository.RemoveItemFromListAsync(id);
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Share list with another user
+        /// </summary>
+        [HttpPost("lists/{id}/share")]
+        public async Task<IActionResult> ShareList(Guid id, [FromBody] ShareListRequest request)
+        {
+            Guid userId = GetUserId();
+            Guid shareId = await _repository.ShareListAsync(id, userId, request.SharedWithUserId, request.Permission);
+            return Ok(new { id = shareId });
+        }
+
+        /// <summary>
+        /// Get shared lists
+        /// </summary>
+        [HttpGet("shared")]
+        public async Task<IActionResult> GetSharedLists()
+        {
+            Guid userId = GetUserId();
+            List<ShoppingListDto> lists = await _repository.GetSharedListsAsync(userId);
+            return Ok(lists);
+        }
+
+        /// <summary>
+        /// Get stores
+        /// </summary>
+        [HttpGet("stores")]
+        public async Task<IActionResult> GetStores()
+        {
+            Guid userId = GetUserId();
+            List<StoreLayoutDto> stores = await _repository.GetUserStoresAsync(userId);
+            return Ok(stores);
+        }
+
+        /// <summary>
+        /// Create store layout
+        /// </summary>
+        [HttpPost("stores")]
+        public async Task<IActionResult> CreateStore([FromBody] CreateStoreRequest request)
+        {
+            Guid userId = GetUserId();
+            Guid storeId = await _repository.CreateStoreLayoutAsync(userId, request.StoreName, request.Address);
+            return Ok(new { id = storeId });
+        }
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-    /// <summary>
-    /// Get all shopping lists for user
-    /// </summary>
-    [HttpGet("lists")]
-    public async Task<IActionResult> GetLists()
+    public class CreateListRequest
     {
-        var userId = GetUserId();
-        var lists = await _repository.GetUserListsAsync(userId);
-        return Ok(lists);
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
     }
 
-    /// <summary>
-    /// Create new shopping list
-    /// </summary>
-    [HttpPost("lists")]
-    public async Task<IActionResult> CreateList([FromBody] CreateListRequest request)
+    public class UpdateListRequest
     {
-        var userId = GetUserId();
-        var listId = await _repository.CreateShoppingListAsync(userId, request.Name, request.Description);
-        var list = await _repository.GetShoppingListAsync(listId, userId);
-        return CreatedAtAction(nameof(GetList), new { id = listId }, list);
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
     }
 
-    /// <summary>
-    /// Get shopping list by ID
-    /// </summary>
-    [HttpGet("lists/{id}")]
-    public async Task<IActionResult> GetList(Guid id)
+    public class AddItemRequest
     {
-        var userId = GetUserId();
-        var list = await _repository.GetShoppingListAsync(id, userId);
-        if (list == null)
-            return NotFound();
-
-        return Ok(list);
+        public Guid? ProductId { get; set; }
+        public string? CustomName { get; set; }
+        public decimal Quantity { get; set; }
+        public string? Unit { get; set; }
+        public string? Category { get; set; }
     }
 
-    /// <summary>
-    /// Update shopping list
-    /// </summary>
-    [HttpPut("lists/{id}")]
-    public async Task<IActionResult> UpdateList(Guid id, [FromBody] UpdateListRequest request)
+    public class UpdateQuantityRequest
     {
-        await _repository.UpdateShoppingListAsync(id, request.Name, request.Description);
-        return NoContent();
+        public decimal Quantity { get; set; }
     }
 
-    /// <summary>
-    /// Delete shopping list
-    /// </summary>
-    [HttpDelete("lists/{id}")]
-    public async Task<IActionResult> DeleteList(Guid id)
+    public class ShareListRequest
     {
-        var userId = GetUserId();
-        await _repository.DeleteShoppingListAsync(id, userId);
-        return NoContent();
+        public Guid SharedWithUserId { get; set; }
+        public string Permission { get; set; } = "View";
     }
 
-    /// <summary>
-    /// Get items in shopping list
-    /// </summary>
-    [HttpGet("lists/{id}/items")]
-    public async Task<IActionResult> GetListItems(Guid id)
+    public class CreateStoreRequest
     {
-        var userId = GetUserId();
-        var items = await _repository.GetListItemsAsync(id, userId);
-        return Ok(items);
+        public string StoreName { get; set; } = string.Empty;
+        public string? Address { get; set; }
     }
-
-    /// <summary>
-    /// Add item to shopping list
-    /// </summary>
-    [HttpPost("lists/{id}/items")]
-    public async Task<IActionResult> AddItem(Guid id, [FromBody] AddItemRequest request)
-    {
-        var userId = GetUserId();
-        var itemId = await _repository.AddItemToListAsync(
-            id, userId, request.ProductId, request.CustomName, request.Quantity, request.Unit, request.Category);
-
-        return Ok(new { id = itemId });
-    }
-
-    /// <summary>
-    /// Update item quantity
-    /// </summary>
-    [HttpPut("items/{id}/quantity")]
-    public async Task<IActionResult> UpdateQuantity(Guid id, [FromBody] UpdateQuantityRequest request)
-    {
-        await _repository.UpdateItemQuantityAsync(id, request.Quantity);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Toggle item checked status
-    /// </summary>
-    [HttpPut("items/{id}/toggle")]
-    public async Task<IActionResult> ToggleChecked(Guid id)
-    {
-        await _repository.ToggleItemCheckedAsync(id);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Remove item from list
-    /// </summary>
-    [HttpDelete("items/{id}")]
-    public async Task<IActionResult> RemoveItem(Guid id)
-    {
-        await _repository.RemoveItemFromListAsync(id);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Share list with another user
-    /// </summary>
-    [HttpPost("lists/{id}/share")]
-    public async Task<IActionResult> ShareList(Guid id, [FromBody] ShareListRequest request)
-    {
-        var userId = GetUserId();
-        var shareId = await _repository.ShareListAsync(id, userId, request.SharedWithUserId, request.Permission);
-        return Ok(new { id = shareId });
-    }
-
-    /// <summary>
-    /// Get shared lists
-    /// </summary>
-    [HttpGet("shared")]
-    public async Task<IActionResult> GetSharedLists()
-    {
-        var userId = GetUserId();
-        var lists = await _repository.GetSharedListsAsync(userId);
-        return Ok(lists);
-    }
-
-    /// <summary>
-    /// Get stores
-    /// </summary>
-    [HttpGet("stores")]
-    public async Task<IActionResult> GetStores()
-    {
-        var userId = GetUserId();
-        var stores = await _repository.GetUserStoresAsync(userId);
-        return Ok(stores);
-    }
-
-    /// <summary>
-    /// Create store layout
-    /// </summary>
-    [HttpPost("stores")]
-    public async Task<IActionResult> CreateStore([FromBody] CreateStoreRequest request)
-    {
-        var userId = GetUserId();
-        var storeId = await _repository.CreateStoreLayoutAsync(userId, request.StoreName, request.Address);
-        return Ok(new { id = storeId });
-    }
-}
-
-public class CreateListRequest
-{
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-}
-
-public class UpdateListRequest
-{
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-}
-
-public class AddItemRequest
-{
-    public Guid? ProductId { get; set; }
-    public string? CustomName { get; set; }
-    public decimal Quantity { get; set; }
-    public string? Unit { get; set; }
-    public string? Category { get; set; }
-}
-
-public class UpdateQuantityRequest
-{
-    public decimal Quantity { get; set; }
-}
-
-public class ShareListRequest
-{
-    public Guid SharedWithUserId { get; set; }
-    public string Permission { get; set; } = "View";
-}
-
-public class CreateStoreRequest
-{
-    public string StoreName { get; set; } = string.Empty;
-    public string? Address { get; set; }
 }

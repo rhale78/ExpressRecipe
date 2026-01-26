@@ -4,229 +4,218 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
-namespace ExpressRecipe.UserService.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-[Authorize]
-public class UserProfileController : ControllerBase
+namespace ExpressRecipe.UserService.Controllers
 {
-    private readonly IUserProfileRepository _repository;
-    private readonly ILogger<UserProfileController> _logger;
-
-    public UserProfileController(
-        IUserProfileRepository repository,
-        ILogger<UserProfileController> logger)
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]
+    public class UserProfileController : ControllerBase
     {
-        _repository = repository;
-        _logger = logger;
-    }
+        private readonly IUserProfileRepository _repository;
+        private readonly ILogger<UserProfileController> _logger;
 
-    private Guid GetCurrentUserId()
-    {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        public UserProfileController(
+            IUserProfileRepository repository,
+            ILogger<UserProfileController> logger)
         {
-            throw new UnauthorizedAccessException("Invalid user ID in token");
+            _repository = repository;
+            _logger = logger;
         }
-        return userId;
-    }
 
-    /// <summary>
-    /// Get current user's profile
-    /// </summary>
-    [HttpGet("me")]
-    public async Task<ActionResult<UserProfileDto>> GetMyProfile()
-    {
-        try
+        private Guid GetCurrentUserId()
         {
-            var userId = GetCurrentUserId();
-            var profile = await _repository.GetByUserIdAsync(userId);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out Guid userId)
+                ? throw new UnauthorizedAccessException("Invalid user ID in token")
+                : userId;
+        }
 
-            if (profile == null)
+        /// <summary>
+        /// Get current user's profile
+        /// </summary>
+        [HttpGet("me")]
+        public async Task<ActionResult<UserProfileDto>> GetMyProfile()
+        {
+            try
             {
-                return NotFound(new { message = "Profile not found" });
+                Guid userId = GetCurrentUserId();
+                UserProfileDto? profile = await _repository.GetByUserIdAsync(userId);
+
+                return profile == null ? (ActionResult<UserProfileDto>)NotFound(new { message = "Profile not found" }) : (ActionResult<UserProfileDto>)Ok(profile);
             }
-
-            return Ok(profile);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user profile");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Get user profile by user ID
-    /// </summary>
-    [HttpGet("user/{userId:guid}")]
-    public async Task<ActionResult<UserProfileDto>> GetByUserId(Guid userId)
-    {
-        try
-        {
-            var profile = await _repository.GetByUserIdAsync(userId);
-
-            if (profile == null)
+            catch (UnauthorizedAccessException ex)
             {
-                return NotFound(new { message = "Profile not found" });
+                return Unauthorized(new { message = ex.Message });
             }
-
-            return Ok(profile);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user profile for user {UserId}", userId);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Create a new user profile (service-to-service call, no auth required)
-    /// </summary>
-    [HttpPost("system/create")]
-    [AllowAnonymous]
-    public async Task<ActionResult<UserProfileDto>> CreateForNewUser([FromBody] CreateUserProfileForNewUserRequest request)
-    {
-        try
-        {
-            _logger.LogInformation("Creating profile for new user {UserId} via system call", request.UserId);
-
-            // Check if profile already exists
-            if (await _repository.UserProfileExistsAsync(request.UserId))
+            catch (Exception ex)
             {
-                _logger.LogWarning("Profile already exists for user {UserId}", request.UserId);
-                var existing = await _repository.GetByUserIdAsync(request.UserId);
-                return Ok(existing);
+                _logger.LogError(ex, "Error retrieving user profile");
+                return StatusCode(500, new { message = "An error occurred" });
             }
-
-            // Create basic profile
-            var createRequest = new CreateUserProfileRequest
-            {
-                UserId = request.UserId,
-                FirstName = request.FirstName,
-                LastName = request.LastName,
-                Email = request.Email
-            };
-
-            var profileId = await _repository.CreateAsync(createRequest, request.UserId);
-            var profile = await _repository.GetByUserIdAsync(request.UserId);
-
-            _logger.LogInformation("User profile created for new user {UserId}", request.UserId);
-
-            return Ok(profile);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating user profile for new user {UserId}", request.UserId);
-            return StatusCode(500, new { message = $"Error creating profile: {ex.Message}" });
-        }
-    }
 
-    /// <summary>
-    /// Create a new user profile
-    /// </summary>
-    [HttpPost]
-    public async Task<ActionResult<UserProfileDto>> Create([FromBody] CreateUserProfileRequest request)
-    {
-        try
+        /// <summary>
+        /// Get user profile by user ID
+        /// </summary>
+        [HttpGet("user/{userId:guid}")]
+        public async Task<ActionResult<UserProfileDto>> GetByUserId(Guid userId)
         {
-            var currentUserId = GetCurrentUserId();
-
-            // Users can only create their own profile
-            if (request.UserId != currentUserId)
+            try
             {
-                return Forbid();
+                UserProfileDto? profile = await _repository.GetByUserIdAsync(userId);
+
+                return profile == null ? (ActionResult<UserProfileDto>)NotFound(new { message = "Profile not found" }) : (ActionResult<UserProfileDto>)Ok(profile);
             }
-
-            // Check if profile already exists
-            if (await _repository.UserProfileExistsAsync(request.UserId))
+            catch (Exception ex)
             {
-                return Conflict(new { message = "Profile already exists for this user" });
+                _logger.LogError(ex, "Error retrieving user profile for user {UserId}", userId);
+                return StatusCode(500, new { message = "An error occurred" });
             }
-
-            var profileId = await _repository.CreateAsync(request, currentUserId);
-            var profile = await _repository.GetByUserIdAsync(request.UserId);
-
-            _logger.LogInformation("User profile created for user {UserId}", request.UserId);
-
-            return CreatedAtAction(nameof(GetByUserId), new { userId = request.UserId }, profile);
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating user profile");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
 
-    /// <summary>
-    /// Update current user's profile
-    /// </summary>
-    [HttpPut("me")]
-    public async Task<ActionResult<UserProfileDto>> UpdateMyProfile([FromBody] UpdateUserProfileRequest request)
-    {
-        try
+        /// <summary>
+        /// Create a new user profile (service-to-service call, no auth required)
+        /// </summary>
+        [HttpPost("system/create")]
+        [AllowAnonymous]
+        public async Task<ActionResult<UserProfileDto>> CreateForNewUser([FromBody] CreateUserProfileForNewUserRequest request)
         {
-            var userId = GetCurrentUserId();
-            var success = await _repository.UpdateAsync(userId, request, userId);
-
-            if (!success)
+            try
             {
-                return NotFound(new { message = "Profile not found" });
+                _logger.LogInformation("Creating profile for new user {UserId} via system call", request.UserId);
+
+                // Check if profile already exists
+                if (await _repository.UserProfileExistsAsync(request.UserId))
+                {
+                    _logger.LogWarning("Profile already exists for user {UserId}", request.UserId);
+                    UserProfileDto? existing = await _repository.GetByUserIdAsync(request.UserId);
+                    return Ok(existing);
+                }
+
+                // Create basic profile
+                CreateUserProfileRequest createRequest = new CreateUserProfileRequest
+                {
+                    UserId = request.UserId,
+                    FirstName = request.FirstName,
+                    LastName = request.LastName,
+                    Email = request.Email
+                };
+
+                Guid profileId = await _repository.CreateAsync(createRequest, request.UserId);
+                UserProfileDto? profile = await _repository.GetByUserIdAsync(request.UserId);
+
+                _logger.LogInformation("User profile created for new user {UserId}", request.UserId);
+
+                return Ok(profile);
             }
-
-            var profile = await _repository.GetByUserIdAsync(userId);
-            _logger.LogInformation("User profile updated for user {UserId}", userId);
-
-            return Ok(profile);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating user profile");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Delete current user's profile
-    /// </summary>
-    [HttpDelete("me")]
-    public async Task<ActionResult> DeleteMyProfile()
-    {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var success = await _repository.DeleteAsync(userId, userId);
-
-            if (!success)
+            catch (Exception ex)
             {
-                return NotFound(new { message = "Profile not found" });
+                _logger.LogError(ex, "Error creating user profile for new user {UserId}", request.UserId);
+                return StatusCode(500, new { message = $"Error creating profile: {ex.Message}" });
             }
-
-            _logger.LogInformation("User profile deleted for user {UserId}", userId);
-
-            return NoContent();
         }
-        catch (UnauthorizedAccessException ex)
+
+        /// <summary>
+        /// Create a new user profile
+        /// </summary>
+        [HttpPost]
+        public async Task<ActionResult<UserProfileDto>> Create([FromBody] CreateUserProfileRequest request)
         {
-            return Unauthorized(new { message = ex.Message });
+            try
+            {
+                Guid currentUserId = GetCurrentUserId();
+
+                // Users can only create their own profile
+                if (request.UserId != currentUserId)
+                {
+                    return Forbid();
+                }
+
+                // Check if profile already exists
+                if (await _repository.UserProfileExistsAsync(request.UserId))
+                {
+                    return Conflict(new { message = "Profile already exists for this user" });
+                }
+
+                Guid profileId = await _repository.CreateAsync(request, currentUserId);
+                UserProfileDto? profile = await _repository.GetByUserIdAsync(request.UserId);
+
+                _logger.LogInformation("User profile created for user {UserId}", request.UserId);
+
+                return CreatedAtAction(nameof(GetByUserId), new { userId = request.UserId }, profile);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating user profile");
+                return StatusCode(500, new { message = "An error occurred" });
+            }
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Update current user's profile
+        /// </summary>
+        [HttpPut("me")]
+        public async Task<ActionResult<UserProfileDto>> UpdateMyProfile([FromBody] UpdateUserProfileRequest request)
         {
-            _logger.LogError(ex, "Error deleting user profile");
-            return StatusCode(500, new { message = "An error occurred" });
+            try
+            {
+                Guid userId = GetCurrentUserId();
+                var success = await _repository.UpdateAsync(userId, request, userId);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Profile not found" });
+                }
+
+                UserProfileDto? profile = await _repository.GetByUserIdAsync(userId);
+                _logger.LogInformation("User profile updated for user {UserId}", userId);
+
+                return Ok(profile);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating user profile");
+                return StatusCode(500, new { message = "An error occurred" });
+            }
+        }
+
+        /// <summary>
+        /// Delete current user's profile
+        /// </summary>
+        [HttpDelete("me")]
+        public async Task<ActionResult> DeleteMyProfile()
+        {
+            try
+            {
+                Guid userId = GetCurrentUserId();
+                var success = await _repository.DeleteAsync(userId, userId);
+
+                if (!success)
+                {
+                    return NotFound(new { message = "Profile not found" });
+                }
+
+                _logger.LogInformation("User profile deleted for user {UserId}", userId);
+
+                return NoContent();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting user profile");
+                return StatusCode(500, new { message = "An error occurred" });
+            }
         }
     }
 }

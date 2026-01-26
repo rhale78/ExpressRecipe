@@ -2,103 +2,99 @@ using ExpressRecipe.Shared.DTOs.User;
 using ExpressRecipe.UserService.Data;
 using Microsoft.AspNetCore.Mvc;
 
-namespace ExpressRecipe.UserService.Controllers;
-
-[ApiController]
-[Route("api/[controller]")]
-public class HealthGoalsController : ControllerBase
+namespace ExpressRecipe.UserService.Controllers
 {
-    private readonly IHealthGoalRepository _repository;
-    private readonly ILogger<HealthGoalsController> _logger;
-
-    public HealthGoalsController(
-        IHealthGoalRepository repository,
-        ILogger<HealthGoalsController> logger)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class HealthGoalsController : ControllerBase
     {
-        _repository = repository;
-        _logger = logger;
-    }
+        private readonly IHealthGoalRepository _repository;
+        private readonly ILogger<HealthGoalsController> _logger;
 
-    /// <summary>
-    /// Get all health goals
-    /// </summary>
-    [HttpGet]
-    public async Task<ActionResult<List<HealthGoalDto>>> GetAll()
-    {
-        try
+        public HealthGoalsController(
+            IHealthGoalRepository repository,
+            ILogger<HealthGoalsController> logger)
         {
-            var goals = await _repository.GetAllAsync();
-            return Ok(goals);
+            _repository = repository;
+            _logger = logger;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving health goals");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
 
-    /// <summary>
-    /// Get health goal by ID
-    /// </summary>
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<HealthGoalDto>> GetById(Guid id)
-    {
-        try
+        /// <summary>
+        /// Get all health goals
+        /// </summary>
+        [HttpGet]
+        public async Task<ActionResult<List<HealthGoalDto>>> GetAll()
         {
-            var goal = await _repository.GetByIdAsync(id);
-
-            if (goal == null)
+            try
             {
-                return NotFound(new { message = "Health goal not found" });
+                List<HealthGoalDto> goals = await _repository.GetAllAsync();
+                return Ok(goals);
             }
-
-            return Ok(goal);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving health goal {GoalId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Get health goals by category
-    /// </summary>
-    [HttpGet("category/{category}")]
-    public async Task<ActionResult<List<HealthGoalDto>>> GetByCategory(string category)
-    {
-        try
-        {
-            var goals = await _repository.GetByCategoryAsync(category);
-            return Ok(goals);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving health goals by category {Category}", category);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
-    }
-
-    /// <summary>
-    /// Search health goals by name
-    /// </summary>
-    [HttpGet("search")]
-    public async Task<ActionResult<List<HealthGoalDto>>> Search([FromQuery] string q)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(q))
+            catch (Exception ex)
             {
-                return BadRequest(new { message = "Search term is required" });
+                _logger.LogError(ex, "Error retrieving health goals");
+                return StatusCode(500, new { message = "An error occurred" });
             }
-
-            var goals = await _repository.SearchByNameAsync(q);
-            return Ok(goals);
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Get health goal by ID
+        /// </summary>
+        [HttpGet("{id:guid}")]
+        public async Task<ActionResult<HealthGoalDto>> GetById(Guid id)
         {
-            _logger.LogError(ex, "Error searching health goals");
-            return StatusCode(500, new { message = "An error occurred" });
+            try
+            {
+                HealthGoalDto? goal = await _repository.GetByIdAsync(id);
+
+                return goal == null ? (ActionResult<HealthGoalDto>)NotFound(new { message = "Health goal not found" }) : (ActionResult<HealthGoalDto>)Ok(goal);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving health goal {GoalId}", id);
+                return StatusCode(500, new { message = "An error occurred" });
+            }
+        }
+
+        /// <summary>
+        /// Get health goals by category
+        /// </summary>
+        [HttpGet("category/{category}")]
+        public async Task<ActionResult<List<HealthGoalDto>>> GetByCategory(string category)
+        {
+            try
+            {
+                List<HealthGoalDto> goals = await _repository.GetByCategoryAsync(category);
+                return Ok(goals);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving health goals by category {Category}", category);
+                return StatusCode(500, new { message = "An error occurred" });
+            }
+        }
+
+        /// <summary>
+        /// Search health goals by name
+        /// </summary>
+        [HttpGet("search")]
+        public async Task<ActionResult<List<HealthGoalDto>>> Search([FromQuery] string q)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(q))
+                {
+                    return BadRequest(new { message = "Search term is required" });
+                }
+
+                List<HealthGoalDto> goals = await _repository.SearchByNameAsync(q);
+                return Ok(goals);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error searching health goals");
+                return StatusCode(500, new { message = "An error occurred" });
+            }
         }
     }
 }

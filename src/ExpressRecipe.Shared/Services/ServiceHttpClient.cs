@@ -3,103 +3,104 @@ using ExpressRecipe.Shared.Resilience;
 using Polly;
 using Microsoft.Extensions.Logging;
 
-namespace ExpressRecipe.Shared.Services;
-
-/// <summary>
-/// Helper for cross-service HTTP communication with resilience policies
-/// </summary>
-public class ServiceHttpClient
+namespace ExpressRecipe.Shared.Services
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<ServiceHttpClient> _logger;
-    private readonly IAsyncPolicy<HttpResponseMessage> _resiliencePolicy;
-
-    public ServiceHttpClient(HttpClient httpClient, ILogger<ServiceHttpClient> logger)
+    /// <summary>
+    /// Helper for cross-service HTTP communication with resilience policies
+    /// </summary>
+    public class ServiceHttpClient
     {
-        _httpClient = httpClient;
-        _logger = logger;
-        _resiliencePolicy = ResiliencePolicies.GetHttpPolicy(logger, "ServiceHttpClient");
-    }
+        private readonly HttpClient _httpClient;
+        private readonly ILogger<ServiceHttpClient> _logger;
+        private readonly IAsyncPolicy<HttpResponseMessage> _resiliencePolicy;
 
-    public async Task<T?> GetAsync<T>(string serviceUrl, string endpoint)
-    {
-        try
+        public ServiceHttpClient(HttpClient httpClient, ILogger<ServiceHttpClient> logger)
         {
-            var response = await _resiliencePolicy.ExecuteAsync(async () =>
-                await _httpClient.GetAsync($"{serviceUrl}{endpoint}"));
-
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<T>();
+            _httpClient = httpClient;
+            _logger = logger;
+            _resiliencePolicy = ResiliencePolicies.GetHttpPolicy(logger, "ServiceHttpClient");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calling GET {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
-            return default;
-        }
-    }
 
-    public async Task<TResponse?> PostAsync<TRequest, TResponse>(string serviceUrl, string endpoint, TRequest data)
-    {
-        try
+        public async Task<T?> GetAsync<T>(string serviceUrl, string endpoint)
         {
-            var response = await _resiliencePolicy.ExecuteAsync(async () =>
-                await _httpClient.PostAsJsonAsync($"{serviceUrl}{endpoint}", data));
+            try
+            {
+                HttpResponseMessage response = await _resiliencePolicy.ExecuteAsync(async () =>
+                    await _httpClient.GetAsync($"{serviceUrl}{endpoint}"));
 
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<TResponse>();
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<T>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling GET {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
+                return default;
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calling POST {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
-            return default;
-        }
-    }
 
-    public async Task<bool> PostAsync<TRequest>(string serviceUrl, string endpoint, TRequest data)
-    {
-        try
+        public async Task<TResponse?> PostAsync<TRequest, TResponse>(string serviceUrl, string endpoint, TRequest data)
         {
-            var response = await _resiliencePolicy.ExecuteAsync(async () =>
-                await _httpClient.PostAsJsonAsync($"{serviceUrl}{endpoint}", data));
+            try
+            {
+                HttpResponseMessage response = await _resiliencePolicy.ExecuteAsync(async () =>
+                    await _httpClient.PostAsJsonAsync($"{serviceUrl}{endpoint}", data));
 
-            return response.IsSuccessStatusCode;
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadFromJsonAsync<TResponse>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling POST {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
+                return default;
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calling POST {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
-            return false;
-        }
-    }
 
-    public async Task<bool> PutAsync<TRequest>(string serviceUrl, string endpoint, TRequest data)
-    {
-        try
+        public async Task<bool> PostAsync<TRequest>(string serviceUrl, string endpoint, TRequest data)
         {
-            var response = await _resiliencePolicy.ExecuteAsync(async () =>
-                await _httpClient.PutAsJsonAsync($"{serviceUrl}{endpoint}", data));
+            try
+            {
+                HttpResponseMessage response = await _resiliencePolicy.ExecuteAsync(async () =>
+                    await _httpClient.PostAsJsonAsync($"{serviceUrl}{endpoint}", data));
 
-            return response.IsSuccessStatusCode;
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling POST {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
+                return false;
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error calling PUT {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
-            return false;
-        }
-    }
 
-    public async Task<bool> DeleteAsync(string serviceUrl, string endpoint)
-    {
-        try
+        public async Task<bool> PutAsync<TRequest>(string serviceUrl, string endpoint, TRequest data)
         {
-            var response = await _resiliencePolicy.ExecuteAsync(async () =>
-                await _httpClient.DeleteAsync($"{serviceUrl}{endpoint}"));
+            try
+            {
+                HttpResponseMessage response = await _resiliencePolicy.ExecuteAsync(async () =>
+                    await _httpClient.PutAsJsonAsync($"{serviceUrl}{endpoint}", data));
 
-            return response.IsSuccessStatusCode;
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling PUT {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
+                return false;
+            }
         }
-        catch (Exception ex)
+
+        public async Task<bool> DeleteAsync(string serviceUrl, string endpoint)
         {
-            _logger.LogError(ex, "Error calling DELETE {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
-            return false;
+            try
+            {
+                HttpResponseMessage response = await _resiliencePolicy.ExecuteAsync(async () =>
+                    await _httpClient.DeleteAsync($"{serviceUrl}{endpoint}"));
+
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling DELETE {ServiceUrl}{Endpoint}", serviceUrl, endpoint);
+                return false;
+            }
         }
     }
 }

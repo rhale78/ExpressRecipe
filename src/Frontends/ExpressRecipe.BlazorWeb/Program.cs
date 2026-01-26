@@ -5,7 +5,7 @@ using ExpressRecipe.Client.Shared.Services.SignalR;
 using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components.Authorization;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add Aspire service defaults
 builder.AddServiceDefaults();
@@ -149,9 +149,9 @@ builder.Services.AddScoped<OfflineDetectionService>();
 // Register SignalR client services (these would be initialized per-user)
 builder.Services.AddScoped<NotificationHubClient>(sp =>
 {
-    var logger = sp.GetRequiredService<ILogger<NotificationHubClient>>();
-    var toast = sp.GetRequiredService<IToastService>();
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+    ILogger<NotificationHubClient> logger = sp.GetRequiredService<ILogger<NotificationHubClient>>();
+    IToastService toast = sp.GetRequiredService<IToastService>();
+    ITokenProvider tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
     var hubUrl = $"{GetServiceUrl("NotificationService")}/hubs/notifications";
     var token = tokenProvider.GetAccessTokenAsync().Result; // Get auth token
@@ -161,8 +161,8 @@ builder.Services.AddScoped<NotificationHubClient>(sp =>
 
 builder.Services.AddScoped<SyncHubClient>(sp =>
 {
-    var logger = sp.GetRequiredService<ILogger<SyncHubClient>>();
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+    ILogger<SyncHubClient> logger = sp.GetRequiredService<ILogger<SyncHubClient>>();
+    ITokenProvider tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
     var hubUrl = $"{GetServiceUrl("SyncService")}/hubs/sync";
     var token = tokenProvider.GetAccessTokenAsync().Result;
@@ -174,7 +174,7 @@ builder.Services.AddScoped<SyncHubClient>(sp =>
 builder.Services.AddScoped<CustomAuthenticationStateProvider>();
 builder.Services.AddScoped<AuthenticationStateProvider>(sp => sp.GetRequiredService<CustomAuthenticationStateProvider>());
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

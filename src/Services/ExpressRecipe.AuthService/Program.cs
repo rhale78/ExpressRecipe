@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Load layered configuration (global + env + local)
 builder.AddLayeredConfiguration(args);
@@ -20,7 +20,7 @@ builder.AddSqlServerClient("authdb");
 builder.AddRedisClient("redis");
 
 // Configure JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+IConfigurationSection jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -91,7 +91,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 // Run database management (drop db/tables if configured)
 await app.RunDatabaseManagementAsync("AuthService", "authdb");
@@ -102,7 +102,7 @@ if (!Directory.Exists(migrationsPath))
 {
     migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
 }
-var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+Dictionary<string, string> migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
 await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure the HTTP request pipeline

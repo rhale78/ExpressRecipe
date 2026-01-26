@@ -3,7 +3,7 @@ using ExpressRecipe.ScannerService.Data;
 using ExpressRecipe.ScannerService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Load layered configuration (global + env + local)
 builder.AddLayeredConfiguration(args);
@@ -62,7 +62,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 // Run database management (drop db/tables if configured)
 await app.RunDatabaseManagementAsync("ScannerService", "scandb");
@@ -73,7 +73,7 @@ if (!Directory.Exists(migrationsPath))
 {
     migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
 }
-var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+Dictionary<string, string> migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
 await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
