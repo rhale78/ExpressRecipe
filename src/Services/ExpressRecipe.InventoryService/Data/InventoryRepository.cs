@@ -42,7 +42,7 @@ public partial class InventoryRepository : IInventoryRepository
         var itemId = (Guid)await command.ExecuteScalarAsync()!;
 
         // Create history entry
-        await CreateHistoryEntryAsync(itemId, userId, "Added", quantity, 0, quantity, null);
+        await CreateHistoryEntryAsync(itemId, userId, "Added", quantity, 0, quantity, null, userId);
 
         _logger.LogInformation("Added inventory item {ItemId} for user {UserId}", itemId, userId);
         return itemId;
@@ -140,7 +140,7 @@ public partial class InventoryRepository : IInventoryRepository
 
             // Create history entry
             var quantityChange = newQuantity - oldQuantity;
-            await CreateHistoryEntryAsync(itemId, userId, actionType, quantityChange, oldQuantity, newQuantity, reason, transaction);
+            await CreateHistoryEntryAsync(itemId, userId, actionType, quantityChange, oldQuantity, newQuantity, reason, userId, null, null, transaction);
 
             await transaction.CommitAsync();
             _logger.LogInformation("Updated inventory item {ItemId} quantity from {Old} to {New}", itemId, oldQuantity, newQuantity);
@@ -470,43 +470,6 @@ public partial class InventoryRepository : IInventoryRepository
     public async Task<List<InventoryHistoryDto>> GetUsageHistoryAsync(Guid itemId, int limit = 50)
     {
         return await GetItemHistoryAsync(itemId, limit);
-    }
-
-    private async Task CreateHistoryEntryAsync(Guid inventoryItemId, Guid userId, string actionType,
-        decimal quantityChange, decimal quantityBefore, decimal quantityAfter, string? reason,
-        SqlTransaction? transaction = null)
-    {
-        const string sql = @"
-            INSERT INTO InventoryHistory
-            (InventoryItemId, UserId, ActionType, QuantityChange, QuantityBefore, QuantityAfter, Reason, CreatedAt)
-            VALUES (@InventoryItemId, @UserId, @ActionType, @QuantityChange, @QuantityBefore, @QuantityAfter, @Reason, GETUTCDATE())";
-
-        if (transaction != null)
-        {
-            await using var command = new SqlCommand(sql, transaction.Connection, transaction);
-            command.Parameters.AddWithValue("@InventoryItemId", inventoryItemId);
-            command.Parameters.AddWithValue("@UserId", userId);
-            command.Parameters.AddWithValue("@ActionType", actionType);
-            command.Parameters.AddWithValue("@QuantityChange", quantityChange);
-            command.Parameters.AddWithValue("@QuantityBefore", quantityBefore);
-            command.Parameters.AddWithValue("@QuantityAfter", quantityAfter);
-            command.Parameters.AddWithValue("@Reason", reason ?? (object)DBNull.Value);
-            await command.ExecuteNonQueryAsync();
-        }
-        else
-        {
-            await using var connection = new SqlConnection(_connectionString);
-            await connection.OpenAsync();
-            await using var command = new SqlCommand(sql, connection);
-            command.Parameters.AddWithValue("@InventoryItemId", inventoryItemId);
-            command.Parameters.AddWithValue("@UserId", userId);
-            command.Parameters.AddWithValue("@ActionType", actionType);
-            command.Parameters.AddWithValue("@QuantityChange", quantityChange);
-            command.Parameters.AddWithValue("@QuantityBefore", quantityBefore);
-            command.Parameters.AddWithValue("@QuantityAfter", quantityAfter);
-            command.Parameters.AddWithValue("@Reason", reason ?? (object)DBNull.Value);
-            await command.ExecuteNonQueryAsync();
-        }
     }
 
     private InventoryItemDto MapInventoryItem(SqlDataReader reader)
