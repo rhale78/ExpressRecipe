@@ -148,7 +148,8 @@ public class RecipesController : ControllerBase
             // Load related data
             recipe.Ingredients = await _recipeRepository.GetRecipeIngredientsAsync(id);
             recipe.Nutrition = await _recipeRepository.GetRecipeNutritionAsync(id);
-            recipe.Tags = await _recipeRepository.GetRecipeTagsAsync(id);
+            var tagNames = await _recipeRepository.GetRecipeTagsAsync(id);
+            recipe.Tags = tagNames.Select(name => new RecipeTagDto { Name = name }).ToList();
             recipe.AllergenWarnings = await _recipeRepository.GetRecipeAllergensAsync(id);
 
             // Get average rating
