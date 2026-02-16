@@ -1,0 +1,257 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using ExpressRecipe.InventoryService.Data;
+
+namespace ExpressRecipe.InventoryService.Controllers;
+
+/// <summary>
+/// Household and address management endpoints
+/// </summary>
+[Authorize]
+[ApiController]
+[Route("api/[controller]")]
+public class HouseholdController : ControllerBase
+{
+    private readonly ILogger<HouseholdController> _logger;
+    private readonly IInventoryRepository _repository;
+
+    public HouseholdController(ILogger<HouseholdController> logger, IInventoryRepository repository)
+    {
+        _logger = logger;
+        _repository = repository;
+    }
+
+    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    #region Household Management
+
+    /// <summary>
+    /// Create a new household
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> CreateHousehold([FromBody] CreateHouseholdRequest request)
+    {
+        var userId = GetUserId();
+        var householdId = await _repository.CreateHouseholdAsync(userId, request.Name, request.Description);
+        var household = await _repository.GetHouseholdByIdAsync(householdId);
+        return CreatedAtAction(nameof(GetHousehold), new { id = householdId }, household);
+    }
+
+    /// <summary>
+    /// Get user's households
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetHouseholds()
+    {
+        var userId = GetUserId();
+        var households = await _repository.GetUserHouseholdsAsync(userId);
+        return Ok(households);
+    }
+
+    /// <summary>
+    /// Get household by ID
+    /// </summary>
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetHousehold(Guid id)
+    {
+        var household = await _repository.GetHouseholdByIdAsync(id);
+        if (household == null)
+            return NotFound();
+
+        return Ok(household);
+    }
+
+    /// <summary>
+    /// Get household members
+    /// </summary>
+    [HttpGet("{id}/members")]
+    public async Task<IActionResult> GetHouseholdMembers(Guid id)
+    {
+        var members = await _repository.GetHouseholdMembersAsync(id);
+        return Ok(members);
+    }
+
+    /// <summary>
+    /// Add member to household
+    /// </summary>
+    [HttpPost("{id}/members")]
+    public async Task<IActionResult> AddMember(Guid id, [FromBody] AddMemberRequest request)
+    {
+        var userId = GetUserId();
+        var memberId = await _repository.AddHouseholdMemberAsync(id, request.UserId, request.Role, userId);
+        return Ok(new { id = memberId });
+    }
+
+    /// <summary>
+    /// Update member permissions
+    /// </summary>
+    [HttpPut("members/{memberId}")]
+    public async Task<IActionResult> UpdateMemberPermissions(Guid memberId, [FromBody] UpdateMemberPermissionsRequest request)
+    {
+        await _repository.UpdateMemberPermissionsAsync(
+            memberId,
+            request.CanManageInventory,
+            request.CanManageShopping,
+            request.CanManageMembers);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Remove member from household
+    /// </summary>
+    [HttpDelete("members/{memberId}")]
+    public async Task<IActionResult> RemoveMember(Guid memberId)
+    {
+        await _repository.RemoveHouseholdMemberAsync(memberId);
+        return NoContent();
+    }
+
+    #endregion
+
+    #region Address Management
+
+    /// <summary>
+    /// Create address for household
+    /// </summary>
+    [HttpPost("{householdId}/addresses")]
+    public async Task<IActionResult> CreateAddress(Guid householdId, [FromBody] CreateAddressRequest request)
+    {
+        var addressId = await _repository.CreateAddressAsync(
+            householdId,
+            request.Name,
+            request.Street,
+            request.City,
+            request.State,
+            request.ZipCode,
+            request.Country ?? "USA",
+            request.Latitude,
+            request.Longitude,
+            request.IsPrimary);
+
+        var address = await _repository.GetAddressByIdAsync(addressId);
+        return CreatedAtAction(nameof(GetAddress), new { id = addressId }, address);
+    }
+
+    /// <summary>
+    /// Get addresses for household
+    /// </summary>
+    [HttpGet("{householdId}/addresses")]
+    public async Task<IActionResult> GetAddresses(Guid householdId)
+    {
+        var addresses = await _repository.GetHouseholdAddressesAsync(householdId);
+        return Ok(addresses);
+    }
+
+    /// <summary>
+    /// Get address by ID
+    /// </summary>
+    [HttpGet("addresses/{id}")]
+    public async Task<IActionResult> GetAddress(Guid id)
+    {
+        var address = await _repository.GetAddressByIdAsync(id);
+        if (address == null)
+            return NotFound();
+
+        return Ok(address);
+    }
+
+    /// <summary>
+    /// Detect nearest address based on current GPS location
+    /// </summary>
+    [HttpPost("{householdId}/addresses/detect")]
+    public async Task<IActionResult> DetectNearestAddress(Guid householdId, [FromBody] DetectAddressRequest request)
+    {
+        var address = await _repository.DetectNearestAddressAsync(
+            householdId,
+            request.Latitude,
+            request.Longitude,
+            request.MaxDistanceKm ?? 1.0);
+
+        if (address == null)
+            return NotFound(new { message = "No nearby addresses found" });
+
+        return Ok(address);
+    }
+
+    /// <summary>
+    /// Update address GPS coordinates
+    /// </summary>
+    [HttpPut("addresses/{id}/coordinates")]
+    public async Task<IActionResult> UpdateCoordinates(Guid id, [FromBody] UpdateCoordinatesRequest request)
+    {
+        await _repository.UpdateAddressCoordinatesAsync(id, request.Latitude, request.Longitude);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Set primary address for household
+    /// </summary>
+    [HttpPut("{householdId}/addresses/{addressId}/primary")]
+    public async Task<IActionResult> SetPrimaryAddress(Guid householdId, Guid addressId)
+    {
+        await _repository.SetPrimaryAddressAsync(householdId, addressId);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Delete address
+    /// </summary>
+    [HttpDelete("addresses/{id}")]
+    public async Task<IActionResult> DeleteAddress(Guid id)
+    {
+        await _repository.DeleteAddressAsync(id);
+        return NoContent();
+    }
+
+    #endregion
+}
+
+#region Request DTOs
+
+public class CreateHouseholdRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+}
+
+public class AddMemberRequest
+{
+    public Guid UserId { get; set; }
+    public string Role { get; set; } = "Member";
+}
+
+public class UpdateMemberPermissionsRequest
+{
+    public bool CanManageInventory { get; set; }
+    public bool CanManageShopping { get; set; }
+    public bool CanManageMembers { get; set; }
+}
+
+public class CreateAddressRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string Street { get; set; } = string.Empty;
+    public string City { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
+    public string ZipCode { get; set; } = string.Empty;
+    public string? Country { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+    public bool IsPrimary { get; set; }
+}
+
+public class DetectAddressRequest
+{
+    public decimal Latitude { get; set; }
+    public decimal Longitude { get; set; }
+    public double? MaxDistanceKm { get; set; }
+}
+
+public class UpdateCoordinatesRequest
+{
+    public decimal Latitude { get; set; }
+    public decimal Longitude { get; set; }
+}
+
+#endregion
