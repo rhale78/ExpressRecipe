@@ -3,7 +3,7 @@ using System.Data;
 
 namespace ExpressRecipe.InventoryService.Data;
 
-public class InventoryRepository : IInventoryRepository
+public partial class InventoryRepository : IInventoryRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<InventoryRepository> _logger;
