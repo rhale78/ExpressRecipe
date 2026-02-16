@@ -26,14 +26,17 @@ Create a comprehensive, user-friendly UI for recipe management that integrates w
   - Real-time preview mode
   
 - **Ingredient Management**
-  - Drag-and-drop reordering
+  - Free-form text input (primary) - users can type any ingredient
+  - Auto-linking to products (optional) - suggests matching products as user types
   - Quick add ingredient button
-  - Auto-complete from known ingredients
-  - Unit selector dropdown
+  - Simple up/down buttons for reordering (NO drag-and-drop)
+  - Unit field (text input with common suggestions)
   - Quantity validation
   - Optional ingredient checkbox
   - Ingredient grouping (e.g., "For the sauce", "For the dough")
   - Preparation notes field
+  - Visual indicator when ingredient is linked to a product
+  - Never block or restrict free-form text entry
   
 - **Recipe Metadata**
   - Title (required)
@@ -368,7 +371,7 @@ Store in airtight container. Cookies stay fresh for up to 5 days.
 - Add new category
 - Edit category name/description
 - Delete category (with warning if recipes exist)
-- Reorder categories (drag-and-drop)
+- Reorder categories (simple up/down buttons)
 
 #### 7.2 Category Assignment
 - Assign category during recipe creation
@@ -928,7 +931,7 @@ public class RecipeSyncService : IHostedService, IDisposable
 
 ### UI Tests
 - Recipe form validation
-- Ingredient drag-and-drop
+- Ingredient autocomplete/auto-linking
 - Serving size real-time update
 - Rating star interaction
 - Shopping list integration
@@ -984,7 +987,7 @@ public class RecipeSyncService : IHostedService, IDisposable
 - [ ] Create UI components
 - [ ] Add markdown parsing (Markdig)
 - [ ] Add rich text editor (Quill.js)
-- [ ] Implement drag-and-drop (Sortable.js)
+- [ ] Implement ingredient auto-linking
 - [ ] Register services in DI
 - [ ] Add file I/O permissions
 - [ ] Configure export directory path

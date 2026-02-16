@@ -4,8 +4,10 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Models.Product
 @using ExpressRecipe.BlazorWeb.Services
 @inject IRecipeApiClient RecipeApi
+@inject IProductApiClient ProductApi
 @inject RecipeSyncService SyncService
 @inject IToastService ToastService
 @inject NavigationManager Navigation
@@ -104,6 +106,7 @@
                 @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
                 {
                     var index = _recipe.Ingredients.IndexOf(ingredient);
+                    var ingredientIndex = index; // Capture for closure
                     <div class="ingredient-row">
                         <div class="ingredient-fields">
                             <input type="number"
@@ -119,11 +122,34 @@
                                    placeholder="Unit"
                                    style="width: 100px;" />
 
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Name"
-                                   placeholder="Ingredient name"
-                                   style="flex: 1;" />
+                            <div class="ingredient-autocomplete-wrapper" style="flex: 1; position: relative;">
+                                <input type="text"
+                                       class="form-control form-control-sm"
+                                       @bind="ingredient.Name"
+                                       @bind:event="oninput"
+                                       @oninput="@(e => HandleIngredientNameInput(e, ingredientIndex))"
+                                       @onfocus="@(() => HandleIngredientFocus(ingredientIndex))"
+                                       @onblur="@(() => HandleIngredientBlur(ingredientIndex))"
+                                       placeholder="Ingredient name (start typing...)"
+                                       style="width: 100%;" />
+                                
+                                @if (_showSuggestions[ingredientIndex] && _ingredientSuggestions[ingredientIndex]?.Any() == true)
+                                {
+                                    <div class="autocomplete-dropdown">
+                                        @foreach (var suggestion in _ingredientSuggestions[ingredientIndex])
+                                        {
+                                            <div class="autocomplete-item" 
+                                                 @onmousedown="@(async () => await SelectSuggestion(ingredientIndex, suggestion))">
+                                                <div class="suggestion-name">@suggestion.Name</div>
+                                                @if (!string.IsNullOrEmpty(suggestion.Brand))
+                                                {
+                                                    <div class="suggestion-meta">@suggestion.Brand</div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
 
                             <input type="text"
                                    class="form-control form-control-sm"
@@ -136,7 +162,7 @@
                                 Optional
                             </label>
                         </div>
-                        <button class="btn-icon btn-danger" @onclick="HandleRemoveIngredient">
+                        <button class="btn-icon btn-danger" @onclick="@(() => RemoveIngredient(ingredientIndex))">
                             🗑️
                         </button>
                     </div>
@@ -160,6 +186,7 @@
                 @foreach (var step in _recipe.Steps.OrderBy(s => s.OrderIndex))
                 {
                     var index = _recipe.Steps.IndexOf(step);
+                    var stepIndex = index; // Capture for closure
                     <div class="step-row">
                         <div class="step-number">@(step.OrderIndex)</div>
                         <div class="step-fields">
@@ -181,7 +208,7 @@
                                        style="flex: 1;" />
                             </div>
                         </div>
-                        <button class="btn-icon btn-danger" @onclick="HandleRemoveStep">
+                        <button class="btn-icon btn-danger" @onclick="@(() => RemoveStep(stepIndex))">
                             🗑️
                         </button>
                     </div>
@@ -356,12 +383,142 @@
         }
     }
 
+    // Ingredient autocomplete state
+    private Dictionary<int, List<ProductDto>> _ingredientSuggestions = new();
+    private Dictionary<int, bool> _showSuggestions = new();
+    private Dictionary<int, System.Threading.Timer?> _debounceTimers = new();
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        // Initialize suggestion dictionaries
+        EnsureSuggestionState();
+    }
+
+    private void EnsureSuggestionState()
+    {
+        for (int i = 0; i < _recipe.Ingredients.Count; i++)
+        {
+            if (!_ingredientSuggestions.ContainsKey(i))
+                _ingredientSuggestions[i] = new List<ProductDto>();
+            if (!_showSuggestions.ContainsKey(i))
+                _showSuggestions[i] = false;
+        }
+    }
+
+    private async Task HandleIngredientNameInput(ChangeEventArgs e, int index)
+    {
+        var input = e.Value?.ToString() ?? string.Empty;
+        _recipe.Ingredients[index].Name = input;
+
+        EnsureSuggestionState();
+
+        // Cancel existing timer
+        if (_debounceTimers.ContainsKey(index))
+        {
+            _debounceTimers[index]?.Dispose();
+        }
+
+        if (string.IsNullOrWhiteSpace(input) || input.Length < 2)
+        {
+            _showSuggestions[index] = false;
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        // Debounce: Wait 300ms before searching
+        _debounceTimers[index] = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await SearchProducts(input, index);
+            });
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private async Task SearchProducts(string searchTerm, int index)
+    {
+        try
+        {
+            var searchRequest = new ProductSearchRequest
+            {
+                SearchTerm = searchTerm,
+                Page = 1,
+                PageSize = 5 // Limit to 5 suggestions
+            };
+
+            var result = await ProductApi.SearchProductsAsync(searchRequest);
+            if (result != null && result.Products.Any())
+            {
+                _ingredientSuggestions[index] = result.Products;
+                _showSuggestions[index] = true;
+            }
+            else
+            {
+                _ingredientSuggestions[index] = new List<ProductDto>();
+                _showSuggestions[index] = false;
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Silently fail - autocomplete is optional
+            _showSuggestions[index] = false;
+        }
+    }
+
+    private void HandleIngredientFocus(int index)
+    {
+        EnsureSuggestionState();
+        // Show suggestions if we have any
+        if (_ingredientSuggestions.ContainsKey(index) && _ingredientSuggestions[index].Any())
+        {
+            _showSuggestions[index] = true;
+        }
+    }
+
+    private void HandleIngredientBlur(int index)
+    {
+        // Delay hiding to allow click on suggestion
+        Task.Delay(200).ContinueWith(_ =>
+        {
+            InvokeAsync(() =>
+            {
+                if (_showSuggestions.ContainsKey(index))
+                {
+                    _showSuggestions[index] = false;
+                    StateHasChanged();
+                }
+            });
+        });
+    }
+
+    private async Task SelectSuggestion(int index, ProductDto product)
+    {
+        _recipe.Ingredients[index].Name = product.Name;
+        _showSuggestions[index] = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
     private void AddIngredient()
     {
         _recipe.Ingredients.Add(new CreateRecipeIngredientRequest
         {
             OrderIndex = _recipe.Ingredients.Count + 1
         });
+        EnsureSuggestionState();
+    }
+
+    private void RemoveIngredient(int index)
+    {
+        _recipe.Ingredients.RemoveAt(index);
+        // Reorder
+        for (int i = 0; i < _recipe.Ingredients.Count; i++)
+        {
+            _recipe.Ingredients[i].OrderIndex = i + 1;
+        }
+        EnsureSuggestionState();
     }
 
     private void RemoveIngredient(CreateRecipeIngredientRequest ingredient)
@@ -380,6 +537,16 @@
         {
             OrderIndex = _recipe.Steps.Count + 1
         });
+    }
+
+    private void RemoveStep(int index)
+    {
+        _recipe.Steps.RemoveAt(index);
+        // Reorder
+        for (int i = 0; i < _recipe.Steps.Count; i++)
+        {
+            _recipe.Steps[i].OrderIndex = i + 1;
+        }
     }
 
     private void RemoveStep(CreateRecipeStepRequest step)
