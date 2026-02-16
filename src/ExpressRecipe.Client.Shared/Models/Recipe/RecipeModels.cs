@@ -55,8 +55,18 @@ public class RecipeStepDto
     public int OrderIndex { get; set; }
     public string Instruction { get; set; } = string.Empty;
     public int? DurationMinutes { get; set; }
-    public string? ImageUrl { get; set; }
+    public string? ImageUrl { get; set; } // Primary image for backward compatibility
+    public List<RecipeStepImageDto> Images { get; set; } = new(); // Multiple step images
     public string? Tips { get; set; }
+}
+
+public class RecipeStepImageDto
+{
+    public Guid Id { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
+    public int OrderIndex { get; set; }
+    public string? Caption { get; set; }
 }
 
 public class NutritionInfoDto
@@ -139,8 +149,17 @@ public class CreateRecipeStepRequest
     public int OrderIndex { get; set; }
     public string Instruction { get; set; } = string.Empty;
     public int? DurationMinutes { get; set; }
-    public string? ImageUrl { get; set; }
+    public string? ImageUrl { get; set; } // Primary image for backward compatibility
+    public List<CreateRecipeStepImageRequest> Images { get; set; } = new(); // Multiple step images
     public string? Tips { get; set; }
+}
+
+public class CreateRecipeStepImageRequest
+{
+    public string ImageUrl { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
+    public int OrderIndex { get; set; }
+    public string? Caption { get; set; }
 }
 
 public class UpdateRecipeRequest : CreateRecipeRequest

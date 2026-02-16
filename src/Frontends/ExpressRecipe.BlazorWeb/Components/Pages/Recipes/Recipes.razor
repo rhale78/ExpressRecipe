@@ -51,12 +51,12 @@
         <!-- View Toggle -->
         <div class="view-toggle">
             <button class="view-btn @(_viewMode == "grid" ? "active" : "")" 
-                    @onclick="() => SetViewMode(\"grid\")"
+                    @onclick="@(() => SetViewMode("grid"))"
                     title="Grid View">
                 ⊞
             </button>
             <button class="view-btn @(_viewMode == "list" ? "active" : "")" 
-                    @onclick="() => SetViewMode(\"list\")"
+                    @onclick="@(() => SetViewMode("list"))"
                     title="List View">
                 ☰
             </button>

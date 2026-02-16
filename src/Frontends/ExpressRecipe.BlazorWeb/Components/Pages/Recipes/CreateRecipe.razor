@@ -317,6 +317,81 @@
                                        placeholder="Tips (optional)"
                                        style="flex: 1;" />
                             </div>
+                            
+                            <!-- Step Images Section -->
+                            <div class="step-images-section">
+                                <div class="step-images-header">
+                                    <label class="step-images-label">Step Images (optional)</label>
+                                    <button class="btn btn-sm btn-outline" 
+                                            @onclick="() => _showStepImageUpload[stepIndex] = !_showStepImageUpload.GetValueOrDefault(stepIndex, false)"
+                                            type="button">
+                                        @(_showStepImageUpload.GetValueOrDefault(stepIndex, false) ? "▼ Hide" : "▶ Add Images")
+                                    </button>
+                                </div>
+                                
+                                @if (_showStepImageUpload.GetValueOrDefault(stepIndex, false))
+                                {
+                                    <!-- Step Image Gallery -->
+                                    @if (step.Images.Any())
+                                    {
+                                        <div class="step-image-gallery">
+                                            @foreach (var (image, imgIdx) in step.Images.Select((img, idx) => (img, idx)))
+                                            {
+                                                <div class="step-image-item @(image.IsPrimary ? "primary" : "")">
+                                                    <img src="@image.ImageUrl" alt="Step @(step.OrderIndex) image @(imgIdx + 1)" />
+                                                    <div class="step-image-overlay">
+                                                        <div class="image-actions">
+                                                            @if (!image.IsPrimary)
+                                                            {
+                                                                <button class="btn btn-xs btn-primary" 
+                                                                        @onclick="() => SetStepImagePrimary(stepIndex, imgIdx)" 
+                                                                        type="button">
+                                                                    ⭐ Primary
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="primary-badge-small">⭐</span>
+                                                            }
+                                                            <button class="btn btn-xs btn-danger" 
+                                                                    @onclick="() => RemoveStepImage(stepIndex, imgIdx)" 
+                                                                    type="button">
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <input type="text" 
+                                                           class="step-image-caption" 
+                                                           placeholder="Caption" 
+                                                           @bind="image.Caption" />
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    
+                                    <!-- Add Step Image -->
+                                    <div class="step-image-upload">
+                                        <div class="url-input-group-sm">
+                                            <input type="url" 
+                                                   class="form-control form-control-sm" 
+                                                   @bind="_stepImageUrls[stepIndex]" 
+                                                   placeholder="Image URL" 
+                                                   @onkeypress="@(e => HandleStepImageUrlKeyPress(e, stepIndex))" />
+                                            <button class="btn btn-sm btn-primary" 
+                                                    @onclick="() => AddStepImageFromUrl(stepIndex)" 
+                                                    type="button"
+                                                    disabled="@string.IsNullOrWhiteSpace(_stepImageUrls.GetValueOrDefault(stepIndex, string.Empty))">
+                                                + Add
+                                            </button>
+                                        </div>
+                                        <div class="upload-divider-sm">OR</div>
+                                        <InputFile OnChange="@(e => HandleStepImageUpload(e, stepIndex))" 
+                                                  class="form-control form-control-sm" 
+                                                  accept="image/*" 
+                                                  multiple />
+                                    </div>
+                                }
+                            </div>
                         </div>
                         <button class="btn-icon btn-danger" @onclick="@(() => RemoveStep(stepIndex))">
                             🗑️
@@ -415,6 +490,10 @@
     private bool _isUploadingImage = false;
     private string? _uploadError;
     private string _newImageUrl = string.Empty;
+    
+    // Step image state
+    private Dictionary<int, bool> _showStepImageUpload = new();
+    private Dictionary<int, string> _stepImageUrls = new();
 
     private readonly string[] _dietaryOptions = new[]
     {
@@ -483,7 +562,15 @@
                     OrderIndex = s.OrderIndex,
                     Instruction = s.Instruction,
                     DurationMinutes = s.DurationMinutes,
-                    Tips = s.Tips
+                    ImageUrl = s.ImageUrl,
+                    Tips = s.Tips,
+                    Images = s.Images.Select(i => new CreateRecipeStepImageRequest
+                    {
+                        ImageUrl = i.ImageUrl,
+                        IsPrimary = i.IsPrimary,
+                        OrderIndex = i.OrderIndex,
+                        Caption = i.Caption
+                    }).ToList()
                 }).ToList();
                 
                 // Load images
@@ -836,6 +923,156 @@
             for (int i = 0; i < _recipe.Images.Count; i++)
             {
                 _recipe.Images[i].OrderIndex = i;
+            }
+        }
+    }
+    
+    // Step Image Handling Methods
+    private void AddStepImageFromUrl(int stepIndex)
+    {
+        if (stepIndex < 0 || stepIndex >= _recipe.Steps.Count)
+            return;
+            
+        var url = _stepImageUrls.GetValueOrDefault(stepIndex, string.Empty);
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+            
+        var step = _recipe.Steps[stepIndex];
+        var newImage = new CreateRecipeStepImageRequest
+        {
+            ImageUrl = url,
+            IsPrimary = !step.Images.Any(), // First image is primary
+            OrderIndex = step.Images.Count
+        };
+        
+        step.Images.Add(newImage);
+        
+        // Update primary ImageUrl for backward compatibility
+        if (newImage.IsPrimary)
+        {
+            step.ImageUrl = newImage.ImageUrl;
+        }
+        
+        _stepImageUrls[stepIndex] = string.Empty;
+    }
+    
+    private async Task HandleStepImageUrlKeyPress(KeyboardEventArgs e, int stepIndex)
+    {
+        if (e.Key == "Enter")
+        {
+            AddStepImageFromUrl(stepIndex);
+        }
+    }
+    
+    private async Task HandleStepImageUpload(InputFileChangeEventArgs e, int stepIndex)
+    {
+        if (stepIndex < 0 || stepIndex >= _recipe.Steps.Count)
+            return;
+            
+        _isUploadingImage = true;
+        _uploadError = null;
+        
+        try
+        {
+            var maxFileSize = 5 * 1024 * 1024; // 5MB
+            var step = _recipe.Steps[stepIndex];
+            var uploadedImages = new List<CreateRecipeStepImageRequest>();
+            
+            foreach (var file in e.GetMultipleFiles(10))
+            {
+                if (file.Size > maxFileSize)
+                {
+                    _uploadError = $"File {file.Name} is too large. Maximum size is 5MB.";
+                    continue;
+                }
+                
+                using var stream = file.OpenReadStream(maxFileSize);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var bytes = ms.ToArray();
+                var base64 = Convert.ToBase64String(bytes);
+                var dataUrl = $"data:{file.ContentType};base64,{base64}";
+                
+                var newImage = new CreateRecipeStepImageRequest
+                {
+                    ImageUrl = dataUrl,
+                    IsPrimary = !step.Images.Any() && uploadedImages.Count == 0,
+                    OrderIndex = step.Images.Count + uploadedImages.Count
+                };
+                
+                uploadedImages.Add(newImage);
+            }
+            
+            step.Images.AddRange(uploadedImages);
+            
+            // Update primary ImageUrl for backward compatibility
+            var primaryImage = step.Images.FirstOrDefault(i => i.IsPrimary);
+            if (primaryImage != null)
+            {
+                step.ImageUrl = primaryImage.ImageUrl;
+            }
+            
+            ToastService.ShowSuccess($"Successfully uploaded {uploadedImages.Count} step image(s)");
+        }
+        catch (Exception ex)
+        {
+            _uploadError = $"Upload failed: {ex.Message}";
+            ToastService.ShowError(_uploadError);
+        }
+        finally
+        {
+            _isUploadingImage = false;
+        }
+    }
+    
+    private void SetStepImagePrimary(int stepIndex, int imageIndex)
+    {
+        if (stepIndex < 0 || stepIndex >= _recipe.Steps.Count)
+            return;
+            
+        var step = _recipe.Steps[stepIndex];
+        
+        // Remove primary from all images
+        foreach (var img in step.Images)
+        {
+            img.IsPrimary = false;
+        }
+        
+        // Set the selected image as primary
+        if (imageIndex >= 0 && imageIndex < step.Images.Count)
+        {
+            step.Images[imageIndex].IsPrimary = true;
+            step.ImageUrl = step.Images[imageIndex].ImageUrl;
+        }
+    }
+    
+    private void RemoveStepImage(int stepIndex, int imageIndex)
+    {
+        if (stepIndex < 0 || stepIndex >= _recipe.Steps.Count)
+            return;
+            
+        var step = _recipe.Steps[stepIndex];
+        
+        if (imageIndex >= 0 && imageIndex < step.Images.Count)
+        {
+            var wasPrimary = step.Images[imageIndex].IsPrimary;
+            step.Images.RemoveAt(imageIndex);
+            
+            // If we removed the primary image, set the first remaining image as primary
+            if (wasPrimary && step.Images.Any())
+            {
+                step.Images[0].IsPrimary = true;
+                step.ImageUrl = step.Images[0].ImageUrl;
+            }
+            else if (!step.Images.Any())
+            {
+                step.ImageUrl = null;
+            }
+            
+            // Update order indices
+            for (int i = 0; i < step.Images.Count; i++)
+            {
+                step.Images[i].OrderIndex = i;
             }
         }
     }
