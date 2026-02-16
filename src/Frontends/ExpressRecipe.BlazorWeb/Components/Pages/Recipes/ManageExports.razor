@@ -114,7 +114,7 @@
                             {
                                 <li>
                                     <span class="recipe-title">@recipe.Title</span>
-                                    <span class="recipe-meta">(@recipe.Category)</span>
+                                    <span class="recipe-meta">(@recipe.Difficulty)</span>
                                 </li>
                             }
                         </ul>
@@ -321,8 +321,6 @@
                     {
                         Title = recipe.Title,
                         Description = recipe.Description,
-                        Category = recipe.Category,
-                        Cuisine = recipe.Cuisine,
                         Difficulty = recipe.Difficulty,
                         PrepTimeMinutes = recipe.PrepTimeMinutes,
                         CookTimeMinutes = recipe.CookTimeMinutes,
@@ -330,8 +328,24 @@
                         ImageUrl = recipe.ImageUrl,
                         Source = recipe.Source,
                         SourceUrl = recipe.SourceUrl,
-                        Ingredients = recipe.Ingredients ?? new List<RecipeIngredientRequest>(),
-                        Steps = recipe.Steps ?? new List<RecipeStepRequest>(),
+                        Ingredients = recipe.Ingredients?.Select(i => new CreateRecipeIngredientRequest
+                        {
+                            Name = i.Name,
+                            Quantity = i.Quantity,
+                            Unit = i.Unit,
+                            Notes = i.Notes,
+                            IsOptional = i.IsOptional,
+                            OrderIndex = i.OrderIndex,
+                            GroupName = i.GroupName
+                        }).ToList() ?? new List<CreateRecipeIngredientRequest>(),
+                        Steps = recipe.Steps?.Select(s => new CreateRecipeStepRequest
+                        {
+                            Instruction = s.Instruction,
+                            OrderIndex = s.OrderIndex,
+                            DurationMinutes = s.DurationMinutes,
+                            ImageUrl = s.ImageUrl,
+                            Tips = s.Tips
+                        }).ToList() ?? new List<CreateRecipeStepRequest>(),
                         Tags = recipe.Tags ?? new List<string>(),
                         DietaryInfo = recipe.DietaryInfo ?? new List<string>(),
                         IsPublic = false
@@ -587,7 +601,7 @@
         animation: spin 1s linear infinite;
     }
 
-    @keyframes spin {
+    @@keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }

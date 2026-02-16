@@ -241,10 +241,6 @@ public class RecipeFileService
         sb.AppendLine($"created: {recipe.CreatedAt:O}");
         if (recipe.UpdatedAt.HasValue)
             sb.AppendLine($"updated: {recipe.UpdatedAt:O}");
-        if (!string.IsNullOrEmpty(recipe.Category))
-            sb.AppendLine($"category: \"{EscapeYaml(recipe.Category)}\"");
-        if (!string.IsNullOrEmpty(recipe.Cuisine))
-            sb.AppendLine($"cuisine: \"{EscapeYaml(recipe.Cuisine)}\"");
         if (!string.IsNullOrEmpty(recipe.Difficulty))
             sb.AppendLine($"difficulty: {recipe.Difficulty}");
         if (recipe.Servings > 0)
@@ -385,12 +381,6 @@ public class RecipeFileService
                             break;
                         case "title":
                             recipe.Title = value;
-                            break;
-                        case "category":
-                            recipe.Category = value;
-                            break;
-                        case "cuisine":
-                            recipe.Cuisine = value;
                             break;
                         case "difficulty":
                             recipe.Difficulty = value;
