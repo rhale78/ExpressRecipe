@@ -77,8 +77,91 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Image URL (optional)</label>
-                    <input type="url" class="form-control" @bind="_recipe.ImageUrl" placeholder="https://example.com/image.jpg" />
+                    <label>Recipe Images</label>
+                    <div class="image-upload-section">
+                        <!-- Multiple Image Preview Gallery -->
+                        @if (_recipe.Images.Any())
+                        {
+                            <div class="image-gallery">
+                                @foreach (var (image, index) in _recipe.Images.Select((img, idx) => (img, idx)))
+                                {
+                                    <div class="image-gallery-item @(image.IsPrimary ? "primary" : "")">
+                                        <img src="@image.ImageUrl" alt="Recipe image @(index + 1)" />
+                                        <div class="image-overlay">
+                                            <div class="image-actions">
+                                                @if (!image.IsPrimary)
+                                                {
+                                                    <button class="btn btn-sm btn-primary" 
+                                                            @onclick="() => SetPrimaryImage(index)" 
+                                                            type="button"
+                                                            title="Set as primary image">
+                                                        ⭐ Set Primary
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <span class="primary-badge">⭐ Primary</span>
+                                                }
+                                                <button class="btn btn-sm btn-danger" 
+                                                        @onclick="() => RemoveImage(index)" 
+                                                        type="button"
+                                                        title="Remove image">
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <input type="text" 
+                                               class="image-caption" 
+                                               placeholder="Caption (optional)" 
+                                               @bind="image.Caption" />
+                                    </div>
+                                }
+                            </div>
+                        }
+                        
+                        <!-- Upload Options -->
+                        <div class="upload-options">
+                            <div class="form-group">
+                                <label>Add Image by URL</label>
+                                <div class="url-input-group">
+                                    <input type="url" 
+                                           class="form-control" 
+                                           @bind="_newImageUrl" 
+                                           placeholder="https://example.com/image.jpg" 
+                                           @onkeypress="HandleImageUrlKeyPress" />
+                                    <button class="btn btn-primary" 
+                                            @onclick="AddImageFromUrl" 
+                                            type="button"
+                                            disabled="@string.IsNullOrWhiteSpace(_newImageUrl)">
+                                        + Add
+                                    </button>
+                                </div>
+                                <small class="form-text">Paste an image URL from the web</small>
+                            </div>
+                            
+                            <div class="upload-divider">OR</div>
+                            
+                            <div class="form-group">
+                                <label>Upload Images</label>
+                                <InputFile OnChange="HandleImageUpload" 
+                                          class="form-control" 
+                                          accept="image/*" 
+                                          multiple />
+                                <small class="form-text">Upload one or multiple images (max 5MB each). First image will be set as primary.</small>
+                                @if (_isUploadingImage)
+                                {
+                                    <div class="upload-progress">
+                                        <div class="spinner-small"></div>
+                                        <span>Uploading...</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(_uploadError))
+                                {
+                                    <div class="upload-error">@_uploadError</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-row">
@@ -327,6 +410,11 @@
     private bool _isSaving = false;
     private string? _errorMessage;
     private string _tagsInput = string.Empty;
+    
+    // Image upload state
+    private bool _isUploadingImage = false;
+    private string? _uploadError;
+    private string _newImageUrl = string.Empty;
 
     private readonly string[] _dietaryOptions = new[]
     {
@@ -346,6 +434,7 @@
         Steps = new(),
         Tags = new(),
         DietaryInfo = new(),
+        Images = new(),
         IsPublic = true
     };
 
@@ -395,6 +484,15 @@
                     Instruction = s.Instruction,
                     DurationMinutes = s.DurationMinutes,
                     Tips = s.Tips
+                }).ToList();
+                
+                // Load images
+                _recipe.Images = existingRecipe.Images.Select(i => new CreateRecipeImageRequest
+                {
+                    ImageUrl = i.ImageUrl,
+                    IsPrimary = i.IsPrimary,
+                    OrderIndex = i.OrderIndex,
+                    Caption = i.Caption
                 }).ToList();
 
                 _tagsInput = string.Join(", ", _recipe.Tags);
@@ -607,6 +705,139 @@
                _recipe.Servings > 0 &&
                _recipe.Ingredients.Any() &&
                _recipe.Steps.Any();
+    }
+    
+    // Image handling methods
+    private void AddImageFromUrl()
+    {
+        if (string.IsNullOrWhiteSpace(_newImageUrl))
+            return;
+            
+        var newImage = new CreateRecipeImageRequest
+        {
+            ImageUrl = _newImageUrl,
+            IsPrimary = !_recipe.Images.Any(), // First image is primary
+            OrderIndex = _recipe.Images.Count
+        };
+        
+        _recipe.Images.Add(newImage);
+        
+        // Update primary ImageUrl for backward compatibility
+        if (newImage.IsPrimary)
+        {
+            _recipe.ImageUrl = newImage.ImageUrl;
+        }
+        
+        _newImageUrl = string.Empty;
+    }
+    
+    private async Task HandleImageUrlKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            AddImageFromUrl();
+        }
+    }
+    
+    private async Task HandleImageUpload(InputFileChangeEventArgs e)
+    {
+        _isUploadingImage = true;
+        _uploadError = null;
+        
+        try
+        {
+            var maxFileSize = 5 * 1024 * 1024; // 5MB
+            var uploadedImages = new List<CreateRecipeImageRequest>();
+            
+            foreach (var file in e.GetMultipleFiles(10)) // Max 10 files at once
+            {
+                if (file.Size > maxFileSize)
+                {
+                    _uploadError = $"File {file.Name} is too large. Maximum size is 5MB.";
+                    continue;
+                }
+                
+                // For now, we'll create a data URL (base64)
+                // In production, you'd upload to a storage service
+                using var stream = file.OpenReadStream(maxFileSize);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var bytes = ms.ToArray();
+                var base64 = Convert.ToBase64String(bytes);
+                var dataUrl = $"data:{file.ContentType};base64,{base64}";
+                
+                var newImage = new CreateRecipeImageRequest
+                {
+                    ImageUrl = dataUrl,
+                    IsPrimary = !_recipe.Images.Any() && uploadedImages.Count == 0, // First image is primary
+                    OrderIndex = _recipe.Images.Count + uploadedImages.Count
+                };
+                
+                uploadedImages.Add(newImage);
+            }
+            
+            _recipe.Images.AddRange(uploadedImages);
+            
+            // Update primary ImageUrl for backward compatibility
+            var primaryImage = _recipe.Images.FirstOrDefault(i => i.IsPrimary);
+            if (primaryImage != null)
+            {
+                _recipe.ImageUrl = primaryImage.ImageUrl;
+            }
+            
+            ToastService.ShowSuccess($"Successfully uploaded {uploadedImages.Count} image(s)");
+        }
+        catch (Exception ex)
+        {
+            _uploadError = $"Upload failed: {ex.Message}";
+            ToastService.ShowError(_uploadError);
+        }
+        finally
+        {
+            _isUploadingImage = false;
+        }
+    }
+    
+    private void SetPrimaryImage(int index)
+    {
+        // Remove primary from all images
+        foreach (var img in _recipe.Images)
+        {
+            img.IsPrimary = false;
+        }
+        
+        // Set the selected image as primary
+        if (index >= 0 && index < _recipe.Images.Count)
+        {
+            _recipe.Images[index].IsPrimary = true;
+            _recipe.ImageUrl = _recipe.Images[index].ImageUrl; // Update for backward compatibility
+        }
+    }
+    
+    private void RemoveImage(int index)
+    {
+        if (index >= 0 && index < _recipe.Images.Count)
+        {
+            var wasPrimary = _recipe.Images[index].IsPrimary;
+            _recipe.Images.RemoveAt(index);
+            
+            // If we removed the primary image, set the first remaining image as primary
+            if (wasPrimary && _recipe.Images.Any())
+            {
+                _recipe.Images[0].IsPrimary = true;
+                _recipe.ImageUrl = _recipe.Images[0].ImageUrl;
+            }
+            else if (!_recipe.Images.Any())
+            {
+                _recipe.ImageUrl = null;
+            }
+            
+            // Update order indices
+            for (int i = 0; i < _recipe.Images.Count; i++)
+            {
+                _recipe.Images[i].OrderIndex = i;
+            }
+        }
     }
 
     private async Task SaveRecipe()
