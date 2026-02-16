@@ -162,3 +162,242 @@ public class ShoppingSummaryDto
     public decimal EstimatedTotal { get; set; }
     public List<ShoppingCategorySummaryDto> CategoriesSummary { get; set; } = new();
 }
+
+// Favorite Items
+public class FavoriteItemDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Brand { get; set; }
+    public string? Category { get; set; }
+    public decimal? TypicalQuantity { get; set; }
+    public string? TypicalUnit { get; set; }
+    public int UsageCount { get; set; }
+    public DateTime LastUsed { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class AddFavoriteItemRequest
+{
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Brand { get; set; }
+    public string? Category { get; set; }
+    public decimal? TypicalQuantity { get; set; }
+    public string? TypicalUnit { get; set; }
+}
+
+// Stores
+public class StoreDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Chain { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? ZipCode { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Website { get; set; }
+    public bool IsPreferred { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class CreateStoreRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Chain { get; set; }
+    public string? Address { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public string? ZipCode { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Website { get; set; }
+}
+
+public class NearbyStoresRequest
+{
+    public decimal Latitude { get; set; }
+    public decimal Longitude { get; set; }
+    public int RadiusKm { get; set; } = 10;
+}
+
+public class SetPreferredStoreRequest
+{
+    public Guid StoreId { get; set; }
+    public Guid UserId { get; set; }
+}
+
+// Store Layout
+public class StoreLayoutDto
+{
+    public Guid Id { get; set; }
+    public Guid StoreId { get; set; }
+    public string Section { get; set; } = string.Empty;
+    public string? Category { get; set; }
+    public int Aisle { get; set; }
+    public int OrderIndex { get; set; }
+}
+
+public class CreateStoreLayoutRequest
+{
+    public Guid StoreId { get; set; }
+    public string Section { get; set; } = string.Empty;
+    public string? Category { get; set; }
+    public int Aisle { get; set; }
+    public int OrderIndex { get; set; }
+}
+
+public class UpdateStoreLayoutRequest : CreateStoreLayoutRequest
+{
+}
+
+// Price Comparison
+public class PriceComparisonDto
+{
+    public Guid Id { get; set; }
+    public Guid ProductId { get; set; }
+    public Guid StoreId { get; set; }
+    public string StoreName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public decimal? UnitPrice { get; set; }
+    public string? Unit { get; set; }
+    public string? DealType { get; set; } // "Regular", "Sale", "BOGO", "BOGO50"
+    public string? DealDescription { get; set; }
+    public DateTime RecordedAt { get; set; }
+}
+
+public class RecordPriceRequest
+{
+    public Guid ProductId { get; set; }
+    public Guid StoreId { get; set; }
+    public decimal Price { get; set; }
+    public decimal? UnitPrice { get; set; }
+    public string? Unit { get; set; }
+    public string? DealType { get; set; }
+    public string? DealDescription { get; set; }
+}
+
+public class BestPriceDto
+{
+    public Guid ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public List<PriceComparisonDto> Prices { get; set; } = new();
+    public PriceComparisonDto? BestPrice { get; set; }
+    public decimal? PotentialSavings { get; set; }
+}
+
+// Templates
+public class ShoppingListTemplateDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int UsageCount { get; set; }
+    public DateTime LastUsed { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class ShoppingListTemplateItemDto
+{
+    public Guid Id { get; set; }
+    public Guid TemplateId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Brand { get; set; }
+    public string? Category { get; set; }
+    public decimal? DefaultQuantity { get; set; }
+    public string? DefaultUnit { get; set; }
+    public int OrderIndex { get; set; }
+}
+
+public class CreateTemplateRequest
+{
+    public Guid? HouseholdId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+}
+
+public class AddTemplateItemRequest
+{
+    public Guid TemplateId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Brand { get; set; }
+    public string? Category { get; set; }
+    public decimal? DefaultQuantity { get; set; }
+    public string? DefaultUnit { get; set; }
+    public int OrderIndex { get; set; }
+}
+
+public class CreateListFromTemplateRequest
+{
+    public Guid TemplateId { get; set; }
+    public string? ListName { get; set; }
+    public DateTime? ShoppingDate { get; set; }
+}
+
+// Shopping Scan Sessions
+public class ShoppingScanSessionDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? ShoppingListId { get; set; }
+    public Guid? StoreId { get; set; }
+    public string Status { get; set; } = "Active";
+    public int ItemsScanned { get; set; }
+    public decimal RunningTotal { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? EndedAt { get; set; }
+}
+
+public class StartShoppingScanRequest
+{
+    public Guid? ShoppingListId { get; set; }
+    public Guid? StoreId { get; set; }
+}
+
+public class ScanPurchaseRequest
+{
+    public Guid SessionId { get; set; }
+    public Guid ShoppingListItemId { get; set; }
+    public string? Barcode { get; set; }
+    public decimal ActualPrice { get; set; }
+}
+
+public class ShoppingScanSessionResultDto
+{
+    public Guid SessionId { get; set; }
+    public int TotalItemsScanned { get; set; }
+    public decimal TotalAmount { get; set; }
+    public DateTime CompletedAt { get; set; }
+    public List<string> PurchasedItems { get; set; } = new();
+}
+
+public class AddPurchasedToInventoryRequest
+{
+    public Guid SessionId { get; set; }
+    public Guid AddressId { get; set; }
+    public Guid StorageLocationId { get; set; }
+}
+
+// Additional Request DTOs
+public class MoveItemRequest
+{
+    public Guid ItemId { get; set; }
+    public Guid TargetListId { get; set; }
+}
+
+public class UpdateStoreRequest : CreateStoreRequest
+{
+}

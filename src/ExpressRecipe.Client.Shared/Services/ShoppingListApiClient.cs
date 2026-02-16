@@ -59,9 +59,9 @@ public interface IShoppingListApiClient
 
     // Shopping Scan Sessions
     Task<Guid?> StartShoppingScanSessionAsync(StartShoppingScanRequest request);
-    Task<ScanSessionDto?> GetActiveShoppingScanSessionAsync();
+    Task<ShoppingScanSessionDto?> GetActiveShoppingScanSessionAsync();
     Task<bool> ScanPurchaseItemAsync(Guid sessionId, ScanPurchaseRequest request);
-    Task<ScanSessionResultDto?> EndShoppingScanSessionAsync(Guid sessionId);
+    Task<ShoppingScanSessionResultDto?> EndShoppingScanSessionAsync(Guid sessionId);
     Task<bool> AddPurchasedToInventoryAsync(AddPurchasedToInventoryRequest request);
 }
 
@@ -374,22 +374,6 @@ public class ShoppingListApiClient : IShoppingListApiClient
         }
     }
 
-    public async Task<bool> ArchiveShoppingListAsync(Guid id)
-    {
-        if (!await EnsureAuthenticatedAsync())
-            return false;
-
-        try
-        {
-            var response = await _httpClient.PostAsync($"/api/shopping/lists/{id}/archive", null);
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     // Favorites
     public async Task<List<FavoriteItemDto>?> GetFavoritesAsync()
     {
@@ -592,7 +576,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync($"/api/shopping/stores/items/{request.ItemId}/prices", request);
+            var response = await _httpClient.PostAsJsonAsync($"/api/shopping/stores/items/{request.ProductId}/prices", request);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -780,14 +764,14 @@ public class ShoppingListApiClient : IShoppingListApiClient
         }
     }
 
-    public async Task<ScanSessionDto?> GetActiveShoppingScanSessionAsync()
+    public async Task<ShoppingScanSessionDto?> GetActiveShoppingScanSessionAsync()
     {
         if (!await EnsureAuthenticatedAsync())
             return null;
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<ScanSessionDto>("/api/shopping/scan/active");
+            return await _httpClient.GetFromJsonAsync<ShoppingScanSessionDto>("/api/shopping/scan/active");
         }
         catch
         {
@@ -811,7 +795,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
         }
     }
 
-    public async Task<ScanSessionResultDto?> EndShoppingScanSessionAsync(Guid sessionId)
+    public async Task<ShoppingScanSessionResultDto?> EndShoppingScanSessionAsync(Guid sessionId)
     {
         if (!await EnsureAuthenticatedAsync())
             return null;
@@ -820,7 +804,7 @@ public class ShoppingListApiClient : IShoppingListApiClient
         {
             var response = await _httpClient.PostAsync($"/api/shopping/scan/{sessionId}/end", null);
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<ScanSessionResultDto>();
+            return await response.Content.ReadFromJsonAsync<ShoppingScanSessionResultDto>();
         }
         catch
         {
