@@ -146,6 +146,10 @@ builder.Services.AddScoped(typeof(LocalStorageRepository<>));
 builder.Services.AddScoped<SyncQueueService>();
 builder.Services.AddScoped<OfflineDetectionService>();
 
+// Register recipe file and sync services
+builder.Services.AddScoped<ExpressRecipe.BlazorWeb.Services.RecipeFileService>();
+builder.Services.AddScoped<ExpressRecipe.BlazorWeb.Services.RecipeSyncService>();
+
 // Register SignalR client services (these would be initialized per-user)
 builder.Services.AddScoped<NotificationHubClient>(sp =>
 {

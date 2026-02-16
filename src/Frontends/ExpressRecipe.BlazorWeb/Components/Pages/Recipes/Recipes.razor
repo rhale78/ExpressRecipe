@@ -16,6 +16,9 @@
     <div class="recipes-header">
         <h1>Recipe Collection</h1>
         <div class="header-actions">
+            <button class="btn btn-outline" @onclick="NavigateToManageExports">
+                💾 Manage Exports
+            </button>
             <button class="btn btn-outline" @onclick="NavigateToImport">
                 📥 Import Recipe
             </button>
@@ -454,6 +457,11 @@
     private void NavigateToCreate()
     {
         Navigation.NavigateTo("/recipes/create");
+    }
+
+    private void NavigateToManageExports()
+    {
+        Navigation.NavigateTo("/recipes/manage-exports");
     }
 
     private void NavigateToSettings()

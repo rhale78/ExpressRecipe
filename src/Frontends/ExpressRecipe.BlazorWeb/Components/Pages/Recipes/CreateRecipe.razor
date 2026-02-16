@@ -4,7 +4,10 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.BlazorWeb.Services
 @inject IRecipeApiClient RecipeApi
+@inject RecipeSyncService SyncService
+@inject IToastService ToastService
 @inject NavigationManager Navigation
 
 <PageTitle>@(_isEditMode ? "Edit Recipe" : "Create Recipe") - ExpressRecipe</PageTitle>
@@ -463,6 +466,22 @@
 
             if (resultId.HasValue)
             {
+                // Auto-save to disk
+                try
+                {
+                    var savedRecipe = await RecipeApi.GetRecipeAsync(resultId.Value);
+                    if (savedRecipe != null)
+                    {
+                        await SyncService.AutoSaveRecipeAsync(savedRecipe);
+                        ToastService.ShowSuccess(_isEditMode ? "Recipe updated and saved to disk" : "Recipe created and saved to disk");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Don't fail the whole operation if disk save fails
+                    ToastService.ShowWarning($"Recipe saved to database but disk export failed: {ex.Message}");
+                }
+                
                 Navigation.NavigateTo($"/recipes/{resultId.Value}");
             }
             else
