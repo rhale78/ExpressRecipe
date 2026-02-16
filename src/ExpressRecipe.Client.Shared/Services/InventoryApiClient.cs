@@ -17,7 +17,7 @@ public interface IInventoryApiClient
     Task<InventoryItemValidationResult?> ValidateInventoryItemAsync(CreateInventoryItemRequest request);
 
     // Household Management
-    Task<Guid?> CreateHouseholdAsync(CreateHouseholdRequest request);
+    Task<HouseholdDto?> CreateHouseholdAsync(CreateHouseholdRequest request);
     Task<List<HouseholdDto>?> GetUserHouseholdsAsync();
     Task<HouseholdDto?> GetHouseholdAsync(Guid householdId);
     Task<bool> UpdateHouseholdAsync(Guid householdId, UpdateHouseholdRequest request);
@@ -28,12 +28,12 @@ public interface IInventoryApiClient
 
     // Address & Location Management
     Task<List<AddressDto>?> GetHouseholdAddressesAsync(Guid householdId);
-    Task<Guid?> CreateAddressAsync(Guid householdId, CreateAddressRequest request);
+    Task<AddressDto?> CreateAddressAsync(Guid householdId, CreateAddressRequest request);
     Task<bool> UpdateAddressAsync(Guid addressId, UpdateAddressRequest request);
     Task<bool> DeleteAddressAsync(Guid addressId);
-    Task<List<AddressDto>?> DetectCurrentAddressAsync(double latitude, double longitude);
+    Task<AddressDto?> DetectCurrentAddressAsync(Guid householdId, DetectAddressRequest request);
     Task<List<StorageLocationDto>?> GetStorageLocationsAsync(Guid? addressId = null, Guid? householdId = null);
-    Task<Guid?> CreateStorageLocationAsync(CreateStorageLocationRequest request);
+    Task<StorageLocationDto?> CreateStorageLocationAsync(CreateStorageLocationRequest request);
     Task<bool> UpdateStorageLocationAsync(Guid locationId, UpdateStorageLocationRequest request);
 
     // Scanning Operations
@@ -238,7 +238,7 @@ public class InventoryApiClient : IInventoryApiClient
     }
 
     // Household Management
-    public async Task<Guid?> CreateHouseholdAsync(CreateHouseholdRequest request)
+    public async Task<HouseholdDto?> CreateHouseholdAsync(CreateHouseholdRequest request)
     {
         if (!await EnsureAuthenticatedAsync())
             return null;
@@ -247,8 +247,7 @@ public class InventoryApiClient : IInventoryApiClient
         {
             var response = await _httpClient.PostAsJsonAsync("/api/inventory/household", request);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<GuidResponse>();
-            return result?.Id;
+            return await response.Content.ReadFromJsonAsync<HouseholdDto>();
         }
         catch
         {
@@ -381,7 +380,7 @@ public class InventoryApiClient : IInventoryApiClient
         }
     }
 
-    public async Task<Guid?> CreateAddressAsync(Guid householdId, CreateAddressRequest request)
+    public async Task<AddressDto?> CreateAddressAsync(Guid householdId, CreateAddressRequest request)
     {
         if (!await EnsureAuthenticatedAsync())
             return null;
@@ -390,8 +389,7 @@ public class InventoryApiClient : IInventoryApiClient
         {
             var response = await _httpClient.PostAsJsonAsync($"/api/inventory/household/{householdId}/addresses", request);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<GuidResponse>();
-            return result?.Id;
+            return await response.Content.ReadFromJsonAsync<AddressDto>();
         }
         catch
         {
@@ -431,15 +429,16 @@ public class InventoryApiClient : IInventoryApiClient
         }
     }
 
-    public async Task<List<AddressDto>?> DetectCurrentAddressAsync(double latitude, double longitude)
+    public async Task<AddressDto?> DetectCurrentAddressAsync(Guid householdId, DetectAddressRequest request)
     {
         if (!await EnsureAuthenticatedAsync())
             return null;
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<List<AddressDto>>(
-                $"/api/inventory/household/addresses/detect?latitude={latitude}&longitude={longitude}");
+            var response = await _httpClient.PostAsJsonAsync($"/api/inventory/household/{householdId}/addresses/detect", request);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<AddressDto>();
         }
         catch
         {
@@ -469,7 +468,7 @@ public class InventoryApiClient : IInventoryApiClient
         }
     }
 
-    public async Task<Guid?> CreateStorageLocationAsync(CreateStorageLocationRequest request)
+    public async Task<StorageLocationDto?> CreateStorageLocationAsync(CreateStorageLocationRequest request)
     {
         if (!await EnsureAuthenticatedAsync())
             return null;
@@ -478,8 +477,7 @@ public class InventoryApiClient : IInventoryApiClient
         {
             var response = await _httpClient.PostAsJsonAsync("/api/inventory/locations", request);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<GuidResponse>();
-            return result?.Id;
+            return await response.Content.ReadFromJsonAsync<StorageLocationDto>();
         }
         catch
         {

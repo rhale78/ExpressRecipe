@@ -141,8 +141,12 @@ public class HouseholdDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public Guid OwnerId { get; set; }
+    public string? Description { get; set; }
+    public Guid CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; }
+    public int MemberCount { get; set; }
+    public int AddressCount { get; set; }
+    public string? UserRole { get; set; } // User's role in this household
 }
 
 public class HouseholdMemberDto
@@ -161,6 +165,7 @@ public class HouseholdMemberDto
 public class CreateHouseholdRequest
 {
     public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
 }
 
 public class AddHouseholdMemberRequest
@@ -180,12 +185,14 @@ public class AddressDto
     public Guid HouseholdId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Street { get; set; } = string.Empty;
+    public string? Street2 { get; set; }
     public string City { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
     public string ZipCode { get; set; } = string.Empty;
     public string? Country { get; set; }
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
+    public double? DistanceKm { get; set; } // Distance from current location
     public bool IsPrimary { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -195,6 +202,7 @@ public class CreateAddressRequest
     public Guid HouseholdId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Street { get; set; } = string.Empty;
+    public string? Street2 { get; set; }
     public string City { get; set; } = string.Empty;
     public string State { get; set; } = string.Empty;
     public string ZipCode { get; set; } = string.Empty;
@@ -217,8 +225,9 @@ public class StorageLocationDto
     public Guid Id { get; set; }
     public Guid AddressId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty; // Fridge, Freezer, Pantry, Cabinet, etc.
+    public string LocationType { get; set; } = string.Empty; // Fridge, Freezer, Pantry, Cabinet, etc.
     public string? Description { get; set; }
+    public string? SubLocation { get; set; }
     public int OrderIndex { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -227,8 +236,9 @@ public class CreateStorageLocationRequest
 {
     public Guid AddressId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string Type { get; set; } = string.Empty;
+    public string LocationType { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string? SubLocation { get; set; }
     public int OrderIndex { get; set; }
 }
 
