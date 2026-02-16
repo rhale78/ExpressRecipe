@@ -103,75 +103,102 @@
                     </button>
                 </div>
 
-                @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
+                @if (_recipe.Ingredients.Any())
                 {
-                    var index = _recipe.Ingredients.IndexOf(ingredient);
-                    var ingredientIndex = index; // Capture for closure
-                    <div class="ingredient-row">
-                        <div class="ingredient-fields">
-                            <input type="number"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Quantity"
-                                   placeholder="Qty"
-                                   step="0.1"
-                                   style="width: 80px;" />
+                    var groupedIngredients = _recipe.Ingredients
+                        .OrderBy(i => i.OrderIndex)
+                        .GroupBy(i => i.GroupName ?? string.Empty)
+                        .OrderBy(g => g.Key);
 
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Unit"
-                                   placeholder="Unit"
-                                   style="width: 100px;" />
+                    foreach (var group in groupedIngredients)
+                    {
+                        @if (!string.IsNullOrEmpty(group.Key))
+                        {
+                            <div class="ingredient-group-header">
+                                <h3>@group.Key</h3>
+                            </div>
+                        }
 
-                            <div class="ingredient-autocomplete-wrapper" style="flex: 1; position: relative;">
-                                <input type="text"
-                                       class="form-control form-control-sm"
-                                       @bind="ingredient.Name"
-                                       @bind:event="oninput"
-                                       @oninput="@(e => HandleIngredientNameInput(e, ingredientIndex))"
-                                       @onfocus="@(() => HandleIngredientFocus(ingredientIndex))"
-                                       @onblur="@(() => HandleIngredientBlur(ingredientIndex))"
-                                       placeholder="Ingredient name (start typing...)"
-                                       style="width: 100%;" />
-                                
-                                @if (_showSuggestions[ingredientIndex] && _ingredientSuggestions[ingredientIndex]?.Any() == true)
-                                {
-                                    <div class="autocomplete-dropdown">
-                                        @foreach (var suggestion in _ingredientSuggestions[ingredientIndex])
+                        foreach (var ingredient in group)
+                        {
+                            var index = _recipe.Ingredients.IndexOf(ingredient);
+                            var ingredientIndex = index; // Capture for closure
+                            <div class="ingredient-row">
+                                <div class="ingredient-fields">
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="ingredient.GroupName"
+                                           placeholder="Section (optional)"
+                                           title="E.g., 'For the Cake', 'For the Icing'"
+                                           style="width: 140px;" />
+
+                                    <input type="number"
+                                           class="form-control form-control-sm"
+                                           @bind="ingredient.Quantity"
+                                           placeholder="Qty"
+                                           step="0.1"
+                                           style="width: 80px;" />
+
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="ingredient.Unit"
+                                           placeholder="Unit"
+                                           style="width: 100px;" />
+
+                                    <div class="ingredient-autocomplete-wrapper" style="flex: 1; position: relative;">
+                                        <input type="text"
+                                               class="form-control form-control-sm"
+                                               value="@ingredient.Name"
+                                               @oninput="@(e => HandleIngredientNameInput(e, ingredientIndex))"
+                                               @onfocus="@(() => HandleIngredientFocus(ingredientIndex))"
+                                               @onblur="@(() => HandleIngredientBlur(ingredientIndex))"
+                                               placeholder="Ingredient name (start typing...)"
+                                               style="width: 100%;" />
+                                        
+                                        @if (_showSuggestions[ingredientIndex] && _ingredientSuggestions[ingredientIndex]?.Any() == true)
                                         {
-                                            <div class="autocomplete-item" 
-                                                 @onmousedown="@(async () => await SelectSuggestion(ingredientIndex, suggestion))">
-                                                <div class="suggestion-name">@suggestion.Name</div>
-                                                @if (!string.IsNullOrEmpty(suggestion.Brand))
+                                            <div class="autocomplete-dropdown">
+                                                @foreach (var suggestion in _ingredientSuggestions[ingredientIndex])
                                                 {
-                                                    <div class="suggestion-meta">@suggestion.Brand</div>
+                                                    <div class="autocomplete-item" 
+                                                         @onmousedown="@(async () => await SelectSuggestion(ingredientIndex, suggestion))">
+                                                        <div class="suggestion-name">@suggestion.Name</div>
+                                                        @if (!string.IsNullOrEmpty(suggestion.Brand))
+                                                        {
+                                                            <div class="suggestion-meta">@suggestion.Brand</div>
+                                                        }
+                                                    </div>
                                                 }
                                             </div>
                                         }
                                     </div>
-                                }
+
+                                    <input type="text"
+                                           class="form-control form-control-sm"
+                                           @bind="ingredient.Notes"
+                                           placeholder="Notes (optional)"
+                                           style="width: 150px;" />
+
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" @bind="ingredient.IsOptional" />
+                                        Optional
+                                    </label>
+                                </div>
+                                <button class="btn-icon btn-danger" @onclick="@(() => RemoveIngredient(ingredientIndex))">
+                                    🗑️
+                                </button>
                             </div>
-
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Notes"
-                                   placeholder="Notes (optional)"
-                                   style="flex: 1;" />
-
-                            <label class="checkbox-label">
-                                <input type="checkbox" @bind="ingredient.IsOptional" />
-                                Optional
-                            </label>
-                        </div>
-                        <button class="btn-icon btn-danger" @onclick="@(() => RemoveIngredient(ingredientIndex))">
-                            🗑️
-                        </button>
-                    </div>
+                        }
+                    }
                 }
-
-                @if (!_recipe.Ingredients.Any())
+                else
                 {
                     <p class="empty-message">No ingredients added yet. Click "Add Ingredient" to start.</p>
                 }
+
+                <div class="ingredient-help">
+                    <small>💡 <strong>Tip:</strong> Use the "Section" field to group ingredients (e.g., "For the Cake", "For the Icing"). Start typing ingredient names to see product suggestions.</small>
+                </div>
             </div>
 
             <!-- Instructions -->
