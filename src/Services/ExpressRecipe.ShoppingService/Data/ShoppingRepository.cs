@@ -13,20 +13,23 @@ public partial class ShoppingRepository : IShoppingRepository
         _logger = logger;
     }
 
-    public async Task<Guid> CreateShoppingListAsync(Guid userId, string name, string? description)
+    public async Task<Guid> CreateShoppingListAsync(Guid userId, Guid? householdId, string name, string? description, string listType = "Standard", Guid? storeId = null)
     {
         const string sql = @"
-            INSERT INTO ShoppingList (UserId, Name, Description, CreatedAt)
+            INSERT INTO ShoppingList (UserId, HouseholdId, Name, Description, ListType, StoreId, CreatedAt)
             OUTPUT INSERTED.Id
-            VALUES (@UserId, @Name, @Description, GETUTCDATE())";
+            VALUES (@UserId, @HouseholdId, @Name, @Description, @ListType, @StoreId, GETUTCDATE())";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@HouseholdId", householdId.HasValue ? householdId.Value : DBNull.Value);
         command.Parameters.AddWithValue("@Name", name);
         command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@ListType", listType);
+        command.Parameters.AddWithValue("@StoreId", storeId.HasValue ? storeId.Value : DBNull.Value);
 
         return (Guid)await command.ExecuteScalarAsync()!;
     }
@@ -106,11 +109,11 @@ public partial class ShoppingRepository : IShoppingRepository
         return null;
     }
 
-    public async Task UpdateShoppingListAsync(Guid listId, string name, string? description)
+    public async Task UpdateShoppingListAsync(Guid listId, string name, string? description, Guid? storeId = null)
     {
         const string sql = @"
             UPDATE ShoppingList
-            SET Name = @Name, Description = @Description, UpdatedAt = GETUTCDATE()
+            SET Name = @Name, Description = @Description, StoreId = @StoreId, UpdatedAt = GETUTCDATE()
             WHERE Id = @ListId";
 
         await using var connection = new SqlConnection(_connectionString);
@@ -120,6 +123,7 @@ public partial class ShoppingRepository : IShoppingRepository
         command.Parameters.AddWithValue("@ListId", listId);
         command.Parameters.AddWithValue("@Name", name);
         command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@StoreId", storeId.HasValue ? storeId.Value : DBNull.Value);
 
         await command.ExecuteNonQueryAsync();
     }
@@ -141,12 +145,13 @@ public partial class ShoppingRepository : IShoppingRepository
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<Guid> AddItemToListAsync(Guid listId, Guid userId, Guid? productId, string? customName, decimal quantity, string? unit, string? category)
+    public async Task<Guid> AddItemToListAsync(Guid listId, Guid userId, Guid? productId, string? customName, decimal quantity, string? unit, string? category, 
+        bool isFavorite = false, bool isGeneric = false, string? preferredBrand = null, Guid? storeId = null)
     {
         const string sql = @"
-            INSERT INTO ShoppingListItem (ShoppingListId, ProductId, CustomName, Quantity, Unit, Category, AddedAt)
+            INSERT INTO ShoppingListItem (ShoppingListId, ProductId, CustomName, Quantity, Unit, Category, IsFavorite, IsGeneric, PreferredBrand, StoreId, AddedAt)
             OUTPUT INSERTED.Id
-            VALUES (@ListId, @ProductId, @CustomName, @Quantity, @Unit, @Category, GETUTCDATE())";
+            VALUES (@ListId, @ProductId, @CustomName, @Quantity, @Unit, @Category, @IsFavorite, @IsGeneric, @PreferredBrand, @StoreId, GETUTCDATE())";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -158,6 +163,10 @@ public partial class ShoppingRepository : IShoppingRepository
         command.Parameters.AddWithValue("@Quantity", quantity);
         command.Parameters.AddWithValue("@Unit", unit ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@IsFavorite", isFavorite);
+        command.Parameters.AddWithValue("@IsGeneric", isGeneric);
+        command.Parameters.AddWithValue("@PreferredBrand", preferredBrand ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@StoreId", storeId.HasValue ? storeId.Value : DBNull.Value);
 
         return (Guid)await command.ExecuteScalarAsync()!;
     }
