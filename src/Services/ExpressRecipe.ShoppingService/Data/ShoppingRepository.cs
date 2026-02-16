@@ -2,7 +2,7 @@ using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.ShoppingService.Data;
 
-public class ShoppingRepository : IShoppingRepository
+public partial class ShoppingRepository : IShoppingRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<ShoppingRepository> _logger;
