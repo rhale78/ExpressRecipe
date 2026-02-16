@@ -199,7 +199,7 @@ public partial class ShoppingRepository : IShoppingRepository
                 Unit = reader.IsDBNull(5) ? null : reader.GetString(5),
                 Category = reader.IsDBNull(6) ? null : reader.GetString(6),
                 IsChecked = reader.GetBoolean(7),
-                SortOrder = reader.GetInt32(8),
+                OrderIndex = reader.GetInt32(8),
                 AddedAt = reader.GetDateTime(9)
             });
         }
@@ -345,71 +345,6 @@ public partial class ShoppingRepository : IShoppingRepository
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@ShareId", shareId);
-
-        await command.ExecuteNonQueryAsync();
-    }
-
-    public async Task<Guid> CreateStoreLayoutAsync(Guid userId, string storeName, string? address)
-    {
-        const string sql = @"
-            INSERT INTO StoreLayout (UserId, StoreName, Address, CreatedAt)
-            OUTPUT INSERTED.Id
-            VALUES (@UserId, @StoreName, @Address, GETUTCDATE())";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@StoreName", storeName);
-        command.Parameters.AddWithValue("@Address", address ?? (object)DBNull.Value);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
-    }
-
-    public async Task<List<StoreLayoutDto>> GetUserStoresAsync(Guid userId)
-    {
-        const string sql = @"
-            SELECT Id, UserId, StoreName, Address
-            FROM StoreLayout
-            WHERE UserId = @UserId AND IsDeleted = 0
-            ORDER BY StoreName";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        var stores = new List<StoreLayoutDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            stores.Add(new StoreLayoutDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                StoreName = reader.GetString(2),
-                Address = reader.IsDBNull(3) ? null : reader.GetString(3)
-            });
-        }
-
-        return stores;
-    }
-
-    public async Task AddCategoryToStoreAsync(Guid storeId, string categoryName, int displayOrder)
-    {
-        const string sql = @"
-            INSERT INTO StoreCategory (StoreLayoutId, CategoryName, DisplayOrder)
-            VALUES (@StoreId, @CategoryName, @DisplayOrder)";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@StoreId", storeId);
-        command.Parameters.AddWithValue("@CategoryName", categoryName);
-        command.Parameters.AddWithValue("@DisplayOrder", displayOrder);
 
         await command.ExecuteNonQueryAsync();
     }

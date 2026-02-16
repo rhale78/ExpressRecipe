@@ -39,7 +39,7 @@ public class ShoppingController : ControllerBase
     public async Task<IActionResult> CreateList([FromBody] CreateListRequest request)
     {
         var userId = GetUserId();
-        var listId = await _repository.CreateShoppingListAsync(userId, request.Name, request.Description);
+        var listId = await _repository.CreateShoppingListAsync(userId, null, request.Name, request.Description);
         var list = await _repository.GetShoppingListAsync(listId, userId);
         return CreatedAtAction(nameof(GetList), new { id = listId }, list);
     }
@@ -173,7 +173,7 @@ public class ShoppingController : ControllerBase
     public async Task<IActionResult> CreateStore([FromBody] CreateStoreRequest request)
     {
         var userId = GetUserId();
-        var storeId = await _repository.CreateStoreLayoutAsync(userId, request.StoreName, request.Address);
+        var storeId = await _repository.CreateStoreLayoutAsync(userId, Guid.Empty, request.StoreName, request.Address, 0);
         return Ok(new { id = storeId });
     }
 }

@@ -321,8 +321,10 @@ public partial class ShoppingRepository
 
     public async Task<List<PriceComparisonDto>> GetBestPricesAsync(Guid productId, Guid? preferredStoreId = null)
     {
-        const string sql = preferredStoreId.HasValue
-            ? @"
+        string sql;
+        if (preferredStoreId.HasValue)
+        {
+            sql = @"
                 SELECT TOP 5 
                     pc.Id, pc.ShoppingListItemId, pc.ProductId, pc.StoreId, s.Name AS StoreName,
                     pc.Price, pc.UnitPrice, pc.Size, pc.Unit, pc.HasDeal, pc.DealType, pc.DealEndDate,
@@ -332,8 +334,11 @@ public partial class ShoppingRepository
                 WHERE pc.ProductId = @ProductId AND pc.IsAvailable = 1
                 ORDER BY 
                     CASE WHEN pc.StoreId = @PreferredStoreId THEN 0 ELSE 1 END,
-                    pc.Price ASC"
-            : @"
+                    pc.Price ASC";
+        }
+        else
+        {
+            sql = @"
                 SELECT TOP 5 
                     pc.Id, pc.ShoppingListItemId, pc.ProductId, pc.StoreId, s.Name AS StoreName,
                     pc.Price, pc.UnitPrice, pc.Size, pc.Unit, pc.HasDeal, pc.DealType, pc.DealEndDate,
@@ -342,6 +347,7 @@ public partial class ShoppingRepository
                 INNER JOIN Store s ON pc.StoreId = s.Id
                 WHERE pc.ProductId = @ProductId AND pc.IsAvailable = 1
                 ORDER BY pc.Price ASC";
+        }
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
