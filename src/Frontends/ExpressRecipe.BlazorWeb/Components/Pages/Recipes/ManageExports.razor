@@ -1,0 +1,615 @@
+@page "/recipes/manage-exports"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.BlazorWeb.Services
+@using System.Security.Claims
+@inject IRecipeApiClient RecipeApi
+@inject RecipeSyncService SyncService
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+@inject CustomAuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Manage Recipe Exports - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+<div class="manage-exports-container">
+    <div class="manage-exports-header">
+        <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/recipes")'>
+            ← Back to Recipes
+        </button>
+        <h1>Manage Recipe Exports</h1>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Export Status -->
+        <div class="export-section">
+            <div class="section-card">
+                <h2>📁 Export Location</h2>
+                @if (!string.IsNullOrEmpty(_exportPath))
+                {
+                    <div class="export-path-info">
+                        <p class="path-label">Your recipes are saved to:</p>
+                        <code class="export-path">@_exportPath</code>
+                        <p class="path-note">💡 These files are in Markdown format and can be edited in any text editor</p>
+                    </div>
+                }
+                else
+                {
+                    <p class="warning-text">⚠️ Export path not available. Please ensure you're logged in.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Export All Recipes -->
+        <div class="export-section">
+            <div class="section-card">
+                <h2>💾 Export All Recipes</h2>
+                <p>Export all your recipes to disk as Markdown files. This creates a backup of your recipes.</p>
+                
+                <div class="stats-row">
+                    <div class="stat-box">
+                        <span class="stat-value">@_totalRecipes</span>
+                        <span class="stat-label">Total Recipes</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">@_exportedCount</span>
+                        <span class="stat-label">Last Export Count</span>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" @onclick="ExportAllRecipes" disabled="@_isExporting">
+                    @if (_isExporting)
+                    {
+                        <span>⏳ Exporting...</span>
+                    }
+                    else
+                    {
+                        <span>💾 Export All Recipes</span>
+                    }
+                </button>
+
+                @if (!string.IsNullOrEmpty(_exportMessage))
+                {
+                    <div class="message-box success">
+                        ✅ @_exportMessage
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Import from Disk -->
+        <div class="export-section">
+            <div class="section-card">
+                <h2>📥 Import from Disk</h2>
+                <p>Scan your export folder for recipe files that don't exist in the database and import them.</p>
+                
+                <button class="btn btn-outline" @onclick="ScanForNewRecipes" disabled="@_isScanning">
+                    @if (_isScanning)
+                    {
+                        <span>⏳ Scanning...</span>
+                    }
+                    else
+                    {
+                        <span>🔍 Scan for New Recipes</span>
+                    }
+                </button>
+
+                @if (_newRecipesFound != null && _newRecipesFound.Any())
+                {
+                    <div class="new-recipes-list">
+                        <h3>Found @_newRecipesFound.Count new recipe(s):</h3>
+                        <ul>
+                            @foreach (var recipe in _newRecipesFound)
+                            {
+                                <li>
+                                    <span class="recipe-title">@recipe.Title</span>
+                                    <span class="recipe-meta">(@recipe.Difficulty)</span>
+                                </li>
+                            }
+                        </ul>
+                        <button class="btn btn-primary" @onclick="ImportNewRecipes" disabled="@_isImporting">
+                            @if (_isImporting)
+                            {
+                                <span>⏳ Importing...</span>
+                            }
+                            else
+                            {
+                                <span>📥 Import These Recipes</span>
+                            }
+                        </button>
+                    </div>
+                }
+                else if (_scannedOnce && (_newRecipesFound == null || !_newRecipesFound.Any()))
+                {
+                    <div class="message-box info">
+                        ℹ️ No new recipes found on disk.
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Auto-Save Settings -->
+        <div class="export-section">
+            <div class="section-card">
+                <h2>⚙️ Auto-Save Settings</h2>
+                <div class="settings-info">
+                    <div class="setting-item">
+                        <span class="setting-icon">✅</span>
+                        <div class="setting-content">
+                            <strong>Auto-save on create</strong>
+                            <p>New recipes are automatically saved to disk</p>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <span class="setting-icon">✅</span>
+                        <div class="setting-content">
+                            <strong>Auto-save on edit</strong>
+                            <p>Recipe updates are automatically saved to disk</p>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <span class="setting-icon">✅</span>
+                        <div class="setting-content">
+                            <strong>Auto-delete protection</strong>
+                            <p>Deleted recipes are moved to _deleted folder, not permanently removed</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="export-section">
+            <div class="section-card">
+                <h2>📖 How It Works</h2>
+                <div class="instructions">
+                    <ol>
+                        <li><strong>Automatic Backup</strong>: Every recipe you create or edit is automatically saved as a Markdown file to your local disk.</li>
+                        <li><strong>File Format</strong>: Files are saved as <code>[recipe-name]_[recipe-id].md</code> in human-readable Markdown format.</li>
+                        <li><strong>Safety</strong>: Deleted recipes are moved to a <code>_deleted</code> subfolder with a timestamp, so you can recover them if needed.</li>
+                        <li><strong>Import</strong>: If you reset your database or move to a new system, use "Scan for New Recipes" to reimport your recipes.</li>
+                        <li><strong>Manual Editing</strong>: You can edit the Markdown files in any text editor and reimport them.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please log in to manage recipe exports.</p>
+            <button class="btn btn-primary" @onclick='() => Navigation.NavigateTo("/login")'>
+                Log In
+            </button>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isExporting = false;
+    private bool _isScanning = false;
+    private bool _isImporting = false;
+    private bool _scannedOnce = false;
+    
+    private string? _exportPath;
+    private string? _exportMessage;
+    private int _totalRecipes = 0;
+    private int _exportedCount = 0;
+    
+    private List<RecipeDto>? _newRecipesFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        
+        try
+        {
+            // Get current user
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            
+            if (user?.Identity?.IsAuthenticated == true)
+            {
+                var email = user.FindFirst(ClaimTypes.Email)?.Value;
+                var name = user.FindFirst(ClaimTypes.Name)?.Value;
+                var userIdentifier = email ?? name ?? "unknown";
+                
+                SyncService.SetCurrentUser(userIdentifier);
+                _exportPath = SyncService.GetExportPath();
+                
+                // Get total recipes count
+                var recipes = await RecipeApi.GetMyRecipesAsync(1, 1000);
+                _totalRecipes = recipes?.Count ?? 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error loading data: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ExportAllRecipes()
+    {
+        _isExporting = true;
+        _exportMessage = null;
+        
+        try
+        {
+            _exportedCount = await SyncService.ExportAllRecipesAsync();
+            _exportMessage = $"Successfully exported {_exportedCount} of {_totalRecipes} recipes to disk!";
+            ToastService.ShowSuccess(_exportMessage);
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private async Task ScanForNewRecipes()
+    {
+        _isScanning = true;
+        _scannedOnce = true;
+        _newRecipesFound = null;
+        
+        try
+        {
+            _newRecipesFound = await SyncService.ScanAndLoadNewRecipesAsync();
+            
+            if (_newRecipesFound.Any())
+            {
+                ToastService.ShowInfo($"Found {_newRecipesFound.Count} new recipes on disk");
+            }
+            else
+            {
+                ToastService.ShowInfo("No new recipes found on disk");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Scan failed: {ex.Message}");
+        }
+        finally
+        {
+            _isScanning = false;
+        }
+    }
+
+    private async Task ImportNewRecipes()
+    {
+        if (_newRecipesFound == null || !_newRecipesFound.Any())
+        {
+            return;
+        }
+
+        _isImporting = true;
+        
+        try
+        {
+            int successCount = 0;
+            foreach (var recipe in _newRecipesFound)
+            {
+                try
+                {
+                    var createRequest = new CreateRecipeRequest
+                    {
+                        Title = recipe.Title,
+                        Description = recipe.Description,
+                        Difficulty = recipe.Difficulty,
+                        PrepTimeMinutes = recipe.PrepTimeMinutes,
+                        CookTimeMinutes = recipe.CookTimeMinutes,
+                        Servings = recipe.Servings,
+                        ImageUrl = recipe.ImageUrl,
+                        Source = recipe.Source,
+                        SourceUrl = recipe.SourceUrl,
+                        Ingredients = recipe.Ingredients?.Select(i => new CreateRecipeIngredientRequest
+                        {
+                            Name = i.Name,
+                            Quantity = i.Quantity,
+                            Unit = i.Unit,
+                            Notes = i.Notes,
+                            IsOptional = i.IsOptional,
+                            OrderIndex = i.OrderIndex,
+                            GroupName = i.GroupName
+                        }).ToList() ?? new List<CreateRecipeIngredientRequest>(),
+                        Steps = recipe.Steps?.Select(s => new CreateRecipeStepRequest
+                        {
+                            Instruction = s.Instruction,
+                            OrderIndex = s.OrderIndex,
+                            DurationMinutes = s.DurationMinutes,
+                            ImageUrl = s.ImageUrl,
+                            Tips = s.Tips
+                        }).ToList() ?? new List<CreateRecipeStepRequest>(),
+                        Tags = recipe.Tags ?? new List<string>(),
+                        DietaryInfo = recipe.DietaryInfo ?? new List<string>(),
+                        IsPublic = false
+                    };
+                    
+                    var recipeId = await RecipeApi.CreateRecipeAsync(createRequest);
+                    if (recipeId.HasValue)
+                    {
+                        successCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log but continue with other recipes
+                    ToastService.ShowWarning($"Failed to import {recipe.Title}: {ex.Message}");
+                }
+            }
+            
+            ToastService.ShowSuccess($"Successfully imported {successCount} of {_newRecipesFound.Count} recipes!");
+            _newRecipesFound = null;
+            _scannedOnce = false;
+            
+            // Reload data
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Import failed: {ex.Message}");
+        }
+        finally
+        {
+            _isImporting = false;
+        }
+    }
+}
+
+<style>
+    .manage-exports-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .manage-exports-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .manage-exports-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        color: var(--primary-color);
+    }
+
+    .export-section {
+        margin-bottom: 2rem;
+    }
+
+    .section-card {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-card h2 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+        font-size: 1.5rem;
+    }
+
+    .export-path-info {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+
+    .path-label {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .export-path {
+        display: block;
+        background: white;
+        padding: 0.75rem;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        font-family: 'Courier New', monospace;
+        word-break: break-all;
+        margin: 0.5rem 0;
+    }
+
+    .path-note {
+        font-size: 0.9rem;
+        color: #666;
+        margin-top: 0.5rem;
+        margin-bottom: 0;
+    }
+
+    .stats-row {
+        display: flex;
+        gap: 1rem;
+        margin: 1.5rem 0;
+    }
+
+    .stat-box {
+        flex: 1;
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-value {
+        display: block;
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: var(--primary-color);
+    }
+
+    .stat-label {
+        display: block;
+        font-size: 0.9rem;
+        color: #666;
+        margin-top: 0.5rem;
+    }
+
+    .message-box {
+        margin-top: 1rem;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid;
+    }
+
+    .message-box.success {
+        background: #d4edda;
+        border-color: #28a745;
+        color: #155724;
+    }
+
+    .message-box.info {
+        background: #d1ecf1;
+        border-color: #17a2b8;
+        color: #0c5460;
+    }
+
+    .warning-text {
+        color: #856404;
+        background: #fff3cd;
+        padding: 1rem;
+        border-radius: 6px;
+        border-left: 4px solid #ffc107;
+    }
+
+    .new-recipes-list {
+        margin-top: 1.5rem;
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+    }
+
+    .new-recipes-list h3 {
+        margin-top: 0;
+        color: var(--text-primary);
+    }
+
+    .new-recipes-list ul {
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0;
+    }
+
+    .new-recipes-list li {
+        padding: 0.75rem;
+        background: white;
+        margin-bottom: 0.5rem;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+    }
+
+    .recipe-title {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .recipe-meta {
+        color: #666;
+        font-size: 0.9rem;
+        margin-left: 0.5rem;
+    }
+
+    .settings-info {
+        margin: 1rem 0;
+    }
+
+    .setting-item {
+        display: flex;
+        align-items: start;
+        gap: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
+    }
+
+    .setting-icon {
+        font-size: 1.5rem;
+    }
+
+    .setting-content strong {
+        display: block;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .setting-content p {
+        margin: 0;
+        color: #666;
+        font-size: 0.9rem;
+    }
+
+    .instructions ol {
+        line-height: 1.8;
+        color: var(--text-primary);
+    }
+
+    .instructions code {
+        background: #f8f9fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+    }
+
+    .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 4rem;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid var(--primary-color);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .unauthorized-container {
+        max-width: 500px;
+        margin: 4rem auto;
+        text-align: center;
+        padding: 2rem;
+    }
+</style>

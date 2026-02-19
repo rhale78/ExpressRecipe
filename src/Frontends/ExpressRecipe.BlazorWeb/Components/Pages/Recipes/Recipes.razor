@@ -16,6 +16,9 @@
     <div class="recipes-header">
         <h1>Recipe Collection</h1>
         <div class="header-actions">
+            <button class="btn btn-outline" @onclick="NavigateToManageExports">
+                💾 Manage Exports
+            </button>
             <button class="btn btn-outline" @onclick="NavigateToImport">
                 📥 Import Recipe
             </button>
@@ -31,17 +34,33 @@
         InitialFilters="_dietaryFilters"
         AutoLoadUserProfile="true" />
 
-    <!-- Recipe Tabs -->
-    <div class="recipe-tabs">
-        <button class="tab-btn @(_activeTab == "all" ? "active" : "")" @onclick="HandleSetActiveTabAll">
-            🍽️ All Recipes (@_totalCount)
-        </button>
-        <button class="tab-btn @(_activeTab == "my" ? "active" : "")" @onclick="HandleSetActiveTabMy">
-            📝 My Recipes
-        </button>
-        <button class="tab-btn @(_activeTab == "favorites" ? "active" : "")" @onclick="HandleSetActiveTabFavorites">
-            ⭐ Favorites
-        </button>
+    <!-- Recipe Tabs with View Toggle -->
+    <div class="recipe-tabs-container">
+        <div class="recipe-tabs">
+            <button class="tab-btn @(_activeTab == "all" ? "active" : "")" @onclick="HandleSetActiveTabAll">
+                🍽️ All Recipes (@_totalCount)
+            </button>
+            <button class="tab-btn @(_activeTab == "my" ? "active" : "")" @onclick="HandleSetActiveTabMy">
+                📝 My Recipes
+            </button>
+            <button class="tab-btn @(_activeTab == "favorites" ? "active" : "")" @onclick="HandleSetActiveTabFavorites">
+                ⭐ Favorites
+            </button>
+        </div>
+        
+        <!-- View Toggle -->
+        <div class="view-toggle">
+            <button class="view-btn @(_viewMode == "grid" ? "active" : "")" 
+                    @onclick="@(() => SetViewMode("grid"))"
+                    title="Grid View">
+                ⊞
+            </button>
+            <button class="view-btn @(_viewMode == "list" ? "active" : "")" 
+                    @onclick="@(() => SetViewMode("list"))"
+                    title="List View">
+                ☰
+            </button>
+        </div>
     </div>
 
     <!-- Search and Additional Filters -->
@@ -149,10 +168,48 @@
             </p>
         </div>
 
-        <!-- Recipe Grid -->
+        <!-- Category Sidebar -->
+        @if (_showCategoryFilter)
+        {
+            <div class="category-sidebar">
+                <div class="category-header">
+                    <h3>Categories</h3>
+                    <button class="btn-close" @onclick="() => _showCategoryFilter = false">✕</button>
+                </div>
+                <div class="category-list">
+                    <button class="category-item @(string.IsNullOrEmpty(_selectedCategory) ? "active" : "")"
+                            @onclick="() => FilterByCategory(null)">
+                        <span class="category-name">All Categories</span>
+                        <span class="category-count">@_totalCount</span>
+                    </button>
+                    @foreach (var category in _categories)
+                    {
+                        <button class="category-item @(_selectedCategory == category ? "active" : "")"
+                                @onclick="() => FilterByCategory(category)">
+                            <span class="category-icon">@GetCategoryIcon(category)</span>
+                            <span class="category-name">@category</span>
+                            <span class="category-count">@GetCategoryCount(category)</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Recipe Grid or List -->
         @if (_searchResult.Recipes.Any())
         {
-            <div class="recipes-grid">
+            <div class="recipes-content-area">
+                <!-- Category Toggle Button (mobile) -->
+                @if (!_showCategoryFilter)
+                {
+                    <button class="btn btn-outline category-toggle-btn" @onclick="() => _showCategoryFilter = true">
+                        📁 Categories
+                    </button>
+                }
+
+                @if (_viewMode == "grid")
+                {
+                    <div class="recipes-grid">
                 @foreach (var recipe in _searchResult.Recipes)
                 {
                     <div class="recipe-card" @onclick="() => ViewRecipe(recipe.Id)">
@@ -222,6 +279,63 @@
                                 View Recipe →
                             </button>
                         </div>
+                    </div>
+                }
+                    </div>
+                }
+                else
+                {
+                    <!-- List View -->
+                    <div class="recipes-list">
+                        @foreach (var recipe in _searchResult.Recipes)
+                        {
+                            <div class="recipe-list-item" @onclick="() => ViewRecipe(recipe.Id)">
+                                <div class="recipe-list-image">
+                                    @if (!string.IsNullOrEmpty(recipe.ImageUrl))
+                                    {
+                                        <img src="@recipe.ImageUrl" alt="@recipe.Title" />
+                                    }
+                                    else
+                                    {
+                                        <div class="recipe-list-placeholder">🍽️</div>
+                                    }
+                                </div>
+                                
+                                <div class="recipe-list-content">
+                                    <div class="recipe-list-header">
+                                        <h3 class="recipe-list-title">@recipe.Title</h3>
+                                        <span class="recipe-list-badge @recipe.Difficulty.ToLower()">@recipe.Difficulty</span>
+                                    </div>
+                                    
+                                    <p class="recipe-list-description">@TruncateDescription(recipe.Description, 150)</p>
+                                    
+                                    <div class="recipe-list-meta">
+                                        <span class="list-meta-item">⏱️ @recipe.TotalTimeMinutes min</span>
+                                        <span class="list-meta-item">🍴 @recipe.Servings servings</span>
+                                        @if (recipe.FavoriteCount > 0)
+                                        {
+                                            <span class="list-meta-item">⭐ @recipe.FavoriteCount</span>
+                                        }
+                                    </div>
+                                    
+                                    @if (recipe.Tags.Any())
+                                    {
+                                        <div class="recipe-list-tags">
+                                            @foreach (var tag in recipe.Tags.Take(5))
+                                            {
+                                                <span class="recipe-tag-small">@tag</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                
+                                <div class="recipe-list-actions">
+                                    <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ViewRecipe(recipe.Id)">
+                                        View →
+                                    </button>
+                                </div>
+                            </div>
+                        }
                     </div>
                 }
             </div>
@@ -295,6 +409,17 @@
     private string _sortBy = "CreatedAt";
     private bool _showAdvancedFilters = false;
     private List<string> _dietaryFilters = new(); // Unified filters from UnifiedDietaryFilter component
+    
+    // View mode and category filtering
+    private string _viewMode = "grid"; // "grid" or "list"
+    private bool _showCategoryFilter = true;
+    private string? _selectedCategory = null;
+    private readonly List<string> _categories = new()
+    {
+        "Breakfast", "Lunch", "Dinner", "Dessert", "Snack",
+        "Appetizer", "Side Dish", "Salad", "Soup", "Beverage"
+    };
+    private Dictionary<string, int> _categoryCounts = new();
 
     private RecipeSearchResult? _searchResult;
     private int _currentPage = 1;
@@ -305,8 +430,62 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Load view mode preference from localStorage would go here
+        // For now, default to grid
+        _viewMode = "grid";
+        
         // Load initial recipes
         await SearchRecipes();
+        
+        // Calculate category counts
+        await UpdateCategoryCounts();
+    }
+    
+    private void SetViewMode(string mode)
+    {
+        _viewMode = mode;
+        // TODO: Save to localStorage
+        StateHasChanged();
+    }
+    
+    private async Task FilterByCategory(string? category)
+    {
+        _selectedCategory = category;
+        _currentPage = 1;
+        await SearchRecipes();
+    }
+    
+    private async Task UpdateCategoryCounts()
+    {
+        // This would ideally come from an API endpoint
+        // For now, we'll just show the total count for each
+        foreach (var category in _categories)
+        {
+            _categoryCounts[category] = 0; // Would be calculated from API
+        }
+    }
+    
+    private string GetCategoryIcon(string category)
+    {
+        return category switch
+        {
+            "Breakfast" => "🌅",
+            "Lunch" => "🌞",
+            "Dinner" => "🌙",
+            "Dessert" => "🍰",
+            "Snack" => "🍿",
+            "Appetizer" => "🥗",
+            "Side Dish" => "🥘",
+            "Salad" => "🥬",
+            "Soup" => "🍜",
+            "Beverage" => "🥤",
+            _ => "🍽️"
+        };
+    }
+    
+    private int GetCategoryCount(string category)
+    {
+        return _categoryCounts.TryGetValue(category, out var count) ? count : 0;
     }
 
     private async Task HandleDietaryFiltersChanged(List<string> filters)
@@ -454,6 +633,11 @@
     private void NavigateToCreate()
     {
         Navigation.NavigateTo("/recipes/create");
+    }
+
+    private void NavigateToManageExports()
+    {
+        Navigation.NavigateTo("/recipes/manage-exports");
     }
 
     private void NavigateToSettings()

@@ -5,7 +5,8 @@ public class RecipeDto
     public Guid Id { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-    public string? ImageUrl { get; set; }
+    public string? ImageUrl { get; set; } // Primary image URL for backward compatibility
+    public List<RecipeImageDto> Images { get; set; } = new(); // All recipe images
     public int PrepTimeMinutes { get; set; }
     public int CookTimeMinutes { get; set; }
     public int TotalTimeMinutes => PrepTimeMinutes + CookTimeMinutes;
@@ -29,6 +30,15 @@ public class RecipeDto
     public int FavoriteCount { get; set; }
 }
 
+public class RecipeImageDto
+{
+    public Guid Id { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
+    public int OrderIndex { get; set; }
+    public string? Caption { get; set; }
+}
+
 public class RecipeIngredientDto
 {
     public Guid Id { get; set; }
@@ -47,8 +57,18 @@ public class RecipeStepDto
     public int OrderIndex { get; set; }
     public string Instruction { get; set; } = string.Empty;
     public int? DurationMinutes { get; set; }
-    public string? ImageUrl { get; set; }
+    public string? ImageUrl { get; set; } // Primary image for backward compatibility
+    public List<RecipeStepImageDto> Images { get; set; } = new(); // Multiple step images
     public string? Tips { get; set; }
+}
+
+public class RecipeStepImageDto
+{
+    public Guid Id { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
+    public int OrderIndex { get; set; }
+    public string? Caption { get; set; }
 }
 
 public class NutritionInfoDto
@@ -91,7 +111,8 @@ public class CreateRecipeRequest
 {
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
-    public string? ImageUrl { get; set; }
+    public string? ImageUrl { get; set; } // Primary image for backward compatibility
+    public List<CreateRecipeImageRequest> Images { get; set; } = new(); // Multiple images
     public int PrepTimeMinutes { get; set; }
     public int CookTimeMinutes { get; set; }
     public int Servings { get; set; } = 4;
@@ -106,6 +127,14 @@ public class CreateRecipeRequest
     public List<string> DietaryInfo { get; set; } = new();
     public NutritionInfoDto? Nutrition { get; set; }
     public bool IsPublic { get; set; } = true;
+}
+
+public class CreateRecipeImageRequest
+{
+    public string ImageUrl { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
+    public int OrderIndex { get; set; }
+    public string? Caption { get; set; }
 }
 
 public class CreateRecipeIngredientRequest
@@ -124,8 +153,17 @@ public class CreateRecipeStepRequest
     public int OrderIndex { get; set; }
     public string Instruction { get; set; } = string.Empty;
     public int? DurationMinutes { get; set; }
-    public string? ImageUrl { get; set; }
+    public string? ImageUrl { get; set; } // Primary image for backward compatibility
+    public List<CreateRecipeStepImageRequest> Images { get; set; } = new(); // Multiple step images
     public string? Tips { get; set; }
+}
+
+public class CreateRecipeStepImageRequest
+{
+    public string ImageUrl { get; set; } = string.Empty;
+    public bool IsPrimary { get; set; }
+    public int OrderIndex { get; set; }
+    public string? Caption { get; set; }
 }
 
 public class UpdateRecipeRequest : CreateRecipeRequest

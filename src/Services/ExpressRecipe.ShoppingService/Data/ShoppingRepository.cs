@@ -2,7 +2,7 @@ using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.ShoppingService.Data;
 
-public class ShoppingRepository : IShoppingRepository
+public partial class ShoppingRepository : IShoppingRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<ShoppingRepository> _logger;
@@ -13,20 +13,23 @@ public class ShoppingRepository : IShoppingRepository
         _logger = logger;
     }
 
-    public async Task<Guid> CreateShoppingListAsync(Guid userId, string name, string? description)
+    public async Task<Guid> CreateShoppingListAsync(Guid userId, Guid? householdId, string name, string? description, string listType = "Standard", Guid? storeId = null)
     {
         const string sql = @"
-            INSERT INTO ShoppingList (UserId, Name, Description, CreatedAt)
+            INSERT INTO ShoppingList (UserId, HouseholdId, Name, Description, ListType, StoreId, CreatedAt)
             OUTPUT INSERTED.Id
-            VALUES (@UserId, @Name, @Description, GETUTCDATE())";
+            VALUES (@UserId, @HouseholdId, @Name, @Description, @ListType, @StoreId, GETUTCDATE())";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@HouseholdId", householdId.HasValue ? householdId.Value : DBNull.Value);
         command.Parameters.AddWithValue("@Name", name);
         command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@ListType", listType);
+        command.Parameters.AddWithValue("@StoreId", storeId.HasValue ? storeId.Value : DBNull.Value);
 
         return (Guid)await command.ExecuteScalarAsync()!;
     }
@@ -106,11 +109,11 @@ public class ShoppingRepository : IShoppingRepository
         return null;
     }
 
-    public async Task UpdateShoppingListAsync(Guid listId, string name, string? description)
+    public async Task UpdateShoppingListAsync(Guid listId, string name, string? description, Guid? storeId = null)
     {
         const string sql = @"
             UPDATE ShoppingList
-            SET Name = @Name, Description = @Description, UpdatedAt = GETUTCDATE()
+            SET Name = @Name, Description = @Description, StoreId = @StoreId, UpdatedAt = GETUTCDATE()
             WHERE Id = @ListId";
 
         await using var connection = new SqlConnection(_connectionString);
@@ -120,6 +123,7 @@ public class ShoppingRepository : IShoppingRepository
         command.Parameters.AddWithValue("@ListId", listId);
         command.Parameters.AddWithValue("@Name", name);
         command.Parameters.AddWithValue("@Description", description ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@StoreId", storeId.HasValue ? storeId.Value : DBNull.Value);
 
         await command.ExecuteNonQueryAsync();
     }
@@ -141,12 +145,13 @@ public class ShoppingRepository : IShoppingRepository
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<Guid> AddItemToListAsync(Guid listId, Guid userId, Guid? productId, string? customName, decimal quantity, string? unit, string? category)
+    public async Task<Guid> AddItemToListAsync(Guid listId, Guid userId, Guid? productId, string? customName, decimal quantity, string? unit, string? category, 
+        bool isFavorite = false, bool isGeneric = false, string? preferredBrand = null, Guid? storeId = null)
     {
         const string sql = @"
-            INSERT INTO ShoppingListItem (ShoppingListId, ProductId, CustomName, Quantity, Unit, Category, AddedAt)
+            INSERT INTO ShoppingListItem (ShoppingListId, ProductId, CustomName, Quantity, Unit, Category, IsFavorite, IsGeneric, PreferredBrand, StoreId, AddedAt)
             OUTPUT INSERTED.Id
-            VALUES (@ListId, @ProductId, @CustomName, @Quantity, @Unit, @Category, GETUTCDATE())";
+            VALUES (@ListId, @ProductId, @CustomName, @Quantity, @Unit, @Category, @IsFavorite, @IsGeneric, @PreferredBrand, @StoreId, GETUTCDATE())";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -158,6 +163,10 @@ public class ShoppingRepository : IShoppingRepository
         command.Parameters.AddWithValue("@Quantity", quantity);
         command.Parameters.AddWithValue("@Unit", unit ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@IsFavorite", isFavorite);
+        command.Parameters.AddWithValue("@IsGeneric", isGeneric);
+        command.Parameters.AddWithValue("@PreferredBrand", preferredBrand ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@StoreId", storeId.HasValue ? storeId.Value : DBNull.Value);
 
         return (Guid)await command.ExecuteScalarAsync()!;
     }
@@ -190,7 +199,7 @@ public class ShoppingRepository : IShoppingRepository
                 Unit = reader.IsDBNull(5) ? null : reader.GetString(5),
                 Category = reader.IsDBNull(6) ? null : reader.GetString(6),
                 IsChecked = reader.GetBoolean(7),
-                SortOrder = reader.GetInt32(8),
+                OrderIndex = reader.GetInt32(8),
                 AddedAt = reader.GetDateTime(9)
             });
         }
@@ -336,71 +345,6 @@ public class ShoppingRepository : IShoppingRepository
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@ShareId", shareId);
-
-        await command.ExecuteNonQueryAsync();
-    }
-
-    public async Task<Guid> CreateStoreLayoutAsync(Guid userId, string storeName, string? address)
-    {
-        const string sql = @"
-            INSERT INTO StoreLayout (UserId, StoreName, Address, CreatedAt)
-            OUTPUT INSERTED.Id
-            VALUES (@UserId, @StoreName, @Address, GETUTCDATE())";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@StoreName", storeName);
-        command.Parameters.AddWithValue("@Address", address ?? (object)DBNull.Value);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
-    }
-
-    public async Task<List<StoreLayoutDto>> GetUserStoresAsync(Guid userId)
-    {
-        const string sql = @"
-            SELECT Id, UserId, StoreName, Address
-            FROM StoreLayout
-            WHERE UserId = @UserId AND IsDeleted = 0
-            ORDER BY StoreName";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        var stores = new List<StoreLayoutDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            stores.Add(new StoreLayoutDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                StoreName = reader.GetString(2),
-                Address = reader.IsDBNull(3) ? null : reader.GetString(3)
-            });
-        }
-
-        return stores;
-    }
-
-    public async Task AddCategoryToStoreAsync(Guid storeId, string categoryName, int displayOrder)
-    {
-        const string sql = @"
-            INSERT INTO StoreCategory (StoreLayoutId, CategoryName, DisplayOrder)
-            VALUES (@StoreId, @CategoryName, @DisplayOrder)";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@StoreId", storeId);
-        command.Parameters.AddWithValue("@CategoryName", categoryName);
-        command.Parameters.AddWithValue("@DisplayOrder", displayOrder);
 
         await command.ExecuteNonQueryAsync();
     }

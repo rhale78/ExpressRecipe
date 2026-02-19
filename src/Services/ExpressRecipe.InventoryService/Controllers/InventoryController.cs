@@ -45,6 +45,7 @@ public class InventoryController : ControllerBase
 
         var itemId = await _repository.AddInventoryItemAsync(
             userId,
+            request.HouseholdId,
             request.ProductId,
             request.CustomName,
             request.StorageLocationId,
@@ -53,7 +54,8 @@ public class InventoryController : ControllerBase
             request.ExpirationDate,
             request.Barcode,
             request.Price,
-            request.Store);
+            request.PreferredStore,
+            request.StoreLocation);
 
         var item = await _repository.GetInventoryItemAsync(itemId, userId);
         return CreatedAtAction(nameof(GetItem), new { id = itemId }, item);
@@ -84,7 +86,7 @@ public class InventoryController : ControllerBase
         var userId = GetUserId();
         _logger.LogInformation("Updating quantity for item {ItemId}", id);
 
-        await _repository.UpdateInventoryQuantityAsync(id, request.Quantity, request.ActionType, request.Reason);
+        await _repository.UpdateInventoryQuantityAsync(id, request.Quantity, request.ActionType, userId, request.Reason, request.DisposalReason, request.AllergenDetected);
         var item = await _repository.GetInventoryItemAsync(id, userId);
         return Ok(item);
     }
@@ -137,9 +139,141 @@ public class InventoryController : ControllerBase
         var userId = GetUserId();
         _logger.LogInformation("Creating storage location for user {UserId}", userId);
 
-        var locationId = await _repository.CreateStorageLocationAsync(userId, request.Name, request.Description, request.Temperature);
+        var locationId = await _repository.CreateStorageLocationAsync(userId, request.HouseholdId, request.AddressId, request.Name, request.Description, request.Temperature);
         var locations = await _repository.GetStorageLocationsAsync(userId);
         return CreatedAtAction(nameof(GetStorageLocations), new { id = locationId }, locations.First(l => l.Id == locationId));
+    }
+
+    /// <summary>
+    /// Get storage locations by address
+    /// </summary>
+    [HttpGet("addresses/{addressId}/locations")]
+    public async Task<IActionResult> GetLocationsByAddress(Guid addressId)
+    {
+        _logger.LogInformation("Getting storage locations for address {AddressId}", addressId);
+
+        var locations = await _repository.GetStorageLocationsByAddressAsync(addressId);
+        return Ok(locations);
+    }
+
+    /// <summary>
+    /// Get storage locations by household
+    /// </summary>
+    [HttpGet("households/{householdId}/locations")]
+    public async Task<IActionResult> GetLocationsByHousehold(Guid householdId)
+    {
+        _logger.LogInformation("Getting storage locations for household {HouseholdId}", householdId);
+
+        var locations = await _repository.GetStorageLocationsByHouseholdAsync(householdId);
+        return Ok(locations);
+    }
+
+    /// <summary>
+    /// Update storage location
+    /// </summary>
+    [HttpPut("locations/{id}")]
+    public async Task<IActionResult> UpdateStorageLocation(Guid id, [FromBody] UpdateStorageLocationRequest request)
+    {
+        await _repository.UpdateStorageLocationAsync(id, request.Name, request.Description, request.Temperature, request.AddressId);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Delete storage location
+    /// </summary>
+    [HttpDelete("locations/{id}")]
+    public async Task<IActionResult> DeleteStorageLocation(Guid id)
+    {
+        await _repository.DeleteStorageLocationAsync(id);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Get household inventory
+    /// </summary>
+    [HttpGet("households/{householdId}")]
+    public async Task<IActionResult> GetHouseholdInventory(Guid householdId)
+    {
+        _logger.LogInformation("Getting inventory for household {HouseholdId}", householdId);
+
+        var items = await _repository.GetHouseholdInventoryAsync(householdId);
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Get inventory by address
+    /// </summary>
+    [HttpGet("addresses/{addressId}")]
+    public async Task<IActionResult> GetInventoryByAddress(Guid addressId)
+    {
+        _logger.LogInformation("Getting inventory for address {AddressId}", addressId);
+
+        var items = await _repository.GetInventoryByAddressAsync(addressId);
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Get inventory by storage location
+    /// </summary>
+    [HttpGet("locations/{locationId}/items")]
+    public async Task<IActionResult> GetInventoryByLocation(Guid locationId)
+    {
+        _logger.LogInformation("Getting inventory for location {LocationId}", locationId);
+
+        var items = await _repository.GetInventoryByStorageLocationAsync(locationId);
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Get low stock items
+    /// </summary>
+    [HttpGet("low-stock")]
+    public async Task<IActionResult> GetLowStockItems([FromQuery] decimal threshold = 2.0m)
+    {
+        var userId = GetUserId();
+        _logger.LogInformation("Getting low stock items for user {UserId}", userId);
+
+        var items = await _repository.GetLowStockItemsAsync(userId, threshold);
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Get items running out within specified days
+    /// </summary>
+    [HttpGet("running-out")]
+    public async Task<IActionResult> GetItemsRunningOut([FromQuery] int withinDays = 7)
+    {
+        var userId = GetUserId();
+        _logger.LogInformation("Getting items running out for user {UserId} within {Days} days", userId, withinDays);
+
+        var items = await _repository.GetItemsRunningOutAsync(userId, withinDays);
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Get items about to expire
+    /// </summary>
+    [HttpGet("about-to-expire")]
+    public async Task<IActionResult> GetItemsAboutToExpire([FromQuery] int daysAhead = 3)
+    {
+        var userId = GetUserId();
+        _logger.LogInformation("Getting items about to expire for user {UserId} in {Days} days", userId, daysAhead);
+
+        var items = await _repository.GetItemsAboutToExpireAsync(userId, daysAhead);
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Get inventory report with statistics
+    /// </summary>
+    [HttpGet("report")]
+    public async Task<IActionResult> GetInventoryReport([FromQuery] Guid? householdId = null)
+    {
+        var userId = GetUserId();
+        _logger.LogInformation("Getting inventory report for user {UserId}", userId);
+
+        var report = await _repository.GetInventoryReportAsync(userId, householdId);
+        return Ok(report);
     }
 
     /// <summary>
@@ -158,6 +292,7 @@ public class InventoryController : ControllerBase
 
 public class AddInventoryItemRequest
 {
+    public Guid? HouseholdId { get; set; }
     public Guid? ProductId { get; set; }
     public string? CustomName { get; set; }
     public Guid StorageLocationId { get; set; }
@@ -167,6 +302,8 @@ public class AddInventoryItemRequest
     public string? Barcode { get; set; }
     public decimal? Price { get; set; }
     public string? Store { get; set; }
+    public string? PreferredStore { get; set; }
+    public string? StoreLocation { get; set; }
 }
 
 public class UpdateQuantityRequest
@@ -174,11 +311,23 @@ public class UpdateQuantityRequest
     public decimal Quantity { get; set; }
     public string ActionType { get; set; } = "Updated";
     public string? Reason { get; set; }
+    public string? DisposalReason { get; set; }
+    public string? AllergenDetected { get; set; }
 }
 
 public class CreateStorageLocationRequest
 {
+    public Guid? HouseholdId { get; set; }
+    public Guid? AddressId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string? Temperature { get; set; }
+}
+
+public class UpdateStorageLocationRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Temperature { get; set; }
+    public Guid? AddressId { get; set; }
 }

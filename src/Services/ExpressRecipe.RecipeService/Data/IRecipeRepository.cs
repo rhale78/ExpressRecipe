@@ -70,4 +70,18 @@ public interface IRecipeRepository
     Task IncrementViewCountAsync(Guid recipeId);
 
     Task UpdateRecipeInstructionsAsync(Guid recipeId, string instructions);
+
+    // Additional methods for RecipesController
+    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto>> GetRecipeIngredientsAsync(Guid recipeId);
+    Task<ExpressRecipe.Shared.DTOs.Recipe.RecipeNutritionDto?> GetRecipeNutritionAsync(Guid recipeId);
+    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeAllergenWarningDto>> GetRecipeAllergensAsync(Guid recipeId);
+    Task UpdateRecipeAsync(Guid id, ExpressRecipe.Shared.DTOs.Recipe.UpdateRecipeRequest request, Guid userId);
+    Task DeleteRecipeAsync(Guid id);
+    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetUserRecipesAsync(Guid userId, int limit = 50);
+    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByCategoryAsync(string category, int limit = 50);
+    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByCuisineAsync(string cuisine, int limit = 50);
+    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByTagAsync(string tag, int limit = 50);
+    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByIngredientAsync(string ingredient, int limit = 50);
+    Task<List<string>> GetAllCategoriesAsync();
+    Task<List<string>> GetAllCuisinesAsync();
 }

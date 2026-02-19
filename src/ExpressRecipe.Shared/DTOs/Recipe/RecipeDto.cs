@@ -166,6 +166,9 @@ public class UpdateRecipeRequest
     [Range(0, 10000)]
     public int? CookTimeMinutes { get; set; }
 
+    [Range(0, 10000)]
+    public int? TotalTimeMinutes { get; set; }
+
     [Range(1, 100)]
     public int? Servings { get; set; }
 

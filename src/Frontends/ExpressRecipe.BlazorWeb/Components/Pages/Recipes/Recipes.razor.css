@@ -1,0 +1,338 @@
+/* Recipe Tabs with View Toggle */
+.recipe-tabs-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.recipe-tabs {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+/* View Toggle */
+.view-toggle {
+    display: flex;
+    gap: 0.25rem;
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.view-btn {
+    padding: 0.5rem 1rem;
+    background: white;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+    color: #666;
+}
+
+.view-btn:hover {
+    background: #f5f5f5;
+    color: #333;
+}
+
+.view-btn.active {
+    background: #7c3aed;
+    color: white;
+}
+
+/* Category Sidebar */
+.category-sidebar {
+    position: fixed;
+    left: 0;
+    top: 60px; /* Adjust based on your header height */
+    width: 250px;
+    height: calc(100vh - 60px);
+    background: white;
+    border-right: 1px solid #e0e0e0;
+    padding: 1.5rem;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+}
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.category-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #999;
+    padding: 0.25rem;
+    display: none; /* Show on mobile */
+}
+
+.category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.category-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    width: 100%;
+}
+
+.category-item:hover {
+    background: #f8f8f8;
+    border-color: #7c3aed;
+    transform: translateX(4px);
+}
+
+.category-item.active {
+    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+    color: white;
+    border-color: #7c3aed;
+}
+
+.category-icon {
+    font-size: 1.3rem;
+}
+
+.category-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.category-count {
+    background: rgba(0,0,0,0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.category-item.active .category-count {
+    background: rgba(255,255,255,0.2);
+}
+
+/* Recipes Content Area - adjust for sidebar */
+.recipes-content-area {
+    margin-left: 270px; /* sidebar width + margin */
+}
+
+.category-toggle-btn {
+    display: none; /* Show on mobile */
+    margin-bottom: 1rem;
+}
+
+/* List View Styles */
+.recipes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.recipe-list-item {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    align-items: flex-start;
+}
+
+.recipe-list-item:hover {
+    border-color: #7c3aed;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
+    transform: translateY(-2px);
+}
+
+.recipe-list-image {
+    flex-shrink: 0;
+    width: 120px;
+    height: 120px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.recipe-list-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.recipe-list-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%);
+    font-size: 3rem;
+}
+
+.recipe-list-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.recipe-list-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.recipe-list-title {
+    margin: 0;
+    font-size: 1.3rem;
+    color: #1a1a1a;
+    font-weight: 600;
+}
+
+.recipe-list-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.recipe-list-badge.easy {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.recipe-list-badge.medium {
+    background: #fed7aa;
+    color: #92400e;
+}
+
+.recipe-list-badge.hard {
+    background: #fecaca;
+    color: #991b1b;
+}
+
+.recipe-list-description {
+    color: #666;
+    margin: 0.5rem 0;
+    line-height: 1.5;
+}
+
+.recipe-list-meta {
+    display: flex;
+    gap: 1.5rem;
+    margin: 0.75rem 0;
+    color: #666;
+    font-size: 0.95rem;
+}
+
+.list-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.recipe-list-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.recipe-tag-small {
+    padding: 0.25rem 0.75rem;
+    background: #f3f4f6;
+    color: #4b5563;
+    border-radius: 12px;
+    font-size: 0.85rem;
+}
+
+.recipe-list-actions {
+    display: flex;
+    align-items: center;
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 1024px) {
+    .category-sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s;
+    }
+
+    .category-sidebar.show {
+        transform: translateX(0);
+    }
+
+    .btn-close {
+        display: block;
+    }
+
+    .recipes-content-area {
+        margin-left: 0;
+    }
+
+    .category-toggle-btn {
+        display: inline-block;
+    }
+}
+
+@media (max-width: 768px) {
+    .recipe-tabs-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .recipe-tabs {
+        flex-direction: column;
+    }
+
+    .view-toggle {
+        justify-content: center;
+    }
+
+    .recipe-list-item {
+        flex-direction: column;
+    }
+
+    .recipe-list-image {
+        width: 100%;
+        height: 200px;
+    }
+
+    .recipe-list-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .recipe-list-meta {
+        flex-wrap: wrap;
+    }
+}

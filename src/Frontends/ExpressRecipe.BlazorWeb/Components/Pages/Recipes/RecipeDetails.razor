@@ -4,9 +4,12 @@
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
 @using System.Security.Claims
+@using ExpressRecipe.BlazorWeb.Services
 @inject IRecipeApiClient RecipeApi
 @inject NavigationManager Navigation
 @inject CustomAuthenticationStateProvider AuthStateProvider
+@inject RecipeSyncService SyncService
+@inject IToastService ToastService
 
 <PageTitle>@(_recipe?.Title ?? "Recipe Details") - ExpressRecipe</PageTitle>
 
@@ -104,6 +107,9 @@
                     {
                         <button class="btn btn-outline" @onclick="EditRecipe">
                             ✏️ Edit
+                        </button>
+                        <button class="btn btn-outline" @onclick="ExportToDisk">
+                            💾 Export to Disk
                         </button>
                         <button class="btn btn-outline btn-danger" @onclick="DeleteRecipe">
                             🗑️ Delete
@@ -396,9 +402,13 @@
 
         try
         {
+            // Auto-delete from disk
+            await SyncService.AutoDeleteRecipeAsync(RecipeId, _recipe?.Title ?? "");
+            
             var success = await RecipeApi.DeleteRecipeAsync(RecipeId);
             if (success)
             {
+                ToastService.ShowSuccess("Recipe deleted successfully");
                 Navigation.NavigateTo("/recipes");
             }
             else
@@ -409,6 +419,28 @@
         catch (Exception ex)
         {
             _errorMessage = $"Failed to delete recipe: {ex.Message}";
+        }
+    }
+
+    private async Task ExportToDisk()
+    {
+        if (_recipe == null) return;
+
+        try
+        {
+            var filePath = await SyncService.AutoSaveRecipeAsync(_recipe);
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                ToastService.ShowSuccess($"Recipe exported to: {Path.GetFileName(filePath)}");
+            }
+            else
+            {
+                ToastService.ShowError("Failed to export recipe");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
         }
     }
 
