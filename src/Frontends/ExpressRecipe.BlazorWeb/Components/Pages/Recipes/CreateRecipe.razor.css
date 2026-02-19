@@ -1,0 +1,458 @@
+/* ── Page container ───────────────────────────────────────── */
+.create-recipe-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #2c3e50;
+}
+
+/* ── Page header ─────────────────────────────────────────── */
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.btn-back {
+    background: none;
+    border: 1px solid #dde1e7;
+    border-radius: 6px;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+    color: #667eea;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+.btn-back:hover { background: #f0f2ff; }
+
+.page-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    flex: 1;
+}
+
+.draft-status-area { margin-left: auto; }
+.draft-saved-label { font-size: 0.8rem; color: #27ae60; white-space: nowrap; }
+
+/* ── Draft restore banner ────────────────────────────────── */
+.draft-banner {
+    background: #fff9e6;
+    border: 1px solid #f39c12;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+}
+.draft-banner-actions { display: flex; gap: 0.5rem; margin-left: auto; }
+
+/* ── Alert ───────────────────────────────────────────────── */
+.alert {
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+}
+.alert-error { background: #fef2f2; border: 1px solid #e74c3c; color: #c0392b; }
+.alert-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.7;
+    padding: 0 0.25rem;
+}
+.alert-close:hover { opacity: 1; }
+
+/* ── Loading ─────────────────────────────────────────────── */
+.loading-container { text-align: center; padding: 3rem; color: #888; }
+
+/* ── Two-column main layout ──────────────────────────────── */
+.create-recipe-main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .create-recipe-main { grid-template-columns: 1fr; }
+}
+
+/* ── Panel cards ─────────────────────────────────────────── */
+.panel {
+    background: #fff;
+    border: 1px solid #e8ecf0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+}
+.panel-header {
+    background: #f8f9fc;
+    border-bottom: 1px solid #e8ecf0;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.panel-body {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* ── Recipe textarea ─────────────────────────────────────── */
+.recipe-textarea {
+    width: 100%;
+    min-height: 260px;
+    padding: 0.75rem;
+    border: 1px solid #dde1e7;
+    border-radius: 8px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.88rem;
+    resize: vertical;
+    line-height: 1.55;
+    color: #2c3e50;
+    background: #fafbfc;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.recipe-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(102,126,234,.12);
+}
+.recipe-textarea::placeholder { color: #aab4c0; font-style: italic; }
+
+/* ── Parse controls ──────────────────────────────────────── */
+.parse-controls { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.btn-parse { flex: 1; }
+
+/* ── Parse status row ────────────────────────────────────── */
+.parse-status-row {
+    border-radius: 6px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.parse-parsing { background: #eef2ff; color: #667eea; }
+.parse-success  { background: #edfaf1; color: #27ae60; }
+.parse-warning  { background: #fff9e6; color: #e67e22; }
+.parse-info     { background: #f0f4ff; color: #2980b9; }
+
+/* ── Suggestion box ──────────────────────────────────────── */
+.suggestion-box {
+    background: #fffbeb;
+    border: 1px solid #f6c90e;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.suggestion-actions { display: flex; gap: 0.4rem; margin-left: auto; }
+
+/* ── Preview panel ───────────────────────────────────────── */
+.preview-empty {
+    text-align: center;
+    color: #9aa5b4;
+    padding: 2rem 1rem;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+.preview-content { display: flex; flex-direction: column; gap: 0.75rem; }
+.preview-title { margin: 0; font-size: 1.25rem; font-weight: 700; color: #2c3e50; }
+.preview-description { margin: 0; font-size: 0.9rem; color: #7f8c8d; }
+.preview-meta { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.meta-chip {
+    background: #f0f4ff;
+    border: 1px solid #d0d9f5;
+    border-radius: 20px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.78rem;
+    color: #4a6cf7;
+    white-space: nowrap;
+}
+.preview-section h3 {
+    margin: 0 0 0.4rem 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 1px solid #f0f0f0;
+    padding-bottom: 0.25rem;
+}
+.preview-ingredients {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.88rem;
+    line-height: 1.7;
+    color: #2c3e50;
+}
+.ing-qty { font-weight: 600; margin-right: 0.2rem; color: #667eea; }
+.ing-notes { color: #7f8c8d; font-style: italic; }
+.preview-steps {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.88rem;
+    line-height: 1.7;
+    color: #2c3e50;
+}
+.preview-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+/* ── Badges ──────────────────────────────────────────────── */
+.badge {
+    border-radius: 12px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.badge-ai   { background: #667eea; color: #fff; }
+.badge-diet { background: #27ae60; color: #fff; }
+
+/* ── Form sections ───────────────────────────────────────── */
+.form-section {
+    background: #fff;
+    border: 1px solid #e8ecf0;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,.04);
+}
+.form-section h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+/* ── Form grid ───────────────────────────────────────────── */
+.form-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+@media (max-width: 600px) {
+    .form-grid-2 { grid-template-columns: 1fr; }
+}
+
+.form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+.form-group label { font-size: 0.85rem; font-weight: 600; color: #4a5568; }
+
+.form-control {
+    border: 1px solid #dde1e7;
+    border-radius: 6px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.9rem;
+    color: #2c3e50;
+    background: #fff;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-control:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,.12);
+}
+.form-control-sm { font-size: 0.85rem; padding: 0.35rem 0.6rem; }
+
+/* ── Tag chips ───────────────────────────────────────────── */
+.tag-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.4rem; }
+.tag-chip {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 20px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.8rem;
+    color: #4338ca;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.tag-chip button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #818cf8;
+    font-size: 0.9rem;
+    padding: 0;
+    line-height: 1;
+}
+.tag-chip button:hover { color: #e74c3c; }
+
+/* ── Dietary checkbox grid ───────────────────────────────── */
+.checkbox-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+}
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.88rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* ── Sources ─────────────────────────────────────────────── */
+.source-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+.source-form-row .form-control { flex: 1; min-width: 120px; }
+.source-form-row select { flex: 0 0 auto; }
+
+.source-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+.source-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: #f8f9fc;
+    border: 1px solid #e8ecf0;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.88rem;
+    flex-wrap: wrap;
+}
+.source-type-badge {
+    background: #667eea;
+    color: #fff;
+    border-radius: 4px;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.source-name { font-weight: 600; }
+.source-author { color: #7f8c8d; }
+.source-url { color: #667eea; text-decoration: none; font-size: 0.82rem; }
+.source-url:hover { text-decoration: underline; }
+.btn-icon-sm {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0 0.25rem;
+    margin-left: auto;
+    opacity: 0.65;
+}
+.btn-icon-sm:hover { opacity: 1; }
+
+/* ── Image section ───────────────────────────────────────── */
+.image-section { display: flex; flex-direction: column; gap: 1rem; }
+.image-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 600px) { .image-inputs { grid-template-columns: 1fr; } }
+.image-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+.image-preview img {
+    max-width: 100%;
+    max-height: 250px;
+    border-radius: 8px;
+    border: 1px solid #e8ecf0;
+    object-fit: cover;
+}
+
+/* ── Form actions ────────────────────────────────────────── */
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 0;
+    flex-wrap: wrap;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn {
+    border: none;
+    border-radius: 7px;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: opacity 0.15s, box-shadow 0.15s;
+    text-decoration: none;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #667eea; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #5a6fd6; box-shadow: 0 2px 8px rgba(102,126,234,.4); }
+.btn-secondary { background: #6c757d; color: #fff; }
+.btn-secondary:hover:not(:disabled) { background: #5a6268; }
+.btn-outline { background: transparent; border: 1px solid #dde1e7; color: #495057; }
+.btn-outline:hover:not(:disabled) { background: #f8f9fc; }
+.btn-sm { padding: 0.35rem 0.85rem; font-size: 0.82rem; }
+.btn-tiny { padding: 0.2rem 0.5rem; font-size: 0.78rem; border-radius: 4px; }
+.btn-warning { background: #f39c12; color: #fff; border: none; }
+.btn-warning:hover { background: #e08e0b; }
+.btn-ghost { background: transparent; border: 1px solid #dde1e7; color: #6c757d; }
+.btn-ghost:hover { background: #f0f0f0; }
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.spinner {
+    width: 32px; height: 32px;
+    border: 3px solid #e8ecf0;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 0.5rem;
+}
+.spinner-small {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+}
+.btn-primary .spinner-small { border-top-color: #fff; }
+.btn-outline .spinner-small { border-color: rgba(100,100,100,.2); border-top-color: #495057; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Empty message ───────────────────────────────────────── */
+.empty-message { color: #9aa5b4; font-size: 0.88rem; margin: 0.5rem 0; }
+
+/* ── Unauthorized ────────────────────────────────────────── */
+.unauthorized-container {
+    max-width: 400px;
+    margin: 4rem auto;
+    text-align: center;
+    padding: 2rem;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+}

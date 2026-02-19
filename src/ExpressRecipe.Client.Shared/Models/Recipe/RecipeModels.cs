@@ -13,6 +13,8 @@ public class RecipeDto
     public string Difficulty { get; set; } = "Medium"; // Easy, Medium, Hard
     public string? Source { get; set; }
     public string? SourceUrl { get; set; }
+    public string? Cuisine { get; set; }
+    public string? Category { get; set; }
     public List<RecipeIngredientDto> Ingredients { get; set; } = new();
     public List<RecipeStepDto> Steps { get; set; } = new();
     public List<string> Tags { get; set; } = new();
@@ -96,6 +98,8 @@ public class CreateRecipeRequest
     public string Difficulty { get; set; } = "Medium";
     public string? Source { get; set; }
     public string? SourceUrl { get; set; }
+    public string? Cuisine { get; set; }
+    public string? Category { get; set; }
     public List<CreateRecipeIngredientRequest> Ingredients { get; set; } = new();
     public List<CreateRecipeStepRequest> Steps { get; set; } = new();
     public List<string> Tags { get; set; } = new();
@@ -150,4 +154,41 @@ public class RecipeImportValidationResult
     public bool IsValid { get; set; }
     public List<string> Errors { get; set; } = new();
     public List<string> Warnings { get; set; } = new();
+}
+
+public class ParsedRecipeResult
+{
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public int PrepTimeMinutes { get; set; }
+    public int CookTimeMinutes { get; set; }
+    public int Servings { get; set; } = 4;
+    public string Difficulty { get; set; } = "Medium";
+    public string? Cuisine { get; set; }
+    public string? Category { get; set; }
+    public List<CreateRecipeIngredientRequest> Ingredients { get; set; } = new();
+    public List<CreateRecipeStepRequest> Steps { get; set; } = new();
+    public List<string> Tags { get; set; } = new();
+    public List<string> DietaryInfo { get; set; } = new();
+    public double Confidence { get; set; }
+    public bool IsAIParsed { get; set; }
+}
+
+public class RecipeSourceDto
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Type { get; set; } = "Website";
+    public string Name { get; set; } = string.Empty;
+    public string? Url { get; set; }
+    public string? Author { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class RecipeDraftData
+{
+    public Guid DraftId { get; set; } = Guid.NewGuid();
+    public string RecipeText { get; set; } = string.Empty;
+    public CreateRecipeRequest RecipeData { get; set; } = new();
+    public List<RecipeSourceDto> Sources { get; set; } = new();
+    public DateTime SavedAt { get; set; } = DateTime.UtcNow;
 }

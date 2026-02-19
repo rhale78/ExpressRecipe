@@ -1,288 +1,500 @@
 @page "/recipes/create"
 @page "/recipes/{RecipeId:guid}/edit"
 @rendermode InteractiveServer
+@implements IDisposable
 @using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Models.AI
+@using Blazored.LocalStorage
+@using System.Text.RegularExpressions
 @inject IRecipeApiClient RecipeApi
+@inject IAIApiClient AIApi
+@inject ILocalStorageService LocalStorage
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
-<PageTitle>@(_isEditMode ? "Edit Recipe" : "Create Recipe") - ExpressRecipe</PageTitle>
+<PageTitle>@(string.IsNullOrWhiteSpace(_recipe.Title) ? (_isEditMode ? "Edit Recipe" : "Create New Recipe") : _recipe.Title) - ExpressRecipe</PageTitle>
 
 <AuthorizeView>
     <Authorized>
-<div class="create-recipe-container">
-    <!-- Header -->
-    <div class="create-header">
-        <button class="btn btn-outline" @onclick="GoBack">
-            ← Cancel
-        </button>
-        <h1>@(_isEditMode ? "Edit Recipe" : "Create New Recipe")</h1>
-    </div>
+        <div class="create-recipe-page">
 
-    @if (_isLoading)
-    {
-        <div class="loading-container">
-            <div class="spinner"></div>
-            <p>Loading recipe...</p>
-        </div>
-    }
-    else
-    {
-        <div class="recipe-form">
-            <!-- Basic Information -->
-            <div class="form-section">
-                <h2>Basic Information</h2>
-
-                <div class="form-group">
-                    <label>Recipe Title *</label>
-                    <input type="text" class="form-control" @bind="_recipe.Title" placeholder="E.g., Homemade Chocolate Chip Cookies" />
-                </div>
-
-                <div class="form-group">
-                    <label>Description *</label>
-                    <textarea class="form-control" @bind="_recipe.Description" rows="4"
-                              placeholder="Brief description of your recipe..."></textarea>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Prep Time (minutes) *</label>
-                        <input type="number" class="form-control" @bind="_recipe.PrepTimeMinutes" min="0" />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Cook Time (minutes) *</label>
-                        <input type="number" class="form-control" @bind="_recipe.CookTimeMinutes" min="0" />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Servings *</label>
-                        <input type="number" class="form-control" @bind="_recipe.Servings" min="1" />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Difficulty</label>
-                        <select class="form-control" @bind="_recipe.Difficulty">
-                            <option value="Easy">Easy</option>
-                            <option value="Medium">Medium</option>
-                            <option value="Hard">Hard</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Image URL (optional)</label>
-                    <input type="url" class="form-control" @bind="_recipe.ImageUrl" placeholder="https://example.com/image.jpg" />
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Source (optional)</label>
-                        <input type="text" class="form-control" @bind="_recipe.Source" placeholder="E.g., Grandma's cookbook" />
-                    </div>
-
-                    <div class="form-group">
-                        <label>Source URL (optional)</label>
-                        <input type="url" class="form-control" @bind="_recipe.SourceUrl" placeholder="https://..." />
-                    </div>
+            <div class="page-header">
+                <button class="btn-back" @onclick="GoBack">← Back</button>
+                <h1 class="page-title">@(_isEditMode ? "✏️ Edit Recipe" : "📝 Create New Recipe")</h1>
+                <div class="draft-status-area">
+                    @if (_draftSavedAt != null)
+                    {
+                        <span class="draft-saved-label">🟢 Draft saved @_draftSavedAt</span>
+                    }
                 </div>
             </div>
 
-            <!-- Ingredients -->
-            <div class="form-section">
-                <div class="section-header">
-                    <h2>Ingredients</h2>
-                    <button class="btn btn-outline btn-sm" @onclick="AddIngredient">
-                        ➕ Add Ingredient
-                    </button>
+            @if (_showDraftRestoreBanner)
+            {
+                <div class="draft-banner">
+                    <span>📝 Draft found from @_draftRestoreTime. Restore your work?</span>
+                    <div class="draft-banner-actions">
+                        <button class="btn btn-sm btn-primary" @onclick="RestoreDraftAsync">Restore</button>
+                        <button class="btn btn-sm btn-outline" @onclick="DismissDraft">Dismiss</button>
+                    </div>
                 </div>
+            }
 
-                @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
-                {
-                    var index = _recipe.Ingredients.IndexOf(ingredient);
-                    <div class="ingredient-row">
-                        <div class="ingredient-fields">
-                            <input type="number"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Quantity"
-                                   placeholder="Qty"
-                                   step="0.1"
-                                   style="width: 80px;" />
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-error">
+                    <strong>Error:</strong> @_errorMessage
+                    <button class="alert-close" @onclick="ClearError">×</button>
+                </div>
+            }
 
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Unit"
-                                   placeholder="Unit"
-                                   style="width: 100px;" />
+            @if (_isLoading)
+            {
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Loading recipe...</p>
+                </div>
+            }
+            else
+            {
+                <div class="create-recipe-main">
 
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Name"
-                                   placeholder="Ingredient name"
-                                   style="flex: 1;" />
+                    <!-- Left: Paste & Parse -->
+                    <div class="panel paste-panel">
+                        <div class="panel-header"><span>📋 Paste Your Recipe</span></div>
+                        <div class="panel-body">
+                            <textarea class="recipe-textarea"
+                                      value="@_recipeText"
+                                      @oninput="OnRecipeTextChanged"
+                                      placeholder="@ExamplePlaceholderText"></textarea>
 
-                            <input type="text"
-                                   class="form-control form-control-sm"
-                                   @bind="ingredient.Notes"
-                                   placeholder="Notes (optional)"
-                                   style="flex: 1;" />
+                            <div class="parse-controls">
+                                <button class="btn btn-primary btn-parse"
+                                        @onclick="ParseWithAIAsync"
+                                        disabled="@(_isParsing || string.IsNullOrWhiteSpace(_recipeText))">
+                                    @if (_isParsing)
+                                    {
+                                        <span class="spinner-small"></span><span>Analyzing...</span>
+                                    }
+                                    else
+                                    {
+                                        <span>✨ Parse with AI</span>
+                                    }
+                                </button>
+                                <button class="btn btn-outline"
+                                        @onclick="ParseWithRegexManual"
+                                        disabled="@string.IsNullOrWhiteSpace(_recipeText)">
+                                    🔄 Smart Parse
+                                </button>
+                            </div>
 
-                            <label class="checkbox-label">
-                                <input type="checkbox" @bind="ingredient.IsOptional" />
-                                Optional
-                            </label>
+                            @if (_isParsing)
+                            {
+                                <div class="parse-status-row parse-parsing">
+                                    <span class="spinner-small"></span>
+                                    <span>AI is analyzing your recipe...</span>
+                                </div>
+                            }
+                            else if (_parseStatus == "ai")
+                            {
+                                <div class="parse-status-row parse-success">✅ AI parsed · @ConfidenceLabel</div>
+                            }
+                            else if (_parseStatus == "ai-fallback")
+                            {
+                                <div class="parse-status-row parse-warning">⚠️ AI unavailable, using smart parsing</div>
+                            }
+                            else if (_parseStatus == "regex")
+                            {
+                                <div class="parse-status-row parse-info">🔍 Smart parsed · @ConfidenceLabel</div>
+                            }
+
+                            @foreach (var suggestion in _unitSuggestions)
+                            {
+                                var s = suggestion;
+                                <div class="suggestion-box">
+                                    <span>💡 Did you mean '<strong>@s.Suggested</strong>' instead of '<strong>@s.Original</strong>' in "@s.Context"?</span>
+                                    <div class="suggestion-actions">
+                                        <button class="btn btn-tiny btn-warning" @onclick="() => AcceptSuggestion(s)">Accept</button>
+                                        <button class="btn btn-tiny btn-ghost" @onclick="() => DismissSuggestion(s)">Dismiss</button>
+                                    </div>
+                                </div>
+                            }
                         </div>
-                        <button class="btn-icon btn-danger" @onclick="HandleRemoveIngredient">
-                            🗑️
-                        </button>
                     </div>
-                }
 
-                @if (!_recipe.Ingredients.Any())
-                {
-                    <p class="empty-message">No ingredients added yet. Click "Add Ingredient" to start.</p>
-                }
-            </div>
+                    <!-- Right: Live Preview -->
+                    <div class="panel preview-panel">
+                        <div class="panel-header">
+                            <span>👁️ Live Preview</span>
+                            @if (_parsed.IsAIParsed)
+                            {
+                                <span class="badge badge-ai">AI</span>
+                            }
+                        </div>
+                        <div class="panel-body">
+                            @if (string.IsNullOrWhiteSpace(_parsed.Title) && !_parsed.Ingredients.Any() && !_parsed.Steps.Any())
+                            {
+                                <div class="preview-empty">
+                                    <p>👨‍🍳 Paste a recipe on the left to see a structured preview here.</p>
+                                    <p>The parser will automatically detect ingredients, steps, times, and more.</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="preview-content">
+                                    @if (!string.IsNullOrWhiteSpace(_parsed.Title))
+                                    {
+                                        <h2 class="preview-title">@_parsed.Title</h2>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(_parsed.Description))
+                                    {
+                                        <p class="preview-description">@_parsed.Description</p>
+                                    }
+                                    <div class="preview-meta">
+                                        @if (_parsed.PrepTimeMinutes > 0)
+                                        {
+                                            <span class="meta-chip">⏱️ Prep: @_parsed.PrepTimeMinutes min</span>
+                                        }
+                                        @if (_parsed.CookTimeMinutes > 0)
+                                        {
+                                            <span class="meta-chip">🍳 Cook: @_parsed.CookTimeMinutes min</span>
+                                        }
+                                        @if (_parsed.PrepTimeMinutes > 0 && _parsed.CookTimeMinutes > 0)
+                                        {
+                                            <span class="meta-chip">⏰ Total: @(_parsed.PrepTimeMinutes + _parsed.CookTimeMinutes) min</span>
+                                        }
+                                        @if (_parsed.Servings > 0)
+                                        {
+                                            <span class="meta-chip">🍴 @_parsed.Servings servings</span>
+                                        }
+                                        <span class="meta-chip">🎯 @_parsed.Difficulty</span>
+                                        @if (!string.IsNullOrWhiteSpace(_parsed.Cuisine))
+                                        {
+                                            <span class="meta-chip">🌍 @_parsed.Cuisine</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(_parsed.Category))
+                                        {
+                                            <span class="meta-chip">🏷️ @_parsed.Category</span>
+                                        }
+                                    </div>
 
-            <!-- Instructions -->
-            <div class="form-section">
-                <div class="section-header">
-                    <h2>Instructions</h2>
-                    <button class="btn btn-outline btn-sm" @onclick="AddStep">
-                        ➕ Add Step
-                    </button>
+                                    @if (_parsed.Ingredients.Any())
+                                    {
+                                        <div class="preview-section">
+                                            <h3>Ingredients (@_parsed.Ingredients.Count)</h3>
+                                            <ul class="preview-ingredients">
+                                                @foreach (var ing in _parsed.Ingredients)
+                                                {
+                                                    <li>
+                                                        @if (ing.Quantity > 0)
+                                                        {
+                                                            <span class="ing-qty">@FormatQuantity(ing.Quantity) @ing.Unit</span>
+                                                        }
+                                                        <span>@ing.Name</span>
+                                                        @if (!string.IsNullOrWhiteSpace(ing.Notes))
+                                                        {
+                                                            <span class="ing-notes">, @ing.Notes</span>
+                                                        }
+                                                    </li>
+                                                }
+                                            </ul>
+                                        </div>
+                                    }
+
+                                    @if (_parsed.Steps.Any())
+                                    {
+                                        <div class="preview-section">
+                                            <h3>Instructions (@_parsed.Steps.Count steps)</h3>
+                                            <ol class="preview-steps">
+                                                @foreach (var step in _parsed.Steps)
+                                                {
+                                                    <li>@step.Instruction</li>
+                                                }
+                                            </ol>
+                                        </div>
+                                    }
+
+                                    @if (_parsed.DietaryInfo.Any())
+                                    {
+                                        <div class="preview-tags">
+                                            @foreach (var diet in _parsed.DietaryInfo)
+                                            {
+                                                <span class="badge badge-diet">@diet</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
                 </div>
 
-                @foreach (var step in _recipe.Steps.OrderBy(s => s.OrderIndex))
-                {
-                    var index = _recipe.Steps.IndexOf(step);
-                    <div class="step-row">
-                        <div class="step-number">@(step.OrderIndex)</div>
-                        <div class="step-fields">
-                            <textarea class="form-control"
-                                      @bind="step.Instruction"
-                                      placeholder="Describe this step in detail..."
-                                      rows="3"></textarea>
-                            <div class="step-meta">
-                                <input type="number"
-                                       class="form-control form-control-sm"
-                                       @bind="step.DurationMinutes"
-                                       placeholder="Duration (min)"
-                                       min="0"
-                                       style="width: 150px;" />
-                                <input type="text"
-                                       class="form-control form-control-sm"
-                                       @bind="step.Tips"
-                                       placeholder="Tips (optional)"
-                                       style="flex: 1;" />
+                <!-- Recipe Details -->
+                <div class="form-section">
+                    <h2>📋 Recipe Details</h2>
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label>Title *</label>
+                            <input type="text" class="form-control"
+                                   value="@_recipe.Title"
+                                   @onchange="OnTitleChanged"
+                                   placeholder="Recipe title" />
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <input type="text" class="form-control"
+                                   value="@_recipe.Description"
+                                   @onchange="OnDescriptionChanged"
+                                   placeholder="Brief description..." />
+                        </div>
+                        <div class="form-group">
+                            <label>Category</label>
+                            <select class="form-control" @onchange="OnCategoryChanged">
+                                <option value="" selected="@(string.IsNullOrEmpty(_recipe.Category))">-- Select Category --</option>
+                                @foreach (var cat in _categoryOptions)
+                                {
+                                    var cv = cat;
+                                    <option value="@cv" selected="@(_recipe.Category == cv)">@cv</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Cuisine</label>
+                            <select class="form-control" @onchange="OnCuisineChanged">
+                                <option value="" selected="@(string.IsNullOrEmpty(_recipe.Cuisine))">-- Select Cuisine --</option>
+                                @foreach (var cui in _cuisineOptions)
+                                {
+                                    var cv = cui;
+                                    <option value="@cv" selected="@(_recipe.Cuisine == cv)">@cv</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Difficulty</label>
+                            <select class="form-control" @onchange="OnDifficultyChanged">
+                                @foreach (var diff in new[] { "Easy", "Medium", "Hard" })
+                                {
+                                    var dv = diff;
+                                    <option value="@dv" selected="@(_recipe.Difficulty == dv)">@dv</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Prep Time (min)</label>
+                            <input type="number" class="form-control"
+                                   value="@_recipe.PrepTimeMinutes"
+                                   @onchange="OnPrepTimeChanged" min="0" />
+                        </div>
+                        <div class="form-group">
+                            <label>Cook Time (min)</label>
+                            <input type="number" class="form-control"
+                                   value="@_recipe.CookTimeMinutes"
+                                   @onchange="OnCookTimeChanged" min="0" />
+                        </div>
+                        <div class="form-group">
+                            <label>Servings</label>
+                            <input type="number" class="form-control"
+                                   value="@_recipe.Servings"
+                                   @onchange="OnServingsChanged" min="1" />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tags (comma-separated)</label>
+                        <input type="text" class="form-control"
+                               value="@_tagsInput"
+                               @onchange="OnTagsChanged"
+                               placeholder="dessert, cookies, easy, quick" />
+                        @if (_recipe.Tags.Any())
+                        {
+                            <div class="tag-chips">
+                                @foreach (var tag in _recipe.Tags)
+                                {
+                                    var t = tag;
+                                    <span class="tag-chip">@t <button type="button" @onclick="() => RemoveTag(t)">×</button></span>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="form-group">
+                        <label>Dietary Information</label>
+                        <div class="checkbox-grid">
+                            @foreach (var diet in _dietaryOptions)
+                            {
+                                var dOpt = diet;
+                                <label class="checkbox-label">
+                                    <input type="checkbox"
+                                           checked="@_recipe.DietaryInfo.Contains(dOpt)"
+                                           @onchange="e => ToggleDietary(dOpt, (bool)(e.Value ?? false))" />
+                                    @dOpt
+                                </label>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" @bind="_recipe.IsPublic" />
+                            <span>Make this recipe public (visible to other users)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Sources -->
+                <div class="form-section">
+                    <h2>📎 Sources</h2>
+                    <div class="source-add-form">
+                        <div class="source-form-row">
+                            <select class="form-control form-control-sm" @bind="_newSourceType">
+                                <option value="Website">Website</option>
+                                <option value="Book">Book</option>
+                                <option value="Person">Person</option>
+                                <option value="Video">Video</option>
+                                <option value="TVShow">TV Show</option>
+                                <option value="Magazine">Magazine</option>
+                            </select>
+                            <input type="text" class="form-control"
+                                   @bind="_newSourceName"
+                                   placeholder="@GetSourceNamePlaceholder()" />
+                            @if (_newSourceType == "Website" || _newSourceType == "Video")
+                            {
+                                <input type="text" class="form-control" @bind="_newSourceUrl" placeholder="URL" />
+                            }
+                            @if (_newSourceType == "Book" || _newSourceType == "Person" || _newSourceType == "Magazine")
+                            {
+                                <input type="text" class="form-control"
+                                       @bind="_newSourceAuthor"
+                                       placeholder="@GetSourceAuthorPlaceholder()" />
+                            }
+                            @if (_newSourceType == "TVShow")
+                            {
+                                <input type="text" class="form-control" @bind="_newSourceNotes" placeholder="Episode / URL" />
+                            }
+                            <button class="btn btn-outline btn-sm" type="button" @onclick="AddSource">+ Add</button>
+                        </div>
+                        <div class="form-group" style="margin-top:0.5rem;">
+                            <input type="text" class="form-control form-control-sm"
+                                   @bind="_sourceSearchTerm"
+                                   placeholder="🔍 Search sources by name..." />
+                        </div>
+                    </div>
+                    @if (_sources.Any())
+                    {
+                        <div class="source-list">
+                            @foreach (var source in FilteredSources)
+                            {
+                                var src = source;
+                                <div class="source-item">
+                                    <span class="source-type-badge">@src.Type</span>
+                                    <span class="source-name">@src.Name</span>
+                                    @if (!string.IsNullOrWhiteSpace(src.Author))
+                                    {
+                                        <span class="source-author">by @src.Author</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(src.Url))
+                                    {
+                                        <a href="@src.Url" target="_blank" class="source-url">🔗 Link</a>
+                                    }
+                                    <button class="btn-icon-sm btn-danger-sm" type="button" @onclick="() => RemoveSource(src)">🗑️</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="empty-message">No sources added yet.</p>
+                    }
+                </div>
+
+                <!-- Image -->
+                <div class="form-section">
+                    <h2>🖼️ Recipe Image</h2>
+                    <div class="image-section">
+                        <div class="image-inputs">
+                            <div class="form-group">
+                                <label>🔗 Image URL</label>
+                                <input type="url" class="form-control"
+                                       value="@_recipe.ImageUrl"
+                                       @onchange="OnImageUrlChanged"
+                                       placeholder="https://example.com/image.jpg" />
+                            </div>
+                            <div class="form-group">
+                                <label>📁 Upload Image</label>
+                                <InputFile OnChange="OnImageFileSelectedAsync" accept="image/*" class="form-control" />
                             </div>
                         </div>
-                        <button class="btn-icon btn-danger" @onclick="HandleRemoveStep">
-                            🗑️
-                        </button>
-                    </div>
-                }
-
-                @if (!_recipe.Steps.Any())
-                {
-                    <p class="empty-message">No steps added yet. Click "Add Step" to start.</p>
-                }
-            </div>
-
-            <!-- Tags and Dietary Info -->
-            <div class="form-section">
-                <h2>Tags & Dietary Information</h2>
-
-                <div class="form-group">
-                    <label>Tags (comma-separated)</label>
-                    <input type="text" class="form-control" @bind="_tagsInput"
-                           placeholder="E.g., dessert, cookies, easy, quick" />
-                    <small>Separate tags with commas</small>
-                </div>
-
-                <div class="form-group">
-                    <label>Dietary Information</label>
-                    <div class="checkbox-grid">
-                        @foreach (var diet in _dietaryOptions)
+                        @if (!string.IsNullOrWhiteSpace(_imagePreviewUrl))
                         {
-                            <label class="checkbox-label">
-                                <input type="checkbox"
-                                       checked="@_recipe.DietaryInfo.Contains(diet)"
-                                       @onchange="e => ToggleDietary(diet, (bool)e.Value!)" />
-                                @diet
-                            </label>
+                            <div class="image-preview">
+                                <img src="@_imagePreviewUrl" alt="Recipe preview" />
+                                <button class="btn btn-sm btn-outline" type="button" @onclick="ClearImage">× Remove</button>
+                            </div>
                         }
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" @bind="_recipe.IsPublic" />
-                        Make this recipe public (visible to other users)
-                    </label>
+                <!-- Actions -->
+                <div class="form-actions">
+                    <button class="btn btn-outline" type="button" @onclick="GoBack">Cancel</button>
+                    <button class="btn btn-secondary" type="button" @onclick="SaveDraftAsync">💾 Save Draft</button>
+                    <button class="btn btn-primary" type="button" @onclick="PublishRecipeAsync" disabled="@(!IsValid() || _isSaving)">
+                        @if (_isSaving)
+                        {
+                            <span class="spinner-small"></span><span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>@(_isEditMode ? "💾 Save Changes" : "✅ Publish Recipe")</span>
+                        }
+                    </button>
                 </div>
-            </div>
-
-            <!-- Actions -->
-            <div class="form-actions">
-                <button class="btn btn-outline" @onclick="GoBack">
-                    Cancel
-                </button>
-                <button class="btn btn-primary" @onclick="SaveRecipe" disabled="@(!IsValid() || _isSaving)">
-                    @if (_isSaving)
-                    {
-                        <span class="spinner-small"></span>
-                        <span>Saving...</span>
-                    }
-                    else
-                    {
-                        <span>@(_isEditMode ? "💾 Save Changes" : "✅ Create Recipe")</span>
-                    }
-                </button>
-            </div>
+            }
         </div>
-    }
-
-    <!-- Error Messages -->
-    @if (!string.IsNullOrEmpty(_errorMessage))
-    {
-        <div class="alert alert-error">
-            <strong>Error:</strong> @_errorMessage
-        </div>
-    }
-</div>
     </Authorized>
     <NotAuthorized>
         <div class="unauthorized-container">
             <h2>Authentication Required</h2>
-            <p>Please <a href="/login">log in</a> to access this page.</p>
+            <p>Please <a href="/login">log in</a> to create recipes.</p>
         </div>
     </NotAuthorized>
 </AuthorizeView>
 
 @code {
-    [Parameter]
-    public Guid? RecipeId { get; set; }
+    [Parameter] public Guid? RecipeId { get; set; }
 
     private bool _isEditMode => RecipeId.HasValue;
+    private string DraftKey => _isEditMode ? $"recipe_draft_edit_{RecipeId}" : "recipe_draft_create";
+    private string ConfidenceLabel =>
+        _parseConfidence >= 80 ? $"{_parseConfidence:0}% confident" :
+        _parseConfidence >= 50 ? "Estimated - please verify" :
+        "Basic parse - please review";
+
     private bool _isLoading = false;
     private bool _isSaving = false;
-    private string? _errorMessage;
-    private string _tagsInput = string.Empty;
+    private bool _isParsing = false;
+    private string? _parseStatus = null;
+    private double _parseConfidence = 0;
+    private string? _errorMessage = null;
+    private string? _draftSavedAt = null;
+    private bool _showDraftRestoreBanner = false;
+    private string? _draftRestoreTime = null;
+    private bool _afterRenderInitialized = false;
+    private bool _hasChangedSinceLastSave = false;
+    private HashSet<string> _userEditedFields = new();
+    private System.Timers.Timer? _debounceTimer;
+    private System.Timers.Timer? _autoSaveTimer;
 
-    private readonly string[] _dietaryOptions = new[]
-    {
-        "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free",
-        "Keto", "Paleo", "Low-Carb", "Low-Fat"
-    };
-
+    private string _recipeText = string.Empty;
+    private ParsedRecipeResult _parsed = new();
     private CreateRecipeRequest _recipe = new()
     {
         Title = string.Empty,
         Description = string.Empty,
-        PrepTimeMinutes = 15,
-        CookTimeMinutes = 30,
+        PrepTimeMinutes = 0,
+        CookTimeMinutes = 0,
         Servings = 4,
         Difficulty = "Medium",
         Ingredients = new(),
@@ -292,177 +504,658 @@
         IsPublic = true
     };
 
+    private string _tagsInput = string.Empty;
+    private static readonly string[] _dietaryOptions =
+        { "Vegetarian", "Vegan", "Gluten-Free", "Dairy-Free", "Keto", "Paleo", "Low-Carb", "Low-Fat" };
+    private static readonly string[] _categoryOptions =
+        { "Appetizer", "Breakfast", "Bread", "Dessert", "Drinks", "Main Course", "Salad", "Seafood", "Snack", "Soup", "Other" };
+    private static readonly string[] _cuisineOptions =
+        { "American", "Chinese", "French", "Greek", "Indian", "Italian", "Japanese", "Mediterranean", "Mexican", "Thai", "Other" };
+
+    private List<SourceEntry> _sources = new();
+    private string _newSourceType = "Website";
+    private string _newSourceName = string.Empty;
+    private string _newSourceUrl = string.Empty;
+    private string _newSourceAuthor = string.Empty;
+    private string _newSourceNotes = string.Empty;
+    private string _sourceSearchTerm = string.Empty;
+    private string? _imagePreviewUrl = null;
+    private List<UnitSuggestion> _unitSuggestions = new();
+
+    private const string ExamplePlaceholderText =
+        "Chocolate Chip Cookies\nMakes 24 cookies | Prep: 15 min | Cook: 12 min\n\nIngredients:\n2 1/4 cups all-purpose flour\n1 tsp baking soda\n1 tsp salt\n1 cup butter, softened\n3/4 cup granulated sugar\n3/4 cup packed brown sugar\n2 large eggs\n2 tsp vanilla extract\n2 cups chocolate chips\n\nInstructions:\n1. Preheat oven to 375 degrees F.\n2. Mix flour, baking soda and salt in a bowl.\n3. Beat butter and both sugars until creamy.\n4. Add eggs and vanilla; beat well.\n5. Gradually blend in flour mixture.\n6. Stir in chocolate chips.\n7. Drop rounded tablespoons onto ungreased baking sheets.\n8. Bake 9 to 11 minutes or until golden brown.";
+
+    private IEnumerable<SourceEntry> FilteredSources =>
+        string.IsNullOrWhiteSpace(_sourceSearchTerm)
+            ? _sources
+            : _sources.Where(s =>
+                s.Name.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (s.Author?.Contains(_sourceSearchTerm, StringComparison.OrdinalIgnoreCase) ?? false));
+
     protected override async Task OnInitializedAsync()
     {
-        if (_isEditMode)
+        if (_isEditMode) await LoadExistingRecipeAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_afterRenderInitialized)
         {
-            await LoadRecipeAsync();
+            _afterRenderInitialized = true;
+            await CheckForDraftAsync();
+            InitializeTimers();
         }
     }
 
-    private async Task LoadRecipeAsync()
+    public void Dispose()
+    {
+        _debounceTimer?.Stop(); _debounceTimer?.Dispose();
+        _autoSaveTimer?.Stop(); _autoSaveTimer?.Dispose();
+    }
+
+    private void InitializeTimers()
+    {
+        _debounceTimer = new System.Timers.Timer(500) { AutoReset = false };
+        _debounceTimer.Elapsed += async (sender, e) =>
+        {
+            try { await InvokeAsync(() => { RunRegexParse(); StateHasChanged(); }); }
+            catch (ObjectDisposedException) { }
+        };
+        _autoSaveTimer = new System.Timers.Timer(30_000) { AutoReset = true };
+        _autoSaveTimer.Elapsed += async (sender, e) =>
+        {
+            try
+            {
+                if (_hasChangedSinceLastSave)
+                    await InvokeAsync(async () => { await SaveDraftAsync(); StateHasChanged(); });
+            }
+            catch (ObjectDisposedException) { }
+        };
+        _autoSaveTimer.Start();
+    }
+
+    private async Task LoadExistingRecipeAsync()
     {
         _isLoading = true;
         try
         {
-            var existingRecipe = await RecipeApi.GetRecipeAsync(RecipeId!.Value);
-            if (existingRecipe != null)
+            var existing = await RecipeApi.GetRecipeAsync(RecipeId!.Value);
+            if (existing != null)
             {
-                _recipe.Title = existingRecipe.Title;
-                _recipe.Description = existingRecipe.Description;
-                _recipe.ImageUrl = existingRecipe.ImageUrl;
-                _recipe.PrepTimeMinutes = existingRecipe.PrepTimeMinutes;
-                _recipe.CookTimeMinutes = existingRecipe.CookTimeMinutes;
-                _recipe.Servings = existingRecipe.Servings;
-                _recipe.Difficulty = existingRecipe.Difficulty;
-                _recipe.Source = existingRecipe.Source;
-                _recipe.SourceUrl = existingRecipe.SourceUrl;
-                _recipe.Tags = existingRecipe.Tags;
-                _recipe.DietaryInfo = existingRecipe.DietaryInfo;
-                _recipe.IsPublic = existingRecipe.IsPublic;
-
-                _recipe.Ingredients = existingRecipe.Ingredients.Select(i => new CreateRecipeIngredientRequest
+                _recipe.Title = existing.Title;
+                _recipe.Description = existing.Description;
+                _recipe.ImageUrl = existing.ImageUrl;
+                _recipe.PrepTimeMinutes = existing.PrepTimeMinutes;
+                _recipe.CookTimeMinutes = existing.CookTimeMinutes;
+                _recipe.Servings = existing.Servings;
+                _recipe.Difficulty = existing.Difficulty;
+                _recipe.Source = existing.Source;
+                _recipe.SourceUrl = existing.SourceUrl;
+                _recipe.Cuisine = existing.Cuisine;
+                _recipe.Category = existing.Category;
+                _recipe.Tags = new List<string>(existing.Tags);
+                _recipe.DietaryInfo = new List<string>(existing.DietaryInfo);
+                _recipe.IsPublic = existing.IsPublic;
+                _recipe.Ingredients = existing.Ingredients.Select(i => new CreateRecipeIngredientRequest
                 {
-                    OrderIndex = i.OrderIndex,
-                    Name = i.Name,
-                    Quantity = i.Quantity,
-                    Unit = i.Unit,
-                    Notes = i.Notes,
-                    IsOptional = i.IsOptional,
-                    GroupName = i.GroupName
+                    OrderIndex = i.OrderIndex, Name = i.Name, Quantity = i.Quantity,
+                    Unit = i.Unit, Notes = i.Notes, IsOptional = i.IsOptional, GroupName = i.GroupName
                 }).ToList();
-
-                _recipe.Steps = existingRecipe.Steps.Select(s => new CreateRecipeStepRequest
+                _recipe.Steps = existing.Steps.Select(s => new CreateRecipeStepRequest
                 {
-                    OrderIndex = s.OrderIndex,
-                    Instruction = s.Instruction,
-                    DurationMinutes = s.DurationMinutes,
-                    Tips = s.Tips
+                    OrderIndex = s.OrderIndex, Instruction = s.Instruction,
+                    DurationMinutes = s.DurationMinutes, Tips = s.Tips
                 }).ToList();
-
                 _tagsInput = string.Join(", ", _recipe.Tags);
+                _imagePreviewUrl = _recipe.ImageUrl;
             }
         }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Failed to load recipe: {ex.Message}";
-        }
-        finally
-        {
-            _isLoading = false;
-        }
+        catch (Exception ex) { _errorMessage = $"Failed to load recipe: {ex.Message}"; }
+        finally { _isLoading = false; }
     }
 
-    private void AddIngredient()
+    private async Task CheckForDraftAsync()
     {
-        _recipe.Ingredients.Add(new CreateRecipeIngredientRequest
+        try
         {
-            OrderIndex = _recipe.Ingredients.Count + 1
-        });
-    }
-
-    private void RemoveIngredient(CreateRecipeIngredientRequest ingredient)
-    {
-        _recipe.Ingredients.Remove(ingredient);
-        // Reorder
-        for (int i = 0; i < _recipe.Ingredients.Count; i++)
-        {
-            _recipe.Ingredients[i].OrderIndex = i + 1;
+            var draft = await LocalStorage.GetItemAsync<RecipeDraftData>(DraftKey);
+            if (draft != null && !string.IsNullOrWhiteSpace(draft.RecipeText))
+            {
+                _showDraftRestoreBanner = true;
+                _draftRestoreTime = FormatTimeAgo(DateTime.UtcNow - draft.SavedAt);
+                StateHasChanged();
+            }
         }
+        catch { }
     }
 
-    private void AddStep()
+    private async Task RestoreDraftAsync()
     {
-        _recipe.Steps.Add(new CreateRecipeStepRequest
+        try
         {
-            OrderIndex = _recipe.Steps.Count + 1
-        });
-    }
-
-    private void RemoveStep(CreateRecipeStepRequest step)
-    {
-        _recipe.Steps.Remove(step);
-        // Reorder
-        for (int i = 0; i < _recipe.Steps.Count; i++)
-        {
-            _recipe.Steps[i].OrderIndex = i + 1;
+            var draft = await LocalStorage.GetItemAsync<RecipeDraftData>(DraftKey);
+            if (draft != null)
+            {
+                _recipeText = draft.RecipeText;
+                if (draft.RecipeData != null)
+                {
+                    var d = draft.RecipeData;
+                    _recipe.Title = d.Title; _recipe.Description = d.Description;
+                    _recipe.PrepTimeMinutes = d.PrepTimeMinutes; _recipe.CookTimeMinutes = d.CookTimeMinutes;
+                    _recipe.Servings = d.Servings; _recipe.Difficulty = d.Difficulty;
+                    _recipe.Cuisine = d.Cuisine; _recipe.Category = d.Category;
+                    _recipe.DietaryInfo = new List<string>(d.DietaryInfo);
+                    _recipe.Tags = new List<string>(d.Tags);
+                    _recipe.IsPublic = d.IsPublic; _recipe.ImageUrl = d.ImageUrl;
+                    _imagePreviewUrl = _recipe.ImageUrl;
+                    _tagsInput = string.Join(", ", _recipe.Tags);
+                }
+                if (draft.Sources != null)
+                    _sources = draft.Sources.Select(s => new SourceEntry
+                    {
+                        Id = s.Id, Type = s.Type, Name = s.Name,
+                        Url = s.Url, Author = s.Author, Notes = s.Notes
+                    }).ToList();
+                RunRegexParse();
+            }
         }
+        catch (Exception ex) { _errorMessage = $"Failed to restore draft: {ex.Message}"; }
+        _showDraftRestoreBanner = false;
     }
+
+    private void DismissDraft() => _showDraftRestoreBanner = false;
+
+    private async Task SaveDraftAsync()
+    {
+        try
+        {
+            var draft = new RecipeDraftData
+            {
+                RecipeText = _recipeText, SavedAt = DateTime.UtcNow,
+                RecipeData = new CreateRecipeRequest
+                {
+                    Title = _recipe.Title, Description = _recipe.Description,
+                    PrepTimeMinutes = _recipe.PrepTimeMinutes, CookTimeMinutes = _recipe.CookTimeMinutes,
+                    Servings = _recipe.Servings, Difficulty = _recipe.Difficulty,
+                    Cuisine = _recipe.Cuisine, Category = _recipe.Category,
+                    DietaryInfo = new List<string>(_recipe.DietaryInfo),
+                    Tags = new List<string>(_recipe.Tags),
+                    IsPublic = _recipe.IsPublic, ImageUrl = _recipe.ImageUrl,
+                    Ingredients = new List<CreateRecipeIngredientRequest>(_recipe.Ingredients),
+                    Steps = new List<CreateRecipeStepRequest>(_recipe.Steps)
+                },
+                Sources = _sources.Select(s => new RecipeSourceDto
+                {
+                    Id = s.Id, Type = s.Type, Name = s.Name,
+                    Url = s.Url, Author = s.Author, Notes = s.Notes
+                }).ToList()
+            };
+            await LocalStorage.SetItemAsync(DraftKey, draft);
+            _draftSavedAt = "just now";
+            _hasChangedSinceLastSave = false;
+        }
+        catch { }
+    }
+
+    private void OnRecipeTextChanged(ChangeEventArgs e)
+    {
+        _recipeText = e.Value?.ToString() ?? string.Empty;
+        _hasChangedSinceLastSave = true;
+        _debounceTimer?.Stop();
+        _debounceTimer?.Start();
+    }
+
+    private void ParseWithRegexManual() => RunRegexParse();
+
+    private void RunRegexParse()
+    {
+        if (string.IsNullOrWhiteSpace(_recipeText)) return;
+        _parsed = ParseRecipeFromText(_recipeText);
+        _parseStatus = "regex";
+        _parseConfidence = _parsed.Confidence;
+        ApplyParsedToForm(_parsed);
+        _unitSuggestions = AnalyzeUnitSuggestions(_parsed.Ingredients);
+    }
+
+    private async Task ParseWithAIAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_recipeText)) return;
+        _isParsing = true; _errorMessage = null; StateHasChanged();
+        try
+        {
+            var result = await AIApi.ExtractRecipeAsync(new RecipeExtractionRequest { RecipeText = _recipeText });
+            if (result != null)
+            {
+                _parsed = ConvertExtractedToParseResult(result);
+                _parsed.IsAIParsed = true;
+                _parseStatus = "ai";
+                _parseConfidence = result.ConfidenceScore * 100;
+                ApplyParsedToForm(_parsed);
+                _unitSuggestions = AnalyzeUnitSuggestions(_parsed.Ingredients);
+            }
+            else
+            {
+                RunRegexParse(); _parseStatus = "ai-fallback";
+            }
+        }
+        catch { RunRegexParse(); _parseStatus = "ai-fallback"; }
+        finally { _isParsing = false; }
+    }
+
+    private static ParsedRecipeResult ConvertExtractedToParseResult(ExtractedRecipeDto e)
+    {
+        var r = new ParsedRecipeResult
+        {
+            Title = e.Title, Description = e.Description,
+            PrepTimeMinutes = e.PrepTimeMinutes, CookTimeMinutes = e.CookTimeMinutes,
+            Servings = e.Servings,
+            Difficulty = string.IsNullOrWhiteSpace(e.Difficulty) ? "Medium" : e.Difficulty,
+            DietaryInfo = new List<string>(e.DietaryInfo),
+            IsAIParsed = true, Confidence = e.ConfidenceScore * 100
+        };
+        int idx = 1;
+        foreach (var ing in e.Ingredients)
+        {
+            decimal.TryParse(ing.Quantity, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var qty);
+            r.Ingredients.Add(new CreateRecipeIngredientRequest
+            {
+                OrderIndex = idx++, Name = ing.Name, Quantity = qty, Unit = ing.Unit, Notes = ing.Notes
+            });
+        }
+        for (int i = 0; i < e.Instructions.Count; i++)
+            r.Steps.Add(new CreateRecipeStepRequest { OrderIndex = i + 1, Instruction = e.Instructions[i] });
+        return r;
+    }
+
+    private void ApplyParsedToForm(ParsedRecipeResult p)
+    {
+        if (!_userEditedFields.Contains("title") && !string.IsNullOrWhiteSpace(p.Title))
+            _recipe.Title = p.Title;
+        if (!_userEditedFields.Contains("description") && !string.IsNullOrWhiteSpace(p.Description))
+            _recipe.Description = p.Description;
+        if (!_userEditedFields.Contains("prepTime") && p.PrepTimeMinutes > 0)
+            _recipe.PrepTimeMinutes = p.PrepTimeMinutes;
+        if (!_userEditedFields.Contains("cookTime") && p.CookTimeMinutes > 0)
+            _recipe.CookTimeMinutes = p.CookTimeMinutes;
+        if (!_userEditedFields.Contains("servings") && p.Servings > 0)
+            _recipe.Servings = p.Servings;
+        if (!_userEditedFields.Contains("difficulty"))
+            _recipe.Difficulty = p.Difficulty;
+        if (!_userEditedFields.Contains("cuisine") && p.Cuisine != null)
+            _recipe.Cuisine = p.Cuisine;
+        if (!_userEditedFields.Contains("category") && p.Category != null)
+            _recipe.Category = p.Category;
+        if (!_userEditedFields.Contains("dietaryInfo") && p.DietaryInfo.Any())
+            _recipe.DietaryInfo = new List<string>(p.DietaryInfo);
+        if (!_userEditedFields.Contains("tags") && p.Tags.Any())
+        {
+            _recipe.Tags = new List<string>(p.Tags);
+            _tagsInput = string.Join(", ", _recipe.Tags);
+        }
+        _recipe.Ingredients = new List<CreateRecipeIngredientRequest>(p.Ingredients);
+        _recipe.Steps = new List<CreateRecipeStepRequest>(p.Steps);
+    }
+
+    private static ParsedRecipeResult ParseRecipeFromText(string text)
+    {
+        var result = new ParsedRecipeResult();
+        if (string.IsNullOrWhiteSpace(text)) return result;
+
+        var allLines = text.Split('\n').Select(l => l.Trim()).ToArray();
+        var nonEmpty = allLines.Where(l => l.Length > 0).ToArray();
+        if (nonEmpty.Length == 0) return result;
+
+        result.Title = nonEmpty[0];
+
+        var servMatch = Regex.Match(text, @"(?:serves|makes|yields|servings?)\s*:?\s*(\d+)", RegexOptions.IgnoreCase);
+        if (servMatch.Success && int.TryParse(servMatch.Groups[1].Value, out var serv))
+            result.Servings = serv;
+
+        var prepMatch = Regex.Match(text, @"prep(?:\s*time)?\s*:?\s*(\d+)\s*(?:min(?:utes?)?|hr?s?)", RegexOptions.IgnoreCase);
+        if (prepMatch.Success && int.TryParse(prepMatch.Groups[1].Value, out var prepVal))
+            result.PrepTimeMinutes = prepVal;
+        else
+        {
+            var altPrep = Regex.Match(text, @"(\d+)\s*min(?:utes?)?\s+prep", RegexOptions.IgnoreCase);
+            if (altPrep.Success && int.TryParse(altPrep.Groups[1].Value, out var ap))
+                result.PrepTimeMinutes = ap;
+        }
+
+        var cookMatch = Regex.Match(text, @"(?:cook|bake)(?:\s*time)?\s*:?\s*(\d+)\s*(?:min(?:utes?)?|hr?s?)", RegexOptions.IgnoreCase);
+        if (cookMatch.Success && int.TryParse(cookMatch.Groups[1].Value, out var cookVal))
+            result.CookTimeMinutes = cookVal;
+        else
+        {
+            var altCook = Regex.Match(text, @"(\d+)\s*min(?:utes?)?\s+cook", RegexOptions.IgnoreCase);
+            if (altCook.Success && int.TryParse(altCook.Groups[1].Value, out var ac))
+                result.CookTimeMinutes = ac;
+        }
+
+        if (Regex.IsMatch(text, @"\b(?:easy|simple|beginner)\b", RegexOptions.IgnoreCase))
+            result.Difficulty = "Easy";
+        else if (Regex.IsMatch(text, @"\b(?:advanced|difficult|hard|complex|challenging)\b", RegexOptions.IgnoreCase))
+            result.Difficulty = "Hard";
+
+        var cuisines = new[] { "Italian", "Mexican", "Chinese", "Indian", "French", "American", "Japanese", "Mediterranean", "Thai", "Greek" };
+        foreach (var cui in cuisines)
+        {
+            if (Regex.IsMatch(text, $@"\b{cui}\b", RegexOptions.IgnoreCase))
+            { result.Cuisine = cui; break; }
+        }
+
+        var categoryMap = new (string Cat, string[] Kw)[]
+        {
+            ("Dessert",     new[] { "dessert", "cake", "cookie", "brownie", "pie", "tart", "pudding" }),
+            ("Soup",        new[] { "soup", "stew", "chowder", "bisque" }),
+            ("Salad",       new[] { "salad" }),
+            ("Bread",       new[] { "bread", "roll", "bun", "loaf", "muffin" }),
+            ("Breakfast",   new[] { "breakfast", "brunch", "pancake", "waffle" }),
+            ("Drinks",      new[] { "smoothie", "juice", "cocktail", "drink", "beverage" }),
+            ("Appetizer",   new[] { "appetizer", "starter", "dip" }),
+            ("Main Course", new[] { "main course", "entree" }),
+            ("Snack",       new[] { "snack", "chips" })
+        };
+        foreach (var (cat, kws) in categoryMap)
+        {
+            if (kws.Any(k => text.Contains(k, StringComparison.OrdinalIgnoreCase)))
+            { result.Category = cat; break; }
+        }
+
+        var dietMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Vegetarian"] = @"\bvegetarian\b",
+            ["Vegan"]      = @"\bvegan\b",
+            ["Gluten-Free"]= @"\bgluten[- ]free\b",
+            ["Dairy-Free"] = @"\bdairy[- ]free\b",
+            ["Keto"]       = @"\bketo\b",
+            ["Paleo"]      = @"\bpaleo\b",
+            ["Low-Carb"]   = @"\blow[- ]carb\b",
+            ["Low-Fat"]    = @"\blow[- ]fat\b"
+        };
+        foreach (var (diet, pattern) in dietMap)
+            if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+                result.DietaryInfo.Add(diet);
+
+        var section = "none";
+        var numberedLine = new Regex(@"^\d+[\.)\-]\s+(.+)$");
+        var ingHeader    = new Regex(@"^ingredients?:?\s*$", RegexOptions.IgnoreCase);
+        var stepHeader   = new Regex(@"^(?:instructions?|directions?|steps?|method):?\s*$", RegexOptions.IgnoreCase);
+        int stepIdx = 1, ingIdx = 1;
+
+        for (int i = 1; i < allLines.Length; i++)
+        {
+            var line = allLines[i];
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (ingHeader.IsMatch(line))  { section = "ingredients"; continue; }
+            if (stepHeader.IsMatch(line)) { section = "steps";       continue; }
+
+            if (section == "ingredients")
+            {
+                var ing = TryParseIngredientLine(line);
+                if (ing != null) { ing.OrderIndex = ingIdx++; result.Ingredients.Add(ing); }
+            }
+            else if (section == "steps")
+            {
+                var nm = numberedLine.Match(line);
+                result.Steps.Add(new CreateRecipeStepRequest
+                {
+                    OrderIndex = stepIdx++,
+                    Instruction = nm.Success ? nm.Groups[1].Value.Trim() : line
+                });
+            }
+            else
+            {
+                var ing = TryParseIngredientLine(line);
+                if (ing != null) { ing.OrderIndex = ingIdx++; result.Ingredients.Add(ing); }
+                else
+                {
+                    var nm = numberedLine.Match(line);
+                    if (nm.Success)
+                        result.Steps.Add(new CreateRecipeStepRequest
+                        { OrderIndex = stepIdx++, Instruction = nm.Groups[1].Value.Trim() });
+                }
+            }
+        }
+        result.Confidence = CalculateConfidence(result);
+        return result;
+    }
+
+    private static CreateRecipeIngredientRequest? TryParseIngredientLine(string line)
+    {
+        var match = Regex.Match(line, @"^(\d+\s+\d+/\d+|\d+[./]\d+|\d+)\s+([a-zA-Z]+\.?)\s+(.+)$");
+        if (!match.Success) return null;
+        var unit = match.Groups[2].Value.TrimEnd('.');
+        var name = match.Groups[3].Value.Trim();
+        var knownUnits = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "cup","cups","tsp","tbsp","oz","lb","lbs","g","kg","ml","l",
+            "teaspoon","teaspoons","tablespoon","tablespoons","ounce","ounces",
+            "pound","pounds","gram","grams","clove","cloves","large","medium",
+            "small","pinch","dash","can","cans","package","packages",
+            "stick","sticks","bunch","bunches","slice","slices","piece","pieces",
+            "sprig","sprigs","head","heads","sheet","sheets"
+        };
+        if (!knownUnits.Contains(unit)) return null;
+        if (!TryParseFractionQuantity(match.Groups[1].Value.Trim(), out var qty)) return null;
+        string? notes = null;
+        var commaIdx = name.IndexOf(',');
+        if (commaIdx > 0)
+        { notes = name[(commaIdx + 1)..].Trim(); name = name[..commaIdx].Trim(); }
+        var notesMatch = Regex.Match(name, @"\s*\((.+)\)\s*$");
+        if (notesMatch.Success)
+        { notes ??= notesMatch.Groups[1].Value; name = name[..notesMatch.Index].Trim(); }
+        return new CreateRecipeIngredientRequest { Name = name, Quantity = qty, Unit = unit, Notes = notes };
+    }
+
+    private static bool TryParseFractionQuantity(string s, out decimal result)
+    {
+        result = 0;
+        if (decimal.TryParse(s, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out result)) return true;
+        var frac = Regex.Match(s, @"^(\d+)/(\d+)$");
+        if (frac.Success)
+        {
+            var n = decimal.Parse(frac.Groups[1].Value);
+            var d = decimal.Parse(frac.Groups[2].Value);
+            if (d == 0) return false; result = n / d; return true;
+        }
+        var mixed = Regex.Match(s, @"^(\d+)\s+(\d+)/(\d+)$");
+        if (mixed.Success)
+        {
+            var w = decimal.Parse(mixed.Groups[1].Value);
+            var n = decimal.Parse(mixed.Groups[2].Value);
+            var d = decimal.Parse(mixed.Groups[3].Value);
+            if (d == 0) return false; result = w + n / d; return true;
+        }
+        return false;
+    }
+
+    private static double CalculateConfidence(ParsedRecipeResult r)
+    {
+        double s = 0;
+        if (!string.IsNullOrWhiteSpace(r.Title)) s += 20;
+        if (r.Ingredients.Count > 0) s += 30;
+        if (r.Steps.Count > 0) s += 30;
+        if (r.PrepTimeMinutes > 0 || r.CookTimeMinutes > 0) s += 10;
+        if (r.Servings > 1) s += 10;
+        return s;
+    }
+
+    private static List<UnitSuggestion> AnalyzeUnitSuggestions(List<CreateRecipeIngredientRequest> ingredients)
+    {
+        var suggestions = new List<UnitSuggestion>();
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["tbs"] = "tbsp", ["T"] = "tbsp",
+            ["cp"]  = "cup",  ["c."] = "cup",
+            ["oz."] = "oz",   ["tsp."] = "tsp"
+        };
+        foreach (var ing in ingredients)
+            if (map.TryGetValue(ing.Unit, out var suggested))
+                suggestions.Add(new UnitSuggestion
+                { Original = ing.Unit, Suggested = suggested,
+                  Context = $"{FormatQuantity(ing.Quantity)} {ing.Unit} {ing.Name}" });
+        return suggestions;
+    }
+
+    private void AcceptSuggestion(UnitSuggestion s)
+    {
+        foreach (var ing in _recipe.Ingredients.Where(i =>
+            string.Equals(i.Unit, s.Original, StringComparison.OrdinalIgnoreCase)))
+            ing.Unit = s.Suggested;
+        foreach (var ing in _parsed.Ingredients.Where(i =>
+            string.Equals(i.Unit, s.Original, StringComparison.OrdinalIgnoreCase)))
+            ing.Unit = s.Suggested;
+        _unitSuggestions.Remove(s);
+    }
+
+    private void DismissSuggestion(UnitSuggestion s) => _unitSuggestions.Remove(s);
+
+    private void OnTitleChanged(ChangeEventArgs e)
+    { _recipe.Title = e.Value?.ToString() ?? ""; _userEditedFields.Add("title"); _hasChangedSinceLastSave = true; }
+
+    private void OnDescriptionChanged(ChangeEventArgs e)
+    { _recipe.Description = e.Value?.ToString() ?? ""; _userEditedFields.Add("description"); _hasChangedSinceLastSave = true; }
+
+    private void OnCategoryChanged(ChangeEventArgs e)
+    { var v = e.Value?.ToString(); _recipe.Category = string.IsNullOrEmpty(v) ? null : v;
+      _userEditedFields.Add("category"); _hasChangedSinceLastSave = true; }
+
+    private void OnCuisineChanged(ChangeEventArgs e)
+    { var v = e.Value?.ToString(); _recipe.Cuisine = string.IsNullOrEmpty(v) ? null : v;
+      _userEditedFields.Add("cuisine"); _hasChangedSinceLastSave = true; }
+
+    private void OnDifficultyChanged(ChangeEventArgs e)
+    { _recipe.Difficulty = e.Value?.ToString() ?? "Medium"; _userEditedFields.Add("difficulty"); _hasChangedSinceLastSave = true; }
+
+    private void OnPrepTimeChanged(ChangeEventArgs e)
+    { if (int.TryParse(e.Value?.ToString(), out var v))
+      { _recipe.PrepTimeMinutes = v; _userEditedFields.Add("prepTime"); _hasChangedSinceLastSave = true; } }
+
+    private void OnCookTimeChanged(ChangeEventArgs e)
+    { if (int.TryParse(e.Value?.ToString(), out var v))
+      { _recipe.CookTimeMinutes = v; _userEditedFields.Add("cookTime"); _hasChangedSinceLastSave = true; } }
+
+    private void OnServingsChanged(ChangeEventArgs e)
+    { if (int.TryParse(e.Value?.ToString(), out var v))
+      { _recipe.Servings = v; _userEditedFields.Add("servings"); _hasChangedSinceLastSave = true; } }
+
+    private void OnTagsChanged(ChangeEventArgs e)
+    { _tagsInput = e.Value?.ToString() ?? ""; _userEditedFields.Add("tags"); ParseTagsFromInput(); _hasChangedSinceLastSave = true; }
+
+    private void ParseTagsFromInput()
+    {
+        _recipe.Tags = _tagsInput.Split(',').Select(t => t.Trim())
+            .Where(t => !string.IsNullOrEmpty(t)).Distinct().ToList();
+    }
+
+    private void RemoveTag(string tag)
+    { _recipe.Tags.Remove(tag); _tagsInput = string.Join(", ", _recipe.Tags); _hasChangedSinceLastSave = true; }
 
     private void ToggleDietary(string diet, bool isChecked)
     {
-        if (isChecked && !_recipe.DietaryInfo.Contains(diet))
-        {
-            _recipe.DietaryInfo.Add(diet);
-        }
-        else if (!isChecked && _recipe.DietaryInfo.Contains(diet))
-        {
-            _recipe.DietaryInfo.Remove(diet);
-        }
+        if (isChecked && !_recipe.DietaryInfo.Contains(diet)) _recipe.DietaryInfo.Add(diet);
+        else if (!isChecked) _recipe.DietaryInfo.Remove(diet);
+        _userEditedFields.Add("dietaryInfo"); _hasChangedSinceLastSave = true;
     }
 
-    private bool IsValid()
+    private void OnImageUrlChanged(ChangeEventArgs e)
+    { _recipe.ImageUrl = e.Value?.ToString(); _imagePreviewUrl = _recipe.ImageUrl; _hasChangedSinceLastSave = true; }
+
+    private async Task OnImageFileSelectedAsync(InputFileChangeEventArgs e)
     {
-        return !string.IsNullOrWhiteSpace(_recipe.Title) &&
-               !string.IsNullOrWhiteSpace(_recipe.Description) &&
-               _recipe.PrepTimeMinutes >= 0 &&
-               _recipe.CookTimeMinutes >= 0 &&
-               _recipe.Servings > 0 &&
-               _recipe.Ingredients.Any() &&
-               _recipe.Steps.Any();
+        const long maxSize = 5 * 1024 * 1024;
+        if (e.File.Size > maxSize) { _errorMessage = "Image too large (max 5 MB)."; return; }
+        try
+        {
+            using var stream = e.File.OpenReadStream(maxSize);
+            using var ms = new System.IO.MemoryStream();
+            await stream.CopyToAsync(ms);
+            var dataUrl = $"data:{e.File.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+            _recipe.ImageUrl = dataUrl; _imagePreviewUrl = dataUrl; _hasChangedSinceLastSave = true;
+        }
+        catch (Exception ex) { _errorMessage = $"Failed to load image: {ex.Message}"; }
     }
 
-    private async Task SaveRecipe()
+    private void ClearImage()
+    { _recipe.ImageUrl = null; _imagePreviewUrl = null; _hasChangedSinceLastSave = true; }
+
+    private void AddSource()
     {
-        _isSaving = true;
-        _errorMessage = null;
-
-        // Parse tags
-        if (!string.IsNullOrWhiteSpace(_tagsInput))
+        if (string.IsNullOrWhiteSpace(_newSourceName)) return;
+        _sources.Add(new SourceEntry
         {
-            _recipe.Tags = _tagsInput.Split(',')
-                .Select(t => t.Trim())
-                .Where(t => !string.IsNullOrEmpty(t))
-                .Distinct()
-                .ToList();
-        }
+            Type   = _newSourceType,
+            Name   = _newSourceName,
+            Url    = string.IsNullOrWhiteSpace(_newSourceUrl)    ? null : _newSourceUrl,
+            Author = string.IsNullOrWhiteSpace(_newSourceAuthor) ? null : _newSourceAuthor,
+            Notes  = string.IsNullOrWhiteSpace(_newSourceNotes)  ? null : _newSourceNotes
+        });
+        _newSourceName = _newSourceUrl = _newSourceAuthor = _newSourceNotes = string.Empty;
+        _hasChangedSinceLastSave = true;
+    }
 
+    private void RemoveSource(SourceEntry src)
+    { _sources.Remove(src); _hasChangedSinceLastSave = true; }
+
+    private string GetSourceNamePlaceholder() => _newSourceType switch
+    {
+        "Book"     => "Book title",
+        "Person"   => "Person name",
+        "Video"    => "Video title",
+        "TVShow"   => "Show name",
+        "Magazine" => "Publication name",
+        _          => "Source name"
+    };
+
+    private string GetSourceAuthorPlaceholder() => _newSourceType switch
+    {
+        "Book"     => "Author name",
+        "Person"   => "Relationship (e.g., Grandma)",
+        "Magazine" => "Issue / date",
+        _          => "Author"
+    };
+
+    private bool IsValid() =>
+        !string.IsNullOrWhiteSpace(_recipe.Title) &&
+        _recipe.PrepTimeMinutes >= 0 &&
+        _recipe.CookTimeMinutes >= 0 &&
+        _recipe.Servings > 0;
+
+    private async Task PublishRecipeAsync()
+    {
+        _isSaving = true; _errorMessage = null;
+        ParseTagsFromInput();
         try
         {
             Guid? resultId;
-
             if (_isEditMode)
             {
-                // Convert CreateRecipeRequest to UpdateRecipeRequest
-                var updateRequest = new UpdateRecipeRequest
+                var upd = new UpdateRecipeRequest
                 {
-                    Title = _recipe.Title,
-                    Description = _recipe.Description,
+                    Title = _recipe.Title, Description = _recipe.Description,
                     Difficulty = _recipe.Difficulty,
                     PrepTimeMinutes = _recipe.PrepTimeMinutes,
                     CookTimeMinutes = _recipe.CookTimeMinutes,
                     Servings = _recipe.Servings,
                     ImageUrl = _recipe.ImageUrl,
-                    Source = _recipe.Source,
-                    SourceUrl = _recipe.SourceUrl,
-                    Ingredients = _recipe.Ingredients,
-                    Steps = _recipe.Steps,
-                    Tags = _recipe.Tags,
-                    DietaryInfo = _recipe.DietaryInfo,
-                    Nutrition = _recipe.Nutrition,
-                    IsPublic = _recipe.IsPublic
+                    Source = _recipe.Source, SourceUrl = _recipe.SourceUrl,
+                    Cuisine = _recipe.Cuisine, Category = _recipe.Category,
+                    Ingredients = _recipe.Ingredients, Steps = _recipe.Steps,
+                    Tags = _recipe.Tags, DietaryInfo = _recipe.DietaryInfo,
+                    Nutrition = _recipe.Nutrition, IsPublic = _recipe.IsPublic
                 };
-                
-                var success = await RecipeApi.UpdateRecipeAsync(RecipeId!.Value, updateRequest);
-                resultId = success ? RecipeId : null;
+                var ok = await RecipeApi.UpdateRecipeAsync(RecipeId!.Value, upd);
+                resultId = ok ? RecipeId : null;
             }
             else
             {
                 resultId = await RecipeApi.CreateRecipeAsync(_recipe);
             }
-
             if (resultId.HasValue)
             {
+                try { await LocalStorage.RemoveItemAsync(DraftKey); } catch { }
                 Navigation.NavigateTo($"/recipes/{resultId.Value}");
             }
             else
@@ -470,42 +1163,47 @@
                 _errorMessage = $"Failed to {(_isEditMode ? "update" : "create")} recipe. Please try again.";
             }
         }
-        catch (Exception ex)
-        {
-            _errorMessage = $"Failed to save recipe: {ex.Message}";
-        }
-        finally
-        {
-            _isSaving = false;
-        }
+        catch (Exception ex) { _errorMessage = $"Failed to save recipe: {ex.Message}"; }
+        finally { _isSaving = false; }
     }
 
     private void GoBack()
     {
-        if (_isEditMode)
-        {
-            Navigation.NavigateTo($"/recipes/{RecipeId}");
-        }
-        else
-        {
-            Navigation.NavigateTo("/recipes");
-        }
+        if (_isEditMode) Navigation.NavigateTo($"/recipes/{RecipeId}");
+        else Navigation.NavigateTo("/recipes");
     }
 
-    // Event Handlers
-    private void HandleRemoveIngredient()
+    private void ClearError() => _errorMessage = null;
+
+    private static string FormatQuantity(decimal qty)
     {
-        if (_recipe.Ingredients.Count > 0)
-        {
-            _recipe.Ingredients.RemoveAt(_recipe.Ingredients.Count - 1);
-        }
+        if (qty == Math.Floor(qty)) return ((int)qty).ToString();
+        return qty.ToString("G4", System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private void HandleRemoveStep()
+    private static string FormatTimeAgo(TimeSpan age)
     {
-        if (_recipe.Steps.Count > 0)
-        {
-            _recipe.Steps.RemoveAt(_recipe.Steps.Count - 1);
-        }
+        if (age.TotalSeconds < 10) return "just now";
+        if (age.TotalMinutes < 1)  return $"{(int)age.TotalSeconds}s ago";
+        if (age.TotalHours   < 1)  return $"{(int)age.TotalMinutes}m ago";
+        if (age.TotalDays    < 1)  return $"{(int)age.TotalHours}h ago";
+        return $"{(int)age.TotalDays}d ago";
+    }
+
+    public class SourceEntry
+    {
+        public Guid    Id     { get; set; } = Guid.NewGuid();
+        public string  Type   { get; set; } = "Website";
+        public string  Name   { get; set; } = string.Empty;
+        public string? Url    { get; set; }
+        public string? Author { get; set; }
+        public string? Notes  { get; set; }
+    }
+
+    public class UnitSuggestion
+    {
+        public string Original  { get; set; } = string.Empty;
+        public string Suggested { get; set; } = string.Empty;
+        public string Context   { get; set; } = string.Empty;
     }
 }
