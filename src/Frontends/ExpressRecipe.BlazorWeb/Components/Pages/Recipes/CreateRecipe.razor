@@ -623,7 +623,7 @@
             {
                 _showDraftRestoreBanner = true;
                 _draftRestoreTime = FormatTimeAgo(DateTime.UtcNow - draft.SavedAt);
-                StateHasChanged();
+                await InvokeAsync(StateHasChanged);
             }
         }
         catch { }
@@ -954,19 +954,23 @@
         if (decimal.TryParse(s, System.Globalization.NumberStyles.Any,
             System.Globalization.CultureInfo.InvariantCulture, out result)) return true;
         var frac = Regex.Match(s, @"^(\d+)/(\d+)$");
-        if (frac.Success)
+        if (frac.Success &&
+            decimal.TryParse(frac.Groups[1].Value, out var fn) &&
+            decimal.TryParse(frac.Groups[2].Value, out var fd))
         {
-            var n = decimal.Parse(frac.Groups[1].Value);
-            var d = decimal.Parse(frac.Groups[2].Value);
-            if (d == 0) return false; result = n / d; return true;
+            if (fd == 0) return false;
+            result = fn / fd;
+            return true;
         }
         var mixed = Regex.Match(s, @"^(\d+)\s+(\d+)/(\d+)$");
-        if (mixed.Success)
+        if (mixed.Success &&
+            decimal.TryParse(mixed.Groups[1].Value, out var mw) &&
+            decimal.TryParse(mixed.Groups[2].Value, out var mn) &&
+            decimal.TryParse(mixed.Groups[3].Value, out var md))
         {
-            var w = decimal.Parse(mixed.Groups[1].Value);
-            var n = decimal.Parse(mixed.Groups[2].Value);
-            var d = decimal.Parse(mixed.Groups[3].Value);
-            if (d == 0) return false; result = w + n / d; return true;
+            if (md == 0) return false;
+            result = mw + mn / md;
+            return true;
         }
         return false;
     }
