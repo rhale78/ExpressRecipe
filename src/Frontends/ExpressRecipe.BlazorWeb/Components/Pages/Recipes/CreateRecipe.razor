@@ -18,65 +18,105 @@
 
 <AuthorizeView>
     <Authorized>
-        <div class="create-recipe-page">
+        <div class="cr-page">
 
-            <div class="page-header">
-                <button class="btn-back" @onclick="GoBack">← Back</button>
-                <h1 class="page-title">@(_isEditMode ? "✏️ Edit Recipe" : "📝 Create New Recipe")</h1>
-                <div class="draft-status-area">
-                    @if (_draftSavedAt != null)
-                    {
-                        <span class="draft-saved-label">🟢 Draft saved @_draftSavedAt</span>
-                    }
-                </div>
+            <!-- Page header -->
+            <div class="cr-header">
+                <button class="btn btn-outline btn-sm" @onclick="GoBack">← Back</button>
+                <h1 class="cr-page-title">@(_isEditMode ? "✏️ Edit Recipe" : "📝 Create New Recipe")</h1>
+                @if (_draftSavedAt != null)
+                {
+                    <span class="cr-draft-saved">🟢 Draft saved @_draftSavedAt</span>
+                }
             </div>
 
+            <!-- Draft restore banner -->
             @if (_showDraftRestoreBanner)
             {
-                <div class="draft-banner">
+                <div class="cr-draft-banner">
                     <span>📝 Draft found from @_draftRestoreTime. Restore your work?</span>
-                    <div class="draft-banner-actions">
+                    <div class="cr-draft-actions">
                         <button class="btn btn-sm btn-primary" @onclick="RestoreDraftAsync">Restore</button>
                         <button class="btn btn-sm btn-outline" @onclick="DismissDraft">Dismiss</button>
                     </div>
                 </div>
             }
 
+            <!-- Error alert -->
             @if (!string.IsNullOrEmpty(_errorMessage))
             {
-                <div class="alert alert-error">
-                    <strong>Error:</strong> @_errorMessage
-                    <button class="alert-close" @onclick="ClearError">×</button>
+                <div class="cr-alert cr-alert-error">
+                    <strong>⚠️ Error:</strong> @_errorMessage
+                    <button class="cr-alert-close" @onclick="ClearError">×</button>
                 </div>
             }
 
+            <!-- Loading state -->
             @if (_isLoading)
             {
-                <div class="loading-container">
-                    <div class="spinner"></div>
+                <div class="cr-loading">
+                    <div class="cr-spinner"></div>
                     <p>Loading recipe...</p>
                 </div>
             }
             else
             {
-                <div class="create-recipe-main">
+                <!-- Progress stepper -->
+                <div class="cr-stepper">
+                    @{
+                        var stepLabels = new[] { "Import", "Basic Info", "Ingredients", "Instructions", "Finish" };
+                    }
+                    @for (int si = 0; si < stepLabels.Length; si++)
+                    {
+                        var stepNum = si + 1;
+                        var label = stepLabels[si];
+                        var stateClass = stepNum < _currentStep ? "cr-stepper-step completed"
+                                       : stepNum == _currentStep ? "cr-stepper-step active"
+                                       : "cr-stepper-step future";
+                        <div class="@stateClass">
+                            <div class="cr-step-circle">
+                                @if (stepNum < _currentStep)
+                                {
+                                    <span>✓</span>
+                                }
+                                else
+                                {
+                                    <span>@stepNum</span>
+                                }
+                            </div>
+                            <span class="cr-step-label">@label</span>
+                        </div>
+                        @if (si < stepLabels.Length - 1)
+                        {
+                            <div class="cr-step-connector @(stepNum < _currentStep ? "done" : "")"></div>
+                        }
+                    }
+                </div>
 
-                    <!-- Left: Paste & Parse -->
-                    <div class="panel paste-panel">
-                        <div class="panel-header"><span>📋 Paste Your Recipe</span></div>
-                        <div class="panel-body">
-                            <textarea class="recipe-textarea"
+                <!-- Step content -->
+                <div class="cr-content">
+
+                    <!-- Step 1: Import (full-width) -->
+                    @if (_currentStep == 1)
+                    {
+                        <div class="cr-step1">
+                            <div class="cr-step1-header">
+                                <h2>📋 Paste or Type Your Recipe</h2>
+                                <p>Drop in any recipe from anywhere — we'll parse the title, ingredients, times, and instructions for you automatically.</p>
+                            </div>
+
+                            <textarea class="cr-textarea"
                                       value="@_recipeText"
                                       @oninput="OnRecipeTextChanged"
                                       placeholder="@ExamplePlaceholderText"></textarea>
 
-                            <div class="parse-controls">
-                                <button class="btn btn-primary btn-parse"
+                            <div class="cr-parse-row">
+                                <button class="btn btn-primary"
                                         @onclick="ParseWithAIAsync"
                                         disabled="@(_isParsing || string.IsNullOrWhiteSpace(_recipeText))">
                                     @if (_isParsing)
                                     {
-                                        <span class="spinner-small"></span><span>Analyzing...</span>
+                                        <span class="cr-spinner-sm"></span><span>Analyzing...</span>
                                     }
                                     else
                                     {
@@ -92,377 +132,512 @@
 
                             @if (_isParsing)
                             {
-                                <div class="parse-status-row parse-parsing">
-                                    <span class="spinner-small"></span>
+                                <div class="cr-parse-status cr-ps-parsing">
+                                    <span class="cr-spinner-sm"></span>
                                     <span>AI is analyzing your recipe...</span>
                                 </div>
                             }
                             else if (_parseStatus == "ai")
                             {
-                                <div class="parse-status-row parse-success">✅ AI parsed · @ConfidenceLabel</div>
+                                <div class="cr-parse-status cr-ps-success">✅ AI parsed · @ConfidenceLabel</div>
                             }
                             else if (_parseStatus == "ai-fallback")
                             {
-                                <div class="parse-status-row parse-warning">⚠️ AI unavailable, using smart parsing</div>
+                                <div class="cr-parse-status cr-ps-warning">⚠️ AI unavailable, using smart parsing</div>
                             }
                             else if (_parseStatus == "regex")
                             {
-                                <div class="parse-status-row parse-info">🔍 Smart parsed · @ConfidenceLabel</div>
+                                <div class="cr-parse-status cr-ps-info">🔍 Smart parsed · @ConfidenceLabel</div>
                             }
 
                             @foreach (var suggestion in _unitSuggestions)
                             {
                                 var s = suggestion;
-                                <div class="suggestion-box">
+                                <div class="cr-suggestion">
                                     <span>💡 Did you mean '<strong>@s.Suggested</strong>' instead of '<strong>@s.Original</strong>' in "@s.Context"?</span>
-                                    <div class="suggestion-actions">
-                                        <button class="btn btn-tiny btn-warning" @onclick="() => AcceptSuggestion(s)">Accept</button>
-                                        <button class="btn btn-tiny btn-ghost" @onclick="() => DismissSuggestion(s)">Dismiss</button>
+                                    <div class="cr-suggestion-actions">
+                                        <button class="btn btn-sm btn-warning" @onclick="() => AcceptSuggestion(s)">Accept</button>
+                                        <button class="btn btn-sm btn-outline" @onclick="() => DismissSuggestion(s)">Dismiss</button>
                                     </div>
                                 </div>
                             }
-                        </div>
-                    </div>
 
-                    <!-- Right: Live Preview -->
-                    <div class="panel preview-panel">
-                        <div class="panel-header">
-                            <span>👁️ Live Preview</span>
-                            @if (_parsed.IsAIParsed)
-                            {
-                                <span class="badge badge-ai">AI</span>
-                            }
+                            <div class="cr-skip-link">
+                                Already have all details?
+                                <button class="btn btn-sm btn-outline" @onclick="() => _currentStep = 2">Skip to Basic Info →</button>
+                            </div>
                         </div>
-                        <div class="panel-body">
-                            @if (string.IsNullOrWhiteSpace(_parsed.Title) && !_parsed.Ingredients.Any() && !_parsed.Steps.Any())
-                            {
-                                <div class="preview-empty">
-                                    <p>👨‍🍳 Paste a recipe on the left to see a structured preview here.</p>
-                                    <p>The parser will automatically detect ingredients, steps, times, and more.</p>
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="preview-content">
-                                    @if (!string.IsNullOrWhiteSpace(_parsed.Title))
-                                    {
-                                        <h2 class="preview-title">@_parsed.Title</h2>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(_parsed.Description))
-                                    {
-                                        <p class="preview-description">@_parsed.Description</p>
-                                    }
-                                    <div class="preview-meta">
-                                        @if (_parsed.PrepTimeMinutes > 0)
-                                        {
-                                            <span class="meta-chip">⏱️ Prep: @_parsed.PrepTimeMinutes min</span>
-                                        }
-                                        @if (_parsed.CookTimeMinutes > 0)
-                                        {
-                                            <span class="meta-chip">🍳 Cook: @_parsed.CookTimeMinutes min</span>
-                                        }
-                                        @if (_parsed.PrepTimeMinutes > 0 && _parsed.CookTimeMinutes > 0)
-                                        {
-                                            <span class="meta-chip">⏰ Total: @(_parsed.PrepTimeMinutes + _parsed.CookTimeMinutes) min</span>
-                                        }
-                                        @if (_parsed.Servings > 0)
-                                        {
-                                            <span class="meta-chip">🍴 @_parsed.Servings servings</span>
-                                        }
-                                        <span class="meta-chip">🎯 @_parsed.Difficulty</span>
-                                        @if (!string.IsNullOrWhiteSpace(_parsed.Cuisine))
-                                        {
-                                            <span class="meta-chip">🌍 @_parsed.Cuisine</span>
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(_parsed.Category))
-                                        {
-                                            <span class="meta-chip">🏷️ @_parsed.Category</span>
-                                        }
+                    }
+
+                    <!-- Steps 2–5: two-column editor + preview -->
+                    @if (_currentStep >= 2)
+                    {
+                        <div class="cr-editor">
+
+                            <!-- Left: form fields -->
+                            <div class="cr-fields">
+
+                                <!-- Step 2: Basic Info -->
+                                @if (_currentStep == 2)
+                                {
+                                    <div class="cr-section">
+                                        <h2>📝 Basic Info</h2>
+
+                                        <div class="cr-form-group">
+                                            <label>Title <span class="cr-required">*</span></label>
+                                            <input type="text" class="cr-input" value="@_recipe.Title"
+                                                   @oninput="OnTitleChanged" placeholder="Recipe title" />
+                                        </div>
+
+                                        <div class="cr-form-group">
+                                            <label>Description</label>
+                                            <textarea class="cr-input" rows="3" value="@_recipe.Description"
+                                                      @oninput="OnDescriptionChanged"
+                                                      placeholder="Brief description of the recipe..."></textarea>
+                                        </div>
+
+                                        <div class="cr-form-grid">
+                                            <div class="cr-form-group">
+                                                <label>Category</label>
+                                                <select class="cr-input" value="@_recipe.Category" @onchange="OnCategoryChanged">
+                                                    <option value="">— Select —</option>
+                                                    @foreach (var opt in _categoryOptions)
+                                                    {
+                                                        <option value="@opt">@opt</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="cr-form-group">
+                                                <label>Cuisine</label>
+                                                <select class="cr-input" value="@_recipe.Cuisine" @onchange="OnCuisineChanged">
+                                                    <option value="">— Select —</option>
+                                                    @foreach (var opt in _cuisineOptions)
+                                                    {
+                                                        <option value="@opt">@opt</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <div class="cr-form-group">
+                                                <label>Difficulty</label>
+                                                <select class="cr-input" value="@_recipe.Difficulty" @onchange="OnDifficultyChanged">
+                                                    <option value="Easy">Easy</option>
+                                                    <option value="Medium">Medium</option>
+                                                    <option value="Hard">Hard</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="cr-form-grid cr-form-grid-3">
+                                            <div class="cr-form-group">
+                                                <label>Prep Time (min)</label>
+                                                <input type="number" class="cr-input" value="@_recipe.PrepTimeMinutes"
+                                                       @oninput="OnPrepTimeChanged" min="0" />
+                                            </div>
+                                            <div class="cr-form-group">
+                                                <label>Cook Time (min)</label>
+                                                <input type="number" class="cr-input" value="@_recipe.CookTimeMinutes"
+                                                       @oninput="OnCookTimeChanged" min="0" />
+                                            </div>
+                                            <div class="cr-form-group">
+                                                <label>Servings</label>
+                                                <input type="number" class="cr-input" value="@_recipe.Servings"
+                                                       @oninput="OnServingsChanged" min="1" />
+                                            </div>
+                                        </div>
                                     </div>
+                                }
 
-                                    @if (_parsed.Ingredients.Any())
-                                    {
-                                        <div class="preview-section">
-                                            <h3>Ingredients (@_parsed.Ingredients.Count)</h3>
-                                            <ul class="preview-ingredients">
-                                                @foreach (var ing in _parsed.Ingredients)
-                                                {
-                                                    <li>
-                                                        @if (ing.Quantity > 0)
-                                                        {
-                                                            <span class="ing-qty">@FormatQuantity(ing.Quantity) @ing.Unit</span>
-                                                        }
-                                                        <span>@ing.Name</span>
-                                                        @if (!string.IsNullOrWhiteSpace(ing.Notes))
-                                                        {
-                                                            <span class="ing-notes">, @ing.Notes</span>
-                                                        }
-                                                    </li>
-                                                }
-                                            </ul>
-                                        </div>
-                                    }
+                                <!-- Step 3: Ingredients -->
+                                @if (_currentStep == 3)
+                                {
+                                    <div class="cr-section">
+                                        <h2>🥕 Ingredients</h2>
 
-                                    @if (_parsed.Steps.Any())
-                                    {
-                                        <div class="preview-section">
-                                            <h3>Instructions (@_parsed.Steps.Count steps)</h3>
-                                            <ol class="preview-steps">
-                                                @foreach (var step in _parsed.Steps)
-                                                {
-                                                    <li>@step.Instruction</li>
-                                                }
-                                            </ol>
-                                        </div>
-                                    }
+                                        @if (!_recipe.Ingredients.Any())
+                                        {
+                                            <p class="cr-empty">No ingredients yet. Add some below!</p>
+                                        }
 
-                                    @if (_parsed.DietaryInfo.Any())
-                                    {
-                                        <div class="preview-tags">
-                                            @foreach (var diet in _parsed.DietaryInfo)
+                                        @foreach (var ingredient in _recipe.Ingredients)
+                                        {
+                                            var ing = ingredient;
+                                            <div class="cr-ingredient-row">
+                                                <span class="cr-row-num">@ing.OrderIndex</span>
+                                                <input type="number" class="cr-input cr-qty-input" placeholder="Qty" step="0.25"
+                                                       @bind="ing.Quantity" />
+                                                <input type="text" class="cr-input cr-unit-input" placeholder="Unit"
+                                                       value="@ing.Unit"
+                                                       @oninput="@(e => { ing.Unit = e.Value?.ToString() ?? string.Empty; _hasChangedSinceLastSave = true; })" />
+                                                <input type="text" class="cr-input cr-name-input" placeholder="Ingredient name"
+                                                       value="@ing.Name"
+                                                       @oninput="@(e => { ing.Name = e.Value?.ToString() ?? string.Empty; _hasChangedSinceLastSave = true; })" />
+                                                <input type="text" class="cr-input cr-notes-input" placeholder="Notes (optional)"
+                                                       value="@ing.Notes"
+                                                       @oninput="@(e => { ing.Notes = e.Value?.ToString(); _hasChangedSinceLastSave = true; })" />
+                                                <button class="btn btn-sm btn-outline cr-row-delete"
+                                                        @onclick="() => { _recipe.Ingredients.Remove(ing); for (int ri = 0; ri < _recipe.Ingredients.Count; ri++) _recipe.Ingredients[ri].OrderIndex = ri + 1; _hasChangedSinceLastSave = true; }">
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        }
+
+                                        <button class="btn btn-outline btn-sm cr-add-btn"
+                                                @onclick="() => { _recipe.Ingredients.Add(new CreateRecipeIngredientRequest { OrderIndex = _recipe.Ingredients.Count + 1 }); _hasChangedSinceLastSave = true; }">
+                                            + Add Ingredient
+                                        </button>
+                                    </div>
+                                }
+
+                                <!-- Step 4: Instructions -->
+                                @if (_currentStep == 4)
+                                {
+                                    <div class="cr-section">
+                                        <h2>📖 Instructions</h2>
+
+                                        @if (!_recipe.Steps.Any())
+                                        {
+                                            <p class="cr-empty">No steps yet. Add your first instruction below!</p>
+                                        }
+
+                                        @foreach (var recipeStep in _recipe.Steps)
+                                        {
+                                            var step = recipeStep;
+                                            <div class="cr-step-row">
+                                                <span class="cr-step-num">@step.OrderIndex</span>
+                                                <textarea class="cr-input cr-step-textarea" rows="3"
+                                                          placeholder="Describe this step..."
+                                                          value="@step.Instruction"
+                                                          @oninput="@(e => { step.Instruction = e.Value?.ToString() ?? string.Empty; _hasChangedSinceLastSave = true; })"></textarea>
+                                                <button class="btn btn-sm btn-outline cr-row-delete"
+                                                        @onclick="() => { _recipe.Steps.Remove(step); for (int ri = 0; ri < _recipe.Steps.Count; ri++) _recipe.Steps[ri].OrderIndex = ri + 1; _hasChangedSinceLastSave = true; }">
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        }
+
+                                        <button class="btn btn-outline btn-sm cr-add-btn"
+                                                @onclick="() => { _recipe.Steps.Add(new CreateRecipeStepRequest { OrderIndex = _recipe.Steps.Count + 1 }); _hasChangedSinceLastSave = true; }">
+                                            + Add Step
+                                        </button>
+                                    </div>
+                                }
+
+                                <!-- Step 5: Finishing Touches -->
+                                @if (_currentStep == 5)
+                                {
+                                    <div class="cr-section">
+                                        <h2>🏁 Finishing Touches</h2>
+
+                                        <!-- Tags -->
+                                        <div class="cr-form-group">
+                                            <label>Tags</label>
+                                            <input type="text" class="cr-input" value="@_tagsInput"
+                                                   @oninput="OnTagsChanged"
+                                                   placeholder="chocolate, quick, dinner (comma-separated)" />
+                                            @if (_recipe.Tags.Any())
                                             {
-                                                <span class="badge badge-diet">@diet</span>
+                                                <div class="cr-tag-chips">
+                                                    @foreach (var tag in _recipe.Tags)
+                                                    {
+                                                        var t = tag;
+                                                        <span class="cr-tag-chip">
+                                                            @t
+                                                            <button @onclick="() => RemoveTag(t)">×</button>
+                                                        </span>
+                                                    }
+                                                </div>
                                             }
                                         </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Recipe Details -->
-                <div class="form-section">
-                    <h2>📋 Recipe Details</h2>
-                    <div class="form-grid-2">
-                        <div class="form-group">
-                            <label>Title *</label>
-                            <input type="text" class="form-control"
-                                   value="@_recipe.Title"
-                                   @onchange="OnTitleChanged"
-                                   placeholder="Recipe title" />
-                        </div>
-                        <div class="form-group">
-                            <label>Description</label>
-                            <input type="text" class="form-control"
-                                   value="@_recipe.Description"
-                                   @onchange="OnDescriptionChanged"
-                                   placeholder="Brief description..." />
-                        </div>
-                        <div class="form-group">
-                            <label>Category</label>
-                            <select class="form-control" @onchange="OnCategoryChanged">
-                                <option value="" selected="@(string.IsNullOrEmpty(_recipe.Category))">-- Select Category --</option>
-                                @foreach (var cat in _categoryOptions)
-                                {
-                                    var cv = cat;
-                                    <option value="@cv" selected="@(_recipe.Category == cv)">@cv</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Cuisine</label>
-                            <select class="form-control" @onchange="OnCuisineChanged">
-                                <option value="" selected="@(string.IsNullOrEmpty(_recipe.Cuisine))">-- Select Cuisine --</option>
-                                @foreach (var cui in _cuisineOptions)
-                                {
-                                    var cv = cui;
-                                    <option value="@cv" selected="@(_recipe.Cuisine == cv)">@cv</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Difficulty</label>
-                            <select class="form-control" @onchange="OnDifficultyChanged">
-                                @foreach (var diff in new[] { "Easy", "Medium", "Hard" })
-                                {
-                                    var dv = diff;
-                                    <option value="@dv" selected="@(_recipe.Difficulty == dv)">@dv</option>
-                                }
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Prep Time (min)</label>
-                            <input type="number" class="form-control"
-                                   value="@_recipe.PrepTimeMinutes"
-                                   @onchange="OnPrepTimeChanged" min="0" />
-                        </div>
-                        <div class="form-group">
-                            <label>Cook Time (min)</label>
-                            <input type="number" class="form-control"
-                                   value="@_recipe.CookTimeMinutes"
-                                   @onchange="OnCookTimeChanged" min="0" />
-                        </div>
-                        <div class="form-group">
-                            <label>Servings</label>
-                            <input type="number" class="form-control"
-                                   value="@_recipe.Servings"
-                                   @onchange="OnServingsChanged" min="1" />
-                        </div>
-                    </div>
+                                        <!-- Dietary info -->
+                                        <div class="cr-form-group">
+                                            <label>Dietary Info</label>
+                                            <div class="cr-checkbox-grid">
+                                                @foreach (var diet in _dietaryOptions)
+                                                {
+                                                    var d = diet;
+                                                    <label class="cr-checkbox-label">
+                                                        <input type="checkbox"
+                                                               checked="@_recipe.DietaryInfo.Contains(d)"
+                                                               @onchange="(e) => ToggleDietary(d, (bool)(e.Value ?? false))" />
+                                                        @d
+                                                    </label>
+                                                }
+                                            </div>
+                                        </div>
 
-                    <div class="form-group">
-                        <label>Tags (comma-separated)</label>
-                        <input type="text" class="form-control"
-                               value="@_tagsInput"
-                               @onchange="OnTagsChanged"
-                               placeholder="dessert, cookies, easy, quick" />
-                        @if (_recipe.Tags.Any())
-                        {
-                            <div class="tag-chips">
-                                @foreach (var tag in _recipe.Tags)
-                                {
-                                    var t = tag;
-                                    <span class="tag-chip">@t <button type="button" @onclick="() => RemoveTag(t)">×</button></span>
+                                        <!-- Sources -->
+                                        <div class="cr-form-group">
+                                            <label>Sources</label>
+                                            <div class="cr-source-form">
+                                                <select class="cr-input cr-source-type" @bind="_newSourceType">
+                                                    <option value="Website">Website</option>
+                                                    <option value="Book">Book</option>
+                                                    <option value="Magazine">Magazine</option>
+                                                    <option value="Person">Person</option>
+                                                    <option value="Video">Video</option>
+                                                    <option value="TVShow">TV Show</option>
+                                                    <option value="Other">Other</option>
+                                                </select>
+                                                <input type="text" class="cr-input" @bind="_newSourceName"
+                                                       placeholder="@GetSourceNamePlaceholder()" />
+                                                <input type="text" class="cr-input" @bind="_newSourceAuthor"
+                                                       placeholder="@GetSourceAuthorPlaceholder()" />
+                                                <input type="url" class="cr-input" @bind="_newSourceUrl"
+                                                       placeholder="URL (optional)" />
+                                                <button class="btn btn-outline btn-sm" @onclick="AddSource"
+                                                        disabled="@string.IsNullOrWhiteSpace(_newSourceName)">
+                                                    + Add
+                                                </button>
+                                            </div>
+                                            @if (_sources.Any())
+                                            {
+                                                <div class="cr-source-list">
+                                                    @foreach (var src in FilteredSources)
+                                                    {
+                                                        var source = src;
+                                                        <div class="cr-source-item">
+                                                            <span class="cr-source-badge">@source.Type</span>
+                                                            <span class="cr-source-name">@source.Name</span>
+                                                            @if (!string.IsNullOrWhiteSpace(source.Author))
+                                                            {
+                                                                <span class="cr-source-author">· @source.Author</span>
+                                                            }
+                                                            @if (!string.IsNullOrWhiteSpace(source.Url))
+                                                            {
+                                                                <a href="@source.Url" target="_blank" class="cr-source-url">🔗</a>
+                                                            }
+                                                            <button class="btn btn-sm btn-outline cr-row-delete"
+                                                                    @onclick="() => RemoveSource(source)">✕</button>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <!-- Recipe image -->
+                                        <div class="cr-form-group">
+                                            <label>Recipe Image</label>
+                                            <div class="cr-image-inputs">
+                                                <input type="url" class="cr-input" value="@_recipe.ImageUrl"
+                                                       @oninput="OnImageUrlChanged" placeholder="Paste image URL" />
+                                                <div class="cr-file-label">
+                                                    <span>or upload:</span>
+                                                    <InputFile OnChange="OnImageFileSelectedAsync" accept="image/*" class="cr-file-input" />
+                                                </div>
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(_imagePreviewUrl))
+                                            {
+                                                <div class="cr-image-preview">
+                                                    <img src="@_imagePreviewUrl" alt="Recipe preview" />
+                                                    <button class="btn btn-sm btn-outline" @onclick="ClearImage">Remove</button>
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <!-- Public toggle -->
+                                        <div class="cr-form-group">
+                                            <label class="cr-checkbox-label">
+                                                <input type="checkbox" @bind="_recipe.IsPublic" />
+                                                Make this recipe public
+                                            </label>
+                                        </div>
+                                    </div>
                                 }
+
                             </div>
-                        }
-                    </div>
 
-                    <div class="form-group">
-                        <label>Dietary Information</label>
-                        <div class="checkbox-grid">
-                            @foreach (var diet in _dietaryOptions)
-                            {
-                                var dOpt = diet;
-                                <label class="checkbox-label">
-                                    <input type="checkbox"
-                                           checked="@_recipe.DietaryInfo.Contains(dOpt)"
-                                           @onchange="e => ToggleDietary(dOpt, (bool)(e.Value ?? false))" />
-                                    @dOpt
-                                </label>
-                            }
-                        </div>
-                    </div>
+                            <!-- Right: live preview sidebar -->
+                            <div class="cr-preview">
+                                <div class="cr-preview-card">
+                                    <div class="cr-preview-header">
+                                        <span>👁️ Live Preview</span>
+                                        @if (_parsed.IsAIParsed)
+                                        {
+                                            <span class="cr-badge-ai">AI</span>
+                                        }
+                                    </div>
+                                    <div class="cr-preview-body">
+                                        @if (string.IsNullOrWhiteSpace(_recipe.Title) && !_recipe.Ingredients.Any() && !_recipe.Steps.Any())
+                                        {
+                                            <div class="cr-preview-empty">
+                                                <p>👨‍🍳 Start filling in details to see your recipe preview here.</p>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @if (!string.IsNullOrWhiteSpace(_imagePreviewUrl))
+                                            {
+                                                <img class="cr-preview-img" src="@_imagePreviewUrl" alt="Recipe" />
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(_recipe.Title))
+                                            {
+                                                <h2 class="cr-preview-title">@_recipe.Title</h2>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(_recipe.Description))
+                                            {
+                                                <p class="cr-preview-desc">@_recipe.Description</p>
+                                            }
+                                            <div class="cr-preview-meta">
+                                                @if (_recipe.PrepTimeMinutes > 0)
+                                                {
+                                                    <span class="cr-meta-chip">⏱️ @_recipe.PrepTimeMinutes min prep</span>
+                                                }
+                                                @if (_recipe.CookTimeMinutes > 0)
+                                                {
+                                                    <span class="cr-meta-chip">🍳 @_recipe.CookTimeMinutes min cook</span>
+                                                }
+                                                @if (_recipe.PrepTimeMinutes > 0 && _recipe.CookTimeMinutes > 0)
+                                                {
+                                                    <span class="cr-meta-chip">⏰ @(_recipe.PrepTimeMinutes + _recipe.CookTimeMinutes) min total</span>
+                                                }
+                                                @if (_recipe.Servings > 0)
+                                                {
+                                                    <span class="cr-meta-chip">🍴 @_recipe.Servings servings</span>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(_recipe.Difficulty))
+                                                {
+                                                    <span class="cr-meta-chip">🎯 @_recipe.Difficulty</span>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(_recipe.Cuisine))
+                                                {
+                                                    <span class="cr-meta-chip">🌍 @_recipe.Cuisine</span>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(_recipe.Category))
+                                                {
+                                                    <span class="cr-meta-chip">🏷️ @_recipe.Category</span>
+                                                }
+                                            </div>
 
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" @bind="_recipe.IsPublic" />
-                            <span>Make this recipe public (visible to other users)</span>
-                        </label>
-                    </div>
-                </div>
+                                            @if (_recipe.Ingredients.Any())
+                                            {
+                                                <div class="cr-preview-section">
+                                                    <h3>Ingredients (@_recipe.Ingredients.Count)</h3>
+                                                    <ul class="cr-preview-ingredients">
+                                                        @foreach (var ing in _recipe.Ingredients)
+                                                        {
+                                                            <li>
+                                                                @if (ing.Quantity > 0)
+                                                                {
+                                                                    <span class="cr-ing-qty">@FormatQuantity(ing.Quantity) @ing.Unit</span>
+                                                                }
+                                                                <span>@ing.Name</span>
+                                                                @if (!string.IsNullOrWhiteSpace(ing.Notes))
+                                                                {
+                                                                    <span class="cr-ing-notes">, @ing.Notes</span>
+                                                                }
+                                                            </li>
+                                                        }
+                                                    </ul>
+                                                </div>
+                                            }
 
-                <!-- Sources -->
-                <div class="form-section">
-                    <h2>📎 Sources</h2>
-                    <div class="source-add-form">
-                        <div class="source-form-row">
-                            <select class="form-control form-control-sm" @bind="_newSourceType">
-                                <option value="Website">Website</option>
-                                <option value="Book">Book</option>
-                                <option value="Person">Person</option>
-                                <option value="Video">Video</option>
-                                <option value="TVShow">TV Show</option>
-                                <option value="Magazine">Magazine</option>
-                            </select>
-                            <input type="text" class="form-control"
-                                   @bind="_newSourceName"
-                                   placeholder="@GetSourceNamePlaceholder()" />
-                            @if (_newSourceType == "Website" || _newSourceType == "Video")
-                            {
-                                <input type="text" class="form-control" @bind="_newSourceUrl" placeholder="URL" />
-                            }
-                            @if (_newSourceType == "Book" || _newSourceType == "Person" || _newSourceType == "Magazine")
-                            {
-                                <input type="text" class="form-control"
-                                       @bind="_newSourceAuthor"
-                                       placeholder="@GetSourceAuthorPlaceholder()" />
-                            }
-                            @if (_newSourceType == "TVShow")
-                            {
-                                <input type="text" class="form-control" @bind="_newSourceNotes" placeholder="Episode / URL" />
-                            }
-                            <button class="btn btn-outline btn-sm" type="button" @onclick="AddSource">+ Add</button>
-                        </div>
-                        <div class="form-group" style="margin-top:0.5rem;">
-                            <input type="text" class="form-control form-control-sm"
-                                   @bind="_sourceSearchTerm"
-                                   placeholder="🔍 Search sources by name..." />
-                        </div>
-                    </div>
-                    @if (_sources.Any())
-                    {
-                        <div class="source-list">
-                            @foreach (var source in FilteredSources)
-                            {
-                                var src = source;
-                                <div class="source-item">
-                                    <span class="source-type-badge">@src.Type</span>
-                                    <span class="source-name">@src.Name</span>
-                                    @if (!string.IsNullOrWhiteSpace(src.Author))
-                                    {
-                                        <span class="source-author">by @src.Author</span>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(src.Url))
-                                    {
-                                        <a href="@src.Url" target="_blank" class="source-url">🔗 Link</a>
-                                    }
-                                    <button class="btn-icon-sm btn-danger-sm" type="button" @onclick="() => RemoveSource(src)">🗑️</button>
+                                            @if (_recipe.Steps.Any())
+                                            {
+                                                <div class="cr-preview-section">
+                                                    <h3>Instructions (@_recipe.Steps.Count)</h3>
+                                                    <ol class="cr-preview-steps">
+                                                        @foreach (var step in _recipe.Steps)
+                                                        {
+                                                            <li>@step.Instruction</li>
+                                                        }
+                                                    </ol>
+                                                </div>
+                                            }
+
+                                            @if (_recipe.DietaryInfo.Any())
+                                            {
+                                                <div class="cr-preview-section">
+                                                    <h3>Dietary</h3>
+                                                    <div class="cr-preview-dietary">
+                                                        @foreach (var d in _recipe.DietaryInfo)
+                                                        {
+                                                            <span class="cr-badge-diet">@d</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+
+                                            @if (_recipe.Tags.Any())
+                                            {
+                                                <div class="cr-preview-section">
+                                                    <h3>Tags</h3>
+                                                    <div class="cr-preview-tags">
+                                                        @foreach (var tag in _recipe.Tags)
+                                                        {
+                                                            <span class="cr-meta-chip">@tag</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
                                 </div>
-                            }
+                            </div>
+
                         </div>
                     }
-                    else
-                    {
-                        <p class="empty-message">No sources added yet.</p>
-                    }
+
                 </div>
 
-                <!-- Image -->
-                <div class="form-section">
-                    <h2>🖼️ Recipe Image</h2>
-                    <div class="image-section">
-                        <div class="image-inputs">
-                            <div class="form-group">
-                                <label>🔗 Image URL</label>
-                                <input type="url" class="form-control"
-                                       value="@_recipe.ImageUrl"
-                                       @onchange="OnImageUrlChanged"
-                                       placeholder="https://example.com/image.jpg" />
-                            </div>
-                            <div class="form-group">
-                                <label>📁 Upload Image</label>
-                                <InputFile OnChange="OnImageFileSelectedAsync" accept="image/*" class="form-control" />
-                            </div>
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(_imagePreviewUrl))
+                <!-- Bottom navigation bar -->
+                <div class="cr-nav">
+                    <div class="cr-nav-left">
+                        @if (_currentStep > 1)
                         {
-                            <div class="image-preview">
-                                <img src="@_imagePreviewUrl" alt="Recipe preview" />
-                                <button class="btn btn-sm btn-outline" type="button" @onclick="ClearImage">× Remove</button>
-                            </div>
+                            <button class="btn btn-outline" @onclick="() => _currentStep--">← Back</button>
                         }
                     </div>
-                </div>
-
-                <!-- Actions -->
-                <div class="form-actions">
-                    <button class="btn btn-outline" type="button" @onclick="GoBack">Cancel</button>
-                    <button class="btn btn-secondary" type="button" @onclick="SaveDraftAsync">💾 Save Draft</button>
-                    <button class="btn btn-primary" type="button" @onclick="PublishRecipeAsync" disabled="@(!IsValid() || _isSaving)">
-                        @if (_isSaving)
+                    <div class="cr-nav-right">
+                        @if (_currentStep < 5)
                         {
-                            <span class="spinner-small"></span><span>Saving...</span>
+                            <button class="btn btn-primary"
+                                    @onclick="() => _currentStep++"
+                                    disabled="@((_currentStep == 1 && !IsStep1Ready()) || (_currentStep == 2 && string.IsNullOrWhiteSpace(_recipe.Title)))">
+                                Next →
+                            </button>
                         }
                         else
                         {
-                            <span>@(_isEditMode ? "💾 Save Changes" : "✅ Publish Recipe")</span>
+                            <button class="btn btn-secondary" @onclick="SaveDraftAsync" disabled="@_isSaving">
+                                💾 Save Draft
+                            </button>
+                            <button class="btn btn-primary"
+                                    @onclick="PublishRecipeAsync"
+                                    disabled="@(!IsValid() || _isSaving)">
+                                @if (_isSaving)
+                                {
+                                    <span class="cr-spinner-sm"></span>
+                                }
+                                @if (_isEditMode)
+                                {
+                                    <span>💾 Save Changes</span>
+                                }
+                                else
+                                {
+                                    <span>✅ Publish Recipe</span>
+                                }
+                            </button>
                         }
-                    </button>
+                    </div>
                 </div>
             }
+
         </div>
     </Authorized>
     <NotAuthorized>
-        <div class="unauthorized-container">
-            <h2>Authentication Required</h2>
-            <p>Please <a href="/login">log in</a> to create recipes.</p>
+        <div class="cr-unauthorized">
+            <h2>🔒 Sign In Required</h2>
+            <p>You must be signed in to create or edit recipes.</p>
+            <a class="btn btn-primary" href="/login">Sign In</a>
         </div>
     </NotAuthorized>
 </AuthorizeView>
 
 @code {
+    private int _currentStep = 1;
+    private bool IsStep1Ready() => !string.IsNullOrWhiteSpace(_recipeText) || !string.IsNullOrWhiteSpace(_recipe.Title);
+
     [Parameter] public Guid? RecipeId { get; set; }
 
     private bool _isEditMode => RecipeId.HasValue;
@@ -534,7 +709,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (_isEditMode) await LoadExistingRecipeAsync();
+        if (_isEditMode) { _currentStep = 2; await LoadExistingRecipeAsync(); }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
