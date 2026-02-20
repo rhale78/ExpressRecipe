@@ -506,7 +506,7 @@ salt and pepper to taste
                                     <label class="form-label fw-bold">🔗 Source Information</label>
                                     <div class="row g-2 mb-3">
                                         <div class="col-md-4">
-                                            <select class="form-select" @bind="_recipe.SourceMetadata.Type" @bind:after="TriggerDraftSave">
+                                            <select class="form-select" @bind="_recipe.SourceMetadata!.Type" @bind:after="TriggerDraftSave">
                                                 <option value="Book">📖 Book</option>
                                                 <option value="Website">🌐 Website</option>
                                                 <option value="Person">👤 Person</option>
@@ -515,10 +515,10 @@ salt and pepper to taste
                                             </select>
                                         </div>
                                         <div class="col-md-8">
-                                            <input type="text" class="form-control" @bind="_recipe.SourceMetadata.Name" @oninput="TriggerDraftSave" placeholder="Source Name" />
+                                            <input type="text" class="form-control" @bind="_recipe.SourceMetadata!.Name" @oninput="TriggerDraftSave" placeholder="Source Name" />
                                         </div>
                                     </div>
-                                    <input type="url" class="form-control form-control-sm mb-2" @bind="_recipe.SourceMetadata.Url" @oninput="TriggerDraftSave" placeholder="URL Link" />
+                                    <input type="url" class="form-control form-control-sm mb-2" @bind="_recipe.SourceMetadata!.Url" @oninput="TriggerDraftSave" placeholder="URL Link" />
                                 </div>
 
                                 <div class="form-check form-switch mt-3">
@@ -637,17 +637,6 @@ salt and pepper to taste
             _currentStep = 2;
             _showDraftLobby = false;
             await LoadRecipeAsync();
-        } else {
-             // For new recipes, load onboarding state
-            await LoadLobbySettings();
-            if (_showOnboarding) {
-                // If onboarding is shown, don't show lobby yet
-                _showDraftLobby = false;
-            } else {
-                // If onboarding is skipped, show the lobby by default
-                _showDraftLobby = true;
-                await LoadAllDrafts();
-            }
         }
 
         // Debounce timer setup
@@ -661,9 +650,24 @@ salt and pepper to taste
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !IsEditMode && !_showOnboarding) // Only load drafts if it's a new recipe and onboarding is not showing
+        if (firstRender)
         {
-            await LoadAllDrafts();
+            if (!IsEditMode)
+            {
+                // For new recipes, load onboarding state
+                await LoadLobbySettings();
+                if (_showOnboarding)
+                {
+                    // If onboarding is shown, don't show lobby yet
+                    _showDraftLobby = false;
+                }
+                else
+                {
+                    // If onboarding is skipped, show the lobby by default
+                    _showDraftLobby = true;
+                    await LoadAllDrafts();
+                }
+            }
             StateHasChanged();
         }
     }
@@ -727,6 +731,7 @@ salt and pepper to taste
         if (draft != null)
         {
             _recipe = draft;
+            _recipe.SourceMetadata ??= new RecipeSourceDto();
             _currentDraftId = id;
             _tagsInput = string.Join(", ", _recipe.Tags ?? new List<string>());
             

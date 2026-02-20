@@ -13,6 +13,7 @@ public interface IAuthRepository
     Task<(Guid userId, bool isValid)> ValidateRefreshTokenAsync(string token);
     Task RevokeRefreshTokenAsync(string token);
     Task RevokeAllUserTokensAsync(Guid userId);
+    Task<bool> EnsureAdminUserExistsAsync();
 }
 
 public class AuthRepository : IAuthRepository
@@ -198,5 +199,105 @@ public class AuthRepository : IAuthRepository
 
         await command.ExecuteNonQueryAsync();
         _logger.LogInformation("Revoked all refresh tokens for user {UserId}", userId);
+    }
+
+    public async Task<bool> EnsureAdminUserExistsAsync()
+    {
+        const string adminEmail = "admin@admin.com";
+        // Use a well-known GUID for the admin user (same across all environments)
+        var adminId = new Guid("00000000-0000-0000-0000-000000000001");
+        
+        const string checkByIdSql = "SELECT COUNT(1) FROM [User] WHERE Id = @Id AND IsDeleted = 0";
+        const string checkByEmailSql = "SELECT Id FROM [User] WHERE Email = @Email AND IsDeleted = 0";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // 1. Check if admin user exists by ID
+        await using var checkIdCommand = new SqlCommand(checkByIdSql, connection);
+        checkIdCommand.Parameters.AddWithValue("@Id", adminId);
+        var countById = (int)(await checkIdCommand.ExecuteScalarAsync() ?? 0);
+
+        // 2. Check if admin user exists by Email (in case it was seeded with a different ID)
+        await using var checkEmailCommand = new SqlCommand(checkByEmailSql, connection);
+        checkEmailCommand.Parameters.AddWithValue("@Email", adminEmail);
+        var existingUserIdResult = await checkEmailCommand.ExecuteScalarAsync();
+        var existingUserIdByEmail = existingUserIdResult != null ? (Guid)existingUserIdResult : Guid.Empty;
+
+        // BCrypt hash for "admin" with work factor 11
+        var adminPasswordHash = BCrypt.Net.BCrypt.HashPassword("admin", 11);
+
+        if (countById > 0)
+        {
+            _logger.LogInformation("Admin user found by ID, ensuring credentials are correct...");
+            const string updateSql = @"
+                UPDATE [User] 
+                SET Email = @Email, PasswordHash = @PasswordHash, FirstName = @FirstName, LastName = @LastName, IsActive = 1
+                WHERE Id = @Id";
+
+            await using var updateCommand = new SqlCommand(updateSql, connection);
+            updateCommand.Parameters.AddWithValue("@Id", adminId);
+            updateCommand.Parameters.AddWithValue("@Email", adminEmail);
+            updateCommand.Parameters.AddWithValue("@PasswordHash", adminPasswordHash);
+            updateCommand.Parameters.AddWithValue("@FirstName", "Admin");
+            updateCommand.Parameters.AddWithValue("@LastName", "User");
+            await updateCommand.ExecuteNonQueryAsync();
+            return false;
+        }
+        else if (existingUserIdByEmail != Guid.Empty)
+        {
+            _logger.LogInformation("Admin user found by Email with different ID {ExistingId}, updating to standard admin ID...", existingUserIdByEmail);
+            
+            // Delete the old one and recreate with standard ID to avoid unique constraint issues
+            // This is safer than updating the PK
+            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync();
+            try
+            {
+                const string deleteSql = "DELETE FROM [User] WHERE Id = @Id";
+                await using (var deleteCommand = new SqlCommand(deleteSql, connection, transaction))
+                {
+                    deleteCommand.Parameters.AddWithValue("@Id", existingUserIdByEmail);
+                    await deleteCommand.ExecuteNonQueryAsync();
+                }
+
+                const string insertSql = @"
+                    INSERT INTO [User] (Id, Email, PasswordHash, FirstName, LastName, EmailVerified, IsActive, CreatedAt)
+                    VALUES (@Id, @Email, @PasswordHash, @FirstName, @LastName, 1, 1, GETUTCDATE())";
+
+                await using (var insertCommand = new SqlCommand(insertSql, connection, transaction))
+                {
+                    insertCommand.Parameters.AddWithValue("@Id", adminId);
+                    insertCommand.Parameters.AddWithValue("@Email", adminEmail);
+                    insertCommand.Parameters.AddWithValue("@PasswordHash", adminPasswordHash);
+                    insertCommand.Parameters.AddWithValue("@FirstName", "Admin");
+                    insertCommand.Parameters.AddWithValue("@LastName", "User");
+                    await insertCommand.ExecuteNonQueryAsync();
+                }
+
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        // Create fresh admin user
+        _logger.LogInformation("Creating fresh admin user...");
+        const string freshInsertSql = @"
+            INSERT INTO [User] (Id, Email, PasswordHash, FirstName, LastName, EmailVerified, IsActive, CreatedAt)
+            VALUES (@Id, @Email, @PasswordHash, @FirstName, @LastName, 1, 1, GETUTCDATE())";
+
+        await using var freshInsertCommand = new SqlCommand(freshInsertSql, connection);
+        freshInsertCommand.Parameters.AddWithValue("@Id", adminId);
+        freshInsertCommand.Parameters.AddWithValue("@Email", adminEmail);
+        freshInsertCommand.Parameters.AddWithValue("@PasswordHash", adminPasswordHash);
+        freshInsertCommand.Parameters.AddWithValue("@FirstName", "Admin");
+        freshInsertCommand.Parameters.AddWithValue("@LastName", "User");
+
+        await freshInsertCommand.ExecuteNonQueryAsync();
+        return true;
     }
 }

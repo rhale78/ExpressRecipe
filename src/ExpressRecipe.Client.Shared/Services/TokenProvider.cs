@@ -28,16 +28,14 @@ public class LocalStorageTokenProvider : ITokenProvider
             Console.WriteLine($"[TokenProvider] GetAccessToken: {(string.IsNullOrEmpty(cleanToken) ? "NULL/EMPTY" : $"Found ({cleanToken.Length} chars)")}");
             return cleanToken;
         }
-        catch (JSException ex)
+        catch (JSException)
         {
             // JavaScript interop not available during prerendering
-            Console.WriteLine($"[TokenProvider] GetAccessToken failed: JSException - {ex.Message}");
             return null;
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
             // JavaScript interop not available during prerendering
-            Console.WriteLine($"[TokenProvider] GetAccessToken failed: InvalidOperationException - {ex.Message}");
             return null;
         }
         catch (Exception ex)
@@ -76,13 +74,11 @@ public class LocalStorageTokenProvider : ITokenProvider
             await _localStorage.SetItemAsStringAsync(RefreshTokenKey, refreshToken);
             Console.WriteLine($"[TokenProvider] Tokens saved successfully");
         }
-        catch (JSException ex)
+        catch (JSException)
         {
-            Console.WriteLine($"[TokenProvider] SetTokens failed: JSException - {ex.Message}");
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            Console.WriteLine($"[TokenProvider] SetTokens failed: InvalidOperationException - {ex.Message}");
         }
         catch (Exception ex)
         {

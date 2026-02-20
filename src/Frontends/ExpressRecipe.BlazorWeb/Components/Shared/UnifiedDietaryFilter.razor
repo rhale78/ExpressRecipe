@@ -525,32 +525,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Load restrictions enabled state from localStorage
-        try
-        {
-            var enabledStr = await JS.InvokeAsync<string>("localStorage.getItem", "dietaryRestrictionsEnabled");
-            if (!string.IsNullOrEmpty(enabledStr))
-            {
-                _restrictionsEnabled = bool.Parse(enabledStr);
-            }
-        }
-        catch { /* Ignore localStorage errors */ }
-
-        // Load cached filters from localStorage (preserves across navigation)
-        try
-        {
-            var cachedFiltersJson = await JS.InvokeAsync<string>("localStorage.getItem", "dietaryFiltersCache");
-            if (!string.IsNullOrEmpty(cachedFiltersJson))
-            {
-                var cachedFilters = System.Text.Json.JsonSerializer.Deserialize<List<string>>(cachedFiltersJson);
-                if (cachedFilters != null && cachedFilters.Any())
-                {
-                    _activeFilters = cachedFilters;
-                }
-            }
-        }
-        catch { /* Ignore cache errors */ }
-
         if (AutoLoadUserProfile)
         {
             await LoadUserProfile();
@@ -566,6 +540,41 @@
 
         // Register navigation guard to prompt save on exit
         _locationChangingRegistration = Navigation.RegisterLocationChangingHandler(OnLocationChanging);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Load restrictions enabled state from localStorage
+            try
+            {
+                var enabledStr = await JS.InvokeAsync<string>("localStorage.getItem", "dietaryRestrictionsEnabled");
+                if (!string.IsNullOrEmpty(enabledStr))
+                {
+                    _restrictionsEnabled = bool.Parse(enabledStr);
+                }
+            }
+            catch { /* Ignore localStorage errors */ }
+
+            // Load cached filters from localStorage (preserves across navigation)
+            try
+            {
+                var cachedFiltersJson = await JS.InvokeAsync<string>("localStorage.getItem", "dietaryFiltersCache");
+                if (!string.IsNullOrEmpty(cachedFiltersJson))
+                {
+                    var cachedFilters = System.Text.Json.JsonSerializer.Deserialize<List<string>>(cachedFiltersJson);
+                    if (cachedFilters != null && cachedFilters.Any())
+                    {
+                        _activeFilters = cachedFilters;
+                        await NotifyChange();
+                    }
+                }
+            }
+            catch { /* Ignore cache errors */ }
+            
+            StateHasChanged();
+        }
     }
 
     private async ValueTask OnLocationChanging(LocationChangingContext context)

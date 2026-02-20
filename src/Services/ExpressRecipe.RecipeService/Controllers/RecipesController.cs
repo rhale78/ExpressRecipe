@@ -6,6 +6,8 @@ using ExpressRecipe.RecipeService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using SharedRecipe = ExpressRecipe.Shared.DTOs.Recipe;
+using CQRSQueries = ExpressRecipe.RecipeService.CQRS.Queries;
 
 namespace ExpressRecipe.RecipeService.Controllers;
 
@@ -183,7 +185,37 @@ public class RecipesController : ControllerBase
             request.CreatedBy = userId.Value;
             var recipeId = await _recipeRepository.CreateRecipeAsync(request, userId.Value);
 
-            _logger.LogInformation("Recipe {RecipeId} created by user {UserId}", recipeId, userId.Value);
+            // Add ingredients if provided
+            if (request.Ingredients != null && request.Ingredients.Any())
+            {
+                var ingredients = request.Ingredients.Select(i => new SharedRecipe.RecipeIngredientDto
+                {
+                    IngredientName = i.Name,
+                    Quantity = i.Quantity,
+                    Unit = i.Unit,
+                    OrderIndex = i.OrderIndex,
+                    PreparationNote = i.Notes,
+                    IsOptional = i.IsOptional
+                }).ToList();
+                await _recipeRepository.AddRecipeIngredientsAsync(recipeId, ingredients, userId.Value);
+            }
+
+            // Add steps if provided
+            if (request.Steps != null && request.Steps.Any())
+            {
+                foreach (var step in request.Steps)
+                {
+                    await _recipeRepository.AddInstructionAsync(recipeId, step.OrderIndex, step.Instruction, step.DurationMinutes);
+                }
+            }
+
+            // Add tags if provided
+            if (request.Tags != null && request.Tags.Any())
+            {
+                await _recipeRepository.AddRecipeTagsAsync(recipeId, request.Tags);
+            }
+
+            _logger.LogInformation("Recipe {RecipeId} created with all components by user {UserId}", recipeId, userId.Value);
 
             return CreatedAtAction(nameof(GetRecipe), new { id = recipeId }, new { id = recipeId });
         }
@@ -222,7 +254,49 @@ public class RecipesController : ControllerBase
 
             await _recipeRepository.UpdateRecipeAsync(id, request, userId.Value);
 
-            _logger.LogInformation("Recipe {RecipeId} updated by user {UserId}", id, userId.Value);
+            // Update ingredients if provided
+            if (request.Ingredients != null)
+            {
+                await _recipeRepository.ClearRecipeIngredientsAsync(id);
+                if (request.Ingredients.Any())
+                {
+                    var ingredients = request.Ingredients.Select(i => new SharedRecipe.RecipeIngredientDto
+                    {
+                        IngredientName = i.Name,
+                        Quantity = i.Quantity,
+                        Unit = i.Unit,
+                        OrderIndex = i.OrderIndex,
+                        PreparationNote = i.Notes,
+                        IsOptional = i.IsOptional
+                    }).ToList();
+                    await _recipeRepository.AddRecipeIngredientsAsync(id, ingredients, userId.Value);
+                }
+            }
+
+            // Update steps if provided
+            if (request.Steps != null)
+            {
+                await _recipeRepository.ClearRecipeInstructionsAsync(id);
+                if (request.Steps.Any())
+                {
+                    foreach (var step in request.Steps)
+                    {
+                        await _recipeRepository.AddInstructionAsync(id, step.OrderIndex, step.Instruction, step.DurationMinutes);
+                    }
+                }
+            }
+
+            // Update tags if provided
+            if (request.Tags != null)
+            {
+                await _recipeRepository.ClearRecipeTagsAsync(id);
+                if (request.Tags.Any())
+                {
+                    await _recipeRepository.AddRecipeTagsAsync(id, request.Tags);
+                }
+            }
+
+            _logger.LogInformation("Recipe {RecipeId} fully updated by user {UserId}", id, userId.Value);
 
             return NoContent();
         }

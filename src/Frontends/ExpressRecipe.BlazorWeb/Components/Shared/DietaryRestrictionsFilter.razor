@@ -71,7 +71,7 @@
                        @onkeypress="HandleKeyPress" />
                 @if (!string.IsNullOrWhiteSpace(_textInput))
                 {
-                    <button class="btn-clear-input" @onclick="() => { _textInput = string.Empty; ParseTextInput(); }">
+                    <button class="btn-clear-input" @onclick="async () => { _textInput = string.Empty; await ParseTextInput(); }">
                         ✖
                     </button>
                 }
@@ -262,7 +262,7 @@
         }
     }
 
-    private void ParseTextInput()
+    private async Task ParseTextInput()
     {
         if (string.IsNullOrWhiteSpace(_textInput))
             return;
@@ -282,18 +282,18 @@
         }
 
         _textInput = string.Empty;
-        NotifyChange();
+        await NotifyChange();
     }
 
     private async Task HandleKeyPress(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
         {
-            ParseTextInput();
+            await ParseTextInput();
         }
     }
 
-    private void ToggleRestriction(string restriction)
+    private async Task ToggleRestriction(string restriction)
     {
         if (_activeRestrictions.Contains(restriction))
         {
@@ -304,16 +304,16 @@
             _activeRestrictions.Add(restriction);
         }
 
-        NotifyChange();
+        await NotifyChange();
     }
 
-    private void RemoveRestriction(string restriction)
+    private async Task RemoveRestriction(string restriction)
     {
         _activeRestrictions.Remove(restriction);
-        NotifyChange();
+        await NotifyChange();
     }
 
-    private void LoadMyRestrictions()
+    private async Task LoadMyRestrictions()
     {
         _useMyRestrictions = !_useMyRestrictions;
         _selectedFamilyMembers.Clear();
@@ -334,10 +334,10 @@
             }
         }
 
-        NotifyChange();
+        await NotifyChange();
     }
 
-    private void ToggleFamilyMember(Guid memberId)
+    private async Task ToggleFamilyMember(Guid memberId)
     {
         _useMyRestrictions = false;
 
@@ -364,16 +364,16 @@
             }
         }
 
-        NotifyChange();
+        await NotifyChange();
     }
 
-    private void ClearAllRestrictions()
+    private async Task ClearAllRestrictions()
     {
         _activeRestrictions.Clear();
         _useMyRestrictions = false;
         _selectedFamilyMembers.Clear();
         _textInput = string.Empty;
-        NotifyChange();
+        await NotifyChange();
     }
 
     private List<RestrictionOption> GetFilteredRestrictions()

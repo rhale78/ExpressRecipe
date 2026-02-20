@@ -12,11 +12,11 @@ public class RecipeDto
     public int TotalTimeMinutes => PrepTimeMinutes + CookTimeMinutes;
     public int Servings { get; set; }
     public string Difficulty { get; set; } = "Medium"; // Easy, Medium, Hard
+    public string? Category { get; set; } // e.g., Breakfast, Main Dish
+    public string? Cuisine { get; set; } // e.g., Italian, Mexican
+    public RecipeSourceDto? SourceMetadata { get; set; }
     public string? Source { get; set; }
     public string? SourceUrl { get; set; }
-    public RecipeSourceDto? SourceMetadata { get; set; }
-    public string? Cuisine { get; set; }
-    public string? Category { get; set; }
     public List<RecipeIngredientDto> Ingredients { get; set; } = new();
     public List<RecipeStepDto> Steps { get; set; } = new();
     public List<string> Tags { get; set; } = new();
@@ -86,6 +86,7 @@ public class NutritionInfoDto
 public class RecipeSearchRequest
 {
     public string? SearchTerm { get; set; }
+    public string? Category { get; set; }
     public List<string>? Tags { get; set; }
     public List<string>? DietaryInfo { get; set; }
     public List<string>? ExcludeAllergens { get; set; }
@@ -119,6 +120,7 @@ public class CreateRecipeRequest
     public int CookTimeMinutes { get; set; }
     public int Servings { get; set; } = 4;
     public string Difficulty { get; set; } = "Medium";
+    public RecipeSourceDto? SourceMetadata { get; set; }
     public string? Source { get; set; }
     public string? SourceUrl { get; set; }
     public RecipeSourceDto? SourceMetadata { get; set; }

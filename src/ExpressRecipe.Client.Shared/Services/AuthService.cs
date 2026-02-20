@@ -1,4 +1,5 @@
 using ExpressRecipe.Client.Shared.Models.Auth;
+using Microsoft.Extensions.Logging;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -18,28 +19,70 @@ public class AuthService : IAuthService
 {
     private readonly HttpClient _httpClient;
     private readonly ITokenProvider _tokenProvider;
+    private readonly ILogger<AuthService> _logger;
     private UserProfile? _currentUser;
 
     public event EventHandler<bool>? AuthenticationStateChanged;
 
-    public AuthService(HttpClient httpClient, ITokenProvider tokenProvider)
+    public AuthService(HttpClient httpClient, ITokenProvider tokenProvider, ILogger<AuthService> logger)
     {
         _httpClient = httpClient;
         _tokenProvider = tokenProvider;
+        _logger = logger;
     }
 
     public async Task<TokenResponse?> LoginAsync(LoginRequest request)
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/auth/login", request);
+            // Map to API DTO
+            var apiRequest = new
+            {
+                email = request.Email,
+                password = request.Password,
+                rememberMe = request.RememberMe
+            };
+
+            if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
+            {
+                _logger.LogWarning("Client-side validation failed: Email or Password is empty");
+                return null;
+            }
+
+            var jsonPayload = System.Text.Json.JsonSerializer.Serialize(apiRequest);
+            _logger.LogInformation("Sending Login JSON: {Json}", jsonPayload);
+
+            var response = await _httpClient.PostAsJsonAsync("/api/auth/login", apiRequest);
 
             if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Login failed: {response.StatusCode} - {errorContent}");
+                return null;
+            }
+
+            var apiResponse = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+            if (apiResponse.ValueKind == JsonValueKind.Undefined)
             {
                 return null;
             }
 
-            var tokenResponse = await response.Content.ReadFromJsonAsync<TokenResponse>();
+            var accessToken = apiResponse.GetProperty("accessToken").GetString() ?? "";
+            var refreshToken = apiResponse.GetProperty("refreshToken").GetString() ?? "";
+            var expiresAt = apiResponse.GetProperty("expiresAt").GetDateTime();
+            var user = apiResponse.GetProperty("user");
+
+            var tokenResponse = new TokenResponse
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                ExpiresAt = expiresAt,
+                UserId = user.GetProperty("id").GetGuid(),
+                Email = user.GetProperty("email").GetString() ?? "",
+                FirstName = user.TryGetProperty("firstName", out var fn) ? fn.GetString() ?? "" : "Admin",
+                LastName = user.TryGetProperty("lastName", out var ln) ? ln.GetString() ?? "" : "User"
+            };
 
             if (tokenResponse != null)
             {
@@ -58,8 +101,9 @@ public class AuthService : IAuthService
 
             return tokenResponse;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Console.WriteLine($"Login exception: {ex.Message}");
             return null;
         }
     }

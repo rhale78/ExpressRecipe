@@ -105,6 +105,22 @@ if (!Directory.Exists(migrationsPath))
 var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
 await app.RunMigrationsAsync(connectionString, migrations);
 
+// Seed default admin user
+using (var scope = app.Services.CreateScope())
+{
+    var authRepo = scope.ServiceProvider.GetRequiredService<IAuthRepository>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    try
+    {
+        await authRepo.EnsureAdminUserExistsAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to seed default admin user");
+    }
+}
+
 // Configure the HTTP request pipeline
 app.MapDefaultEndpoints();
 

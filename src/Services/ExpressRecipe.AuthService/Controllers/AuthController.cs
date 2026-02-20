@@ -150,22 +150,37 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
+        _logger.LogInformation("Login attempt - Email: {Email}, PasswordLength: {PasswordLength}", 
+            request.Email ?? "(null)", 
+            request.Password?.Length ?? 0);
+
+        if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
+        {
+            _logger.LogWarning("Login failed: Email or Password is null/empty");
+            return Unauthorized(new { message = "Invalid email or password" });
+        }
+
         // Get user by email
         var user = await _repository.GetUserByEmailAsync(request.Email);
         if (user == null)
         {
+            _logger.LogWarning("Login failed: User not found for email {Email}", request.Email);
             return Unauthorized(new { message = "Invalid email or password" });
         }
 
         // Check if user is active
         if (!user.IsActive)
         {
+            _logger.LogWarning("Login failed: User {Email} is inactive", request.Email);
             return Unauthorized(new { message = "Account is inactive" });
         }
 
         // Verify password
-        if (!_tokenService.VerifyPassword(request.Password, user.PasswordHash))
+        bool passwordValid = _tokenService.VerifyPassword(request.Password, user.PasswordHash);
+        
+        if (!passwordValid)
         {
+            _logger.LogWarning("Login failed: Password mismatch for user {Email}", request.Email);       
             return Unauthorized(new { message = "Invalid email or password" });
         }
 

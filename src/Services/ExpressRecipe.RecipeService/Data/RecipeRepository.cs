@@ -27,7 +27,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             CookTimeMinutes = cookTimeMinutes,
             TotalTimeMinutes = totalTimeMinutes,
             Servings = servings,
-            DifficultyLevel = difficulty,
+            Difficulty = difficulty,
             CreatedBy = userId,
             IsPublic = true
         };
@@ -153,7 +153,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
     public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto>> GetIngredientsAsync(Guid recipeId)
     {
         const string sql = @"
-            SELECT Id, RecipeId, IngredientId, BaseIngredientId, IngredientName, Quantity, Unit, OrderIndex, PreparationNote, IsOptional, SubstituteNotes
+            SELECT Id, RecipeId, IngredientId, BaseIngredientId, IngredientName, Quantity, Unit, OrderIndex, PreparationNote, IsOptional, SubstituteNotes, GroupName
             FROM RecipeIngredient
             WHERE RecipeId = @RecipeId
             ORDER BY OrderIndex";
@@ -170,7 +170,8 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             OrderIndex = reader.GetInt32(reader.GetOrdinal("OrderIndex")),
             PreparationNote = reader.IsDBNull(reader.GetOrdinal("PreparationNote")) ? null : reader.GetString(reader.GetOrdinal("PreparationNote")),
             IsOptional = reader.GetBoolean(reader.GetOrdinal("IsOptional")),
-            SubstituteNotes = reader.IsDBNull(reader.GetOrdinal("SubstituteNotes")) ? null : reader.GetString(reader.GetOrdinal("SubstituteNotes"))
+            SubstituteNotes = reader.IsDBNull(reader.GetOrdinal("SubstituteNotes")) ? null : reader.GetString(reader.GetOrdinal("SubstituteNotes")),
+            GroupName = reader.IsDBNull(reader.GetOrdinal("GroupName")) ? null : reader.GetString(reader.GetOrdinal("GroupName"))
         }, new SqlParameter("@RecipeId", recipeId));
 
         return ingredients;
@@ -179,15 +180,15 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
     public async Task<List<CQ.RecipeInstructionDto>> GetInstructionsAsync(Guid recipeId)
     {
         const string sql = @"
-            SELECT Id, RecipeId, StepNumber, Instruction, TimeMinutes
+            SELECT Id, RecipeId, OrderIndex, Instruction, TimeMinutes
             FROM RecipeInstruction
             WHERE RecipeId = @RecipeId
-            ORDER BY StepNumber";
+            ORDER BY OrderIndex";
 
         var instructions = await ExecuteReaderAsync(sql, reader => new CQ.RecipeInstructionDto
         {
             Id = reader.GetGuid(reader.GetOrdinal("Id")),
-            StepNumber = reader.GetInt32(reader.GetOrdinal("StepNumber")),
+            OrderIndex = reader.GetInt32(reader.GetOrdinal("OrderIndex")),
             Instruction = reader.IsDBNull(reader.GetOrdinal("Instruction")) ? string.Empty : reader.GetString(reader.GetOrdinal("Instruction")),
             TimeMinutes = reader.IsDBNull(reader.GetOrdinal("TimeMinutes")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("TimeMinutes"))
         }, new SqlParameter("@RecipeId", recipeId));
@@ -276,7 +277,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             new SqlParameter("@Description", (object?)request.Description ?? DBNull.Value),
             new SqlParameter("@Category", (object?)request.Category ?? DBNull.Value),
             new SqlParameter("@Cuisine", (object?)request.Cuisine ?? DBNull.Value),
-            new SqlParameter("@DifficultyLevel", (object?)request.DifficultyLevel ?? DBNull.Value),
+            new SqlParameter("@DifficultyLevel", (object?)request.Difficulty ?? DBNull.Value),
             new SqlParameter("@PrepTimeMinutes", (object?)request.PrepTimeMinutes ?? DBNull.Value),
             new SqlParameter("@CookTimeMinutes", (object?)request.CookTimeMinutes ?? DBNull.Value),
             new SqlParameter("@TotalTimeMinutes", totalTime > 0 ? totalTime : DBNull.Value),
@@ -342,15 +343,15 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             new SqlParameter("@IsOptional", isOptional));
     }
 
-    public async Task AddInstructionAsync(Guid recipeId, int stepNumber, string instruction, int? timeMinutes)
+    public async Task AddInstructionAsync(Guid recipeId, int orderIndex, string instruction, int? timeMinutes)
     {
         const string sql = @"
-            INSERT INTO RecipeInstruction (RecipeId, StepNumber, Instruction, TimeMinutes, CreatedAt)
-            VALUES (@RecipeId, @StepNumber, @Instruction, @TimeMinutes, GETUTCDATE())";
+            INSERT INTO RecipeInstruction (RecipeId, OrderIndex, Instruction, TimeMinutes, CreatedAt)
+            VALUES (@RecipeId, @OrderIndex, @Instruction, @TimeMinutes, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@RecipeId", recipeId),
-            new SqlParameter("@StepNumber", stepNumber),
+            new SqlParameter("@OrderIndex", orderIndex),
             new SqlParameter("@Instruction", instruction),
             new SqlParameter("@TimeMinutes", (object?)timeMinutes ?? DBNull.Value));
     }
@@ -395,12 +396,12 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             INSERT INTO RecipeIngredient (
                 RecipeId, IngredientId, BaseIngredientId, IngredientName,
                 Quantity, Unit, OrderIndex, PreparationNote,
-                IsOptional, SubstituteNotes, CreatedBy, CreatedAt
+                IsOptional, SubstituteNotes, GroupName, CreatedBy, CreatedAt
             )
             VALUES (
                 @RecipeId, @IngredientId, @BaseIngredientId, @IngredientName,
                 @Quantity, @Unit, @OrderIndex, @PreparationNote,
-                @IsOptional, @SubstituteNotes, @CreatedBy, GETUTCDATE()
+                @IsOptional, @SubstituteNotes, @GroupName, @CreatedBy, GETUTCDATE()
             )";
 
         using var connection = new SqlConnection(ConnectionString);
@@ -422,6 +423,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 command.Parameters.AddWithValue("@PreparationNote", (object?)ingredient.PreparationNote ?? DBNull.Value);
                 command.Parameters.AddWithValue("@IsOptional", ingredient.IsOptional);
                 command.Parameters.AddWithValue("@SubstituteNotes", (object?)ingredient.SubstituteNotes ?? DBNull.Value);
+                command.Parameters.AddWithValue("@GroupName", (object?)ingredient.GroupName ?? DBNull.Value);
                 command.Parameters.AddWithValue("@CreatedBy", (object?)createdBy ?? DBNull.Value);
 
                 await command.ExecuteNonQueryAsync();
@@ -674,11 +676,29 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         );
     }
 
+    public async Task ClearRecipeIngredientsAsync(Guid recipeId)
+    {
+        const string sql = "DELETE FROM RecipeIngredient WHERE RecipeId = @RecipeId";
+        await ExecuteNonQueryAsync(sql, new SqlParameter("@RecipeId", recipeId));
+    }
+
+    public async Task ClearRecipeInstructionsAsync(Guid recipeId)
+    {
+        const string sql = "DELETE FROM RecipeInstruction WHERE RecipeId = @RecipeId";
+        await ExecuteNonQueryAsync(sql, new SqlParameter("@RecipeId", recipeId));
+    }
+
+    public async Task ClearRecipeTagsAsync(Guid recipeId)
+    {
+        const string sql = "DELETE FROM RecipeTagMapping WHERE RecipeId = @RecipeId";
+        await ExecuteNonQueryAsync(sql, new SqlParameter("@RecipeId", recipeId));
+    }
+
     public async Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto>> GetRecipeIngredientsAsync(Guid recipeId)
     {
         const string sql = @"
             SELECT Id, RecipeId, IngredientId, BaseIngredientId, IngredientName,
-                   Quantity, Unit, OrderIndex, PreparationNote, IsOptional, SubstituteNotes
+                   Quantity, Unit, OrderIndex, PreparationNote, IsOptional, SubstituteNotes, GroupName
             FROM RecipeIngredient
             WHERE RecipeId = @RecipeId AND IsDeleted = 0
             ORDER BY OrderIndex";
@@ -695,7 +715,8 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             OrderIndex = reader.GetInt32(reader.GetOrdinal("OrderIndex")),
             PreparationNote = reader.IsDBNull(reader.GetOrdinal("PreparationNote")) ? null : reader.GetString(reader.GetOrdinal("PreparationNote")),
             IsOptional = reader.GetBoolean(reader.GetOrdinal("IsOptional")),
-            SubstituteNotes = reader.IsDBNull(reader.GetOrdinal("SubstituteNotes")) ? null : reader.GetString(reader.GetOrdinal("SubstituteNotes"))
+            SubstituteNotes = reader.IsDBNull(reader.GetOrdinal("SubstituteNotes")) ? null : reader.GetString(reader.GetOrdinal("SubstituteNotes")),
+            GroupName = reader.IsDBNull(reader.GetOrdinal("GroupName")) ? null : reader.GetString(reader.GetOrdinal("GroupName"))
         },
         new SqlParameter("@RecipeId", recipeId));
     }
@@ -781,7 +802,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             new SqlParameter("@Description", (object?)request.Description ?? DBNull.Value),
             new SqlParameter("@Category", (object?)request.Category ?? DBNull.Value),
             new SqlParameter("@Cuisine", (object?)request.Cuisine ?? DBNull.Value),
-            new SqlParameter("@DifficultyLevel", (object?)request.DifficultyLevel ?? DBNull.Value),
+            new SqlParameter("@DifficultyLevel", (object?)request.Difficulty ?? DBNull.Value),
             new SqlParameter("@PrepTimeMinutes", (object?)request.PrepTimeMinutes ?? DBNull.Value),
             new SqlParameter("@CookTimeMinutes", (object?)request.CookTimeMinutes ?? DBNull.Value),
             new SqlParameter("@TotalTimeMinutes", (object?)request.TotalTimeMinutes ?? DBNull.Value),

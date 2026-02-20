@@ -13,382 +13,385 @@
 
 <AuthorizeView>
     <Authorized>
-<div class="recipes-container">
-    <div class="recipes-header">
-        <h1>Recipe Collection</h1>
-        <div class="header-actions">
-            <button class="btn btn-outline" @onclick="NavigateToManageExports">
-                💾 Manage Exports
-            </button>
-            <button class="btn btn-outline" @onclick="NavigateToImport">
-                📥 Import Recipe
-            </button>
-            <button class="btn btn-primary" @onclick="NavigateToCreate">
-                ➕ Create Recipe
-            </button>
-        </div>
-    </div>
-
-    <!-- Unified Dietary Filter -->
-    <UnifiedDietaryFilter
-        OnFiltersChanged="HandleDietaryFiltersChanged"
-        InitialFilters="_dietaryFilters"
-        AutoLoadUserProfile="true" />
-
-    <!-- Recipe Tabs with View Toggle -->
-    <div class="recipe-tabs-container">
-        <div class="recipe-tabs">
-            <button class="tab-btn @(_activeTab == "all" ? "active" : "")" @onclick="HandleSetActiveTabAll">
-                🍽️ All Recipes (@_totalCount)
-            </button>
-            <button class="tab-btn @(_activeTab == "my" ? "active" : "")" @onclick="HandleSetActiveTabMy">
-                📝 My Recipes
-            </button>
-            <button class="tab-btn @(_activeTab == "favorites" ? "active" : "")" @onclick="HandleSetActiveTabFavorites">
-                ⭐ Favorites
-            </button>
-        </div>
-        
-        <!-- View Toggle -->
-        <div class="view-toggle">
-            <button class="view-btn @(_viewMode == "grid" ? "active" : "")" 
-                    @onclick="@(() => SetViewMode("grid"))"
-                    title="Grid View">
-                ⊞
-            </button>
-            <button class="view-btn @(_viewMode == "list" ? "active" : "")" 
-                    @onclick="@(() => SetViewMode("list"))"
-                    title="List View">
-                ☰
-            </button>
-        </div>
-    </div>
-
-    <!-- Search and Additional Filters -->
-    <div class="search-section">
-        <div class="search-bar">
-            <input type="text"
-                   class="search-input"
-                   placeholder="Search recipes by name, ingredients, or tags..."
-                   @bind="_searchTerm"
-                   @bind:event="oninput"
-                   @onkeypress="HandleSearchKeyPress" />
-            <button class="btn btn-primary" @onclick="SearchRecipes">
-                🔍 Search
-            </button>
-        </div>
-
-        <!-- Collapsible Advanced Filters -->
-        <div class="advanced-filters-section">
-            <button class="advanced-filters-toggle" @onclick="() => _showAdvancedFilters = !_showAdvancedFilters">
-                @if (_showAdvancedFilters)
-                {
-                    <span>▼ Hide Additional Filters</span>
-                }
-                else
-                {
-                    <span>▶ Show Additional Filters</span>
-                }
-            </button>
-
-            @if (_showAdvancedFilters)
-            {
-                <!-- Filters Row -->
-                <div class="filters-row">
-                    <div class="filter-group">
-                        <label>Difficulty</label>
-                        <select class="filter-select" @bind="_difficultyFilter">
-                            <option value="">Any</option>
-                            <option value="Easy">Easy</option>
-                            <option value="Medium">Medium</option>
-                            <option value="Hard">Hard</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group">
-                        <label>Max Prep Time</label>
-                        <select class="filter-select" @bind="_maxPrepTime">
-                            <option value="0">Any</option>
-                            <option value="15">15 min</option>
-                            <option value="30">30 min</option>
-                            <option value="45">45 min</option>
-                            <option value="60">1 hour</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group">
-                        <label>Max Cook Time</label>
-                        <select class="filter-select" @bind="_maxCookTime">
-                            <option value="0">Any</option>
-                            <option value="30">30 min</option>
-                            <option value="60">1 hour</option>
-                            <option value="120">2 hours</option>
-                            <option value="240">4 hours</option>
-                        </select>
-                    </div>
-
-                    <div class="filter-group">
-                        <label>Sort By</label>
-                        <select class="filter-select" @bind="_sortBy">
-                            <option value="CreatedAt">Newest First</option>
-                            <option value="ViewCount">Most Popular</option>
-                            <option value="FavoriteCount">Most Favorited</option>
-                            <option value="Title">Alphabetical</option>
-                        </select>
-                    </div>
-                </div>
-            }
-        </div>
-
-        <div class="filter-actions">
-            <button class="btn btn-outline" @onclick="ClearFilters">Clear All Filters</button>
-            <button class="btn btn-primary" @onclick="SearchRecipes">Apply Filters</button>
-        </div>
-    </div>
-
-    <!-- Loading State -->
-    @if (_isLoading)
-    {
-        <div class="loading-container">
-            <div class="spinner"></div>
-            <p>Loading recipes...</p>
-        </div>
-    }
-    else if (_searchResult is not null)
-    {
-        <!-- Results Summary -->
-        <div class="results-summary">
-            <p>
-                Showing @_searchResult.Recipes.Count of @_searchResult.TotalCount.ToString("N0") recipes
-                @if (_dietaryFilters.Any())
-                {
-                    <span class="filter-indicator">
-                        🍽️ Dietary filters: @string.Join(", ", _dietaryFilters.Take(3))@((_dietaryFilters.Count > 3) ? $" +{_dietaryFilters.Count - 3} more" : "")
-                    </span>
-                }
-            </p>
-        </div>
-
-        <!-- Category Sidebar -->
-        @if (_showCategoryFilter)
-        {
-            <div class="category-sidebar">
-                <div class="category-header">
-                    <h3>Categories</h3>
-                    <button class="btn-close" @onclick="() => _showCategoryFilter = false">✕</button>
-                </div>
-                <div class="category-list">
-                    <button class="category-item @(string.IsNullOrEmpty(_selectedCategory) ? "active" : "")"
-                            @onclick="() => FilterByCategory(null)">
-                        <span class="category-name">All Categories</span>
-                        <span class="category-count">@_totalCount</span>
+        <div class="recipes-container">
+            <div class="recipes-header">
+                <h1>Recipe Collection</h1>
+                <div class="header-actions">
+                    <button class="btn btn-outline" @onclick="NavigateToManageExports">
+                        💾 Manage Exports
                     </button>
-                    @foreach (var category in _categories)
-                    {
-                        <button class="category-item @(_selectedCategory == category ? "active" : "")"
-                                @onclick="() => FilterByCategory(category)">
-                            <span class="category-icon">@GetCategoryIcon(category)</span>
-                            <span class="category-name">@category</span>
-                            <span class="category-count">@GetCategoryCount(category)</span>
-                        </button>
-                    }
+                    <button class="btn btn-outline" @onclick="NavigateToImport">
+                        📥 Import Recipe
+                    </button>
+                    <button class="btn btn-primary" @onclick="NavigateToCreate">
+                        ➕ Create Recipe
+                    </button>
                 </div>
             </div>
-        }
 
-        <!-- Recipe Grid or List -->
-        @if (_searchResult.Recipes.Any())
-        {
-            <div class="recipes-content-area">
-                <!-- Category Toggle Button (mobile) -->
-                @if (!_showCategoryFilter)
-                {
-                    <button class="btn btn-outline category-toggle-btn" @onclick="() => _showCategoryFilter = true">
-                        📁 Categories
+            <!-- Unified Dietary Filter -->
+            <UnifiedDietaryFilter OnFiltersChanged="HandleDietaryFiltersChanged"
+                                  InitialFilters="_dietaryFilters"
+                                  AutoLoadUserProfile="true" />
+
+            <!-- Recipe Tabs with View Toggle -->
+            <div class="recipe-tabs-container">
+                <div class="recipe-tabs">
+                    <button class="tab-btn @(_activeTab == "all" ? "active" : "")" @onclick="HandleSetActiveTabAll">
+                        🍽️ All Recipes (@_totalCount)
                     </button>
-                }
+                    <button class="tab-btn @(_activeTab == "my" ? "active" : "")" @onclick="HandleSetActiveTabMy">
+                        📝 My Recipes
+                    </button>
+                    <button class="tab-btn @(_activeTab == "favorites" ? "active" : "")" @onclick="HandleSetActiveTabFavorites">
+                        ⭐ Favorites
+                    </button>
+                </div>
 
-                @if (_viewMode == "grid")
-                {
-                    <div class="recipes-grid">
-                @foreach (var recipe in _searchResult.Recipes)
-                {
-                    <div class="recipe-card" @onclick="() => ViewRecipe(recipe.Id)">
-                        <div class="recipe-image">
-                            @if (!string.IsNullOrEmpty(recipe.ImageUrl))
-                            {
-                                <img src="@recipe.ImageUrl" alt="@recipe.Title" />
-                            }
-                            else
-                            {
-                                <div class="recipe-image-placeholder">🍽️</div>
-                            }
-                            <div class="recipe-difficulty-badge @recipe.Difficulty.ToLower()">
-                                @recipe.Difficulty
+                <!-- View Toggle -->
+                <div class="view-toggle">
+                    <button class="view-btn @(_viewMode == "grid" ? "active" : "")"
+                            @onclick="@(() => SetViewMode("grid"))"
+                            title="Grid View">
+                        ⊞
+                    </button>
+                    <button class="view-btn @(_viewMode == "list" ? "active" : "")"
+                            @onclick="@(() => SetViewMode("list"))"
+                            title="List View">
+                        ☰
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search and Additional Filters -->
+            <div class="search-section">
+                <div class="search-bar">
+                    <input type="text"
+                           class="search-input"
+                           placeholder="Search recipes by name, ingredients, or tags..."
+                           @bind="_searchTerm"
+                           @bind:event="oninput"
+                           @onkeypress="HandleSearchKeyPress" />
+                    <button class="btn btn-primary" @onclick="SearchRecipes">
+                        🔍 Search
+                    </button>
+                </div>
+
+                <!-- Collapsible Advanced Filters -->
+                <div class="advanced-filters-section">
+                    <button class="advanced-filters-toggle" @onclick="() => _showAdvancedFilters = !_showAdvancedFilters">
+                        @if (_showAdvancedFilters)
+                        {
+                            <span>▼ Hide Additional Filters</span>
+                        }
+                        else
+                        {
+                            <span>▶ Show Additional Filters</span>
+                        }
+                    </button>
+
+                    @if (_showAdvancedFilters)
+                    {
+                        <!-- Filters Row -->
+                        <div class="filters-row">
+                            <div class="filter-group">
+                                <label>Difficulty</label>
+                                <select class="filter-select" @bind="_difficultyFilter">
+                                    <option value="">Any</option>
+                                    <option value="Easy">Easy</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="Hard">Hard</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-group">
+                                <label>Max Prep Time</label>
+                                <select class="filter-select" @bind="_maxPrepTime">
+                                    <option value="0">Any</option>
+                                    <option value="15">15 min</option>
+                                    <option value="30">30 min</option>
+                                    <option value="45">45 min</option>
+                                    <option value="60">1 hour</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-group">
+                                <label>Max Cook Time</label>
+                                <select class="filter-select" @bind="_maxCookTime">
+                                    <option value="0">Any</option>
+                                    <option value="30">30 min</option>
+                                    <option value="60">1 hour</option>
+                                    <option value="120">2 hours</option>
+                                    <option value="240">4 hours</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-group">
+                                <label>Sort By</label>
+                                <select class="filter-select" @bind="_sortBy">
+                                    <option value="CreatedAt">Newest First</option>
+                                    <option value="ViewCount">Most Popular</option>
+                                    <option value="FavoriteCount">Most Favorited</option>
+                                    <option value="Title">Alphabetical</option>
+                                </select>
                             </div>
                         </div>
+                    }
+                </div>
 
-                        <div class="recipe-info">
-                            <h3 class="recipe-title">@recipe.Title</h3>
-                            <p class="recipe-description">@TruncateDescription(recipe.Description, 100)</p>
+                <div class="filter-actions">
+                    <button class="btn btn-outline" @onclick="ClearFilters">Clear All Filters</button>
+                    <button class="btn btn-primary" @onclick="SearchRecipes">Apply Filters</button>
+                </div>
+            </div>
 
-                            <div class="recipe-meta">
-                                <span class="meta-item">
-                                    <span class="meta-icon">⏱️</span>
-                                    @recipe.TotalTimeMinutes min
-                                </span>
-                                <span class="meta-item">
-                                    <span class="meta-icon">🍴</span>
-                                    @recipe.Servings servings
-                                </span>
-                                @if (recipe.FavoriteCount > 0)
+            <!-- Loading State -->
+            @if (_isLoading)
+            {
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Loading recipes...</p>
+                </div>
+            }
+            else if (_searchResult is not null)
+            {
+                <!-- Results Summary -->
+                <div class="results-summary">
+                    <p>
+                        Showing @_searchResult.Recipes.Count of @_searchResult.TotalCount.ToString("N0") recipes
+                        @if (_dietaryFilters.Any())
+                        {
+                            <span class="filter-indicator">
+                                🍽️ Dietary filters: @string.Join(", ", _dietaryFilters.Take(3))@(_dietaryFilters.Count > 3 ? $" +{_dietaryFilters.Count - 3} more" : "")
+                            </span>
+                        }
+                    </p>
+                </div>
+
+                <!-- Category Sidebar -->
+                @if (_showCategoryFilter)
+                {
+                    <div class="category-sidebar">
+                        <div class="category-header">
+                            <h3>Categories</h3>
+                            <button class="btn-close" @onclick="() => _showCategoryFilter = false">✕</button>
+                        </div>
+                        <div class="category-list">
+                            <button class="category-item @(string.IsNullOrEmpty(_selectedCategory) ? "active" : "")"
+                                    @onclick="() => FilterByCategory(null)">
+                                <span class="category-name">All Categories</span>
+                                <span class="category-count">@_totalCount</span>
+                            </button>
+                            @foreach (var category in _categories)
+                            {
+                                <button class="category-item @(_selectedCategory == category ? "active" : "")"
+                                        @onclick="() => FilterByCategory(category)">
+                                    <span class="category-icon">@GetCategoryIcon(category)</span>
+                                    <span class="category-name">@category</span>
+                                    <span class="category-count">@GetCategoryCount(category)</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- Recipe Grid or List -->
+                @if (_searchResult.Recipes.Any())
+                {
+                    <div class="recipes-content-area">
+                        <!-- Category Toggle Button (mobile) -->
+                        @if (!_showCategoryFilter)
+                        {
+                            <button class="btn btn-outline category-toggle-btn" @onclick="() => _showCategoryFilter = true">
+                                📁 Categories
+                            </button>
+                        }
+
+                        @if (_viewMode == "grid")
+                        {
+                            <div class="recipes-grid">
+                                @foreach (var recipe in _searchResult.Recipes)
                                 {
-                                    <span class="meta-item">
-                                        <span class="meta-icon">⭐</span>
-                                        @recipe.FavoriteCount
-                                    </span>
+                                    <div class="recipe-card" @onclick="() => ViewRecipe(recipe.Id)">
+                                        <div class="recipe-image">
+                                            @if (!string.IsNullOrEmpty(recipe.ImageUrl))
+                                            {
+                                                <img src="@recipe.ImageUrl" alt="@recipe.Title" />
+                                            }
+                                            else
+                                            {
+                                                <div class="recipe-image-placeholder">🍽️</div>
+                                            }
+                                            <div class="recipe-difficulty-badge @recipe.Difficulty.ToLower()">
+                                                @recipe.Difficulty
+                                            </div>
+                                        </div>
+
+                                        <div class="recipe-info">
+                                            <h3 class="recipe-title">@recipe.Title</h3>
+                                            <p class="recipe-description">@TruncateDescription(recipe.Description, 100)</p>
+
+                                            <div class="recipe-meta">
+                                                <span class="meta-item">
+                                                    <span class="meta-icon">⏱️</span>
+                                                    @recipe.TotalTimeMinutes min
+                                                </span>
+                                                <span class="meta-item">
+                                                    <span class="meta-icon">🍴</span>
+                                                    @recipe.Servings servings
+                                                </span>
+                                                @if (recipe.FavoriteCount > 0)
+                                                {
+                                                    <span class="meta-item">
+                                                        <span class="meta-icon">⭐</span>
+                                                        @recipe.FavoriteCount
+                                                    </span>
+                                                }
+                                            </div>
+
+                                            @if (recipe.Tags.Any())
+                                            {
+                                                <div class="recipe-tags">
+                                                    @foreach (var tag in recipe.Tags.Take(3))
+                                                    {
+                                                        <span class="recipe-tag">@tag</span>
+                                                    }
+                                                    @if (recipe.Tags.Count > 3)
+                                                    {
+                                                        <span class="recipe-tag">+@(recipe.Tags.Count - 3)</span>
+                                                    }
+                                                </div>
+                                            }
+
+                                            @if (recipe.DietaryInfo.Any())
+                                            {
+                                                <div class="dietary-badges">
+                                                    @foreach (var diet in recipe.DietaryInfo.Take(3))
+                                                    {
+                                                        <span class="dietary-badge">@diet</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <div class="recipe-footer">
+                                            <button class="btn-link" @onclick:stopPropagation="true" @onclick="() => ViewRecipe(recipe.Id)">
+                                                View Recipe →
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- List View -->
+                            <div class="recipes-list">
+                                @foreach (var recipe in _searchResult.Recipes)
+                                {
+                                    <div class="recipe-list-item" @onclick="() => ViewRecipe(recipe.Id)">
+                                        <div class="recipe-list-image">
+                                            @if (!string.IsNullOrEmpty(recipe.ImageUrl))
+                                            {
+                                                <img src="@recipe.ImageUrl" alt="@recipe.Title" />
+                                            }
+                                            else
+                                            {
+                                                <div class="recipe-list-placeholder">🍽️</div>
+                                            }
+                                        </div>
+
+                                        <div class="recipe-list-content">
+                                            <div class="recipe-list-header">
+                                                <h3 class="recipe-list-title">@recipe.Title</h3>
+                                                <span class="recipe-list-badge @recipe.Difficulty.ToLower()">@recipe.Difficulty</span>
+                                            </div>
+
+                                            <p class="recipe-list-description">@TruncateDescription(recipe.Description, 150)</p>
+
+                                            <div class="recipe-list-meta">
+                                                <span class="list-meta-item">⏱️ @recipe.TotalTimeMinutes min</span>
+                                                <span class="list-meta-item">🍴 @recipe.Servings servings</span>
+                                                @if (recipe.FavoriteCount > 0)
+                                                {
+                                                    <span class="list-meta-item">⭐ @recipe.FavoriteCount</span>
+                                                }
+                                            </div>
+
+                                            @if (recipe.Tags.Any())
+                                            {
+                                                <div class="recipe-list-tags">
+                                                    @foreach (var tag in recipe.Tags.Take(5))
+                                                    {
+                                                        <span class="recipe-tag-small">@tag</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+
+                                        <div class="recipe-list-actions">
+                                            <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ViewRecipe(recipe.Id)">
+                                                View →
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Pagination -->
+                    @if (_searchResult.TotalPages > 1)
+                    {
+                        <div class="pagination">
+                            <button class="btn btn-outline"
+                                    @onclick="() => ChangePage(_currentPage - 1)"
+                                    disabled="@(_currentPage <= 1)">
+                                ← Previous
+                            </button>
+
+                            <div class="page-numbers">
+                                @for (int i = Math.Max(1, _currentPage - 2); i <= Math.Min(_searchResult.TotalPages, _currentPage + 2); i++)
+                                {
+                                    var pageNum = i;
+                                    <button class="page-number @(pageNum == _currentPage ? "active" : "")"
+                                            @onclick="() => ChangePage(pageNum)">
+                                        @pageNum
+                                    </button>
                                 }
                             </div>
 
-                            @if (recipe.Tags.Any())
-                            {
-                                <div class="recipe-tags">
-                                    @foreach (var tag in recipe.Tags.Take(3))
-                                    {
-                                        <span class="recipe-tag">@tag</span>
-                                    }
-                                    @if (recipe.Tags.Count > 3)
-                                    {
-                                        <span class="recipe-tag">+@(recipe.Tags.Count - 3)</span>
-                                    }
-                                </div>
-                            }
-
-                            @if (recipe.DietaryInfo.Any())
-                            {
-                                <div class="dietary-badges">
-                                    @foreach (var diet in recipe.DietaryInfo.Take(3))
-                                    {
-                                        <span class="dietary-badge">@diet</span>
-                                    }
-                                </div>
-                            }
+                            <button class="btn btn-outline"
+                                    @onclick="() => ChangePage(_currentPage + 1)"
+                                    disabled="@(_currentPage >= _searchResult.TotalPages)">
+                                Next →
+                            </button>
                         </div>
-
-                        <div class="recipe-footer">
-                            <button class="btn-link" @onclick:stopPropagation="true" @onclick="() => ViewRecipe(recipe.Id)">
-                                View Recipe →
+                    }
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <h2>No safe recipes found</h2>
+                        <p>No recipes match your current allergen and dietary filters.</p>
+                        <div class="empty-actions">
+                            <button class="btn btn-outline" @onclick="ClearFilters">Clear All Filters</button>
+                            <button class="btn btn-primary" @onclick="NavigateToCreate">
+                                Create Custom Recipe
                             </button>
                         </div>
                     </div>
                 }
-                    </div>
-                }
-                else
-                {
-                    <!-- List View -->
-                    <div class="recipes-list">
-                        @foreach (var recipe in _searchResult.Recipes)
-                        {
-                            <div class="recipe-list-item" @onclick="() => ViewRecipe(recipe.Id)">
-                                <div class="recipe-list-image">
-                                    @if (!string.IsNullOrEmpty(recipe.ImageUrl))
-                                    {
-                                        <img src="@recipe.ImageUrl" alt="@recipe.Title" />
-                                    }
-                                    else
-                                    {
-                                        <div class="recipe-list-placeholder">🍽️</div>
-                                    }
-                                </div>
-                                
-                                <div class="recipe-list-content">
-                                    <div class="recipe-list-header">
-                                        <h3 class="recipe-list-title">@recipe.Title</h3>
-                                        <span class="recipe-list-badge @recipe.Difficulty.ToLower()">@recipe.Difficulty</span>
-                                    </div>
-                                    
-                                    <p class="recipe-list-description">@TruncateDescription(recipe.Description, 150)</p>
-                                    
-                                    <div class="recipe-list-meta">
-                                        <span class="list-meta-item">⏱️ @recipe.TotalTimeMinutes min</span>
-                                        <span class="list-meta-item">🍴 @recipe.Servings servings</span>
-                                        @if (recipe.FavoriteCount > 0)
-                                        {
-                                            <span class="list-meta-item">⭐ @recipe.FavoriteCount</span>
-                                        }
-                                    </div>
-                                    
-                                    @if (recipe.Tags.Any())
-                                    {
-                                        <div class="recipe-list-tags">
-                                            @foreach (var tag in recipe.Tags.Take(5))
-                                            {
-                                                <span class="recipe-tag-small">@tag</span>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                                
-                                <div class="recipe-list-actions">
-                                    <button class="btn btn-sm btn-primary" @onclick:stopPropagation="true" @onclick="() => ViewRecipe(recipe.Id)">
-                                        View →
-                                    </button>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
+            }
 
-            <!-- Pagination -->
-            @if (_searchResult.TotalPages > 1)
+            <!-- Error Message -->
+            @if (!string.IsNullOrEmpty(_errorMessage))
             {
-                <div class="pagination">
-                    <button class="btn btn-outline"
-                            @onclick="() => ChangePage(_currentPage - 1)"
-                            disabled="@(_currentPage <= 1)">
-                        ← Previous
-                    </button>
-
-                    <div class="page-numbers">
-                        @for (int i = Math.Max(1, _currentPage - 2); i <= Math.Min(_searchResult.TotalPages, _currentPage + 2); i++)
-                        {
-                            var pageNum = i;
-                            <button class="page-number @(pageNum == _currentPage ? "active" : "")"
-                                    @onclick="() => ChangePage(pageNum)"> @pageNum</button>
-                        }
-                    </div>
-
-                    <button class="btn btn-outline"
-                            @onclick="() => ChangePage(_currentPage + 1)"
-                            disabled="@(_currentPage >= _searchResult.TotalPages)">
-                        Next →
-                    </button>
+                <div class="alert alert-error">
+                    <strong>Error:</strong> @_errorMessage
                 </div>
             }
-        }
-        else
-        {
-            <div class="empty-state">
-                <div class="empty-icon">🔍</div>
-                <h2>No safe recipes found</h2>
-                <p>No recipes match your current allergen and dietary filters.</p>
-                <div class="empty-actions">
-                    <button class="btn btn-outline" @onclick="ClearFilters">Clear All Filters</button>
-                    <button class="btn btn-primary" @onclick="NavigateToCreate">
-                        Create Custom Recipe
-                    </button>
-                </div>
-            </div>
-        }
-    }
-
-    <!-- Error Message -->
-    @if (!string.IsNullOrEmpty(_errorMessage))
-    {
-        <div class="alert alert-error">
-            <strong>Error:</strong> @_errorMessage
         </div>
     }
 </div>
@@ -410,7 +413,7 @@
     private string _sortBy = "CreatedAt";
     private bool _showAdvancedFilters = false;
     private List<string> _dietaryFilters = new(); // Unified filters from UnifiedDietaryFilter component
-    
+
     // View mode and category filtering
     private string _viewMode = "grid"; // "grid" or "list"
     private bool _showCategoryFilter = true;
@@ -430,30 +433,30 @@
         // Load view mode preference from localStorage would go here
         // For now, default to grid
         _viewMode = "grid";
-        _categories = Configuration.GetSection("RecipeMetadata:Categories").Get<string[]>() 
+        _categories = Configuration.GetSection("RecipeMetadata:Categories").Get<string[]>()
                       ?? new[] { "Breakfast", "Lunch", "Dinner", "Dessert", "Snack", "Appetizer", "Side Dish", "Salad", "Soup", "Beverage" };
-        
+
         // Load initial recipes
         await SearchRecipes();
-        
+
         // Calculate category counts
         await UpdateCategoryCounts();
     }
-    
+
     private void SetViewMode(string mode)
     {
         _viewMode = mode;
         // TODO: Save to localStorage
         StateHasChanged();
     }
-    
+
     private async Task FilterByCategory(string? category)
     {
         _selectedCategory = category;
         _currentPage = 1;
         await SearchRecipes();
     }
-    
+
     private async Task UpdateCategoryCounts()
     {
         // This would ideally come from an API endpoint
@@ -463,7 +466,7 @@
             _categoryCounts[category] = 0; // Would be calculated from API
         }
     }
-    
+
     private string GetCategoryIcon(string category)
     {
         return category switch
@@ -481,7 +484,7 @@
             _ => "🍽️"
         };
     }
-    
+
     private int GetCategoryCount(string category)
     {
         return _categoryCounts.TryGetValue(category, out var count) ? count : 0;
@@ -547,6 +550,8 @@
 
     private async Task SearchRecipes()
     {
+        if (_isLoading) return;
+
         _isLoading = true;
         _errorMessage = null;
 

@@ -8,6 +8,8 @@ ALTER TABLE ShoppingList ADD ListType NVARCHAR(50) NOT NULL DEFAULT 'Standard'; 
 ALTER TABLE ShoppingList ADD ScheduledFor DATETIME2 NULL; -- For future lists
 ALTER TABLE ShoppingList ADD StoreId UNIQUEIDENTIFIER NULL; -- Preferred store for this list
 
+GO
+
 CREATE INDEX IX_ShoppingList_HouseholdId ON ShoppingList(HouseholdId);
 CREATE INDEX IX_ShoppingList_StoreId ON ShoppingList(StoreId);
 CREATE INDEX IX_ShoppingList_ListType ON ShoppingList(ListType);
@@ -33,6 +35,8 @@ ALTER TABLE ShoppingListItem ADD DealType NVARCHAR(50) NULL; -- BOGO, Buy1Get50O
 ALTER TABLE ShoppingListItem ADD DealDescription NVARCHAR(500) NULL;
 ALTER TABLE ShoppingListItem ADD PurchasedAt DATETIME2 NULL;
 ALTER TABLE ShoppingListItem ADD AddToInventoryOnPurchase BIT NOT NULL DEFAULT 1;
+
+GO
 
 CREATE INDEX IX_ShoppingListItem_IsFavorite ON ShoppingListItem(IsFavorite) WHERE IsFavorite = 1;
 CREATE INDEX IX_ShoppingListItem_StoreId ON ShoppingListItem(StoreId);

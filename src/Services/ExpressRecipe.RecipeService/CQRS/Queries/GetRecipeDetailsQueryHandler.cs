@@ -99,12 +99,13 @@ public class GetRecipeDetailsQueryHandler : IQueryHandler<GetRecipeDetailsQuery,
                 Unit = i.Unit ?? string.Empty,
                 Notes = i.PreparationNote, // Map PreparationNote to Notes
                 IsOptional = i.IsOptional,
-                SortOrder = i.OrderIndex // Map OrderIndex to SortOrder
+                SortOrder = i.OrderIndex, // Map OrderIndex to SortOrder
+                GroupName = i.GroupName
             }).ToList(),
             Instructions = instructions.Select(i => new RecipeInstructionDto
             {
                 Id = i.Id,
-                StepNumber = i.StepNumber,
+                OrderIndex = i.OrderIndex,
                 Instruction = i.Instruction,
                 TimeMinutes = i.TimeMinutes
             }).ToList(),

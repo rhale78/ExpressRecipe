@@ -70,6 +70,9 @@ public interface IRecipeRepository
     Task IncrementViewCountAsync(Guid recipeId);
 
     Task UpdateRecipeInstructionsAsync(Guid recipeId, string instructions);
+    Task ClearRecipeIngredientsAsync(Guid recipeId);
+    Task ClearRecipeInstructionsAsync(Guid recipeId);
+    Task ClearRecipeTagsAsync(Guid recipeId);
 
     // Additional methods for RecipesController
     Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto>> GetRecipeIngredientsAsync(Guid recipeId);

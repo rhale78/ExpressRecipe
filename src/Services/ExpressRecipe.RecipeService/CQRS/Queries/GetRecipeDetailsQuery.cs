@@ -54,12 +54,13 @@ public class RecipeIngredientDto
     public string? Notes { get; set; }
     public bool IsOptional { get; set; }
     public int SortOrder { get; set; }
+    public string? GroupName { get; set; }
 }
 
 public class RecipeInstructionDto
 {
     public Guid Id { get; set; }
-    public int StepNumber { get; set; }
+    public int OrderIndex { get; set; }
     public string Instruction { get; set; } = string.Empty;
     public int? TimeMinutes { get; set; }
 }

@@ -1,17 +1,31 @@
+using System.Text.Json.Serialization;
+
 namespace ExpressRecipe.Client.Shared.Models.Auth;
 
 public class RegisterRequest
 {
+    [JsonPropertyName("email")]
     public string Email { get; set; } = string.Empty;
+    
+    [JsonPropertyName("password")]
     public string Password { get; set; } = string.Empty;
+    
+    [JsonPropertyName("firstName")]
     public string FirstName { get; set; } = string.Empty;
+    
+    [JsonPropertyName("lastName")]
     public string LastName { get; set; } = string.Empty;
 }
 
 public class LoginRequest
 {
+    [JsonPropertyName("email")]
     public string Email { get; set; } = string.Empty;
+    
+    [JsonPropertyName("password")]
     public string Password { get; set; } = string.Empty;
+    
+    [JsonPropertyName("rememberMe")]
     public bool RememberMe { get; set; }
 }
 

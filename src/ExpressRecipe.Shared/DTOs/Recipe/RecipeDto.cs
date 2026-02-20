@@ -55,6 +55,7 @@ public class RecipeIngredientDto
     public string? PreparationNote { get; set; }
     public bool IsOptional { get; set; }
     public string? SubstituteNotes { get; set; }
+    public string? GroupName { get; set; }
 }
 
 public class RecipeNutritionDto
@@ -109,7 +110,7 @@ public class CreateRecipeRequest
     public string? Cuisine { get; set; }
 
     [StringLength(50)]
-    public string? DifficultyLevel { get; set; }
+    public string? Difficulty { get; set; }
 
     [Range(0, 10000)]
     public int? PrepTimeMinutes { get; set; }
@@ -140,7 +141,10 @@ public class CreateRecipeRequest
     public string? SourceUrl { get; set; }
 
     public Guid CreatedBy { get; set; }
-    // Ingredients and tags added separately via dedicated endpoints
+    
+    public List<CreateRecipeIngredientRequest>? Ingredients { get; set; }
+    public List<CreateRecipeStepRequest>? Steps { get; set; }
+    public List<string>? Tags { get; set; }
 }
 
 public class UpdateRecipeRequest
@@ -158,7 +162,7 @@ public class UpdateRecipeRequest
     public string? Cuisine { get; set; }
 
     [StringLength(50)]
-    public string? DifficultyLevel { get; set; }
+    public string? Difficulty { get; set; }
 
     [Range(0, 10000)]
     public int? PrepTimeMinutes { get; set; }
@@ -187,6 +191,30 @@ public class UpdateRecipeRequest
     [Url]
     [StringLength(500)]
     public string? SourceUrl { get; set; }
+
+    public List<CreateRecipeIngredientRequest>? Ingredients { get; set; }
+    public List<CreateRecipeStepRequest>? Steps { get; set; }
+    public List<string>? Tags { get; set; }
+}
+
+public class CreateRecipeIngredientRequest
+{
+    public int OrderIndex { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public string Unit { get; set; } = string.Empty;
+    public string? Notes { get; set; }
+    public bool IsOptional { get; set; }
+    public string? GroupName { get; set; }
+}
+
+public class CreateRecipeStepRequest
+{
+    public int OrderIndex { get; set; }
+    public string Instruction { get; set; } = string.Empty;
+    public int? DurationMinutes { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? Tips { get; set; }
 }
 
 public class RecipeSearchRequest
@@ -194,14 +222,13 @@ public class RecipeSearchRequest
     public string? SearchTerm { get; set; }
     public string? Category { get; set; }
     public string? Cuisine { get; set; }
-    public string? DifficultyLevel { get; set; }
+    public string? Difficulty { get; set; }
     public List<string>? Tags { get; set; }
     public List<string>? DietaryInfo { get; set; }
     public List<string>? ExcludeAllergens { get; set; } // Filter out recipes with these allergens
     public List<string>? ExcludeIngredients { get; set; } // Foods/ingredients user dislikes
     public int? MaxPrepTime { get; set; }
     public int? MaxCookTime { get; set; }
-    public string? Difficulty { get; set; }
     public int? MaxPrepTimeMinutes { get; set; }
     public int? MaxTotalTimeMinutes { get; set; }
     public List<Guid>? TagIds { get; set; }

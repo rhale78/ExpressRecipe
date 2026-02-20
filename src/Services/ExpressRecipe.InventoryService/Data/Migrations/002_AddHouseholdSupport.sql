@@ -73,6 +73,8 @@ ALTER TABLE StorageLocation ADD
     CONSTRAINT FK_StorageLocation_Address FOREIGN KEY (AddressId)
         REFERENCES Address(Id);
 
+GO
+
 CREATE INDEX IX_StorageLocation_HouseholdId ON StorageLocation(HouseholdId);
 CREATE INDEX IX_StorageLocation_AddressId ON StorageLocation(AddressId);
 GO
@@ -86,6 +88,8 @@ ALTER TABLE InventoryItem ADD
     CONSTRAINT FK_InventoryItem_Household FOREIGN KEY (HouseholdId)
         REFERENCES Household(Id);
 
+GO
+
 CREATE INDEX IX_InventoryItem_HouseholdId ON InventoryItem(HouseholdId);
 CREATE INDEX IX_InventoryItem_AddedBy ON InventoryItem(AddedBy);
 GO
@@ -94,6 +98,8 @@ GO
 ALTER TABLE InventoryHistory ADD ChangedBy UNIQUEIDENTIFIER NULL;
 ALTER TABLE InventoryHistory ADD DisposalReason NVARCHAR(100) NULL; -- Bad, CausedAllergy, Expired, Other
 ALTER TABLE InventoryHistory ADD AllergenDetected NVARCHAR(500) NULL; -- Comma-separated list of allergens
+
+GO
 
 CREATE INDEX IX_InventoryHistory_ChangedBy ON InventoryHistory(ChangedBy);
 CREATE INDEX IX_InventoryHistory_DisposalReason ON InventoryHistory(DisposalReason) WHERE DisposalReason IS NOT NULL;

@@ -236,7 +236,7 @@ public class RecipeImportService
             Description = parsed.Description,
             Category = parsed.Category,
             Cuisine = parsed.Cuisine,
-            DifficultyLevel = parsed.DifficultyLevel,
+            Difficulty = parsed.DifficultyLevel,
             PrepTimeMinutes = parsed.PrepTimeMinutes,
             CookTimeMinutes = parsed.CookTimeMinutes,
             Servings = parsed.Servings,

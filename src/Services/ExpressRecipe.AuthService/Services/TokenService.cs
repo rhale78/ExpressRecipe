@@ -33,7 +33,7 @@ public class TokenService : ITokenService
     public string GenerateAccessToken(User user)
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");
-        var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+        var secretKey = jwtSettings["SecretKey"] ?? _configuration["JWT_SECRET_KEY"] ?? "development-secret-key-change-in-production-min-32-chars-required!";
         var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe";
         var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
         var expirationMinutes = int.Parse(jwtSettings["ExpirationMinutes"] ?? "60");
@@ -65,7 +65,7 @@ public class TokenService : ITokenService
     public string GenerateAccessToken(AuthUser user)
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");
-        var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey not configured");
+        var secretKey = jwtSettings["SecretKey"] ?? _configuration["JWT_SECRET_KEY"] ?? "development-secret-key-change-in-production-min-32-chars-required!";
         var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe";
         var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
         var expirationMinutes = int.Parse(jwtSettings["ExpirationMinutes"] ?? "60");
@@ -113,7 +113,7 @@ public class TokenService : ITokenService
 
     public string HashPassword(string password)
     {
-        return BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12);
+        return BCrypt.Net.BCrypt.HashPassword(password, workFactor: 11);
     }
 
     public bool VerifyPassword(string password, string passwordHash)
