@@ -94,7 +94,7 @@ public class RecipeSearchRequest
     public int? MaxPrepTime { get; set; }
     public int? MaxCookTime { get; set; }
     public string? Difficulty { get; set; }
-    public string? Category { get; set; }
+    //public string? Category { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
     public string? SortBy { get; set; } = "CreatedAt"; // CreatedAt, ViewCount, FavoriteCount, Title
@@ -123,7 +123,7 @@ public class CreateRecipeRequest
     public RecipeSourceDto? SourceMetadata { get; set; }
     public string? Source { get; set; }
     public string? SourceUrl { get; set; }
-    public RecipeSourceDto? SourceMetadata { get; set; }
+    //public RecipeSourceDto? SourceMetadata { get; set; }
     public string? Cuisine { get; set; }
     public string? Category { get; set; }
     public List<CreateRecipeIngredientRequest> Ingredients { get; set; } = new();
