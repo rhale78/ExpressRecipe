@@ -74,6 +74,9 @@ public class ExtractedRecipeDto
     public string Difficulty { get; set; } = string.Empty;
     public List<string> DietaryInfo { get; set; } = new();
     public double ConfidenceScore { get; set; }
+    public string? Category { get; set; }
+    public string? Cuisine { get; set; }
+    public List<string> Tags { get; set; } = new();
 }
 
 public class ExtractedIngredientDto
