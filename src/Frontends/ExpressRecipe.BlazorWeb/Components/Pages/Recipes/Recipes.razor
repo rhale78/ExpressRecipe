@@ -7,6 +7,7 @@
 @inject IRecipeApiClient RecipeApi
 @inject IUserProfileApiClient UserProfileApi
 @inject NavigationManager Navigation
+@inject IConfiguration Configuration
 
 <PageTitle>Recipes - ExpressRecipe</PageTitle>
 
@@ -389,8 +390,6 @@
         <div class="alert alert-error">
             <strong>Error:</strong> @_errorMessage
         </div>
-    }
-</div>
     </Authorized>
     <NotAuthorized>
         <div class="unauthorized-container">
@@ -414,11 +413,7 @@
     private string _viewMode = "grid"; // "grid" or "list"
     private bool _showCategoryFilter = true;
     private string? _selectedCategory = null;
-    private readonly List<string> _categories = new()
-    {
-        "Breakfast", "Lunch", "Dinner", "Dessert", "Snack",
-        "Appetizer", "Side Dish", "Salad", "Soup", "Beverage"
-    };
+    private string[] _categories = Array.Empty<string>();
     private Dictionary<string, int> _categoryCounts = new();
 
     private RecipeSearchResult? _searchResult;
@@ -433,6 +428,8 @@
         // Load view mode preference from localStorage would go here
         // For now, default to grid
         _viewMode = "grid";
+        _categories = Configuration.GetSection("RecipeMetadata:Categories").Get<string[]>() 
+                      ?? new[] { "Breakfast", "Lunch", "Dinner", "Dessert", "Snack", "Appetizer", "Side Dish", "Salad", "Soup", "Beverage" };
         
         // Load initial recipes
         await SearchRecipes();
@@ -562,6 +559,7 @@
                 DietaryInfo = _dietaryFilters.Any() ? _dietaryFilters : null,
                 ExcludeAllergens = _dietaryFilters.Any() ? _dietaryFilters : null,
                 ExcludeIngredients = _dietaryFilters.Any() ? _dietaryFilters : null,
+                Category = _selectedCategory, // Add selected category to search request
                 Page = _currentPage,
                 PageSize = _pageSize,
                 SortBy = _sortBy,
@@ -615,6 +613,7 @@
         _maxCookTime = 0;
         _sortBy = "CreatedAt";
         _dietaryFilters.Clear(); // Clear unified dietary filters
+        _selectedCategory = null; // Clear selected category
 
         _currentPage = 1;
         await SearchRecipes();
@@ -632,7 +631,7 @@
 
     private void NavigateToCreate()
     {
-        Navigation.NavigateTo("/recipes/create");
+        Navigation.NavigateTo("/recipes/studio");
     }
 
     private void NavigateToManageExports()
@@ -668,4 +667,3 @@
         return description.Substring(0, maxLength) + "...";
     }
 }
-

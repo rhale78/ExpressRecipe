@@ -1,0 +1,1070 @@
+@page "/recipes/studio"
+@page "/recipes/studio/{RecipeId:guid}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Models.Product
+@using ExpressRecipe.Client.Shared.Models.AI
+@using ExpressRecipe.BlazorWeb.Services
+@using Blazored.LocalStorage
+@inject IRecipeApiClient RecipeApi
+@inject IProductApiClient ProductApi
+@inject IAIApiClient AIApi
+@inject ILocalStorageService LocalStorage
+@inject RecipeSyncService SyncService
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IConfiguration Configuration
+@implements IDisposable
+
+<PageTitle>@(_recipe.Title ?? "New Recipe") - Studio</PageTitle>
+
+<style>
+    /* Direct injection to bypass isolation issues and fix heights */
+    .magic-textarea-forced {
+        width: 100% !important;
+        min-height: 700px !important;
+        height: 700px !important;
+        border: 3px solid #007bff !important;
+        border-radius: 1rem !important;
+        padding: 2rem !important;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+        font-size: 1.2rem !important;
+        line-height: 1.6 !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 10px 25px rgba(0,123,255,0.1) !important;
+        margin-bottom: 2rem !important;
+        display: block !important;
+    }
+
+    .ingredient-row input, .ingredient-row select, .ingredient-row .input-group-text, .ingredient-row button {
+        height: 45px !important;
+        line-height: 1.5 !important;
+    }
+
+    .debug-version-banner {
+        background-color: #20c997;
+        color: #fff;
+        padding: 0.5rem;
+        text-align: center;
+        font-weight: bold;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        border: 2px solid #1ba87e;
+    }
+
+    .ai-stage-indicator {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #007bff;
+        margin-top: 0.5rem;
+        animation: pulse 1.5s infinite;
+    }
+
+    @@keyframes pulse {
+        0% { opacity: 0.6; }
+        50% { opacity: 1; }
+        100% { opacity: 0.6; }
+    }
+</style>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="recipe-studio-container">
+            <div class="debug-version-banner">
+                🚀 RECIPE STUDIO - VERSION 3.10 (RECIPES.RAZOR RESTORED) 🚀
+            </div>
+
+            @if (_showOnboarding && !IsEditMode && _currentStep == 1)
+            {
+                <div class="onboarding-screen shadow">
+                    <div class="onboarding-close" @onclick="() => _showOnboarding = false">✕</div>
+                    <h2>✨ Welcome to Recipe Studio</h2>
+                    <p class="lead">A frictionless way to digitize your recipes. Click an icon to learn more:</p>
+                    
+                    <div class="row mt-4 g-3">
+                        <div class="col-md-4">
+                            <div class="onboarding-icon-btn @(_onboardingFeature == "import" ? "active" : "")" @onclick='() => _onboardingFeature = "import"'>
+                                <div class="h1">🪄</div>
+                                <h5>Magic Import</h5>
+                                <p class="small mb-0">Type or paste everything at once.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="onboarding-icon-btn @(_onboardingFeature == "review" ? "active" : "")" @onclick='() => _onboardingFeature = "review"'>
+                                <div class="h1">📏</div>
+                                <h5>Guided Review</h5>
+                                <p class="small mb-0">Verify and refine AI results.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="onboarding-icon-btn @(_onboardingFeature == "safety" ? "active" : "")" @onclick='() => _onboardingFeature = "safety"'>
+                                <div class="h1">🛡️</div>
+                                <h5>Safety Options</h5>
+                                <p class="small mb-0">Optional allergen verification.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_onboardingFeature))
+                    {
+                        <div class="onboarding-detail-box">
+                            @if (_onboardingFeature == "import")
+                            {
+                                <strong>🪄 Magic Import:</strong>
+                                <p class="mb-0">You don't have to fill out dozens of fields. Simply type or paste the entire recipe (Title, Ingredients, Instructions) into the large workspace. Our AI will automatically categorize every piece of data for you.</p>
+                            }
+                            else if (_onboardingFeature == "review")
+                            {
+                                <strong>📏 Guided Review:</strong>
+                                <p class="mb-0">Once the AI parses your text, you'll walk through a simplified 4-step review process. This ensures that weights, volumes, and instructions are exactly how you want them before saving to your cookbook.</p>
+                            }
+                            else if (_onboardingFeature == "safety")
+                            {
+                                <strong>🛡️ Safety Options:</strong>
+                                <p class="mb-0">This is 100% optional. If enabled, the system will match your ingredients against real-world products to check for hidden allergens (like Annatto in cheese). You can ignore this if you're just entering recipes for record-keeping.</p>
+                            }
+                        </div>
+                    }
+
+                    <div class="mt-4 d-flex justify-content-between align-items-center">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" @bind="_neverShowOnboarding" id="dontShow">
+                            <label class="form-check-label text-white-50" for="dontShow">Don't show this intro again</label>
+                        </div>
+                        <button class="btn btn-light fw-bold px-4 shadow-sm" @onclick="DismissOnboarding">Start Creating</button>
+                    </div>
+                </div>
+            }
+
+            @if (_showDraftLobby && !IsEditMode && _currentStep == 1)
+            {
+                <div class="draft-lobby mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h3 class="mb-0">📝 Your Unfinished Drafts</h3>
+                        <button class="btn btn-primary shadow-sm fw-bold" @onclick="StartNewEmptyRecipe">➕ Start Fresh Recipe</button>
+                    </div>
+                    
+                    @if (_drafts.Any())
+                    {
+                        @foreach (var draft in _drafts)
+                        {
+                            <div class="draft-item shadow-sm">
+                                <div>
+                                    <h5 class="mb-1 text-primary fw-bold">@(string.IsNullOrEmpty(draft.Title) ? "Untitled Recipe" : draft.Title)</h5>
+                                    <p class="mb-0 text-muted small">Saved on @draft.UpdatedAt.ToString("MMM dd, HH:mm") • @draft.IngredientsCount items</p>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-outline-primary px-4 fw-bold" @onclick="() => ResumeDraft(draft.Id)">Continue</button>
+                                    <button class="btn btn-outline-danger" @onclick="() => DeleteDraft(draft.Id)">🗑️</button>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center py-5 border rounded bg-light">
+                            <p class="text-muted">No saved drafts found.</p>
+                            <button class="btn btn-link" @onclick="StartNewEmptyRecipe">Click here to start your first recipe!</button>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="studio-layout">
+                    <div class="studio-main">
+                        <!-- Studio Header -->
+                        <div class="studio-header">
+                            <div>
+                                <h1 class="studio-title">@(_recipe.Title ?? "New Recipe")</h1>
+                                <div class="autosave-status">
+                                    @if (_isSavingDraft)
+                                    {
+                                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                                        <span>Saving draft...</span>
+                                    }
+                                    else if (_lastSavedDraft.HasValue)
+                                    {
+                                        <span class="pulse"></span>
+                                        <span>Auto-saved at @_lastSavedDraft.Value.ToString("HH:mm:ss")</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="header-actions">
+                                @if (_ingredientUndoStack.Any())
+                                {
+                                    <button class="btn btn-outline-warning me-2 fw-bold" @onclick="UndoDelete" title="Undo Delete">↩️ Undo</button>
+                                }
+                                <button class="btn btn-outline-secondary px-4 fw-bold me-2" @onclick="Cancel">✖ Cancel</button>
+                                @if (_currentStep > 1)
+                                {
+                                    <button class="btn btn-primary fw-bold shadow-sm" @onclick="SaveRecipe" disabled="@(_isSaving || !IsValid())">
+                                        @if (_isSaving)
+                                        {
+                                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                                        }
+                                        else
+                                        {
+                                            <span>💾 Save Recipe</span>
+                                        }
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Stepper (Hidden on Step 1) -->
+                        @if (_currentStep > 1 || IsEditMode)
+                        {
+                            <div class="studio-stepper">
+                                <div class="step-item @GetStepClass(2)" @onclick="() => SetStep(2)">
+                                    1
+                                    <span class="step-label">Basic Info</span>
+                                </div>
+                                <div class="step-item @GetStepClass(3)" @onclick="() => SetStep(3)">
+                                    2
+                                    <span class="step-label">Ingredients</span>
+                                </div>
+                                <div class="step-item @GetStepClass(4)" @onclick="() => SetStep(4)">
+                                    3
+                                    <span class="step-label">Instructions</span>
+                                </div>
+                                <div class="step-item @GetStepClass(5)" @onclick="() => SetStep(5)">
+                                    4
+                                    <span class="step-label">Final Details</span>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Step 1: Magic Entry -->
+                        @if (!IsEditMode && _currentStep == 1)
+                        {
+                            <div class="magic-box-card">
+                                <div class="magic-box-header">
+                                    <div class="magic-box-title">
+                                        <span style="font-size: 2rem;">✨</span>
+                                        <h3 class="mb-0">Recipe Workspace</h3>
+                                    </div>
+                                    <p class="lead text-primary mb-0">Type or paste your recipe text here.</p>
+                                </div>
+                                
+                                <div class="p-4">
+                                    <p class="text-muted mb-3">Our AI will automatically organize your text into the correct fields once you click <strong>Start Magic Parse</strong>.</p>
+                                    
+                                    <textarea class="magic-textarea-forced" 
+                                              @bind="_magicInput"
+                                              placeholder="E.g.
+Simple Scrambled Eggs
+
+3 large eggs
+1 tbsp butter
+1 tbsp milk (optional)
+salt and pepper to taste
+
+1. Whisk: Crack eggs into a bowl, add milk and salt. Whisk vigorously.
+2. Heat: Melt butter in a nonstick skillet over medium-low heat.
+3. Cook: Pour in eggs and stir gently until soft curds form.
+4. Serve: Remove when slightly runny and season with pepper."></textarea>
+                                    
+                                    <div class="text-center mt-2">
+                                        <button class="btn btn-lg btn-primary px-5 py-3 shadow fw-bold" @onclick="ExtractWithAI" disabled="@(string.IsNullOrWhiteSpace(_magicInput) || _isExtracting)">
+                                            @if (_isExtracting)
+                                            {
+                                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                                <span>Analyzing...</span>
+                                            }
+                                            else
+                                            {
+                                                <span>✨ Start Magic Parse</span>
+                                            }
+                                        </button>
+                                        
+                                        @if (_isExtracting)
+                                        {
+                                            <div class="ai-stage-indicator">
+                                                <span>⚡ @_aiStage</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                <div class="manual-start-zone">
+                                    <p class="text-muted mb-3">Want to skip the AI and type field-by-field?</p>
+                                    <button class="btn btn-manual fw-bold" @onclick="StartManually">Start Manual Entry →</button>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Step 2: Recipe Info -->
+                        @if (_currentStep == 2)
+                        {
+                            <div class="studio-card">
+                                <h3 class="section-title">📝 Step 1: Basic Info</h3>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Recipe Title *</label>
+                                    <input type="text" class="form-control form-control-lg" @bind="_recipe.Title" @oninput="TriggerDraftSave" />
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">Description</label>
+                                    <textarea class="form-control" @bind="_recipe.Description" rows="4" @oninput="TriggerDraftSave" placeholder="Tell us about this dish..."></textarea>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-bold">📁 Category</label>
+                                        <select class="form-select" @bind="_recipe.Category" @bind:after="TriggerDraftSave">
+                                            <option value="">Select Category...</option>
+                                            @foreach (var cat in _categories) { <option value="@cat">@cat</option> }
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-bold">🌏 Cuisine</label>
+                                        <input type="text" class="form-control" @bind="_recipe.Cuisine" list="cuisine-list" @oninput="TriggerDraftSave" />
+                                        <datalist id="cuisine-list">
+                                            @foreach (var cui in _cuisines) { <option value="@cui" /> }
+                                        </datalist>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <label class="form-label fw-bold">⏱️ Prep (min)</label>
+                                        <input type="number" class="form-control" @bind="_recipe.PrepTimeMinutes" />
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <label class="form-label fw-bold">🔥 Cook (min)</label>
+                                        <input type="number" class="form-control" @bind="_recipe.CookTimeMinutes" />
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <label class="form-label fw-bold">🍴 Servings</label>
+                                        <input type="number" class="form-control" @bind="_recipe.Servings" />
+                                    </div>
+                                    <div class="col-md-3 col-6 mb-3">
+                                        <label class="form-label fw-bold">📊 Difficulty</label>
+                                        <select class="form-select" @bind="_recipe.Difficulty" @bind:after="TriggerDraftSave">
+                                            <option value="Easy">Easy</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="Hard">Hard</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Step 3: Ingredients -->
+                        @if (_currentStep == 3)
+                        {
+                            <div class="studio-card">
+                                <div class="d-flex justify-content-between align-items-center mb-4">
+                                    <h3 class="section-title mb-0">🛒 Step 2: Ingredients</h3>
+                                    <div class="btn-group">
+                                        <button class="btn btn-outline-primary btn-sm fw-bold" @onclick="AddIngredient">➕ Add Item</button>
+                                        <button class="btn @(_isBulkMode ? "btn-primary" : "btn-outline-primary") btn-sm fw-bold" @onclick="ToggleBulkMode">📝 Bulk Edit</button>
+                                    </div>
+                                </div>
+
+                                @if (_isBulkMode)
+                                {
+                                    <textarea class="form-control" @bind="_bulkIngredientInput" rows="15" placeholder="1 cup flour..."></textarea>
+                                    <button class="btn btn-primary mt-3 w-100 fw-bold" @onclick="ParseBulkIngredients">Apply Bulk Changes</button>
+                                }
+                                else
+                                {
+                                    <div class="mb-3 p-2 bg-light rounded d-flex gap-2 overflow-auto">
+                                        @foreach (var unit in _commonUnits) {
+                                            <button class="btn btn-sm btn-white border" @onclick="() => SetLastUnit(unit)">@unit</button>
+                                        }
+                                    </div>
+
+                                    <div class="ingredient-list">
+                                        @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
+                                        {
+                                            <div class="ingredient-row shadow-sm border rounded p-2 mb-2 bg-white">
+                                                <div class="row g-1 align-items-center">
+                                                    <div class="col-2">
+                                                        <input type="number" step="0.1" class="form-control border-0" @bind="ingredient.Quantity" @oninput="TriggerDraftSave" placeholder="Qty" />
+                                                    </div>
+                                                    <div class="col-2">
+                                                        <input type="text" class="form-control border-0" @bind="ingredient.Unit" @oninput="TriggerDraftSave" placeholder="Unit" />
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <div class="input-group">
+                                                            <input type="text" class="form-control border-0 bg-transparent" @bind="ingredient.Name" @oninput="TriggerDraftSave" placeholder="Ingredient..." />
+                                                            <button class="btn btn-link text-muted" @onclick="() => CheckIngredient(ingredient)" title="Check info">🔍</button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-3">
+                                                        <div class="input-group">
+                                                            <button class="btn btn-link text-muted" @onclick="() => CycleIngredientSection(ingredient)" title="Set Section">📂</button>
+                                                            <input type="text" class="form-control border-0 bg-transparent" @bind="ingredient.GroupName" @oninput="TriggerDraftSave" placeholder="Section" />
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-1 d-flex justify-content-end">
+                                                        <button class="btn btn-link text-danger p-0" @onclick="() => RemoveIngredientWithUndo(ingredient)">🗑️</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <!-- Step 4: Instructions -->
+                        @if (_currentStep == 4)
+                        {
+                            <div class="studio-card">
+                                <div class="d-flex justify-content-between align-items-center mb-4">
+                                    <h3 class="section-title mb-0">🍳 Step 3: Instructions</h3>
+                                    <button class="btn btn-outline-primary btn-sm fw-bold" @onclick="AddStepAction">➕ Add Step</button>
+                                </div>
+
+                                <div class="instruction-steps">
+                                    @foreach (var step in _recipe.Steps.OrderBy(s => s.OrderIndex))
+                                    {
+                                        <div class="instruction-item-modern">
+                                            <div class="step-content">
+                                                <textarea class="form-control mb-2" @bind="step.Instruction" @oninput="TriggerDraftSave" rows="3" placeholder="Instruction..."></textarea>
+                                                <div class="row g-2">
+                                                    <div class="col-md-4">
+                                                        <div class="input-group input-group-sm">
+                                                            <span class="input-group-text">⏱️</span>
+                                                            <input type="number" class="form-control" @bind="step.DurationMinutes" @oninput="TriggerDraftSave" placeholder="Min" />
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-8">
+                                                        <input type="text" class="form-control form-control-sm" @bind="step.Tips" @oninput="TriggerDraftSave" placeholder="💡 Tip..." />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="step-actions d-flex flex-column gap-2">
+                                                <button class="btn btn-link text-danger p-0" @onclick="() => RemoveStep(step)">🗑️</button>
+                                                <button class="btn btn-link text-primary p-0" @onclick="() => ToggleStepImage(step)">📷</button>
+                                            </div>
+                                        </div>
+
+                                        @if (_stepImageVisibility.GetValueOrDefault(step.OrderIndex, false))
+                                        {
+                                            <div class="ms-5 mb-3 p-3 border rounded bg-white shadow-sm" @onpaste="(e) => HandleStepImagePaste(e, step)">
+                                                <label class="form-label text-muted small">Step Image (Paste, Upload, or URL)</label>
+                                                <div class="d-flex gap-2 mb-2">
+                                                    <input type="url" class="form-control form-control-sm" @bind="step.ImageUrl" placeholder="URL..." />
+                                                    <InputFile class="d-none" id="@($"file-{step.OrderIndex}")" OnChange="(e) => UploadStepImage(e, step)" />
+                                                    <label class="btn btn-sm btn-outline-primary mb-0" for="@($"file-{step.OrderIndex}")">📁 Upload</label>
+                                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => _stepImageVisibility[step.OrderIndex] = false">Close</button>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(step.ImageUrl))
+                                                {
+                                                    <div class="mt-2 text-center">
+                                                        <img src="@step.ImageUrl" style="max-height: 120px; border-radius: 0.5rem;" />
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Step 5: Final Details -->
+                        @if (_currentStep == 5)
+                        {
+                            <div class="studio-card">
+                                <h3 class="section-title">✨ Step 4: Final Touches</h3>
+                                
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">🏷️ Tags</label>
+                                    <input type="text" class="form-control mb-2" @bind="_tagsInput" @oninput="TriggerDraftSave" placeholder="Separated by commas..." />
+                                    @if (_aiSuggestedTags.Any())
+                                    {
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <small class="me-2 text-muted">AI Suggested:</small>
+                                            @foreach (var tag in _aiSuggestedTags)
+                                            {
+                                                <span class="badge bg-info cursor-pointer text-dark" @onclick="() => AddTag(tag)">+ @tag</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="mb-4 border p-3 rounded bg-white shadow-sm">
+                                    <label class="form-label fw-bold">🖼️ Main Recipe Image</label>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <input type="url" class="form-control" @bind="_recipe.ImageUrl" placeholder="Main Image URL..." />
+                                        <InputFile class="d-none" id="main-image-upload" OnChange="UploadMainImage" />
+                                        <label class="btn btn-outline-primary mb-0 fw-bold" for="main-image-upload">📁 Upload Photo</label>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(_recipe.ImageUrl))
+                                    {
+                                        <div class="mt-3 text-center">
+                                            <img src="@_recipe.ImageUrl" style="max-height: 200px; border-radius: 1rem; border: 1px solid #ddd;" />
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="mb-4 border p-3 rounded bg-light">
+                                    <label class="form-label fw-bold">🔗 Source Information</label>
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-md-4">
+                                            <select class="form-select" @bind="_recipe.SourceMetadata.Type" @bind:after="TriggerDraftSave">
+                                                <option value="Book">📖 Book</option>
+                                                <option value="Website">🌐 Website</option>
+                                                <option value="Person">👤 Person</option>
+                                                <option value="Video">🎥 Video</option>
+                                                <option value="Other">❓ Other</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <input type="text" class="form-control" @bind="_recipe.SourceMetadata.Name" @oninput="TriggerDraftSave" placeholder="Source Name" />
+                                        </div>
+                                    </div>
+                                    <input type="url" class="form-control form-control-sm mb-2" @bind="_recipe.SourceMetadata.Url" @oninput="TriggerDraftSave" placeholder="URL Link" />
+                                </div>
+
+                                <div class="form-check form-switch mt-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="publicSwitch" @bind="_recipe.IsPublic" @bind:after="TriggerDraftSave">
+                                    <label class="form-check-label text-dark fw-bold" for="publicSwitch">🌎 Make this recipe public</label>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- Navigation Buttons -->
+                        <div class="d-flex justify-content-between mt-4 mb-5">
+                            <button class="btn btn-secondary px-4 py-2 fw-bold" @onclick="PrevStep" disabled="@(_currentStep == 1)">← Previous Step</button>
+                            @if (_currentStep < 5)
+                            {
+                                <button class="btn btn-primary px-4 py-2 fw-bold shadow-sm" @onclick="NextStep" disabled="@(!IsEditMode && _currentStep == 1 && string.IsNullOrWhiteSpace(_magicInput))">
+                                    Next Step →
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-success btn-lg px-5 shadow fw-bold" @onclick="SaveRecipe" disabled="@(_isSaving || !IsValid())">✅ Finish & Save Recipe</button>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Live Preview Sidebar -->
+                    <div class="studio-preview">
+                        <div class="preview-card shadow">
+                            <div class="preview-header">
+                                <h5 class="mb-0 fw-bold">👀 Live Preview</h5>
+                            </div>
+                            <div class="preview-body">
+                                <h4 class="text-primary fw-bold">@(_recipe.Title ?? "Untitled Recipe")</h4>
+                                <div class="d-flex flex-wrap gap-1 mb-2">
+                                    @if (!string.IsNullOrEmpty(_recipe.Category)) { <span class="badge bg-info text-dark">@_recipe.Category</span> }
+                                    @if (!string.IsNullOrEmpty(_recipe.Cuisine)) { <span class="badge bg-secondary">@_recipe.Cuisine</span> }
+                                </div>
+                                
+                                @if (!string.IsNullOrEmpty(_recipe.ImageUrl))
+                                {
+                                    <img src="@_recipe.ImageUrl" class="w-100 rounded mb-3 shadow-sm" style="max-height: 150px; object-fit: cover;" />
+                                }
+
+                                <div class="row g-0 border-top border-bottom py-2 mb-3 text-center small bg-light">
+                                    <div class="col-4 border-end"><strong>⏱️</strong><br/>@((_recipe.PrepTimeMinutes + _recipe.CookTimeMinutes) > 0 ? (_recipe.PrepTimeMinutes + _recipe.CookTimeMinutes) + "m" : "-")</div>
+                                    <div class="col-4 border-end"><strong>🍴</strong><br/>@(_recipe.Servings > 0 ? _recipe.Servings.ToString() : "-")</div>
+                                    <div class="col-4"><strong>📊</strong><br/>@_recipe.Difficulty</div>
+                                </div>
+                                
+                                <h6>🛒 Ingredients (@_recipe.Ingredients.Count)</h6>
+                                <ul class="list-unstyled small mb-3">
+                                    @foreach (var ing in _recipe.Ingredients.Take(5))
+                                    {
+                                        <li>• @(ing.Quantity > 0 ? ing.Quantity.ToString() : "") @ing.Unit @ing.Name</li>
+                                    }
+                                    @if (_recipe.Ingredients.Count > 5) { <li class="text-muted italic">...and @(_recipe.Ingredients.Count - 5) more</li> }
+                                </ul>
+
+                                <h6>🍳 Instructions (@_recipe.Steps.Count)</h6>
+                                <p class="small text-muted mb-0">@TruncateDescription(_recipe.Steps.FirstOrDefault()?.Instruction ?? "No steps yet.", 120)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [Parameter] public Guid? RecipeId { get; set; }
+
+    private bool IsEditMode => RecipeId.HasValue;
+    private int _currentStep = 1;
+    private string _magicInput = string.Empty;
+    private bool _isExtracting = false;
+    private bool _isSaving = false;
+    private bool _isSavingDraft = false;
+    private DateTime? _lastSavedDraft;
+    private string _tagsInput = string.Empty;
+    private List<string> _aiSuggestedTags = new();
+    private string _aiStage = "";
+    private bool _isBulkMode = false;
+    private string _bulkIngredientInput = string.Empty;
+    private System.Timers.Timer _debounceTimer = new System.Timers.Timer();
+
+
+    // Onboarding Feature Display
+    private string _onboardingFeature = "import";
+
+    // Draft & Lobby State
+    private bool _showDraftLobby = true;
+    private List<RecipeDraftInfo> _drafts = new();
+    private Guid _currentDraftId = Guid.NewGuid();
+
+    // Onboarding State
+    private bool _showOnboarding = true;
+    private bool _neverShowOnboarding = false;
+
+    // Data lists
+    private string[] _categories = Array.Empty<string>();
+    private string[] _cuisines = Array.Empty<string>();
+    private readonly string[] _commonUnits = { "cup", "tbsp", "tsp", "oz", "g", "lb", "ml", "pcs", "clove" };
+
+    private CreateRecipeRequest _recipe = new() { SourceMetadata = new RecipeSourceDto(), Servings = 0, IsPublic = false };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = Configuration.GetSection("RecipeMetadata:Categories").Get<string[]>() 
+                      ?? new[] { "Breakfast", "Lunch", "Dinner", "Dessert", "Snack", "Appetizer", "Side Dish", "Salad", "Soup", "Beverage" };
+        _cuisines = Configuration.GetSection("RecipeMetadata:Cuisines").Get<string[]>()
+                    ?? new[] { "Italian", "Mexican", "Chinese", "Indian", "American", "French", "Japanese", "Mediterranean", "Thai" };
+
+        if (IsEditMode)
+        {
+            _currentStep = 2;
+            _showDraftLobby = false;
+            await LoadRecipeAsync();
+        } else {
+             // For new recipes, load onboarding state
+            await LoadLobbySettings();
+            if (_showOnboarding) {
+                // If onboarding is shown, don't show lobby yet
+                _showDraftLobby = false;
+            } else {
+                // If onboarding is skipped, show the lobby by default
+                _showDraftLobby = true;
+                await LoadAllDrafts();
+            }
+        }
+
+        // Debounce timer setup
+        _debounceTimer.Interval = 1000; // 1 second debounce
+        _debounceTimer.AutoReset = false;
+        _debounceTimer.Elapsed += async (sender, e) => {
+            await InvokeAsync(SaveDraftAsync);
+            StateHasChanged(); // Update UI after saving draft
+        };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !IsEditMode && !_showOnboarding) // Only load drafts if it's a new recipe and onboarding is not showing
+        {
+            await LoadAllDrafts();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadLobbySettings()
+    {
+        bool hideOnboarding = await LocalStorage.GetItemAsync<bool>("hide_studio_onboarding");
+        _showOnboarding = !hideOnboarding;
+        Console.WriteLine($"[RecipeStudio] Loaded hide_studio_onboarding: {hideOnboarding}, so _showOnboarding: {_showOnboarding}");
+    }
+
+    private async Task DismissOnboarding()
+    {
+        _showOnboarding = false;
+        if (_neverShowOnboarding)
+        {
+            await LocalStorage.SetItemAsync("hide_studio_onboarding", true);
+            Console.WriteLine($"[RecipeStudio] Set hide_studio_onboarding to true.");
+        }
+        _showDraftLobby = true; // Show lobby after dismissing onboarding
+        await LoadAllDrafts(); // Reload drafts to ensure current list is fresh
+    }
+
+    private async Task LoadAllDrafts()
+    {
+        var draftKeys = await LocalStorage.GetItemAsync<List<Guid>>("recipe_studio_draft_keys") ?? new();
+        _drafts.Clear();
+        foreach (var key in draftKeys)
+        {
+            try {
+                var draft = await LocalStorage.GetItemAsync<CreateRecipeRequest>($"recipe_draft_{key}");
+                if (draft != null)
+                {
+                    _drafts.Add(new RecipeDraftInfo { 
+                        Id = key, 
+                        Title = draft.Title, 
+                        UpdatedAt = DateTime.Now,
+                        IngredientsCount = draft.Ingredients.Count 
+                    });
+                }
+            } catch (Exception ex) {
+                Console.WriteLine($"[RecipeStudio] Error loading draft {key}: {ex.Message}");
+                // Consider removing corrupted draft key
+            }
+        }
+    }
+
+    private void StartNewEmptyRecipe()
+    {
+        _currentDraftId = Guid.NewGuid();
+        _recipe = new CreateRecipeRequest { SourceMetadata = new RecipeSourceDto(), Servings = 0, IsPublic = false };
+        _magicInput = string.Empty; // Ensure magic input is empty for a truly fresh start
+        _showDraftLobby = false;
+        _currentStep = 1;
+        StateHasChanged(); // Force UI update
+    }
+
+    private async Task ResumeDraft(Guid id)
+    {
+        var draft = await LocalStorage.GetItemAsync<CreateRecipeRequest>($"recipe_draft_{id}");
+        if (draft != null)
+        {
+            _recipe = draft;
+            _currentDraftId = id;
+            _tagsInput = string.Join(", ", _recipe.Tags ?? new List<string>());
+            
+            // If the draft has already been parsed, skip step 1 (Magic Entry)
+            if (_recipe.Ingredients.Any() || _recipe.Steps.Any())
+            {
+                _currentStep = 2; 
+                _magicInput = string.Empty; // Clear magic input if already parsed
+            } else {
+                // If it's just raw text, populate magic input
+                // This would require saving the raw magic input with the draft, which is not currently done.
+                // For now, if no ingredients/steps, assume it's an unparsed draft and stay on step 1
+                // User will have to re-paste or re-type to parse.
+                _currentStep = 1; 
+            }
+
+            _showDraftLobby = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteDraft(Guid id)
+    {
+        await LocalStorage.RemoveItemAsync($"recipe_draft_{id}");
+        var keys = await LocalStorage.GetItemAsync<List<Guid>>("recipe_studio_draft_keys") ?? new();
+        keys.Remove(id);
+        await LocalStorage.SetItemAsync("recipe_studio_draft_keys", keys);
+        await LoadAllDrafts();
+    }
+
+    // Undo Logic
+    private Stack<List<CreateRecipeIngredientRequest>> _ingredientUndoStack = new();
+
+    private void TriggerDraftSave()
+    {
+        _debounceTimer.Stop(); // Reset the timer
+        _debounceTimer.Start(); // Start it again
+    }
+
+    private void UndoDelete()
+    {
+        if (_ingredientUndoStack.TryPop(out var previousList))
+        {
+            _recipe.Ingredients = previousList;
+            ToastService.ShowInfo("Undo successful.");
+            StateHasChanged();
+            TriggerDraftSave();
+        }
+    }
+
+    private void RemoveIngredientWithUndo(CreateRecipeIngredientRequest ing)
+    {
+        var copy = _recipe.Ingredients.Select(i => new CreateRecipeIngredientRequest {
+            Name = i.Name, Quantity = i.Quantity, Unit = i.Unit, GroupName = i.GroupName, OrderIndex = i.OrderIndex
+        }).ToList();
+        _ingredientUndoStack.Push(copy);
+        _recipe.Ingredients.Remove(ing);
+        TriggerDraftSave();
+    }
+
+    private void HandleStepImagePaste(ClipboardEventArgs e, CreateRecipeStepRequest step)
+    {
+        Console.WriteLine(">>> Image Paste Detected");
+    }
+
+    private Dictionary<int, bool> _stepImageVisibility = new();
+    private void ToggleStepImage(CreateRecipeStepRequest step)
+    {
+        _stepImageVisibility[step.OrderIndex] = !_stepImageVisibility.GetValueOrDefault(step.OrderIndex, false);
+    }
+
+    private void AddTag(string tag)
+    {
+        if (string.IsNullOrWhiteSpace(_tagsInput)) _tagsInput = tag;
+        else if (!_tagsInput.Contains(tag)) _tagsInput += ", " + tag;
+        _aiSuggestedTags.Remove(tag);
+        TriggerDraftSave();
+    }
+
+    private async Task UploadMainImage(InputFileChangeEventArgs e)
+    {
+        using var stream = e.File.OpenReadStream(10 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        _recipe.ImageUrl = $"data:{e.File.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+        TriggerDraftSave();
+    }
+
+    private async Task UploadStepImage(InputFileChangeEventArgs e, CreateRecipeStepRequest step)
+    {
+        using var stream = e.File.OpenReadStream(5 * 1024 * 1024);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        step.ImageUrl = $"data:{e.File.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+        TriggerDraftSave();
+    }
+
+    private void CycleIngredientSection(CreateRecipeIngredientRequest ing)
+    {
+        var commonSections = new[] { "Main", "Sauce", "Dressing", "Garnish", "Topping" };
+        int currentIndex = Array.IndexOf(commonSections, ing.GroupName);
+        ing.GroupName = commonSections[(currentIndex + 1) % commonSections.Length];
+        StateHasChanged();
+        TriggerDraftSave();
+    }
+
+    private void ToggleBulkMode()
+    {
+        if (!_isBulkMode)
+        {
+            _bulkIngredientInput = string.Join("\n", _recipe.Ingredients
+                .OrderBy(i => i.OrderIndex)
+                .Select(i => $"{(i.Quantity > 0 ? i.Quantity.ToString() : "")} {i.Unit} {i.Name}".Trim()));
+        }
+        _isBulkMode = !_isBulkMode;
+    }
+
+    private async Task ParseBulkIngredients()
+    {
+        if (string.IsNullOrWhiteSpace(_bulkIngredientInput)) return;
+        _isExtracting = true;
+        _aiStage = "Parsing Ingredients...";
+        try
+        {
+            var result = await AIApi.ExtractRecipeAsync(new RecipeExtractionRequest { RecipeText = "Parse ingredients:\n" + _bulkIngredientInput });
+            if (result != null)
+            {
+                _recipe.Ingredients = result.Ingredients.Select((ing, idx) => new CreateRecipeIngredientRequest
+                {
+                    Name = ing.Name, Quantity = decimal.TryParse(ing.Quantity, out var q) ? q : 0, Unit = ing.Unit, OrderIndex = idx + 1
+                }).ToList();
+                _isBulkMode = false;
+                await SaveDraftAsync();
+            }
+        }
+        finally { _isExtracting = false; _aiStage = ""; }
+    }
+
+    private void SetLastUnit(string unit)
+    {
+        if (_recipe.Ingredients.Any()) { _recipe.Ingredients.Last().Unit = unit; StateHasChanged(); TriggerDraftSave(); }
+    }
+
+    private async Task CheckIngredient(CreateRecipeIngredientRequest ing)
+    {
+        if (string.IsNullOrWhiteSpace(ing.Name)) return;
+        var search = await ProductApi.SearchProductsAsync(new ProductSearchRequest { SearchTerm = ing.Name, PageSize = 1 });
+        if (search?.Products.Any() == true) {
+            ToastService.ShowInfo($"Matched '{ing.Name}' to {search.Products.First().Name}.");
+        } else {
+            ToastService.ShowWarning($"No direct product match for '{ing.Name}'.");
+        }
+    }
+
+    private async Task LoadRecipeAsync()
+    {
+        try
+        {
+            var existing = await RecipeApi.GetRecipeAsync(RecipeId!.Value);
+            if (existing != null)
+            {
+                _recipe.Title = existing.Title;
+                _recipe.Description = existing.Description;
+                _recipe.PrepTimeMinutes = existing.PrepTimeMinutes;
+                _recipe.CookTimeMinutes = existing.CookTimeMinutes;
+                _recipe.Servings = existing.Servings;
+                _recipe.Difficulty = existing.Difficulty;
+                _recipe.Category = existing.Category;
+                _recipe.Cuisine = existing.Cuisine;
+                _recipe.SourceMetadata = existing.SourceMetadata ?? new RecipeSourceDto();
+                _recipe.ImageUrl = existing.ImageUrl;
+                _recipe.IsPublic = existing.IsPublic;
+                _recipe.Tags = existing.Tags;
+                _tagsInput = string.Join(", ", existing.Tags ?? new List<string>());
+
+                _recipe.Ingredients = existing.Ingredients.Select(i => new CreateRecipeIngredientRequest
+                {
+                    Name = i.Name, Quantity = i.Quantity, Unit = i.Unit, GroupName = i.GroupName, OrderIndex = i.OrderIndex
+                }).ToList();
+
+                _recipe.Steps = existing.Steps.Select(s => new CreateRecipeStepRequest
+                {
+                    Instruction = s.Instruction, DurationMinutes = s.DurationMinutes, Tips = s.Tips, OrderIndex = s.OrderIndex, ImageUrl = s.ImageUrl
+                }).ToList();
+            }
+        }
+        catch (Exception ex) { ToastService.ShowError(ex.Message); }
+    }
+
+    private async Task ExtractWithAI()
+    {
+        _isExtracting = true;
+        _aiStage = "Waking up AI...";
+        await SaveDraftAsync();
+        
+        try
+        {
+            _aiStage = "Reading Recipe Text...";
+            var result = await AIApi.ExtractRecipeAsync(new RecipeExtractionRequest { RecipeText = _magicInput });
+            
+            if (result != null)
+            {
+                _aiStage = "Organizing Results...";
+                _recipe.Title = result.Title;
+                _recipe.Description = result.Description;
+                _recipe.PrepTimeMinutes = result.PrepTimeMinutes;
+                _recipe.CookTimeMinutes = result.CookTimeMinutes;
+                _recipe.Servings = result.Servings;
+                _recipe.Difficulty = result.Difficulty ?? "Medium";
+                
+                // Ensure category and cuisine are from the allowed lists
+                _recipe.Category = _categories.Contains(result.Category) ? result.Category : (_categories.Any() ? _categories[0] : null);
+                _recipe.Cuisine = _cuisines.Contains(result.Cuisine) ? result.Cuisine : (_cuisines.Any() ? _cuisines[0] : null);
+
+                _aiSuggestedTags = result.Tags ?? new();
+                
+                _recipe.Ingredients = result.Ingredients.Select((ing, idx) => new CreateRecipeIngredientRequest
+                {
+                    Name = ing.Name, Quantity = decimal.TryParse(ing.Quantity, out var q) ? q : 0, Unit = ing.Unit, GroupName = ing.Notes, OrderIndex = idx + 1
+                }).ToList();
+
+                _recipe.Steps = result.Instructions.Select((ins, idx) => new CreateRecipeStepRequest
+                {
+                    Instruction = ins, OrderIndex = idx + 1
+                }).ToList();
+
+                // Post-processing for title (remove "Serves X")
+                _recipe.Title = System.Text.RegularExpressions.Regex.Replace(_recipe.Title, @"\s*\(Serves\s+\d+([\s\-]\d+)?\)", "").Trim();
+
+                _aiStage = "Finalizing...";
+                ToastService.ShowSuccess("Recipe parsed! Review the steps now.");
+                _currentStep = 2;
+                await SaveDraftAsync();
+            }
+            else
+            {
+                ToastService.ShowError("AI failed to extract recipe. Using local fallback.");
+                // Fallback is handled by ExtractRecipeFromTextAsync catching null
+            }
+        }
+        catch (Exception ex) { 
+            ToastService.ShowError($"AI extraction error: {ex.Message}. Using local fallback."); 
+        }
+        finally { _isExtracting = false; _aiStage = ""; }
+    }
+
+    private async Task CheckEntireRecipe()
+    {
+        if (!IsValid()) return;
+        _isExtracting = true;
+        _aiStage = "Scanning for Allergens...";
+        try
+        {
+            var result = await AIApi.DetectAllergensAsync(new AllergenDetectionRequest { Ingredients = _recipe.Ingredients.Select(i => i.Name).ToList() });
+            if (result?.DetectedAllergens.Any() == true) {
+                ToastService.ShowWarning("⚠️ Allergens Detected!");
+            } else {
+                ToastService.ShowSuccess("✅ Looks safe.");
+            }
+        }
+        finally { _isExtracting = false; _aiStage = ""; }
+    }
+
+    private void StartManually() { _currentStep = 2; _showDraftLobby = false; StateHasChanged(); }
+    private void SetStep(int step) => _currentStep = step;
+    private void NextStep() { if (_currentStep < 5) _currentStep++; TriggerDraftSave(); }
+    private void PrevStep() { if (_currentStep > 1) _currentStep--; TriggerDraftSave(); }
+    private string GetStepClass(int step) => _currentStep == step ? "active" : (_currentStep > step ? "completed" : "");
+
+    private void AddIngredient() { _recipe.Ingredients.Add(new CreateRecipeIngredientRequest { OrderIndex = _recipe.Ingredients.Count + 1 }); TriggerDraftSave(); }
+    private void AddStepAction() { _recipe.Steps.Add(new CreateRecipeStepRequest { OrderIndex = _recipe.Steps.Count + 1 }); TriggerDraftSave(); }
+    private void RemoveStep(CreateRecipeStepRequest step) { _recipe.Steps.Remove(step); TriggerDraftSave(); }
+
+    private bool IsValid() => !string.IsNullOrWhiteSpace(_recipe.Title) && _recipe.Ingredients.Any();
+
+    private async Task SaveRecipe()
+    {
+        _isSaving = true;
+        if (!string.IsNullOrWhiteSpace(_tagsInput)) _recipe.Tags = _tagsInput.Split(',').Select(t => t.Trim()).ToList();
+        try
+        {
+            if (IsEditMode) await RecipeApi.UpdateRecipeAsync(RecipeId!.Value, new UpdateRecipeRequest { 
+                Title = _recipe.Title, Description = _recipe.Description, PrepTimeMinutes = _recipe.PrepTimeMinutes, 
+                CookTimeMinutes = _recipe.CookTimeMinutes, Servings = _recipe.Servings, Difficulty = _recipe.Difficulty,
+                Category = _recipe.Category, Cuisine = _recipe.Cuisine, SourceMetadata = _recipe.SourceMetadata,
+                ImageUrl = _recipe.ImageUrl, Ingredients = _recipe.Ingredients, Steps = _recipe.Steps, Tags = _recipe.Tags
+            });
+            else {
+                var id = await RecipeApi.CreateRecipeAsync(_recipe);
+                await DeleteDraft(_currentDraftId);
+                Navigation.NavigateTo($"/recipes/{id}");
+                return;
+            }
+            Navigation.NavigateTo("/recipes");
+        }
+        catch (Exception ex) { ToastService.ShowError(ex.Message); }
+        finally { _isSaving = false; }
+    }
+
+    private void Cancel() => Navigation.NavigateTo("/recipes");
+
+    private async Task SaveDraftAsync()
+    {
+        if (IsEditMode || _showDraftLobby || _isSavingDraft) return; // Don't try to save if already saving
+        
+        _isSavingDraft = true;
+        try { 
+            await LocalStorage.SetItemAsync($"recipe_draft_{_currentDraftId}", _recipe); 
+            var keys = await LocalStorage.GetItemAsync<List<Guid>>("recipe_studio_draft_keys") ?? new();
+            if (!keys.Contains(_currentDraftId)) {
+                keys.Add(_currentDraftId);
+                await LocalStorage.SetItemAsync("recipe_studio_draft_keys", keys);
+            }
+            _lastSavedDraft = DateTime.Now; 
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[RecipeStudio] Error saving draft: {ex.Message}");
+            ToastService.ShowError("Failed to auto-save draft.");
+        }
+        finally { _isSavingDraft = false; }
+    }
+
+    private string TruncateDescription(string description, int maxLength)
+    {
+        if (string.IsNullOrEmpty(description) || description.Length <= maxLength) return description;
+        return description.Substring(0, maxLength) + "...";
+    }
+
+    private class RecipeDraftInfo {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = "";
+        public DateTime UpdatedAt { get; set; }
+        public int IngredientsCount { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+}

@@ -111,6 +111,7 @@
     background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
     color: white;
     border-color: #7c3aed;
+    color: white; /* Ensure text remains white */
 }
 
 .category-icon {
