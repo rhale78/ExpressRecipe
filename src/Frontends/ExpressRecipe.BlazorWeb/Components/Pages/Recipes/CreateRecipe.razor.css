@@ -779,7 +779,7 @@
 .btn-warning:hover:not(:disabled) { background: #e08e0b; }
 
 .btn-sm  { padding: 0.35rem 0.85rem; font-size: 0.82rem; }
-.btn-tiny{ padding: 0.2rem 0.5rem;  font-size: 0.78rem; border-radius: 4px; }
+.btn-tiny { padding: 0.2rem 0.5rem;  font-size: 0.78rem; border-radius: 4px; }
 
 /* ── Unauthorized ────────────────────────────────────── */
 .cr-unauthorized {

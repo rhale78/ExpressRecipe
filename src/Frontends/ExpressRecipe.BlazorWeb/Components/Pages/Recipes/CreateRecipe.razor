@@ -267,22 +267,22 @@
                                                        @bind="ing.Quantity" />
                                                 <input type="text" class="cr-input cr-unit-input" placeholder="Unit"
                                                        value="@ing.Unit"
-                                                       @oninput="@(e => { ing.Unit = e.Value?.ToString() ?? string.Empty; _hasChangedSinceLastSave = true; })" />
+                                                       @oninput="@(e => OnIngredientFieldChanged(ing, "unit", e.Value?.ToString()))" />
                                                 <input type="text" class="cr-input cr-name-input" placeholder="Ingredient name"
                                                        value="@ing.Name"
-                                                       @oninput="@(e => { ing.Name = e.Value?.ToString() ?? string.Empty; _hasChangedSinceLastSave = true; })" />
+                                                       @oninput="@(e => OnIngredientFieldChanged(ing, "name", e.Value?.ToString()))" />
                                                 <input type="text" class="cr-input cr-notes-input" placeholder="Notes (optional)"
                                                        value="@ing.Notes"
-                                                       @oninput="@(e => { ing.Notes = e.Value?.ToString(); _hasChangedSinceLastSave = true; })" />
+                                                       @oninput="@(e => OnIngredientFieldChanged(ing, "notes", e.Value?.ToString()))" />
                                                 <button class="btn btn-sm btn-outline cr-row-delete"
-                                                        @onclick="() => { _recipe.Ingredients.Remove(ing); for (int ri = 0; ri < _recipe.Ingredients.Count; ri++) _recipe.Ingredients[ri].OrderIndex = ri + 1; _hasChangedSinceLastSave = true; }">
+                                                        @onclick="() => RemoveIngredient(ing)">
                                                     ✕
                                                 </button>
                                             </div>
                                         }
 
                                         <button class="btn btn-outline btn-sm cr-add-btn"
-                                                @onclick="() => { _recipe.Ingredients.Add(new CreateRecipeIngredientRequest { OrderIndex = _recipe.Ingredients.Count + 1 }); _hasChangedSinceLastSave = true; }">
+                                                @onclick="AddIngredient">
                                             + Add Ingredient
                                         </button>
                                     </div>
@@ -307,16 +307,16 @@
                                                 <textarea class="cr-input cr-step-textarea" rows="3"
                                                           placeholder="Describe this step..."
                                                           value="@step.Instruction"
-                                                          @oninput="@(e => { step.Instruction = e.Value?.ToString() ?? string.Empty; _hasChangedSinceLastSave = true; })"></textarea>
+                                                          @oninput="@(e => OnStepInstructionChanged(step, e.Value?.ToString()))"></textarea>
                                                 <button class="btn btn-sm btn-outline cr-row-delete"
-                                                        @onclick="() => { _recipe.Steps.Remove(step); for (int ri = 0; ri < _recipe.Steps.Count; ri++) _recipe.Steps[ri].OrderIndex = ri + 1; _hasChangedSinceLastSave = true; }">
+                                                        @onclick="() => RemoveStep(step)">
                                                     ✕
                                                 </button>
                                             </div>
                                         }
 
                                         <button class="btn btn-outline btn-sm cr-add-btn"
-                                                @onclick="() => { _recipe.Steps.Add(new CreateRecipeStepRequest { OrderIndex = _recipe.Steps.Count + 1 }); _hasChangedSinceLastSave = true; }">
+                                                @onclick="AddStep">
                                             + Add Step
                                         </button>
                                     </div>
@@ -1227,6 +1227,51 @@
     {
         _recipe.Tags = _tagsInput.Split(',').Select(t => t.Trim())
             .Where(t => !string.IsNullOrEmpty(t)).Distinct().ToList();
+    }
+
+    private void AddIngredient()
+    {
+        _recipe.Ingredients.Add(new CreateRecipeIngredientRequest { OrderIndex = _recipe.Ingredients.Count + 1 });
+        _hasChangedSinceLastSave = true;
+    }
+
+    private void RemoveIngredient(CreateRecipeIngredientRequest ing)
+    {
+        _recipe.Ingredients.Remove(ing);
+        for (int i = 0; i < _recipe.Ingredients.Count; i++)
+            _recipe.Ingredients[i].OrderIndex = i + 1;
+        _hasChangedSinceLastSave = true;
+    }
+
+    private void OnIngredientFieldChanged(CreateRecipeIngredientRequest ing, string field, string? value)
+    {
+        switch (field)
+        {
+            case "unit":  ing.Unit  = value ?? string.Empty; break;
+            case "name":  ing.Name  = value ?? string.Empty; break;
+            case "notes": ing.Notes = value;                 break;
+        }
+        _hasChangedSinceLastSave = true;
+    }
+
+    private void AddStep()
+    {
+        _recipe.Steps.Add(new CreateRecipeStepRequest { OrderIndex = _recipe.Steps.Count + 1 });
+        _hasChangedSinceLastSave = true;
+    }
+
+    private void RemoveStep(CreateRecipeStepRequest step)
+    {
+        _recipe.Steps.Remove(step);
+        for (int i = 0; i < _recipe.Steps.Count; i++)
+            _recipe.Steps[i].OrderIndex = i + 1;
+        _hasChangedSinceLastSave = true;
+    }
+
+    private void OnStepInstructionChanged(CreateRecipeStepRequest step, string? value)
+    {
+        step.Instruction = value ?? string.Empty;
+        _hasChangedSinceLastSave = true;
     }
 
     private void RemoveTag(string tag)
