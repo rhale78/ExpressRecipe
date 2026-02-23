@@ -14,28 +14,70 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>@(string.IsNullOrWhiteSpace(_recipe.Title) ? (_isEditMode ? "Edit Recipe" : "Create New Recipe") : _recipe.Title) - ExpressRecipe</PageTitle>
+<PageTitle>@(string.IsNullOrWhiteSpace(_recipe.Title) ? (_isEditMode ? "Edit Recipe" : "New Recipe") : _recipe.Title) — ExpressRecipe</PageTitle>
 
 <AuthorizeView>
     <Authorized>
-        <div class="cr-page">
+        <div class="rs-page">
 
-            <!-- Page header -->
-            <div class="cr-header">
-                <button class="btn btn-outline btn-sm" @onclick="GoBack">← Back</button>
-                <h1 class="cr-page-title">@(_isEditMode ? "✏️ Edit Recipe" : "📝 Create New Recipe")</h1>
-                @if (_draftSavedAt != null)
-                {
-                    <span class="cr-draft-saved">🟢 Draft saved @_draftSavedAt</span>
-                }
+            <!-- Top nav bar -->
+            <div class="rs-topbar">
+                <div class="rs-topbar-left">
+                    <button class="btn btn-outline btn-sm" @onclick="GoBack">← Back</button>
+                    <span class="rs-brand">
+                        <span class="rs-brand-icon">🍴</span>
+                        @(_isEditMode ? "Edit Recipe" : "New Recipe") · Smart Entry
+                    </span>
+                </div>
+                <div class="rs-topbar-right">
+                    @if (_draftSavedAt != null)
+                    {
+                        <span class="rs-draft-status">✓ Draft saved @_draftSavedAt</span>
+                    }
+                </div>
+            </div>
+
+            <!-- Editable title + Live parse toggle -->
+            <div class="rs-title-row">
+                <input class="rs-title-input"
+                       value="@_recipe.Title"
+                       @oninput="OnTitleChanged"
+                       placeholder="Recipe Title" />
+                <div class="rs-live-controls">
+                    <span class="rs-live-label">→ Live Parse</span>
+                    <label class="rs-toggle">
+                        <input type="checkbox" @bind="_liveParseEnabled" />
+                        <span class="rs-toggle-track">
+                            <span class="rs-toggle-thumb"></span>
+                        </span>
+                    </label>
+                    <span class="rs-toggle-state @(_liveParseEnabled ? "rs-state-on" : "rs-state-off")">
+                        @(_liveParseEnabled ? "ON" : "OFF")
+                    </span>
+                </div>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="rs-toolbar">
+                <div class="rs-toolbar-left">
+                    <button class="rs-text-btn" @onclick="SaveDraftAsync" disabled="@_isSaving">💾 Save Draft</button>
+                </div>
+                <div class="rs-toolbar-right">
+                    <button class="btn btn-outline btn-sm" @onclick="() => _showPreview = true">Preview</button>
+                    <button class="btn btn-primary btn-sm" @onclick="PublishRecipeAsync"
+                            disabled="@(!IsValid() || _isSaving)">
+                        @if (_isSaving) { <span class="rs-spin-sm"></span> }
+                        @(_isEditMode ? "Save Changes" : "Publish")
+                    </button>
+                </div>
             </div>
 
             <!-- Draft restore banner -->
             @if (_showDraftRestoreBanner)
             {
-                <div class="cr-draft-banner">
-                    <span>📝 Draft found from @_draftRestoreTime. Restore your work?</span>
-                    <div class="cr-draft-actions">
+                <div class="rs-banner rs-banner-info">
+                    <span>📝 Draft from @_draftRestoreTime — restore your work?</span>
+                    <div class="rs-banner-actions">
                         <button class="btn btn-sm btn-primary" @onclick="RestoreDraftAsync">Restore</button>
                         <button class="btn btn-sm btn-outline" @onclick="DismissDraft">Dismiss</button>
                     </div>
@@ -45,580 +87,443 @@
             <!-- Error alert -->
             @if (!string.IsNullOrEmpty(_errorMessage))
             {
-                <div class="cr-alert cr-alert-error">
-                    <strong>⚠️ Error:</strong> @_errorMessage
-                    <button class="cr-alert-close" @onclick="ClearError">×</button>
+                <div class="rs-banner rs-banner-error">
+                    <span>⚠️ @_errorMessage</span>
+                    <button class="rs-close-btn" @onclick="ClearError">×</button>
                 </div>
             }
 
-            <!-- Loading state -->
+            <!-- Loading -->
             @if (_isLoading)
             {
-                <div class="cr-loading">
-                    <div class="cr-spinner"></div>
-                    <p>Loading recipe...</p>
+                <div class="rs-loading">
+                    <div class="rs-spinner"></div>
+                    <p>Loading recipe…</p>
                 </div>
             }
             else
             {
-                <!-- Progress stepper -->
-                <div class="cr-stepper">
-                    @{
-                        var stepLabels = new[] { "Import", "Basic Info", "Ingredients", "Instructions", "Finish" };
-                    }
-                    @for (int si = 0; si < stepLabels.Length; si++)
-                    {
-                        var stepNum = si + 1;
-                        var label = stepLabels[si];
-                        var stateClass = stepNum < _currentStep ? "cr-stepper-step completed"
-                                       : stepNum == _currentStep ? "cr-stepper-step active"
-                                       : "cr-stepper-step future";
-                        <div class="@stateClass">
-                            <div class="cr-step-circle">
-                                @if (stepNum < _currentStep)
-                                {
-                                    <span>✓</span>
-                                }
-                                else
-                                {
-                                    <span>@stepNum</span>
-                                }
+                <!-- ── MAIN DUAL-PANEL ──────────────────────────────────────────── -->
+                <div class="rs-main">
+
+                    <!-- LEFT: Paste panel -->
+                    <div class="rs-paste-panel">
+                        <div class="rs-panel-head">
+                            <div class="rs-panel-title">→ Paste or Type Raw Recipe Here</div>
+                            <div class="rs-panel-sub">
+                                @(_liveParseEnabled
+                                    ? "Copy/paste from anywhere — parsed live as you type"
+                                    : "Copy/paste from anywhere — click Parse to extract")
                             </div>
-                            <span class="cr-step-label">@label</span>
                         </div>
-                        @if (si < stepLabels.Length - 1)
-                        {
-                            <div class="cr-step-connector @(stepNum < _currentStep ? "done" : "")"></div>
-                        }
-                    }
-                </div>
 
-                <!-- Step content -->
-                <div class="cr-content">
+                        <textarea class="rs-textarea"
+                                  value="@_recipeText"
+                                  @oninput="OnRecipeTextChanged"
+                                  placeholder="@ExamplePlaceholderText"></textarea>
 
-                    <!-- Step 1: Import (full-width) -->
-                    @if (_currentStep == 1)
-                    {
-                        <div class="cr-step1">
-                            <div class="cr-step1-header">
-                                <h2>📋 Paste or Type Your Recipe</h2>
-                                <p>Drop in any recipe from anywhere — we'll parse the title, ingredients, times, and instructions for you automatically.</p>
-                            </div>
-
-                            <textarea class="cr-textarea"
-                                      value="@_recipeText"
-                                      @oninput="OnRecipeTextChanged"
-                                      placeholder="@ExamplePlaceholderText"></textarea>
-
-                            <div class="cr-parse-row">
-                                <button class="btn btn-primary"
-                                        @onclick="ParseWithAIAsync"
-                                        disabled="@(_isParsing || string.IsNullOrWhiteSpace(_recipeText))">
-                                    @if (_isParsing)
-                                    {
-                                        <span class="cr-spinner-sm"></span><span>Analyzing...</span>
-                                    }
-                                    else
-                                    {
-                                        <span>✨ Parse with AI</span>
-                                    }
-                                </button>
-                                <button class="btn btn-outline"
-                                        @onclick="ParseWithRegexManual"
+                        <div class="rs-parse-btns">
+                            @if (!_liveParseEnabled)
+                            {
+                                <button class="btn btn-sm btn-outline" @onclick="ParseWithRegexManual"
                                         disabled="@string.IsNullOrWhiteSpace(_recipeText)">
                                     🔄 Smart Parse
                                 </button>
-                            </div>
-
-                            @if (_isParsing)
-                            {
-                                <div class="cr-parse-status cr-ps-parsing">
-                                    <span class="cr-spinner-sm"></span>
-                                    <span>AI is analyzing your recipe...</span>
-                                </div>
                             }
-                            else if (_parseStatus == "ai")
-                            {
-                                <div class="cr-parse-status cr-ps-success">✅ AI parsed · @ConfidenceLabel</div>
-                            }
-                            else if (_parseStatus == "ai-fallback")
-                            {
-                                <div class="cr-parse-status cr-ps-warning">⚠️ AI unavailable, using smart parsing</div>
-                            }
-                            else if (_parseStatus == "regex")
-                            {
-                                <div class="cr-parse-status cr-ps-info">🔍 Smart parsed · @ConfidenceLabel</div>
-                            }
-
-                            @foreach (var suggestion in _unitSuggestions)
-                            {
-                                var s = suggestion;
-                                <div class="cr-suggestion">
-                                    <span>💡 Did you mean '<strong>@s.Suggested</strong>' instead of '<strong>@s.Original</strong>' in "@s.Context"?</span>
-                                    <div class="cr-suggestion-actions">
-                                        <button class="btn btn-sm btn-warning" @onclick="() => AcceptSuggestion(s)">Accept</button>
-                                        <button class="btn btn-sm btn-outline" @onclick="() => DismissSuggestion(s)">Dismiss</button>
-                                    </div>
-                                </div>
-                            }
-
-                            <div class="cr-skip-link">
-                                Already have all details?
-                                <button class="btn btn-sm btn-outline" @onclick="() => _currentStep = 2">Skip to Basic Info →</button>
-                            </div>
-                        </div>
-                    }
-
-                    <!-- Steps 2–5: two-column editor + preview -->
-                    @if (_currentStep >= 2)
-                    {
-                        <div class="cr-editor">
-
-                            <!-- Left: form fields -->
-                            <div class="cr-fields">
-
-                                <!-- Step 2: Basic Info -->
-                                @if (_currentStep == 2)
+                            <button class="btn btn-sm btn-primary" @onclick="ParseWithAIAsync"
+                                    disabled="@(_isParsing || string.IsNullOrWhiteSpace(_recipeText))">
+                                @if (_isParsing)
                                 {
-                                    <div class="cr-section">
-                                        <h2>📝 Basic Info</h2>
-
-                                        <div class="cr-form-group">
-                                            <label>Title <span class="cr-required">*</span></label>
-                                            <input type="text" class="cr-input" value="@_recipe.Title"
-                                                   @oninput="OnTitleChanged" placeholder="Recipe title" />
-                                        </div>
-
-                                        <div class="cr-form-group">
-                                            <label>Description</label>
-                                            <textarea class="cr-input" rows="3" value="@_recipe.Description"
-                                                      @oninput="OnDescriptionChanged"
-                                                      placeholder="Brief description of the recipe..."></textarea>
-                                        </div>
-
-                                        <div class="cr-form-grid">
-                                            <div class="cr-form-group">
-                                                <label>Category</label>
-                                                <select class="cr-input" value="@_recipe.Category" @onchange="OnCategoryChanged">
-                                                    <option value="">— Select —</option>
-                                                    @foreach (var opt in _categoryOptions)
-                                                    {
-                                                        <option value="@opt">@opt</option>
-                                                    }
-                                                </select>
-                                            </div>
-                                            <div class="cr-form-group">
-                                                <label>Cuisine</label>
-                                                <select class="cr-input" value="@_recipe.Cuisine" @onchange="OnCuisineChanged">
-                                                    <option value="">— Select —</option>
-                                                    @foreach (var opt in _cuisineOptions)
-                                                    {
-                                                        <option value="@opt">@opt</option>
-                                                    }
-                                                </select>
-                                            </div>
-                                            <div class="cr-form-group">
-                                                <label>Difficulty</label>
-                                                <select class="cr-input" value="@_recipe.Difficulty" @onchange="OnDifficultyChanged">
-                                                    <option value="Easy">Easy</option>
-                                                    <option value="Medium">Medium</option>
-                                                    <option value="Hard">Hard</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div class="cr-form-grid cr-form-grid-3">
-                                            <div class="cr-form-group">
-                                                <label>Prep Time (min)</label>
-                                                <input type="number" class="cr-input" value="@_recipe.PrepTimeMinutes"
-                                                       @oninput="OnPrepTimeChanged" min="0" />
-                                            </div>
-                                            <div class="cr-form-group">
-                                                <label>Cook Time (min)</label>
-                                                <input type="number" class="cr-input" value="@_recipe.CookTimeMinutes"
-                                                       @oninput="OnCookTimeChanged" min="0" />
-                                            </div>
-                                            <div class="cr-form-group">
-                                                <label>Servings</label>
-                                                <input type="number" class="cr-input" value="@_recipe.Servings"
-                                                       @oninput="OnServingsChanged" min="1" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-
-                                <!-- Step 3: Ingredients -->
-                                @if (_currentStep == 3)
-                                {
-                                    <div class="cr-section">
-                                        <h2>🥕 Ingredients</h2>
-
-                                        @if (!_recipe.Ingredients.Any())
-                                        {
-                                            <p class="cr-empty">No ingredients yet. Add some below!</p>
-                                        }
-
-                                        @foreach (var ingredient in _recipe.Ingredients)
-                                        {
-                                            var ing = ingredient;
-                                            <div class="cr-ingredient-row">
-                                                <span class="cr-row-num">@ing.OrderIndex</span>
-                                                <input type="number" class="cr-input cr-qty-input" placeholder="Qty" step="0.25"
-                                                       @bind="ing.Quantity" />
-                                                <input type="text" class="cr-input cr-unit-input" placeholder="Unit"
-                                                       value="@ing.Unit"
-                                                       @oninput="@(e => OnIngredientFieldChanged(ing, "unit", e.Value?.ToString()))" />
-                                                <input type="text" class="cr-input cr-name-input" placeholder="Ingredient name"
-                                                       value="@ing.Name"
-                                                       @oninput="@(e => OnIngredientFieldChanged(ing, "name", e.Value?.ToString()))" />
-                                                <input type="text" class="cr-input cr-notes-input" placeholder="Notes (optional)"
-                                                       value="@ing.Notes"
-                                                       @oninput="@(e => OnIngredientFieldChanged(ing, "notes", e.Value?.ToString()))" />
-                                                <button class="btn btn-sm btn-outline cr-row-delete"
-                                                        @onclick="() => RemoveIngredient(ing)">
-                                                    ✕
-                                                </button>
-                                            </div>
-                                        }
-
-                                        <button class="btn btn-outline btn-sm cr-add-btn"
-                                                @onclick="AddIngredient">
-                                            + Add Ingredient
-                                        </button>
-                                    </div>
-                                }
-
-                                <!-- Step 4: Instructions -->
-                                @if (_currentStep == 4)
-                                {
-                                    <div class="cr-section">
-                                        <h2>📖 Instructions</h2>
-
-                                        @if (!_recipe.Steps.Any())
-                                        {
-                                            <p class="cr-empty">No steps yet. Add your first instruction below!</p>
-                                        }
-
-                                        @foreach (var recipeStep in _recipe.Steps)
-                                        {
-                                            var step = recipeStep;
-                                            <div class="cr-step-row">
-                                                <span class="cr-step-num">@step.OrderIndex</span>
-                                                <textarea class="cr-input cr-step-textarea" rows="3"
-                                                          placeholder="Describe this step..."
-                                                          value="@step.Instruction"
-                                                          @oninput="@(e => OnStepInstructionChanged(step, e.Value?.ToString()))"></textarea>
-                                                <button class="btn btn-sm btn-outline cr-row-delete"
-                                                        @onclick="() => RemoveStep(step)">
-                                                    ✕
-                                                </button>
-                                            </div>
-                                        }
-
-                                        <button class="btn btn-outline btn-sm cr-add-btn"
-                                                @onclick="AddStep">
-                                            + Add Step
-                                        </button>
-                                    </div>
-                                }
-
-                                <!-- Step 5: Finishing Touches -->
-                                @if (_currentStep == 5)
-                                {
-                                    <div class="cr-section">
-                                        <h2>🏁 Finishing Touches</h2>
-
-                                        <!-- Tags -->
-                                        <div class="cr-form-group">
-                                            <label>Tags</label>
-                                            <input type="text" class="cr-input" value="@_tagsInput"
-                                                   @oninput="OnTagsChanged"
-                                                   placeholder="chocolate, quick, dinner (comma-separated)" />
-                                            @if (_recipe.Tags.Any())
-                                            {
-                                                <div class="cr-tag-chips">
-                                                    @foreach (var tag in _recipe.Tags)
-                                                    {
-                                                        var t = tag;
-                                                        <span class="cr-tag-chip">
-                                                            @t
-                                                            <button @onclick="() => RemoveTag(t)">×</button>
-                                                        </span>
-                                                    }
-                                                </div>
-                                            }
-                                        </div>
-
-                                        <!-- Dietary info -->
-                                        <div class="cr-form-group">
-                                            <label>Dietary Info</label>
-                                            <div class="cr-checkbox-grid">
-                                                @foreach (var diet in _dietaryOptions)
-                                                {
-                                                    var d = diet;
-                                                    <label class="cr-checkbox-label">
-                                                        <input type="checkbox"
-                                                               checked="@_recipe.DietaryInfo.Contains(d)"
-                                                               @onchange="(e) => ToggleDietary(d, (bool)(e.Value ?? false))" />
-                                                        @d
-                                                    </label>
-                                                }
-                                            </div>
-                                        </div>
-
-                                        <!-- Sources -->
-                                        <div class="cr-form-group">
-                                            <label>Sources</label>
-                                            <div class="cr-source-form">
-                                                <select class="cr-input cr-source-type" @bind="_newSourceType">
-                                                    <option value="Website">Website</option>
-                                                    <option value="Book">Book</option>
-                                                    <option value="Magazine">Magazine</option>
-                                                    <option value="Person">Person</option>
-                                                    <option value="Video">Video</option>
-                                                    <option value="TVShow">TV Show</option>
-                                                    <option value="Other">Other</option>
-                                                </select>
-                                                <input type="text" class="cr-input" @bind="_newSourceName"
-                                                       placeholder="@GetSourceNamePlaceholder()" />
-                                                <input type="text" class="cr-input" @bind="_newSourceAuthor"
-                                                       placeholder="@GetSourceAuthorPlaceholder()" />
-                                                <input type="url" class="cr-input" @bind="_newSourceUrl"
-                                                       placeholder="URL (optional)" />
-                                                <button class="btn btn-outline btn-sm" @onclick="AddSource"
-                                                        disabled="@string.IsNullOrWhiteSpace(_newSourceName)">
-                                                    + Add
-                                                </button>
-                                            </div>
-                                            @if (_sources.Any())
-                                            {
-                                                <div class="cr-source-list">
-                                                    @foreach (var src in FilteredSources)
-                                                    {
-                                                        var source = src;
-                                                        <div class="cr-source-item">
-                                                            <span class="cr-source-badge">@source.Type</span>
-                                                            <span class="cr-source-name">@source.Name</span>
-                                                            @if (!string.IsNullOrWhiteSpace(source.Author))
-                                                            {
-                                                                <span class="cr-source-author">· @source.Author</span>
-                                                            }
-                                                            @if (!string.IsNullOrWhiteSpace(source.Url))
-                                                            {
-                                                                <a href="@source.Url" target="_blank" class="cr-source-url">🔗</a>
-                                                            }
-                                                            <button class="btn btn-sm btn-outline cr-row-delete"
-                                                                    @onclick="() => RemoveSource(source)">✕</button>
-                                                        </div>
-                                                    }
-                                                </div>
-                                            }
-                                        </div>
-
-                                        <!-- Recipe image -->
-                                        <div class="cr-form-group">
-                                            <label>Recipe Image</label>
-                                            <div class="cr-image-inputs">
-                                                <input type="url" class="cr-input" value="@_recipe.ImageUrl"
-                                                       @oninput="OnImageUrlChanged" placeholder="Paste image URL" />
-                                                <div class="cr-file-label">
-                                                    <span>or upload:</span>
-                                                    <InputFile OnChange="OnImageFileSelectedAsync" accept="image/*" class="cr-file-input" />
-                                                </div>
-                                            </div>
-                                            @if (!string.IsNullOrWhiteSpace(_imagePreviewUrl))
-                                            {
-                                                <div class="cr-image-preview">
-                                                    <img src="@_imagePreviewUrl" alt="Recipe preview" />
-                                                    <button class="btn btn-sm btn-outline" @onclick="ClearImage">Remove</button>
-                                                </div>
-                                            }
-                                        </div>
-
-                                        <!-- Public toggle -->
-                                        <div class="cr-form-group">
-                                            <label class="cr-checkbox-label">
-                                                <input type="checkbox" @bind="_recipe.IsPublic" />
-                                                Make this recipe public
-                                            </label>
-                                        </div>
-                                    </div>
-                                }
-
-                            </div>
-
-                            <!-- Right: live preview sidebar -->
-                            <div class="cr-preview">
-                                <div class="cr-preview-card">
-                                    <div class="cr-preview-header">
-                                        <span>👁️ Live Preview</span>
-                                        @if (_parsed.IsAIParsed)
-                                        {
-                                            <span class="cr-badge-ai">AI</span>
-                                        }
-                                    </div>
-                                    <div class="cr-preview-body">
-                                        @if (string.IsNullOrWhiteSpace(_recipe.Title) && !_recipe.Ingredients.Any() && !_recipe.Steps.Any())
-                                        {
-                                            <div class="cr-preview-empty">
-                                                <p>👨‍🍳 Start filling in details to see your recipe preview here.</p>
-                                            </div>
-                                        }
-                                        else
-                                        {
-                                            @if (!string.IsNullOrWhiteSpace(_imagePreviewUrl))
-                                            {
-                                                <img class="cr-preview-img" src="@_imagePreviewUrl" alt="Recipe" />
-                                            }
-                                            @if (!string.IsNullOrWhiteSpace(_recipe.Title))
-                                            {
-                                                <h2 class="cr-preview-title">@_recipe.Title</h2>
-                                            }
-                                            @if (!string.IsNullOrWhiteSpace(_recipe.Description))
-                                            {
-                                                <p class="cr-preview-desc">@_recipe.Description</p>
-                                            }
-                                            <div class="cr-preview-meta">
-                                                @if (_recipe.PrepTimeMinutes > 0)
-                                                {
-                                                    <span class="cr-meta-chip">⏱️ @_recipe.PrepTimeMinutes min prep</span>
-                                                }
-                                                @if (_recipe.CookTimeMinutes > 0)
-                                                {
-                                                    <span class="cr-meta-chip">🍳 @_recipe.CookTimeMinutes min cook</span>
-                                                }
-                                                @if (_recipe.PrepTimeMinutes > 0 && _recipe.CookTimeMinutes > 0)
-                                                {
-                                                    <span class="cr-meta-chip">⏰ @(_recipe.PrepTimeMinutes + _recipe.CookTimeMinutes) min total</span>
-                                                }
-                                                @if (_recipe.Servings > 0)
-                                                {
-                                                    <span class="cr-meta-chip">🍴 @_recipe.Servings servings</span>
-                                                }
-                                                @if (!string.IsNullOrWhiteSpace(_recipe.Difficulty))
-                                                {
-                                                    <span class="cr-meta-chip">🎯 @_recipe.Difficulty</span>
-                                                }
-                                                @if (!string.IsNullOrWhiteSpace(_recipe.Cuisine))
-                                                {
-                                                    <span class="cr-meta-chip">🌍 @_recipe.Cuisine</span>
-                                                }
-                                                @if (!string.IsNullOrWhiteSpace(_recipe.Category))
-                                                {
-                                                    <span class="cr-meta-chip">🏷️ @_recipe.Category</span>
-                                                }
-                                            </div>
-
-                                            @if (_recipe.Ingredients.Any())
-                                            {
-                                                <div class="cr-preview-section">
-                                                    <h3>Ingredients (@_recipe.Ingredients.Count)</h3>
-                                                    <ul class="cr-preview-ingredients">
-                                                        @foreach (var ing in _recipe.Ingredients)
-                                                        {
-                                                            <li>
-                                                                @if (ing.Quantity > 0)
-                                                                {
-                                                                    <span class="cr-ing-qty">@FormatQuantity(ing.Quantity) @ing.Unit</span>
-                                                                }
-                                                                <span>@ing.Name</span>
-                                                                @if (!string.IsNullOrWhiteSpace(ing.Notes))
-                                                                {
-                                                                    <span class="cr-ing-notes">, @ing.Notes</span>
-                                                                }
-                                                            </li>
-                                                        }
-                                                    </ul>
-                                                </div>
-                                            }
-
-                                            @if (_recipe.Steps.Any())
-                                            {
-                                                <div class="cr-preview-section">
-                                                    <h3>Instructions (@_recipe.Steps.Count)</h3>
-                                                    <ol class="cr-preview-steps">
-                                                        @foreach (var step in _recipe.Steps)
-                                                        {
-                                                            <li>@step.Instruction</li>
-                                                        }
-                                                    </ol>
-                                                </div>
-                                            }
-
-                                            @if (_recipe.DietaryInfo.Any())
-                                            {
-                                                <div class="cr-preview-section">
-                                                    <h3>Dietary</h3>
-                                                    <div class="cr-preview-dietary">
-                                                        @foreach (var d in _recipe.DietaryInfo)
-                                                        {
-                                                            <span class="cr-badge-diet">@d</span>
-                                                        }
-                                                    </div>
-                                                </div>
-                                            }
-
-                                            @if (_recipe.Tags.Any())
-                                            {
-                                                <div class="cr-preview-section">
-                                                    <h3>Tags</h3>
-                                                    <div class="cr-preview-tags">
-                                                        @foreach (var tag in _recipe.Tags)
-                                                        {
-                                                            <span class="cr-meta-chip">@tag</span>
-                                                        }
-                                                    </div>
-                                                </div>
-                                            }
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-                    }
-
-                </div>
-
-                <!-- Bottom navigation bar -->
-                <div class="cr-nav">
-                    <div class="cr-nav-left">
-                        @if (_currentStep > 1)
-                        {
-                            <button class="btn btn-outline" @onclick="() => _currentStep--">← Back</button>
-                        }
-                    </div>
-                    <div class="cr-nav-right">
-                        @if (_currentStep < 5)
-                        {
-                            <button class="btn btn-primary"
-                                    @onclick="() => _currentStep++"
-                                    disabled="@((_currentStep == 1 && !IsStep1Ready()) || (_currentStep == 2 && string.IsNullOrWhiteSpace(_recipe.Title)))">
-                                Next →
-                            </button>
-                        }
-                        else
-                        {
-                            <button class="btn btn-secondary" @onclick="SaveDraftAsync" disabled="@_isSaving">
-                                💾 Save Draft
-                            </button>
-                            <button class="btn btn-primary"
-                                    @onclick="PublishRecipeAsync"
-                                    disabled="@(!IsValid() || _isSaving)">
-                                @if (_isSaving)
-                                {
-                                    <span class="cr-spinner-sm"></span>
-                                }
-                                @if (_isEditMode)
-                                {
-                                    <span>💾 Save Changes</span>
+                                    <span class="rs-spin-sm"></span><span>Analyzing…</span>
                                 }
                                 else
                                 {
-                                    <span>✅ Publish Recipe</span>
+                                    <span>✨ Parse with AI</span>
                                 }
                             </button>
+                        </div>
+
+                        <!-- Unit suggestions -->
+                        @foreach (var suggestion in _unitSuggestions)
+                        {
+                            var s = suggestion;
+                            <div class="rs-suggestion">
+                                <span>💡 Did you mean <strong>@s.Suggested</strong> for "@s.Context"?</span>
+                                <button class="btn btn-sm btn-outline" @onclick="() => AcceptSuggestion(s)">Accept</button>
+                                <button class="rs-text-btn rs-text-sm" @onclick="() => DismissSuggestion(s)">Dismiss</button>
+                            </div>
                         }
+                    </div>
+
+                    <!-- RIGHT: Live structured panel -->
+                    <div class="rs-live-panel">
+                        <div class="rs-panel-head">
+                            <div class="rs-live-head-row">
+                                <span class="rs-live-dot @(_liveParseEnabled ? "rs-dot-live" : "rs-dot-off")"></span>
+                                <span class="rs-panel-title">Live Detection</span>
+                                @if (_parseStatus == "ai")
+                                {
+                                    <span class="rs-badge-ai">AI</span>
+                                }
+                                else if (_parseStatus == "ai-fallback")
+                                {
+                                    <span class="rs-badge-fallback">Regex fallback</span>
+                                }
+                            </div>
+                            @if (_parseStatus != null || _isParsing)
+                            {
+                                <div class="rs-parse-line">
+                                    @if (_isParsing)
+                                    {
+                                        <span class="rs-spin-sm rs-spin-teal"></span>
+                                        <span>Parsing…</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="rs-parse-label">@(_parseStatus == "ai" ? "AI parsed" : _parseStatus == "ai-fallback" ? "Fallback" : "Smart parsed")</span>
+                                        @if (_lastParseAt != DateTime.MinValue)
+                                        {
+                                            <span class="rs-parse-sep">·</span>
+                                            <span>@FormatTimeAgo(DateTime.UtcNow - _lastParseAt) ago</span>
+                                        }
+                                        @if (_parseConfidence > 0)
+                                        {
+                                            <span class="rs-parse-sep">·</span>
+                                            <span class="rs-conf">@(_parseConfidence.ToString("0"))% confidence</span>
+                                        }
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <div class="rs-live-body">
+
+                            <!-- Skeleton when AI is running and no content yet -->
+                            @if (_isParsing && string.IsNullOrWhiteSpace(_recipe.Title))
+                            {
+                                <div class="rs-field-block">
+                                    <label class="rs-flabel">Title</label>
+                                    <div class="rs-skel rs-skel-full"></div>
+                                </div>
+                                <div class="rs-field-block">
+                                    <label class="rs-flabel">Short Description</label>
+                                    <div class="rs-skel rs-skel-full" style="height:2.5rem"></div>
+                                </div>
+                                <div class="rs-field-block">
+                                    <label class="rs-flabel">Ingredients</label>
+                                    <div class="rs-skel rs-skel-full" style="height:5rem"></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- Title -->
+                                <div class="rs-field-block">
+                                    <label class="rs-flabel">Title</label>
+                                    <input class="rs-finput"
+                                           value="@_recipe.Title"
+                                           @oninput="OnTitleChangedAndRebuild"
+                                           placeholder="Recipe name" />
+                                </div>
+
+                                <!-- Description -->
+                                <div class="rs-field-block">
+                                    <label class="rs-flabel">Short Description</label>
+                                    <textarea class="rs-finput rs-ftextarea" rows="2"
+                                              value="@_recipe.Description"
+                                              @oninput="OnDescriptionChangedAndRebuild"
+                                              placeholder="Brief description of the dish"></textarea>
+                                </div>
+
+                                <!-- Quick meta -->
+                                <div class="rs-meta-grid">
+                                    <div class="rs-meta-cell">
+                                        <label>Prep (min)</label>
+                                        <input type="number" class="rs-minput" value="@_recipe.PrepTimeMinutes"
+                                               @onchange="OnPrepTimeChanged" min="0" />
+                                    </div>
+                                    <div class="rs-meta-cell">
+                                        <label>Cook (min)</label>
+                                        <input type="number" class="rs-minput" value="@_recipe.CookTimeMinutes"
+                                               @onchange="OnCookTimeChanged" min="0" />
+                                    </div>
+                                    <div class="rs-meta-cell">
+                                        <label>Servings</label>
+                                        <input type="number" class="rs-minput" value="@_recipe.Servings"
+                                               @onchange="OnServingsChanged" min="1" />
+                                    </div>
+                                    <div class="rs-meta-cell">
+                                        <label>Difficulty</label>
+                                        <select class="rs-minput" value="@_recipe.Difficulty" @onchange="OnDifficultyChanged">
+                                            <option>Easy</option>
+                                            <option>Medium</option>
+                                            <option>Hard</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Ingredients -->
+                                <div class="rs-section">
+                                    <div class="rs-sec-head">
+                                        <span class="rs-sec-title">Ingredients</span>
+                                        <span class="rs-sec-count">@_recipe.Ingredients.Count</span>
+                                    </div>
+                                    @if (_isParsing && !_recipe.Ingredients.Any())
+                                    {
+                                        <div class="rs-skel rs-skel-full" style="height:4rem"></div>
+                                    }
+                                    else
+                                    {
+                                        <div class="rs-ing-table">
+                                            <div class="rs-ing-thead">
+                                                <span class="col-qty">Qty</span>
+                                                <span class="col-unit">Unit</span>
+                                                <span class="col-name">Ingredient</span>
+                                                <span class="col-notes">Notes</span>
+                                                <span class="col-del"></span>
+                                            </div>
+                                            @foreach (var ingredient in _recipe.Ingredients)
+                                            {
+                                                var ing = ingredient;
+                                                <div class="rs-ing-row">
+                                                    <input type="number" class="rs-ing-inp col-qty" step="0.25" min="0"
+                                                           value="@ing.Quantity"
+                                                           @onchange="@(e => OnIngredientQtyChanged(ing, e.Value?.ToString()))" />
+                                                    <input type="text" class="rs-ing-inp col-unit" placeholder="cup"
+                                                           value="@ing.Unit"
+                                                           @oninput="@(e => OnIngredientFieldChanged(ing, "unit", e.Value?.ToString()))" />
+                                                    <input type="text" class="rs-ing-inp col-name" placeholder="Ingredient"
+                                                           value="@ing.Name"
+                                                           @oninput="@(e => OnIngredientFieldChanged(ing, "name", e.Value?.ToString()))" />
+                                                    <input type="text" class="rs-ing-inp col-notes" placeholder="notes"
+                                                           value="@ing.Notes"
+                                                           @oninput="@(e => OnIngredientFieldChanged(ing, "notes", e.Value?.ToString()))" />
+                                                    <button class="rs-del-btn col-del" @onclick="() => RemoveIngredient(ing)" title="Remove">✕</button>
+                                                </div>
+                                            }
+                                        </div>
+                                        <button class="rs-add-btn" @onclick="AddIngredient">+ Add Ingredient</button>
+                                    }
+                                </div>
+
+                                <!-- Instructions -->
+                                <div class="rs-section">
+                                    <div class="rs-sec-head">
+                                        <span class="rs-sec-title">Instructions</span>
+                                        <span class="rs-sec-count">@_recipe.Steps.Count @(_recipe.Steps.Count == 1 ? "step" : "steps")</span>
+                                    </div>
+                                    @if (_isParsing && !_recipe.Steps.Any())
+                                    {
+                                        <div class="rs-skel rs-skel-full" style="height:4rem"></div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var recipeStep in _recipe.Steps)
+                                        {
+                                            var step = recipeStep;
+                                            <div class="rs-step-row">
+                                                <span class="rs-step-num">@step.OrderIndex</span>
+                                                <textarea class="rs-step-ta" rows="2"
+                                                          placeholder="Describe this step…"
+                                                          value="@step.Instruction"
+                                                          @oninput="@(e => OnStepInstructionChangedAndRebuild(step, e.Value?.ToString()))"></textarea>
+                                                <button class="rs-del-btn" @onclick="() => RemoveStep(step)" title="Remove">✕</button>
+                                            </div>
+                                        }
+                                        <button class="rs-add-btn" @onclick="AddStep">+ Add Step</button>
+                                    }
+                                </div>
+
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── ADDITIONAL DETAILS accordion ────────────────────────────── -->
+                <div class="rs-details">
+                    <button class="rs-details-btn" @onclick="() => _showDetails = !_showDetails">
+                        <span class="rs-details-chevron">@(_showDetails ? "▼" : "▶")</span>
+                        Additional Details
+                        <span class="rs-details-hint">category, cuisine, dietary, tags, sources, image</span>
+                    </button>
+                    @if (_showDetails)
+                    {
+                        <div class="rs-details-body">
+                            <div class="rs-details-row">
+                                <div class="rs-dfield">
+                                    <label>Category</label>
+                                    <select class="rs-finput" value="@(_recipe.Category ?? "")" @onchange="OnCategoryChanged">
+                                        <option value="">— select —</option>
+                                        @foreach (var opt in _categoryOptions) { <option value="@opt">@opt</option> }
+                                    </select>
+                                </div>
+                                <div class="rs-dfield">
+                                    <label>Cuisine</label>
+                                    <select class="rs-finput" value="@(_recipe.Cuisine ?? "")" @onchange="OnCuisineChanged">
+                                        <option value="">— select —</option>
+                                        @foreach (var opt in _cuisineOptions) { <option value="@opt">@opt</option> }
+                                    </select>
+                                </div>
+                                <div class="rs-dfield rs-dfield-wide">
+                                    <label>Tags <small>(comma-separated)</small></label>
+                                    <input type="text" class="rs-finput" value="@_tagsInput" @oninput="OnTagsChanged"
+                                           placeholder="e.g. quick, family-friendly, baked" />
+                                    @if (_recipe.Tags.Any())
+                                    {
+                                        <div class="rs-chips">
+                                            @foreach (var tag in _recipe.Tags)
+                                            {
+                                                var t = tag;
+                                                <span class="rs-chip">@t <button @onclick="() => RemoveTag(t)">×</button></span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="rs-dfield-full">
+                                <label>Dietary</label>
+                                <div class="rs-checkbox-row">
+                                    @foreach (var diet in _dietaryOptions)
+                                    {
+                                        var d = diet;
+                                        <label class="rs-check-label">
+                                            <input type="checkbox"
+                                                   checked="@_recipe.DietaryInfo.Contains(d)"
+                                                   @onchange="@(e => ToggleDietary(d, (bool)(e.Value ?? false)))" />
+                                            @d
+                                        </label>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="rs-dfield-full">
+                                <label>Sources</label>
+                                <div class="rs-source-add">
+                                    <select class="rs-finput rs-src-type" @bind="_newSourceType">
+                                        <option value="Website">Website</option>
+                                        <option value="Book">Book</option>
+                                        <option value="Person">Person</option>
+                                        <option value="Video">Video</option>
+                                        <option value="TVShow">TV Show</option>
+                                        <option value="Magazine">Magazine</option>
+                                    </select>
+                                    <input type="text" class="rs-finput" @bind="_newSourceName"
+                                           placeholder="@GetSourceNamePlaceholder()" />
+                                    @if (_newSourceType == "Website" || _newSourceType == "Video")
+                                    {
+                                        <input type="text" class="rs-finput" @bind="_newSourceUrl" placeholder="URL" />
+                                    }
+                                    @if (_newSourceType is "Book" or "Person" or "Magazine")
+                                    {
+                                        <input type="text" class="rs-finput" @bind="_newSourceAuthor"
+                                               placeholder="@GetSourceAuthorPlaceholder()" />
+                                    }
+                                    @if (_newSourceType == "TVShow")
+                                    {
+                                        <input type="text" class="rs-finput" @bind="_newSourceNotes" placeholder="Episode / URL" />
+                                    }
+                                    <button class="btn btn-sm btn-outline" @onclick="AddSource">+ Add</button>
+                                </div>
+                                @if (_sources.Any())
+                                {
+                                    <div class="rs-source-list">
+                                        @foreach (var source in FilteredSources)
+                                        {
+                                            var src = source;
+                                            <div class="rs-src-item">
+                                                <span class="rs-src-badge">@src.Type</span>
+                                                <span class="rs-src-name">@src.Name</span>
+                                                @if (!string.IsNullOrWhiteSpace(src.Author)) { <span class="rs-src-meta">by @src.Author</span> }
+                                                @if (!string.IsNullOrWhiteSpace(src.Url)) { <a href="@src.Url" target="_blank" class="rs-src-link">🔗</a> }
+                                                <button class="rs-del-btn" @onclick="() => RemoveSource(src)">✕</button>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="rs-dfield-full">
+                                <label>Recipe Image</label>
+                                <div class="rs-img-row">
+                                    <input type="url" class="rs-finput" value="@_recipe.ImageUrl"
+                                           @onchange="OnImageUrlChanged" placeholder="https://…/photo.jpg" />
+                                    <span class="rs-or">or</span>
+                                    <InputFile OnChange="OnImageFileSelectedAsync" accept="image/*" class="rs-finput" />
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(_imagePreviewUrl))
+                                {
+                                    <div class="rs-img-preview">
+                                        <img src="@_imagePreviewUrl" alt="Recipe preview" />
+                                        <button class="btn btn-sm btn-outline" @onclick="ClearImage">Remove</button>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="rs-dfield">
+                                <label class="rs-check-label">
+                                    <input type="checkbox" @bind="_recipe.IsPublic" />
+                                    Make this recipe public
+                                </label>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- ── PREVIEW MODAL ──────────────────────────────────────────────── -->
+            @if (_showPreview)
+            {
+                <div class="rs-overlay" @onclick="() => _showPreview = false">
+                    <div class="rs-modal" @onclick:stopPropagation="true">
+                        <div class="rs-modal-head">
+                            <h2>@_recipe.Title</h2>
+                            <button class="rs-close-btn rs-close-lg" @onclick="() => _showPreview = false">×</button>
+                        </div>
+                        <div class="rs-modal-body">
+                            @if (!string.IsNullOrWhiteSpace(_recipe.Description))
+                            {
+                                <p class="rs-prev-desc">@_recipe.Description</p>
+                            }
+                            <div class="rs-prev-meta">
+                                @if (_recipe.PrepTimeMinutes > 0) { <span class="rs-meta-chip">⏱️ Prep @_recipe.PrepTimeMinutes min</span> }
+                                @if (_recipe.CookTimeMinutes > 0) { <span class="rs-meta-chip">🍳 Cook @_recipe.CookTimeMinutes min</span> }
+                                @if (_recipe.PrepTimeMinutes + _recipe.CookTimeMinutes > 0) { <span class="rs-meta-chip">⏰ @(_recipe.PrepTimeMinutes + _recipe.CookTimeMinutes) min total</span> }
+                                @if (_recipe.Servings > 0) { <span class="rs-meta-chip">🍴 @_recipe.Servings servings</span> }
+                                @if (!string.IsNullOrWhiteSpace(_recipe.Difficulty)) { <span class="rs-meta-chip">🎯 @_recipe.Difficulty</span> }
+                                @if (!string.IsNullOrWhiteSpace(_recipe.Cuisine)) { <span class="rs-meta-chip">🌍 @_recipe.Cuisine</span> }
+                                @if (!string.IsNullOrWhiteSpace(_recipe.Category)) { <span class="rs-meta-chip">🏷️ @_recipe.Category</span> }
+                            </div>
+                            @if (_recipe.Ingredients.Any())
+                            {
+                                <h3>Ingredients</h3>
+                                <ul class="rs-prev-list">
+                                    @foreach (var ing in _recipe.Ingredients)
+                                    {
+                                        <li><strong>@FormatQuantity(ing.Quantity) @ing.Unit</strong> @ing.Name@if (!string.IsNullOrWhiteSpace(ing.Notes)) { <em>, @ing.Notes</em> }</li>
+                                    }
+                                </ul>
+                            }
+                            @if (_recipe.Steps.Any())
+                            {
+                                <h3>Instructions</h3>
+                                <ol class="rs-prev-list">
+                                    @foreach (var step in _recipe.Steps) { <li>@step.Instruction</li> }
+                                </ol>
+                            }
+                            @if (_recipe.DietaryInfo.Any())
+                            {
+                                <div class="rs-prev-diet">
+                                    @foreach (var d in _recipe.DietaryInfo) { <span class="rs-diet-chip">@d</span> }
+                                </div>
+                            }
+                        </div>
+                        <div class="rs-modal-foot">
+                            <button class="btn btn-outline" @onclick="() => _showPreview = false">Close</button>
+                            <button class="btn btn-primary" @onclick="PublishRecipeAsync"
+                                    disabled="@(!IsValid() || _isSaving)">
+                                @(_isEditMode ? "Save Changes" : "Publish Recipe")
+                            </button>
+                        </div>
                     </div>
                 </div>
             }
@@ -626,32 +531,35 @@
         </div>
     </Authorized>
     <NotAuthorized>
-        <div class="cr-unauthorized">
+        <div class="rs-unauth">
             <h2>🔒 Sign In Required</h2>
-            <p>You must be signed in to create or edit recipes.</p>
+            <p>You need to be signed in to create or edit recipes.</p>
             <a class="btn btn-primary" href="/login">Sign In</a>
         </div>
     </NotAuthorized>
 </AuthorizeView>
 
 @code {
-    private int _currentStep = 1;
-    private bool IsStep1Ready() => !string.IsNullOrWhiteSpace(_recipeText) || !string.IsNullOrWhiteSpace(_recipe.Title);
+    private const int LiveParseDebounceMs = 300;
 
     [Parameter] public Guid? RecipeId { get; set; }
 
     private bool _isEditMode => RecipeId.HasValue;
     private string DraftKey => _isEditMode ? $"recipe_draft_edit_{RecipeId}" : "recipe_draft_create";
-    private string ConfidenceLabel =>
-        _parseConfidence >= 80 ? $"{_parseConfidence:0}% confident" :
-        _parseConfidence >= 50 ? "Estimated - please verify" :
-        "Basic parse - please review";
 
+    // UI state
     private bool _isLoading = false;
     private bool _isSaving = false;
     private bool _isParsing = false;
+    private bool _showDetails = false;
+    private bool _showPreview = false;
+    private bool _liveParseEnabled = true;
+    private bool _updatingFromStructured = false;
+
+    // Parse state
     private string? _parseStatus = null;
     private double _parseConfidence = 0;
+    private DateTime _lastParseAt = DateTime.MinValue;
     private string? _errorMessage = null;
     private string? _draftSavedAt = null;
     private bool _showDraftRestoreBanner = false;
@@ -709,7 +617,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (_isEditMode) { _currentStep = 2; await LoadExistingRecipeAsync(); }
+        if (_isEditMode) await LoadExistingRecipeAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -730,7 +638,7 @@
 
     private void InitializeTimers()
     {
-        _debounceTimer = new System.Timers.Timer(500) { AutoReset = false };
+        _debounceTimer = new System.Timers.Timer(LiveParseDebounceMs) { AutoReset = false };
         _debounceTimer.Elapsed += async (sender, e) =>
         {
             try { await InvokeAsync(() => { RunRegexParse(); StateHasChanged(); }); }
@@ -783,6 +691,7 @@
                 }).ToList();
                 _tagsInput = string.Join(", ", _recipe.Tags);
                 _imagePreviewUrl = _recipe.ImageUrl;
+                RebuildRawTextFromStructured();
             }
         }
         catch (Exception ex) { _errorMessage = $"Failed to load recipe: {ex.Message}"; }
@@ -874,10 +783,14 @@
 
     private void OnRecipeTextChanged(ChangeEventArgs e)
     {
+        if (_updatingFromStructured) return;
         _recipeText = e.Value?.ToString() ?? string.Empty;
         _hasChangedSinceLastSave = true;
-        _debounceTimer?.Stop();
-        _debounceTimer?.Start();
+        if (_liveParseEnabled)
+        {
+            _debounceTimer?.Stop();
+            _debounceTimer?.Start();
+        }
     }
 
     private void ParseWithRegexManual() => RunRegexParse();
@@ -888,6 +801,7 @@
         _parsed = ParseRecipeFromText(_recipeText);
         _parseStatus = "regex";
         _parseConfidence = _parsed.Confidence;
+        _lastParseAt = DateTime.UtcNow;
         ApplyParsedToForm(_parsed);
         _unitSuggestions = AnalyzeUnitSuggestions(_parsed.Ingredients);
     }
@@ -905,6 +819,7 @@
                 _parsed.IsAIParsed = true;
                 _parseStatus = "ai";
                 _parseConfidence = result.ConfidenceScore * 100;
+                _lastParseAt = DateTime.UtcNow;
                 ApplyParsedToForm(_parsed);
                 _unitSuggestions = AnalyzeUnitSuggestions(_parsed.Ingredients);
             }
@@ -970,6 +885,70 @@
         }
         _recipe.Ingredients = new List<CreateRecipeIngredientRequest>(p.Ingredients);
         _recipe.Steps = new List<CreateRecipeStepRequest>(p.Steps);
+    }
+
+    // ── Bidirectional: rebuild raw text from structured fields ────────────────
+
+    private void RebuildRawTextFromStructured()
+    {
+        if (_updatingFromStructured) return;
+        _updatingFromStructured = true;
+        try
+        {
+            var recipeTextBuilder = new System.Text.StringBuilder();
+            recipeTextBuilder.AppendLine(_recipe.Title);
+
+            var parts = new List<string>();
+            if (_recipe.Servings > 0) parts.Add($"Makes {_recipe.Servings} servings");
+            if (_recipe.PrepTimeMinutes > 0) parts.Add($"Prep: {_recipe.PrepTimeMinutes} min");
+            if (_recipe.CookTimeMinutes > 0) parts.Add($"Cook: {_recipe.CookTimeMinutes} min");
+            if (parts.Any()) recipeTextBuilder.AppendLine(string.Join(" | ", parts));
+
+            if (!string.IsNullOrWhiteSpace(_recipe.Description))
+                recipeTextBuilder.AppendLine().AppendLine(_recipe.Description);
+
+            if (_recipe.Ingredients.Any())
+            {
+                recipeTextBuilder.AppendLine().AppendLine("Ingredients:");
+                foreach (var ing in _recipe.Ingredients)
+                {
+                    var qty = FormatQuantity(ing.Quantity);
+                    var unit = string.IsNullOrWhiteSpace(ing.Unit) ? "" : $" {ing.Unit}";
+                    var notes = string.IsNullOrWhiteSpace(ing.Notes) ? "" : $", {ing.Notes}";
+                    recipeTextBuilder.AppendLine($"{qty}{unit} {ing.Name}{notes}".Trim());
+                }
+            }
+
+            if (_recipe.Steps.Any())
+            {
+                recipeTextBuilder.AppendLine().AppendLine("Instructions:");
+                foreach (var step in _recipe.Steps)
+                    recipeTextBuilder.AppendLine($"{step.OrderIndex}. {step.Instruction}");
+            }
+
+            _recipeText = recipeTextBuilder.ToString().TrimEnd();
+            _hasChangedSinceLastSave = true;
+        }
+        finally { _updatingFromStructured = false; }
+    }
+
+    // ── Bidirectional field change handlers ───────────────────────────────────
+
+    private void OnTitleChangedAndRebuild(ChangeEventArgs e)
+    { _recipe.Title = e.Value?.ToString() ?? ""; _userEditedFields.Add("title"); RebuildRawTextFromStructured(); }
+
+    private void OnDescriptionChangedAndRebuild(ChangeEventArgs e)
+    { _recipe.Description = e.Value?.ToString() ?? ""; _userEditedFields.Add("description"); RebuildRawTextFromStructured(); }
+
+    private void OnStepInstructionChangedAndRebuild(CreateRecipeStepRequest step, string? value)
+    { step.Instruction = value ?? string.Empty; RebuildRawTextFromStructured(); }
+
+    private void OnIngredientQtyChanged(CreateRecipeIngredientRequest ing, string? value)
+    {
+        if (decimal.TryParse(value, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var qty))
+            ing.Quantity = qty;
+        RebuildRawTextFromStructured();
     }
 
     private static ParsedRecipeResult ParseRecipeFromText(string text)
@@ -1210,15 +1189,15 @@
 
     private void OnPrepTimeChanged(ChangeEventArgs e)
     { if (int.TryParse(e.Value?.ToString(), out var v))
-      { _recipe.PrepTimeMinutes = v; _userEditedFields.Add("prepTime"); _hasChangedSinceLastSave = true; } }
+      { _recipe.PrepTimeMinutes = v; _userEditedFields.Add("prepTime"); RebuildRawTextFromStructured(); } }
 
     private void OnCookTimeChanged(ChangeEventArgs e)
     { if (int.TryParse(e.Value?.ToString(), out var v))
-      { _recipe.CookTimeMinutes = v; _userEditedFields.Add("cookTime"); _hasChangedSinceLastSave = true; } }
+      { _recipe.CookTimeMinutes = v; _userEditedFields.Add("cookTime"); RebuildRawTextFromStructured(); } }
 
     private void OnServingsChanged(ChangeEventArgs e)
     { if (int.TryParse(e.Value?.ToString(), out var v))
-      { _recipe.Servings = v; _userEditedFields.Add("servings"); _hasChangedSinceLastSave = true; } }
+      { _recipe.Servings = v; _userEditedFields.Add("servings"); RebuildRawTextFromStructured(); } }
 
     private void OnTagsChanged(ChangeEventArgs e)
     { _tagsInput = e.Value?.ToString() ?? ""; _userEditedFields.Add("tags"); ParseTagsFromInput(); _hasChangedSinceLastSave = true; }
@@ -1240,7 +1219,7 @@
         _recipe.Ingredients.Remove(ing);
         for (int i = 0; i < _recipe.Ingredients.Count; i++)
             _recipe.Ingredients[i].OrderIndex = i + 1;
-        _hasChangedSinceLastSave = true;
+        RebuildRawTextFromStructured();
     }
 
     private void OnIngredientFieldChanged(CreateRecipeIngredientRequest ing, string field, string? value)
@@ -1251,7 +1230,7 @@
             case "name":  ing.Name  = value ?? string.Empty; break;
             case "notes": ing.Notes = value;                 break;
         }
-        _hasChangedSinceLastSave = true;
+        RebuildRawTextFromStructured();
     }
 
     private void AddStep()
@@ -1265,7 +1244,7 @@
         _recipe.Steps.Remove(step);
         for (int i = 0; i < _recipe.Steps.Count; i++)
             _recipe.Steps[i].OrderIndex = i + 1;
-        _hasChangedSinceLastSave = true;
+        RebuildRawTextFromStructured();
     }
 
     private void OnStepInstructionChanged(CreateRecipeStepRequest step, string? value)
