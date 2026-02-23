@@ -59,7 +59,8 @@ public class AIController : ControllerBase
                 return BadRequest("Recipe text is required");
             }
 
-            var extractedRecipe = await _ollamaService.ExtractRecipeFromTextAsync(request.RecipeText);
+            var mode = string.IsNullOrWhiteSpace(request.ParseMode) ? "quick" : request.ParseMode;
+            var extractedRecipe = await _ollamaService.ExtractRecipeFromTextAsync(request.RecipeText, mode);
             return Ok(extractedRecipe);
         }
         catch (Exception ex)

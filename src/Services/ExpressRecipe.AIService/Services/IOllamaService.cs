@@ -9,7 +9,11 @@ public interface IOllamaService
     Task<string> GenerateCompletionAsync(string prompt, string? model = null, double temperature = 0.7);
     Task<List<RecipeSuggestionDto>> GenerateRecipeSuggestionsAsync(RecipeSuggestionRequest request);
     Task<IngredientSubstitutionDto> GenerateSubstitutionsAsync(IngredientSubstitutionRequest request);
-    Task<ExtractedRecipeDto> ExtractRecipeFromTextAsync(string text);
+    /// <summary>
+    /// Extract recipe from text using the configured AI model.
+    /// <param name="mode">"quick" = fast model for live typing; "deep" = accurate model for full extraction.</param>
+    /// </summary>
+    Task<ExtractedRecipeDto> ExtractRecipeFromTextAsync(string text, string mode = "quick");
     Task<MealPlanSuggestionDto> GenerateMealPlanAsync(MealPlanSuggestionRequest request);
     Task<AllergenDetectionResult> DetectAllergensAsync(AllergenDetectionRequest request);
     Task<DietaryAnalysisResult> AnalyzeDietAsync(DietaryAnalysisRequest request);
@@ -22,6 +26,8 @@ public class OllamaService : IOllamaService
     private readonly IConfiguration _configuration;
     private readonly ILogger<OllamaService> _logger;
     private readonly string _defaultModel;
+    private readonly string _quickModel;
+    private readonly string _deepModel;
 
     public OllamaService(HttpClient httpClient, IConfiguration configuration, ILogger<OllamaService> logger)
     {
@@ -33,6 +39,12 @@ public class OllamaService : IOllamaService
         _defaultModel = configuration["AI:DefaultModel"]
             ?? configuration["Ollama:DefaultModel"]
             ?? "llama3.2";
+
+        // Quick model: low-latency for live typing feedback
+        _quickModel = configuration["AI:QuickModel"] ?? _defaultModel;
+
+        // Deep model: high-accuracy for full structured extraction
+        _deepModel = configuration["AI:DeepModel"] ?? _defaultModel;
 
         // Consistent endpoint lookup: AI:OllamaEndpoint takes precedence, then Ollama:BaseUrl
         var ollamaEndpoint = configuration["AI:OllamaEndpoint"]
@@ -90,20 +102,26 @@ public class OllamaService : IOllamaService
     /// Tries Ollama AI extraction first; falls back to local regex parsing when Ollama is
     /// unavailable (e.g. model not installed, service down, or timeout).
     /// </summary>
-    public async Task<ExtractedRecipeDto> ExtractRecipeFromTextAsync(string text)
+    /// <param name="mode">"quick" = fast model (low-latency, live typing); "deep" = accurate model (full extraction).</param>
+    public async Task<ExtractedRecipeDto> ExtractRecipeFromTextAsync(string text, string mode = "quick")
     {
+        var model  = mode == "deep" ? _deepModel  : _quickModel;
+        var temp   = mode == "deep" ? 0.3         : 0.1;
+        var prompt = mode == "deep"
+            ? BuildDeepRecipeExtractionPrompt(text)
+            : BuildQuickRecipeExtractionPrompt(text);
+
         try
         {
-            var prompt = BuildRecipeExtractionPrompt(text);
-            var rawResponse = await GenerateCompletionAsync(prompt, temperature: 0.3);
+            var rawResponse = await GenerateCompletionAsync(prompt, model, temp);
 
             if (!string.IsNullOrWhiteSpace(rawResponse))
             {
                 var aiResult = TryParseAiExtractionResponse(rawResponse);
                 if (aiResult != null && !string.IsNullOrWhiteSpace(aiResult.Title))
                 {
-                    aiResult.ConfidenceScore = Math.Max(aiResult.ConfidenceScore, 0.7);
-                    _logger.LogInformation("AI extraction succeeded (model: {Model})", _defaultModel);
+                    aiResult.ConfidenceScore = Math.Max(aiResult.ConfidenceScore, mode == "deep" ? 0.85 : 0.70);
+                    _logger.LogInformation("AI extraction succeeded (model: {Model}, mode: {Mode})", model, mode);
                     return aiResult;
                 }
             }
@@ -112,22 +130,22 @@ public class OllamaService : IOllamaService
         {
             _logger.LogWarning(
                 "Ollama model '{Model}' not found (404). Run 'ollama pull {Model}' to install it. Falling back to regex.",
-                _defaultModel, _defaultModel);
+                model, model);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Ollama HTTP error. Falling back to regex extraction.");
+            _logger.LogWarning(ex, "Ollama HTTP error (mode: {Mode}). Falling back to regex extraction.", mode);
         }
         catch (TaskCanceledException ex)
         {
-            _logger.LogWarning(ex, "Ollama request timed out. Falling back to regex extraction.");
+            _logger.LogWarning(ex, "Ollama request timed out (mode: {Mode}). Falling back to regex extraction.", mode);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "AI extraction failed. Falling back to regex extraction.");
+            _logger.LogWarning(ex, "AI extraction failed (mode: {Mode}). Falling back to regex extraction.", mode);
         }
 
-        _logger.LogInformation("Using local regex extraction as fallback");
+        _logger.LogInformation("Using local regex extraction as fallback (mode: {Mode})", mode);
         return ExtractRecipeLocally(text);
     }
 
@@ -422,20 +440,48 @@ Avoid allergens: {string.Join(", ", request.UserAllergens)}
 Return JSON array of substitution options.";
     }
 
-    private string BuildRecipeExtractionPrompt(string text)
+    /// <summary>
+    /// Quick prompt: minimal fields, fast response for live-typing feedback.
+    /// </summary>
+    private static string BuildQuickRecipeExtractionPrompt(string text)
     {
-        return $@"Extract recipe information from the text below. Return ONLY valid JSON, no extra text.
+        return $@"Extract recipe data. Return ONLY valid JSON, no extra text.
 
+TEXT:
 {text}
 
-JSON structure:
+JSON:
+{{
+  ""title"": """",
+  ""servings"": 4,
+  ""prepTimeMinutes"": 0,
+  ""cookTimeMinutes"": 0,
+  ""difficulty"": ""Medium"",
+  ""ingredients"": [{{""name"":"""",""quantity"":"""",""unit"":""""}}],
+  ""instructions"": [""""],
+  ""confidenceScore"": 0.9
+}}";
+    }
+
+    /// <summary>
+    /// Deep prompt: full extraction including description, allergens, dietary info, tags, cuisine, category.
+    /// </summary>
+    private static string BuildDeepRecipeExtractionPrompt(string text)
+    {
+        return $@"You are a recipe extraction expert. Extract ALL recipe information from the text below.
+Return ONLY valid JSON — no explanations, no markdown fences, just the JSON object.
+
+TEXT:
+{text}
+
+JSON structure (fill every field accurately):
 {{
   ""title"": """",
   ""description"": """",
   ""prepTimeMinutes"": 0,
   ""cookTimeMinutes"": 0,
   ""servings"": 4,
-  ""difficulty"": ""Medium"",
+  ""difficulty"": ""Easy|Medium|Hard"",
   ""cuisine"": """",
   ""category"": """",
   ""ingredients"": [{{""name"": """", ""quantity"": """", ""unit"": """", ""notes"": """"}}],

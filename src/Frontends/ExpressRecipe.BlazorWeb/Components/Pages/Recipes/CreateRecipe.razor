@@ -125,22 +125,39 @@
                         <div class="rs-parse-btns">
                             @if (!_liveParseEnabled)
                             {
-                                <button class="btn btn-sm btn-outline" @onclick="ParseWithRegexManual"
-                                        disabled="@string.IsNullOrWhiteSpace(_recipeText)">
-                                    🔄 Smart Parse
+                                <button class="btn btn-sm btn-outline" @onclick="RunQuickAIParseAsync"
+                                        disabled="@(_isQuickParsing || _isParsing || string.IsNullOrWhiteSpace(_recipeText))"
+                                        title="Fast AI parse — best for quick previews">
+                                    @if (_isQuickParsing)
+                                    {
+                                        <span class="rs-spin-sm"></span><span>Quick AI…</span>
+                                    }
+                                    else
+                                    {
+                                        <span>⚡ Quick Parse</span>
+                                    }
                                 </button>
                             }
                             <button class="btn btn-sm btn-primary" @onclick="ParseWithAIAsync"
-                                    disabled="@(_isParsing || string.IsNullOrWhiteSpace(_recipeText))">
+                                    disabled="@(_isParsing || _isQuickParsing || string.IsNullOrWhiteSpace(_recipeText))"
+                                    title="Full AI extraction — most accurate, may take a few seconds">
                                 @if (_isParsing)
                                 {
-                                    <span class="rs-spin-sm"></span><span>Analyzing…</span>
+                                    <span class="rs-spin-sm"></span><span>Deep parsing…</span>
                                 }
                                 else
                                 {
-                                    <span>✨ Parse with AI</span>
+                                    <span>🔬 Deep Parse</span>
                                 }
                             </button>
+                            @if (_parseStatus == "ai-fallback")
+                            {
+                                <button class="btn btn-sm btn-outline rs-offline-btn" @onclick="ParseWithRegexFallback"
+                                        disabled="@string.IsNullOrWhiteSpace(_recipeText)"
+                                        title="AI unavailable — instant regex-based parse (less accurate)">
+                                    💡 Offline Parse
+                                </button>
+                            }
                         </div>
 
                         <!-- Unit suggestions -->
@@ -159,32 +176,45 @@
                     <div class="rs-live-panel">
                         <div class="rs-panel-head">
                             <div class="rs-live-head-row">
-                                <span class="rs-live-dot @(_liveParseEnabled ? "rs-dot-live" : "rs-dot-off")"></span>
+                                <span class="rs-live-dot @((_liveParseEnabled && !_isQuickParsing) ? "rs-dot-live" : (_isQuickParsing ? "rs-dot-pulse" : "rs-dot-off"))"></span>
                                 <span class="rs-panel-title">Live Detection</span>
-                                @if (_parseStatus == "ai")
+                                @if (_parseStatus == "quick-ai")
                                 {
-                                    <span class="rs-badge-ai">AI</span>
+                                    <span class="rs-badge-ai" title="Quick AI model">⚡ Quick AI</span>
+                                }
+                                else if (_parseStatus == "deep-ai")
+                                {
+                                    <span class="rs-badge-ai rs-badge-deep" title="Deep AI model">🔬 Deep AI</span>
                                 }
                                 else if (_parseStatus == "ai-fallback")
                                 {
-                                    <span class="rs-badge-fallback">Regex fallback</span>
+                                    <span class="rs-badge-fallback" title="AI unavailable — using regex fallback">⚠️ Regex fallback</span>
                                 }
                             </div>
-                            @if (_parseStatus != null || _isParsing)
+                            @if (_parseStatus != null || _isParsing || _isQuickParsing)
                             {
                                 <div class="rs-parse-line">
                                     @if (_isParsing)
                                     {
                                         <span class="rs-spin-sm rs-spin-teal"></span>
-                                        <span>Parsing…</span>
+                                        <span>Deep AI parsing…</span>
+                                    }
+                                    else if (_isQuickParsing)
+                                    {
+                                        <span class="rs-spin-sm rs-spin-teal"></span>
+                                        <span>Quick AI parsing…</span>
                                     }
                                     else
                                     {
-                                        <span class="rs-parse-label">@(_parseStatus == "ai" ? "AI parsed" : _parseStatus == "ai-fallback" ? "Fallback" : "Smart parsed")</span>
+                                        <span class="rs-parse-label">
+                                            @(_parseStatus == "quick-ai" ? "⚡ Quick AI parsed"
+                                              : _parseStatus == "deep-ai"   ? "🔬 Deep AI parsed"
+                                              : "⚠️ Regex fallback")
+                                        </span>
                                         @if (_lastParseAt != DateTime.MinValue)
                                         {
                                             <span class="rs-parse-sep">·</span>
-                                            <span>@FormatTimeAgo(DateTime.UtcNow - _lastParseAt) ago</span>
+                                            <span>@FormatTimeAgo(DateTime.UtcNow - _lastParseAt)</span>
                                         }
                                         @if (_parseConfidence > 0)
                                         {
@@ -199,7 +229,7 @@
                         <div class="rs-live-body">
 
                             <!-- Skeleton when AI is running and no content yet -->
-                            @if (_isParsing && string.IsNullOrWhiteSpace(_recipe.Title))
+                            @if ((_isParsing || _isQuickParsing) && string.IsNullOrWhiteSpace(_recipe.Title))
                             {
                                 <div class="rs-field-block">
                                     <label class="rs-flabel">Title</label>
@@ -540,7 +570,7 @@
 </AuthorizeView>
 
 @code {
-    private const int LiveParseDebounceMs = 300;
+    private const int LiveParseDebounceMs = 1500; // backend network call — 1.5s is fast enough for live feel
 
     [Parameter] public Guid? RecipeId { get; set; }
 
@@ -550,7 +580,8 @@
     // UI state
     private bool _isLoading = false;
     private bool _isSaving = false;
-    private bool _isParsing = false;
+    private bool _isParsing = false;       // deep AI parse in progress
+    private bool _isQuickParsing = false;  // quick AI parse in progress (live debounce)
     private bool _showDetails = false;
     private bool _showPreview = false;
     private bool _liveParseEnabled = true;
@@ -641,7 +672,7 @@
         _debounceTimer = new System.Timers.Timer(LiveParseDebounceMs) { AutoReset = false };
         _debounceTimer.Elapsed += async (sender, e) =>
         {
-            try { await InvokeAsync(() => { RunRegexParse(); StateHasChanged(); }); }
+            try { await InvokeAsync(async () => { await RunQuickAIParseAsync(); StateHasChanged(); }); }
             catch (ObjectDisposedException) { }
         };
         _autoSaveTimer = new System.Timers.Timer(30_000) { AutoReset = true };
@@ -793,7 +824,44 @@
         }
     }
 
-    private void ParseWithRegexManual() => RunRegexParse();
+    private void ParseWithRegexFallback() => RunRegexParse();
+
+    /// <summary>
+    /// Live debounce handler — calls the backend quick AI model for fast feedback.
+    /// Falls back to local regex only if the AI service is unreachable.
+    /// </summary>
+    private async Task RunQuickAIParseAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_recipeText)) return;
+        _isQuickParsing = true; StateHasChanged();
+        try
+        {
+            var result = await AIApi.ExtractRecipeAsync(new RecipeExtractionRequest
+            {
+                RecipeText = _recipeText,
+                ParseMode = "quick"
+            });
+            if (result != null)
+            {
+                _parsed = ConvertExtractedToParseResult(result);
+                _parseStatus = "quick-ai";
+                _parseConfidence = result.ConfidenceScore * 100;
+                _lastParseAt = DateTime.UtcNow;
+                ApplyParsedToForm(_parsed);
+                _unitSuggestions = AnalyzeUnitSuggestions(_parsed.Ingredients);
+            }
+            else
+            {
+                // AI returned null — fall back to regex so the user still gets feedback
+                RunRegexParse(); _parseStatus = "ai-fallback";
+            }
+        }
+        catch
+        {
+            RunRegexParse(); _parseStatus = "ai-fallback";
+        }
+        finally { _isQuickParsing = false; }
+    }
 
     private void RunRegexParse()
     {
@@ -812,12 +880,16 @@
         _isParsing = true; _errorMessage = null; StateHasChanged();
         try
         {
-            var result = await AIApi.ExtractRecipeAsync(new RecipeExtractionRequest { RecipeText = _recipeText });
+            var result = await AIApi.ExtractRecipeAsync(new RecipeExtractionRequest
+            {
+                RecipeText = _recipeText,
+                ParseMode = "deep"
+            });
             if (result != null)
             {
                 _parsed = ConvertExtractedToParseResult(result);
                 _parsed.IsAIParsed = true;
-                _parseStatus = "ai";
+                _parseStatus = "deep-ai";
                 _parseConfidence = result.ConfidenceScore * 100;
                 _lastParseAt = DateTime.UtcNow;
                 ApplyParsedToForm(_parsed);

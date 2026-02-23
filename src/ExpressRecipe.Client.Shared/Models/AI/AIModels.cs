@@ -59,6 +59,12 @@ public class RecipeExtractionRequest
     public string? RecipeText { get; set; }
     public string? RecipeUrl { get; set; }
     public byte[]? RecipeImage { get; set; }
+    /// <summary>
+    /// "quick" uses the fast model for live-typing feedback (low latency).
+    /// "deep" uses the high-accuracy model for full structured extraction.
+    /// Defaults to "quick".
+    /// </summary>
+    public string ParseMode { get; set; } = "quick";
 }
 
 public class ExtractedRecipeDto

@@ -295,9 +295,18 @@
     box-shadow: 0 0 0 3px rgba(39,174,96,.15);
     animation: rs-pulse 2s ease-in-out infinite;
 }
+.rs-live-dot.rs-dot-pulse {
+    background: #f39c12;
+    box-shadow: 0 0 0 3px rgba(243,156,18,.15);
+    animation: rs-pulse-amber 1s ease-in-out infinite;
+}
 @keyframes rs-pulse {
     0%, 100% { box-shadow: 0 0 0 3px rgba(39,174,96,.15); }
     50%       { box-shadow: 0 0 0 6px rgba(39,174,96,.05); }
+}
+@keyframes rs-pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(243,156,18,.15); }
+    50%       { box-shadow: 0 0 0 6px rgba(243,156,18,.05); }
 }
 .rs-parse-line {
     font-size: 0.78rem;
@@ -320,6 +329,9 @@
     font-weight: 700;
     letter-spacing: 0.03em;
 }
+.rs-badge-ai.rs-badge-deep {
+    background: #6f42c1; /* purple for deep/accurate */
+}
 .rs-badge-fallback {
     background: #f39c12;
     color: #fff;
@@ -327,6 +339,13 @@
     padding: 0.1rem 0.45rem;
     font-size: 0.7rem;
     font-weight: 600;
+}
+.rs-offline-btn {
+    color: #f39c12;
+    border-color: #f39c12;
+}
+.rs-offline-btn:hover {
+    background: #fff9ee;
 }
 .rs-live-body { padding: 0.75rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.7rem; }
 
