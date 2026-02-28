@@ -83,6 +83,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.AppHost.New",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.CookbookService", "src\Services\ExpressRecipe.CookbookService\ExpressRecipe.CookbookService.csproj", "{A396A665-D684-4038-8861-7186E7D1657D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.CookbookService.Tests", "src\Tests\ExpressRecipe.CookbookService.Tests\ExpressRecipe.CookbookService.Tests.csproj", "{AA1234BB-5678-90CC-DDEE-FF0011223344}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -381,6 +383,18 @@ Global
 		{A396A665-D684-4038-8861-7186E7D1657D}.Release|x64.Build.0 = Release|Any CPU
 		{A396A665-D684-4038-8861-7186E7D1657D}.Release|x86.ActiveCfg = Release|Any CPU
 		{A396A665-D684-4038-8861-7186E7D1657D}.Release|x86.Build.0 = Release|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Debug|x64.Build.0 = Debug|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Debug|x86.Build.0 = Debug|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Release|x64.ActiveCfg = Release|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Release|x64.Build.0 = Release|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Release|x86.ActiveCfg = Release|Any CPU
+		{AA1234BB-5678-90CC-DDEE-FF0011223344}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -412,6 +426,7 @@ Global
 		{6AB9065B-A7BA-4906-8A9C-1F6128D55F61} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
 		{A941FA54-E56B-3A8F-4221-31F38156B401} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
 		{A396A665-D684-4038-8861-7186E7D1657D} = {9A19103F-16F7-4668-BE54-9A1E7A4F7556}
+		{AA1234BB-5678-90CC-DDEE-FF0011223344} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {6EAC10AB-3752-4D3C-8C92-11AAC92408C0}
