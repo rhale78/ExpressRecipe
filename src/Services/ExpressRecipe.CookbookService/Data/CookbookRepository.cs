@@ -128,6 +128,12 @@ public class CookbookRepository : SqlHelper, ICookbookRepository
             new SqlParameter("@PageSize", pageSize));
     }
 
+    public async Task<int> GetUserCookbookCountAsync(Guid userId)
+    {
+        const string sql = "SELECT COUNT(*) FROM Cookbook WHERE OwnerId = @UserId AND IsDeleted = 0";
+        return await ExecuteScalarAsync<int>(sql, new SqlParameter("@UserId", userId));
+    }
+
     public async Task<List<CookbookSummaryDto>> SearchCookbooksAsync(string? searchTerm, string? visibility, int page = 1, int pageSize = 20)
     {
         const string sql = @"
@@ -159,6 +165,24 @@ public class CookbookRepository : SqlHelper, ICookbookRepository
             new SqlParameter("@SearchTermLike", (object?)termLike ?? DBNull.Value),
             new SqlParameter("@Offset", (page - 1) * pageSize),
             new SqlParameter("@PageSize", pageSize));
+    }
+
+    public async Task<int> SearchCookbooksCountAsync(string? searchTerm, string? visibility)
+    {
+        const string sql = @"
+            SELECT COUNT(*)
+            FROM Cookbook c
+            WHERE c.IsDeleted = 0
+              AND c.Visibility = @Visibility
+              AND (@SearchTerm IS NULL OR c.Title LIKE @SearchTermLike OR c.Description LIKE @SearchTermLike)";
+
+        var vis = visibility ?? "Public";
+        var termLike = searchTerm != null ? $"%{searchTerm}%" : null;
+
+        return await ExecuteScalarAsync<int>(sql,
+            new SqlParameter("@Visibility", vis),
+            new SqlParameter("@SearchTerm", (object?)searchTerm ?? DBNull.Value),
+            new SqlParameter("@SearchTermLike", (object?)termLike ?? DBNull.Value));
     }
 
     public async Task<bool> UpdateCookbookAsync(Guid id, Guid userId, UpdateCookbookRequest request)
@@ -231,7 +255,7 @@ public class CookbookRepository : SqlHelper, ICookbookRepository
         if (request.CategoryOrMealType != null) { setClauses.Add("CategoryOrMealType = @CategoryOrMealType"); parameters.Add(new("@CategoryOrMealType", request.CategoryOrMealType)); }
         if (request.SortOrder.HasValue) { setClauses.Add("SortOrder = @SortOrder"); parameters.Add(new("@SortOrder", request.SortOrder.Value)); }
 
-        var sql = $@"UPDATE cs SET {string.Join(", ", setClauses.Select(s => "cs." + s))}
+        var sql = $@"UPDATE cs SET {string.Join(", ", setClauses)}
             FROM CookbookSection cs
             INNER JOIN Cookbook c ON c.Id = cs.CookbookId
             WHERE cs.Id = @Id AND c.OwnerId = @UserId AND c.IsDeleted = 0";

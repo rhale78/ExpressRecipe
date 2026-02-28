@@ -9,7 +9,9 @@ public interface ICookbookRepository
     Task<CookbookDto?> GetCookbookByIdAsync(Guid id, bool includeSections = true);
     Task<CookbookDto?> GetCookbookBySlugAsync(string slug);
     Task<List<CookbookSummaryDto>> GetUserCookbooksAsync(Guid userId, int page = 1, int pageSize = 20);
+    Task<int> GetUserCookbookCountAsync(Guid userId);
     Task<List<CookbookSummaryDto>> SearchCookbooksAsync(string? searchTerm, string? visibility, int page = 1, int pageSize = 20);
+    Task<int> SearchCookbooksCountAsync(string? searchTerm, string? visibility);
     Task<bool> UpdateCookbookAsync(Guid id, Guid userId, UpdateCookbookRequest request);
     Task<bool> DeleteCookbookAsync(Guid id, Guid userId);
 

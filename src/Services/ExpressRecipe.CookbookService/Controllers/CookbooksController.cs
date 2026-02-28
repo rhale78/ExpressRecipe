@@ -38,15 +38,18 @@ public class CookbooksController : ControllerBase
         {
             var userId = GetCurrentUserId();
             List<CookbookSummaryDto> items;
+            int totalCount;
             if (userId.HasValue && string.IsNullOrEmpty(visibility))
             {
                 items = await _repository.GetUserCookbooksAsync(userId.Value, page, pageSize);
+                totalCount = await _repository.GetUserCookbookCountAsync(userId.Value);
             }
             else
             {
                 items = await _repository.SearchCookbooksAsync(searchTerm, visibility ?? "Public", page, pageSize);
+                totalCount = await _repository.SearchCookbooksCountAsync(searchTerm, visibility ?? "Public");
             }
-            return Ok(new CookbookSearchResult { Items = items, Page = page, PageSize = pageSize, TotalCount = items.Count });
+            return Ok(new CookbookSearchResult { Items = items, Page = page, PageSize = pageSize, TotalCount = totalCount });
         }
         catch (Exception ex)
         {
