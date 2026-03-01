@@ -1,5 +1,9 @@
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Security.Claims;
 
 namespace ExpressRecipe.CookbookService.Tests.Helpers;
@@ -31,5 +35,19 @@ public static class ControllerTestHelpers
                 User = new ClaimsPrincipal(new ClaimsIdentity())
             }
         };
+    }
+
+    /// <summary>
+    /// Creates a real <see cref="HybridCacheService"/> backed by in-process
+    /// MemoryCache + MemoryDistributedCache – suitable for unit tests
+    /// without a live Redis connection.
+    /// </summary>
+    public static HybridCacheService CreateTestHybridCache()
+    {
+        var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var distributedCache = new MemoryDistributedCache(
+            Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
+        var logger = NullLogger<HybridCacheService>.Instance;
+        return new HybridCacheService(memoryCache, distributedCache, logger);
     }
 }

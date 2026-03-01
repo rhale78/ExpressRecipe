@@ -1,5 +1,6 @@
 using ExpressRecipe.CookbookService.Data;
 using ExpressRecipe.CookbookService.Models;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -12,11 +13,13 @@ namespace ExpressRecipe.CookbookService.Controllers;
 public class CookbooksController : ControllerBase
 {
     private readonly ICookbookRepository _repository;
+    private readonly HybridCacheService _cache;
     private readonly ILogger<CookbooksController> _logger;
 
-    public CookbooksController(ICookbookRepository repository, ILogger<CookbooksController> logger)
+    public CookbooksController(ICookbookRepository repository, HybridCacheService cache, ILogger<CookbooksController> logger)
     {
         _repository = repository;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -64,7 +67,11 @@ public class CookbooksController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
-            var cookbook = await _repository.GetCookbookByIdAsync(id);
+            var cacheKey = string.Format(CacheKeys.CookbookById, id);
+            var cookbook = await _cache.GetOrSetAsync(cacheKey,
+                () => _repository.GetCookbookByIdAsync(id),
+                memoryExpiry: TimeSpan.FromMinutes(5),
+                distributedExpiry: TimeSpan.FromMinutes(30));
             if (cookbook == null) return NotFound(new { message = "Cookbook not found" });
 
             if (!userId.HasValue || !await _repository.CanViewAsync(id, userId.Value))
@@ -86,7 +93,11 @@ public class CookbooksController : ControllerBase
     {
         try
         {
-            var cookbook = await _repository.GetCookbookBySlugAsync(slug);
+            var cacheKey = string.Format(CacheKeys.CookbookBySlug, slug);
+            var cookbook = await _cache.GetOrSetAsync(cacheKey,
+                () => _repository.GetCookbookBySlugAsync(slug),
+                memoryExpiry: TimeSpan.FromMinutes(5),
+                distributedExpiry: TimeSpan.FromMinutes(30));
             if (cookbook == null) return NotFound(new { message = "Cookbook not found" });
             if (cookbook.Visibility != "Public") return Forbid();
 
@@ -128,6 +139,9 @@ public class CookbooksController : ControllerBase
 
             var success = await _repository.UpdateCookbookAsync(id, userId.Value, request);
             if (!success) return NotFound(new { message = "Cookbook not found or not authorized" });
+
+            // Invalidate cache so next read reflects the update
+            await _cache.RemoveAsync(string.Format(CacheKeys.CookbookById, id));
             return NoContent();
         }
         catch (Exception ex)
@@ -147,6 +161,9 @@ public class CookbooksController : ControllerBase
 
             var success = await _repository.DeleteCookbookAsync(id, userId.Value);
             if (!success) return NotFound(new { message = "Cookbook not found" });
+
+            // Invalidate cache
+            await _cache.RemoveAsync(string.Format(CacheKeys.CookbookById, id));
             return NoContent();
         }
         catch (Exception ex)

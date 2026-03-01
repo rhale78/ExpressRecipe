@@ -2,6 +2,7 @@ using ExpressRecipe.CookbookService.Controllers;
 using ExpressRecipe.CookbookService.Data;
 using ExpressRecipe.CookbookService.Models;
 using ExpressRecipe.CookbookService.Tests.Helpers;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -13,6 +14,7 @@ public class CookbooksControllerTests
 {
     private readonly Mock<ICookbookRepository> _mockRepo;
     private readonly Mock<ILogger<CookbooksController>> _mockLogger;
+    private readonly HybridCacheService _cache;
     private readonly CookbooksController _controller;
     private readonly Guid _userId = Guid.NewGuid();
 
@@ -20,7 +22,8 @@ public class CookbooksControllerTests
     {
         _mockRepo = new Mock<ICookbookRepository>();
         _mockLogger = new Mock<ILogger<CookbooksController>>();
-        _controller = new CookbooksController(_mockRepo.Object, _mockLogger.Object);
+        _cache = ControllerTestHelpers.CreateTestHybridCache();
+        _controller = new CookbooksController(_mockRepo.Object, _cache, _mockLogger.Object);
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_userId);
     }
 
@@ -67,7 +70,7 @@ public class CookbooksControllerTests
         Assert.Equal(500, obj.StatusCode);
     }
 
-    // ── GetCookbook ───────────────────────────────────────────────────────────
+    // ── GetCookbook (with caching) ────────────────────────────────────────────
 
     [Fact]
     public async Task GetCookbook_FoundAndCanView_ReturnsOk()
@@ -111,6 +114,26 @@ public class CookbooksControllerTests
     }
 
     [Fact]
+    public async Task GetCookbook_SecondCall_UsesCache_RepositoryCalledOnce()
+    {
+        var id = Guid.NewGuid();
+        var dto = new CookbookDto { Id = id, Title = "Cached", Visibility = "Private" };
+        _mockRepo.Setup(r => r.GetCookbookByIdAsync(id, true)).ReturnsAsync(dto);
+        _mockRepo.Setup(r => r.CanViewAsync(id, _userId)).ReturnsAsync(true);
+        _mockRepo.Setup(r => r.IncrementViewCountAsync(id)).Returns(Task.CompletedTask);
+
+        // First call – populates cache
+        await _controller.GetCookbook(id);
+        // Second call – should be served from cache
+        var result = await _controller.GetCookbook(id);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.IsType<CookbookDto>(ok.Value);
+        // Repository only queried once despite two controller calls
+        _mockRepo.Verify(r => r.GetCookbookByIdAsync(id, true), Times.Once);
+    }
+
+    [Fact]
     public async Task GetCookbook_RepositoryThrows_Returns500()
     {
         var id = Guid.NewGuid();
@@ -122,7 +145,7 @@ public class CookbooksControllerTests
         Assert.Equal(500, obj.StatusCode);
     }
 
-    // ── GetCookbookBySlug ─────────────────────────────────────────────────────
+    // ── GetCookbookBySlug (with caching) ─────────────────────────────────────
 
     [Fact]
     public async Task GetCookbookBySlug_PublicCookbook_ReturnsOk()
@@ -136,6 +159,19 @@ public class CookbooksControllerTests
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var cookbook = Assert.IsType<CookbookDto>(ok.Value);
         Assert.Equal("Public CB", cookbook.Title);
+    }
+
+    [Fact]
+    public async Task GetCookbookBySlug_SecondCall_UsesCache_RepositoryCalledOnce()
+    {
+        var dto = new CookbookDto { Id = Guid.NewGuid(), Title = "Cached Slug", Visibility = "Public" };
+        _mockRepo.Setup(r => r.GetCookbookBySlugAsync("cached-slug")).ReturnsAsync(dto);
+        _mockRepo.Setup(r => r.IncrementViewCountAsync(dto.Id)).Returns(Task.CompletedTask);
+
+        await _controller.GetCookbookBySlug("cached-slug");
+        await _controller.GetCookbookBySlug("cached-slug");
+
+        _mockRepo.Verify(r => r.GetCookbookBySlugAsync("cached-slug"), Times.Once);
     }
 
     [Fact]
@@ -672,5 +708,59 @@ public class CookbooksControllerTests
         var result = await _controller.ExtractRecipes(id);
 
         Assert.IsType<ForbidResult>(result.Result);
+    }
+
+    // ── Cache-invalidation on UpdateCookbook ──────────────────────────────────
+
+    [Fact]
+    public async Task UpdateCookbook_Success_InvalidatesCacheForId()
+    {
+        var id = Guid.NewGuid();
+        var dto = new CookbookDto { Id = id, Title = "Original", Visibility = "Private" };
+        _mockRepo.Setup(r => r.GetCookbookByIdAsync(id, true)).ReturnsAsync(dto);
+        _mockRepo.Setup(r => r.CanViewAsync(id, _userId)).ReturnsAsync(true);
+        _mockRepo.Setup(r => r.IncrementViewCountAsync(id)).Returns(Task.CompletedTask);
+        _mockRepo.Setup(r => r.UpdateCookbookAsync(id, _userId, It.IsAny<UpdateCookbookRequest>())).ReturnsAsync(true);
+
+        // Warm the cache
+        await _controller.GetCookbook(id);
+        // Mutate – should evict the cache entry
+        await _controller.UpdateCookbook(id, new UpdateCookbookRequest { Title = "Updated" });
+        // A new DTO simulating what the DB now returns after the update
+        var updatedDto = new CookbookDto { Id = id, Title = "Updated", Visibility = "Private" };
+        _mockRepo.Setup(r => r.GetCookbookByIdAsync(id, true)).ReturnsAsync(updatedDto);
+        // Read again – must hit the repository (cache was evicted)
+        var result = await _controller.GetCookbook(id);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var cookbook = Assert.IsType<CookbookDto>(ok.Value);
+        Assert.Equal("Updated", cookbook.Title);
+        // Repository called twice: once before update, once after cache eviction
+        _mockRepo.Verify(r => r.GetCookbookByIdAsync(id, true), Times.Exactly(2));
+    }
+
+    // ── Cache-invalidation on DeleteCookbook ──────────────────────────────────
+
+    [Fact]
+    public async Task DeleteCookbook_Success_InvalidatesCacheForId()
+    {
+        var id = Guid.NewGuid();
+        var dto = new CookbookDto { Id = id, Title = "ToDelete", Visibility = "Private" };
+        _mockRepo.Setup(r => r.GetCookbookByIdAsync(id, true)).ReturnsAsync(dto);
+        _mockRepo.Setup(r => r.CanViewAsync(id, _userId)).ReturnsAsync(true);
+        _mockRepo.Setup(r => r.IncrementViewCountAsync(id)).Returns(Task.CompletedTask);
+        _mockRepo.Setup(r => r.DeleteCookbookAsync(id, _userId)).ReturnsAsync(true);
+
+        // Warm the cache
+        await _controller.GetCookbook(id);
+        // Delete – should evict the cache entry
+        await _controller.DeleteCookbook(id);
+        // Now simulate the DB returning null (deleted)
+        _mockRepo.Setup(r => r.GetCookbookByIdAsync(id, true)).ReturnsAsync((CookbookDto?)null);
+        var result = await _controller.GetCookbook(id);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        // Repository called twice: once to warm cache, once after cache eviction
+        _mockRepo.Verify(r => r.GetCookbookByIdAsync(id, true), Times.Exactly(2));
     }
 }

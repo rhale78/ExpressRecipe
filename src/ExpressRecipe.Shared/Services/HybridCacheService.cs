@@ -175,6 +175,11 @@ public static class CacheKeys
     public const string RecipeById = "recipe:id:{0}";
     public const string RecipeSearch = "recipe:search:{0}";
 
+    // Cookbooks
+    public const string CookbookById = "cookbook:id:{0}";
+    public const string CookbookBySlug = "cookbook:slug:{0}";
+    public const string CookbookList = "cookbook:list:{0}";
+
     // User data
     public const string UserProfile = "user:profile:{0}";
 

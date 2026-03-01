@@ -11,7 +11,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddLayeredConfiguration(args);
 builder.AddServiceDefaults();
 builder.AddSqlServerClient("cookbookdb");
-builder.Services.AddMemoryCache();
+
+// Add Redis for distributed caching
+builder.AddRedisClient("cache");
+
+// Add hybrid caching (memory L1 + Redis L2)
+builder.AddHybridCache();
+
+// Register hybrid cache service
+builder.Services.AddSingleton<HybridCacheService>();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
@@ -37,7 +45,8 @@ builder.Services.AddAuthorization();
 var connectionString = builder.Configuration.GetConnectionString("cookbookdb")
     ?? throw new InvalidOperationException("Database connection string 'cookbookdb' not found");
 
-builder.Services.AddScoped<ICookbookRepository>(sp => new CookbookRepository(connectionString));
+builder.Services.AddScoped<ICookbookRepository>(sp =>
+    new CookbookRepository(connectionString));
 
 builder.Services.AddControllers();
 
