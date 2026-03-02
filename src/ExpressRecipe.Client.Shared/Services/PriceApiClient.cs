@@ -40,6 +40,14 @@ public interface IPriceApiClient
 
     // Price Trends
     Task<List<PriceTrendDto>> GetPriceTrendsAsync(GetPriceTrendsRequest request);
+
+    // Price Search
+    Task<PriceSearchResponse> SearchPricesAsync(PriceSearchRequest request);
+    Task<List<ProductPriceItemDto>> GetPricesByUpcAsync(string upc);
+    Task<List<ProductPriceItemDto>> GetPricesByProductNameAsync(string productName);
+    Task<List<ProductPriceItemDto>> GetBatchPricesAsync(BatchPriceRequest request);
+    Task<List<ProductPriceItemDto>> GetBestPricesAsync(Guid productId);
+    Task<List<PriceImportStatusDto>> GetImportStatusAsync();
 }
 
 public class PriceApiClient : IPriceApiClient
@@ -384,6 +392,89 @@ public class PriceApiClient : IPriceApiClient
         catch
         {
             return new List<PriceTrendDto>();
+        }
+    }
+
+    // Price Search
+    public async Task<PriceSearchResponse> SearchPricesAsync(PriceSearchRequest request)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/prices/search", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<PriceSearchResponse>();
+            return result ?? new PriceSearchResponse();
+        }
+        catch
+        {
+            return new PriceSearchResponse();
+        }
+    }
+
+    public async Task<List<ProductPriceItemDto>> GetPricesByUpcAsync(string upc)
+    {
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<ProductPriceItemDto>>($"/api/prices/upc/{Uri.EscapeDataString(upc)}");
+            return result ?? new List<ProductPriceItemDto>();
+        }
+        catch
+        {
+            return new List<ProductPriceItemDto>();
+        }
+    }
+
+    public async Task<List<ProductPriceItemDto>> GetPricesByProductNameAsync(string productName)
+    {
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<ProductPriceItemDto>>($"/api/prices/search/name?name={Uri.EscapeDataString(productName)}");
+            return result ?? new List<ProductPriceItemDto>();
+        }
+        catch
+        {
+            return new List<ProductPriceItemDto>();
+        }
+    }
+
+    public async Task<List<ProductPriceItemDto>> GetBatchPricesAsync(BatchPriceRequest request)
+    {
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/prices/batch", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<List<ProductPriceItemDto>>();
+            return result ?? new List<ProductPriceItemDto>();
+        }
+        catch
+        {
+            return new List<ProductPriceItemDto>();
+        }
+    }
+
+    public async Task<List<ProductPriceItemDto>> GetBestPricesAsync(Guid productId)
+    {
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<ProductPriceItemDto>>($"/api/prices/best/{productId}");
+            return result ?? new List<ProductPriceItemDto>();
+        }
+        catch
+        {
+            return new List<ProductPriceItemDto>();
+        }
+    }
+
+    public async Task<List<PriceImportStatusDto>> GetImportStatusAsync()
+    {
+        try
+        {
+            var result = await _httpClient.GetFromJsonAsync<List<PriceImportStatusDto>>("/api/prices/import/status");
+            return result ?? new List<PriceImportStatusDto>();
+        }
+        catch
+        {
+            return new List<PriceImportStatusDto>();
         }
     }
 }

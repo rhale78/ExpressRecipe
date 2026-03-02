@@ -272,3 +272,61 @@ public class GetPriceTrendsRequest
     public int Days { get; set; } = 30;
     public string TrendType { get; set; } = "All"; // All, Rising, Falling, Stable
 }
+
+// Price Search
+public class PriceSearchRequest
+{
+    public Guid? ProductId { get; set; }
+    public string? Upc { get; set; }
+    public string? ProductName { get; set; }
+    public string? StoreName { get; set; }
+    public string? StoreChain { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public decimal? MinPrice { get; set; }
+    public decimal? MaxPrice { get; set; }
+    public int DaysBack { get; set; } = 90;
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 50;
+}
+
+public class PriceSearchResponse
+{
+    public List<ProductPriceItemDto> Prices { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+}
+
+public class ProductPriceItemDto
+{
+    public Guid Id { get; set; }
+    public Guid ProductId { get; set; }
+    public string? Upc { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public string? StoreName { get; set; }
+    public string? StoreChain { get; set; }
+    public string? City { get; set; }
+    public string? State { get; set; }
+    public decimal Price { get; set; }
+    public string Currency { get; set; } = "USD";
+    public string? Unit { get; set; }
+    public decimal? PricePerUnit { get; set; }
+    public string DataSource { get; set; } = string.Empty;
+    public DateTime ObservedAt { get; set; }
+}
+
+public class BatchPriceRequest
+{
+    public List<Guid> ProductIds { get; set; } = new();
+}
+
+public class PriceImportStatusDto
+{
+    public string DataSource { get; set; } = string.Empty;
+    public DateTime? LastImportAt { get; set; }
+    public int RecordsImported { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+}

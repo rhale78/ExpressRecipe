@@ -1,0 +1,338 @@
+@page "/grocery-stores"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Models.GroceryStore
+@using ExpressRecipe.Client.Shared.Services
+@inject IGroceryStoreApiClient StoreApi
+@inject NavigationManager Navigation
+
+<PageTitle>Grocery Stores - ExpressRecipe</PageTitle>
+
+<style>
+    .stores-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    .stores-header { margin-bottom: 1.5rem; }
+    .search-section { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+    .search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem; }
+    .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; color: #555; }
+    .form-input { width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; box-sizing: border-box; }
+    .search-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .nearby-section { border: 1px solid #dee2e6; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; }
+    .nearby-section h3 { margin: 0 0 0.5rem 0; font-size: 1rem; }
+    .nearby-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem; margin-bottom: 0.5rem; }
+    .btn { padding: 0.4rem 1rem; border-radius: 4px; border: 1px solid transparent; cursor: pointer; font-size: 0.9rem; }
+    .btn-primary { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .btn-outline { background: #fff; color: #0d6efd; border-color: #0d6efd; }
+    .btn-success { background: #198754; color: #fff; border-color: #198754; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .loading-container { text-align: center; padding: 2rem; color: #666; }
+    .spinner { display: inline-block; width: 2rem; height: 2rem; border: 3px solid #ddd; border-top-color: #0d6efd; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+    .alert-error { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; border-radius: 4px; padding: 0.75rem; margin-top: 1rem; }
+    .results-summary { color: #555; margin-bottom: 0.75rem; font-size: 0.9rem; }
+    .stores-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+    .store-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; background: #fff; }
+    .store-name { font-size: 1rem; font-weight: 700; margin: 0 0 0.25rem 0; }
+    .store-chain { color: #555; font-size: 0.85rem; margin: 0 0 0.5rem 0; }
+    .store-address { font-size: 0.85rem; color: #444; margin-bottom: 0.5rem; }
+    .store-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .badge-snap { background: #d1e7dd; color: #0f5132; }
+    .badge-type { background: #cfe2ff; color: #084298; }
+    .badge-distance { background: #fff3cd; color: #664d03; }
+    .empty-state { text-align: center; padding: 3rem; color: #888; }
+    .pagination { display: flex; gap: 0.4rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
+    .page-number { padding: 0.3rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #fff; }
+    .page-number.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .pagination-info { font-size: 0.85rem; color: #666; margin-top: 0.5rem; }
+    .geo-note { font-size: 0.8rem; color: #666; font-style: italic; margin-top: 0.4rem; }
+    .unauthorized-container { text-align: center; padding: 3rem; }
+</style>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="stores-container">
+            <div class="stores-header">
+                <h1>Grocery Stores</h1>
+            </div>
+
+            <div class="search-section">
+                <div class="search-grid">
+                    <div class="form-group">
+                        <label>Store Name</label>
+                        <input type="text" class="form-input" placeholder="e.g. Whole Foods" @bind="_name" />
+                    </div>
+                    <div class="form-group">
+                        <label>Chain</label>
+                        <input type="text" class="form-input" placeholder="e.g. Kroger" @bind="_chain" />
+                    </div>
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" class="form-input" placeholder="e.g. Austin" @bind="_city" />
+                    </div>
+                    <div class="form-group">
+                        <label>State</label>
+                        <input type="text" class="form-input" placeholder="e.g. TX" @bind="_state" />
+                    </div>
+                    <div class="form-group">
+                        <label>Zip Code</label>
+                        <input type="text" class="form-input" placeholder="e.g. 78701" @bind="_zipCode" />
+                    </div>
+                    <div class="form-group">
+                        <label>Store Type</label>
+                        <select class="form-input" @bind="_storeType">
+                            <option value="">All Types</option>
+                            <option value="supermarket">Supermarket</option>
+                            <option value="convenience">Convenience</option>
+                            <option value="wholesale">Wholesale</option>
+                            <option value="specialty">Specialty</option>
+                            <option value="farmers_market">Farmers Market</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <label style="display:flex;align-items:center;gap:0.4rem;padding-top:0.2rem;">
+                            <input type="checkbox" @bind="_acceptsSnap" />
+                            Accepts SNAP/EBT
+                        </label>
+                    </div>
+                </div>
+
+                <div class="nearby-section">
+                    <h3>📍 Find Nearby Stores</h3>
+                    <div class="nearby-grid">
+                        <div class="form-group">
+                            <label>Latitude</label>
+                            <input type="number" class="form-input" step="0.0001" placeholder="e.g. 30.2672" @bind="_latitude" />
+                        </div>
+                        <div class="form-group">
+                            <label>Longitude</label>
+                            <input type="number" class="form-input" step="0.0001" placeholder="e.g. -97.7431" @bind="_longitude" />
+                        </div>
+                        <div class="form-group">
+                            <label>Radius (miles)</label>
+                            <input type="number" class="form-input" step="1" min="1" max="100" @bind="_radiusMiles" />
+                        </div>
+                    </div>
+                    <button class="btn btn-success" @onclick="SearchNearby" disabled="@_isLoading">
+                        📍 Find Nearby
+                    </button>
+                    <p class="geo-note">Enter coordinates manually to find stores near a location.</p>
+                </div>
+
+                <div class="search-actions">
+                    <button class="btn btn-primary" @onclick="SearchStores" disabled="@_isLoading">
+                        🔍 Search
+                    </button>
+                    <button class="btn btn-outline" @onclick="ClearSearch" disabled="@_isLoading">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Searching stores...</p>
+                </div>
+            }
+            else if (_searchResult is not null)
+            {
+                <div class="results-summary">
+                    Showing @_searchResult.Stores.Count of @_searchResult.TotalCount.ToString("N0") stores
+                </div>
+
+                @if (_searchResult.Stores.Any())
+                {
+                    <div class="stores-grid">
+                        @foreach (var store in _searchResult.Stores)
+                        {
+                            <div class="store-card">
+                                <p class="store-name">@store.Name</p>
+                                @if (!string.IsNullOrEmpty(store.Chain))
+                                {
+                                    <p class="store-chain">@store.Chain</p>
+                                }
+                                <div class="store-address">
+                                    @if (!string.IsNullOrEmpty(store.Address))
+                                    {
+                                        <div>@store.Address</div>
+                                    }
+                                    <div>@GetCityStateZip(store)</div>
+                                </div>
+                                <div class="store-badges">
+                                    @if (!string.IsNullOrEmpty(store.StoreType))
+                                    {
+                                        <span class="badge badge-type">@store.StoreType</span>
+                                    }
+                                    @if (store.AcceptsSnap)
+                                    {
+                                        <span class="badge badge-snap">✓ SNAP/EBT</span>
+                                    }
+                                    @if (store.DistanceMiles.HasValue)
+                                    {
+                                        <span class="badge badge-distance">@store.DistanceMiles.Value.ToString("F1") mi</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (_searchResult.TotalPages > 1)
+                    {
+                        <div class="pagination">
+                            <button class="btn btn-outline" @onclick="() => ChangePage(_currentPage - 1)" disabled="@(_currentPage <= 1)">← Prev</button>
+                            @for (int p = Math.Max(1, _currentPage - 2); p <= Math.Min(_searchResult.TotalPages, _currentPage + 2); p++)
+                            {
+                                var pageNum = p;
+                                <button class="page-number @(pageNum == _currentPage ? "active" : "")" @onclick="() => ChangePage(pageNum)">@pageNum</button>
+                            }
+                            <button class="btn btn-outline" @onclick="() => ChangePage(_currentPage + 1)" disabled="@(_currentPage >= _searchResult.TotalPages)">Next →</button>
+                        </div>
+                        <div class="pagination-info">Page @_currentPage of @_searchResult.TotalPages</div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <div style="font-size:2rem">🏪</div>
+                        <h3>No stores found</h3>
+                        <p>Try adjusting your search criteria.</p>
+                    </div>
+                }
+            }
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert-error"><strong>Error:</strong> @_errorMessage</div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to search grocery stores.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string? _name;
+    private string? _chain;
+    private string? _city;
+    private string? _state;
+    private string? _zipCode;
+    private string? _storeType;
+    private bool _acceptsSnap = false;
+    private double _latitude = 0;
+    private double _longitude = 0;
+    private double _radiusMiles = 10;
+
+    private GroceryStoreSearchResponse? _searchResult;
+    private int _currentPage = 1;
+    private const int PageSize = 25;
+    private bool _isLoading = false;
+    private string? _errorMessage;
+
+    private async Task SearchStores()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        _currentPage = 1;
+        await LoadPage();
+    }
+
+    private async Task SearchNearby()
+    {
+        if (_latitude == 0 && _longitude == 0)
+        {
+            _errorMessage = "Please enter valid latitude and longitude coordinates.";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = null;
+        try
+        {
+            var stores = await StoreApi.GetNearbyStoresAsync(_latitude, _longitude, _radiusMiles, 50);
+            _searchResult = new GroceryStoreSearchResponse
+            {
+                Stores = stores,
+                TotalCount = stores.Count,
+                Page = 1,
+                PageSize = 50
+            };
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to find nearby stores: {ex.Message}";
+            _searchResult = new GroceryStoreSearchResponse();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page < 1 || (_searchResult is not null && page > _searchResult.TotalPages)) return;
+        _currentPage = page;
+        await LoadPage();
+    }
+
+    private async Task LoadPage()
+    {
+        _isLoading = true;
+        try
+        {
+            var request = new GroceryStoreSearchRequest
+            {
+                Name = string.IsNullOrWhiteSpace(_name) ? null : _name,
+                Chain = string.IsNullOrWhiteSpace(_chain) ? null : _chain,
+                City = string.IsNullOrWhiteSpace(_city) ? null : _city,
+                State = string.IsNullOrWhiteSpace(_state) ? null : _state,
+                ZipCode = string.IsNullOrWhiteSpace(_zipCode) ? null : _zipCode,
+                StoreType = string.IsNullOrWhiteSpace(_storeType) ? null : _storeType,
+                AcceptsSnap = _acceptsSnap ? true : null,
+                Page = _currentPage,
+                PageSize = PageSize
+            };
+
+            _searchResult = await StoreApi.SearchStoresAsync(request);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to search stores: {ex.Message}";
+            _searchResult = new GroceryStoreSearchResponse();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        _name = null;
+        _chain = null;
+        _city = null;
+        _state = null;
+        _zipCode = null;
+        _storeType = null;
+        _acceptsSnap = false;
+        _searchResult = null;
+        _currentPage = 1;
+        _errorMessage = null;
+        await Task.CompletedTask;
+    }
+
+    private static string GetCityStateZip(GroceryStoreDto store)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(store.City)) parts.Add(store.City);
+        if (!string.IsNullOrEmpty(store.State)) parts.Add(store.State);
+        if (!string.IsNullOrEmpty(store.ZipCode)) parts.Add(store.ZipCode);
+        return parts.Count > 0 ? string.Join(", ", parts) : "—";
+    }
+}

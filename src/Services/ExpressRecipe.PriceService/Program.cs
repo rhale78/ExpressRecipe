@@ -1,6 +1,8 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.PriceService.Data;
 using ExpressRecipe.PriceService.Services;
+using ExpressRecipe.PriceService.Workers;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,13 +28,50 @@ builder.Services.AddAuthentication("Bearer")
 
 builder.Services.AddAuthorization();
 
-// Register database connection
+// SQL Server via Aspire
+builder.AddSqlServerClient("pricedb");
+
+// Redis cache via Aspire
+builder.AddRedisClient("cache");
+
+// Memory cache + HybridCacheService
+builder.AddHybridCache();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<HybridCacheService>();
+
+// Register database connection string for direct use
 var connectionString = builder.Configuration.GetConnectionString("pricedb")
     ?? throw new InvalidOperationException("Database connection string 'pricedb' not found");
 
 // Register repositories
 builder.Services.AddScoped<IPriceRepository>(sp =>
-    new PriceRepository(connectionString, sp.GetRequiredService<ILogger<PriceRepository>>()));
+    new PriceRepository(
+        connectionString,
+        sp.GetService<HybridCacheService>(),
+        sp.GetService<ILogger<PriceRepository>>()));
+
+// Register import services
+builder.Services.AddHttpClient<OpenPricesImportService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<OpenPricesImportService>(sp =>
+    new OpenPricesImportService(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(OpenPricesImportService)),
+        sp.GetRequiredService<IPriceRepository>(),
+        sp.GetRequiredService<ILogger<OpenPricesImportService>>(),
+        sp.GetRequiredService<IConfiguration>()));
+
+builder.Services.AddHttpClient<GroceryDbImportService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<GroceryDbImportService>(sp =>
+    new GroceryDbImportService(
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(GroceryDbImportService)),
+        sp.GetRequiredService<IPriceRepository>(),
+        sp.GetRequiredService<ILogger<GroceryDbImportService>>(),
+        sp.GetRequiredService<IConfiguration>()));
 
 // Register price scraping services
 builder.Services.AddHttpClient<PriceScraperService>();
@@ -40,16 +79,12 @@ builder.Services.AddHttpClient<GoogleShoppingApiClient>();
 
 // Register background workers
 builder.Services.AddHostedService<PriceAnalysisWorker>();
+// Register PriceDataImportWorker as singleton so it can be injected into controllers
+builder.Services.AddSingleton<PriceDataImportWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PriceDataImportWorker>());
 
 // Add controllers
 builder.Services.AddControllers();
-
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.PriceService API", Version = "v1" });
-// });
 
 // CORS
 builder.Services.AddCors(options =>
@@ -78,12 +113,6 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
-
-if (app.Environment.IsDevelopment())
-{
-    // app.UseSwagger();
-    // app.UseSwaggerUI();
-}
 
 app.UseCors("AllowAll");
 app.UseAuthentication();

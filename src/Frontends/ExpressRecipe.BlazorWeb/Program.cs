@@ -118,6 +118,11 @@ builder.Services.AddHttpClient<IScannerApiClient, ScannerApiClient>(client =>
     client.BaseAddress = new Uri("http://scannerservice");
 });
 
+builder.Services.AddHttpClient<IGroceryStoreApiClient, GroceryStoreApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://grocerystorelocationservice");
+});
+
 builder.Services.AddHttpClient<IRecallApiClient, RecallApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://recallservice");
