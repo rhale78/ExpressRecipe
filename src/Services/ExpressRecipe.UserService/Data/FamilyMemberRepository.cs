@@ -40,11 +40,11 @@ public class FamilyMemberRepository : SqlHelper, IFamilyMemberRepository
                 Relationship = GetString(reader, "Relationship"),
                 DateOfBirth = GetDateTime(reader, "DateOfBirth"),
                 Notes = GetString(reader, "Notes"),
-                UserId = GetNullableGuid(reader, "UserId"),
+                UserId = GetGuidNullable(reader, "UserId"),
                 UserRole = GetString(reader, "UserRole") ?? "Member",
                 HasUserAccount = GetBool(reader, "HasUserAccount") ?? false,
                 IsGuest = GetBool(reader, "IsGuest") ?? false,
-                LinkedUserId = GetNullableGuid(reader, "LinkedUserId"),
+                LinkedUserId = GetGuidNullable(reader, "LinkedUserId"),
                 Email = GetString(reader, "Email")
             },
             CreateParameter("@PrimaryUserId", primaryUserId));
@@ -68,11 +68,11 @@ public class FamilyMemberRepository : SqlHelper, IFamilyMemberRepository
                 Relationship = GetString(reader, "Relationship"),
                 DateOfBirth = GetDateTime(reader, "DateOfBirth"),
                 Notes = GetString(reader, "Notes"),
-                UserId = GetNullableGuid(reader, "UserId"),
+                UserId = GetGuidNullable(reader, "UserId"),
                 UserRole = GetString(reader, "UserRole") ?? "Member",
                 HasUserAccount = GetBool(reader, "HasUserAccount") ?? false,
                 IsGuest = GetBool(reader, "IsGuest") ?? false,
-                LinkedUserId = GetNullableGuid(reader, "LinkedUserId"),
+                LinkedUserId = GetGuidNullable(reader, "LinkedUserId"),
                 Email = GetString(reader, "Email")
             },
             CreateParameter("@Id", id));
@@ -98,11 +98,11 @@ public class FamilyMemberRepository : SqlHelper, IFamilyMemberRepository
                 Relationship = GetString(reader, "Relationship"),
                 DateOfBirth = GetDateTime(reader, "DateOfBirth"),
                 Notes = GetString(reader, "Notes"),
-                UserId = GetNullableGuid(reader, "UserId"),
+                UserId = GetGuidNullable(reader, "UserId"),
                 UserRole = GetString(reader, "UserRole") ?? "Member",
                 HasUserAccount = GetBool(reader, "HasUserAccount") ?? false,
                 IsGuest = GetBool(reader, "IsGuest") ?? false,
-                LinkedUserId = GetNullableGuid(reader, "LinkedUserId"),
+                LinkedUserId = GetGuidNullable(reader, "LinkedUserId"),
                 Email = GetString(reader, "Email")
             },
             CreateParameter("@UserId", userId));

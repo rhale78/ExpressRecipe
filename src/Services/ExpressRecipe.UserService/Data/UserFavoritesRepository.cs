@@ -41,7 +41,7 @@ public class UserFavoritesRepository : SqlHelper, IUserFavoritesRepository
                 UserId = GetGuid(reader, "UserId"),
                 RecipeId = GetGuid(reader, "RecipeId"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             CreateParameter("@UserId", userId));
     }
@@ -61,7 +61,7 @@ public class UserFavoritesRepository : SqlHelper, IUserFavoritesRepository
                 UserId = GetGuid(reader, "UserId"),
                 RecipeId = GetGuid(reader, "RecipeId"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             CreateParameter("@UserId", userId),
             CreateParameter("@RecipeId", recipeId));
@@ -124,7 +124,7 @@ public class UserFavoritesRepository : SqlHelper, IUserFavoritesRepository
                 UserId = GetGuid(reader, "UserId"),
                 ProductId = GetGuid(reader, "ProductId"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             CreateParameter("@UserId", userId));
     }
@@ -144,7 +144,7 @@ public class UserFavoritesRepository : SqlHelper, IUserFavoritesRepository
                 UserId = GetGuid(reader, "UserId"),
                 ProductId = GetGuid(reader, "ProductId"),
                 Notes = GetString(reader, "Notes"),
-                CreatedAt = GetDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
+                CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             CreateParameter("@UserId", userId),
             CreateParameter("@ProductId", productId));
