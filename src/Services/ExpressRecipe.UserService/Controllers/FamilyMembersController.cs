@@ -234,12 +234,13 @@ public class FamilyMembersController : ControllerBase
 
             // Create user account in AuthService
             var authClient = _httpClientFactory.CreateClient("AuthService");
+            var nameParts = request.Name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var createUserRequest = new
             {
                 email = request.Email,
                 password = request.Password,
-                firstName = request.Name.Split(' ').FirstOrDefault() ?? request.Name,
-                lastName = request.Name.Split(' ').Skip(1).FirstOrDefault() ?? string.Empty
+                firstName = nameParts.FirstOrDefault() ?? request.Name,
+                lastName = string.Join(' ', nameParts.Skip(1))
             };
 
             var authResponse = await authClient.PostAsJsonAsync("/api/auth/register-internal", createUserRequest);

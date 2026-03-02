@@ -3,7 +3,7 @@ using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.CookbookService.Data;
 
-public class DatabaseMigrator
+public partial class DatabaseMigrator
 {
     private readonly string _connectionString;
     private readonly ILogger _logger;
@@ -73,7 +73,7 @@ public class DatabaseMigrator
             // Apply migration — split on GO batch separators (ADO.NET rejects GO)
             _logger.LogInformation("Applying migration: {Migration}", migrationName);
             var sql = await File.ReadAllTextAsync(file);
-            var batches = Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            var batches = GoBatchSeparator().Split(sql);
 
             foreach (var batch in batches)
             {
@@ -96,4 +96,7 @@ public class DatabaseMigrator
             _logger.LogInformation("Migration {Migration} applied successfully", migrationName);
         }
     }
+
+    [GeneratedRegex(@"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex GoBatchSeparator();
 }
