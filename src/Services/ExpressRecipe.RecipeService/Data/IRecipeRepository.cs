@@ -1,90 +1,59 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Shared = ExpressRecipe.Shared.DTOs.Recipe;
+using ExpressRecipe.Shared.DTOs.Recipe;
 using CQ = ExpressRecipe.RecipeService.CQRS.Queries;
 
 namespace ExpressRecipe.RecipeService.Data;
 
 /// <summary>
 /// Interface for recipe data access used by the RecipeService.
-/// Uses explicit aliases to avoid ambiguous DTO type names between projects.
 /// </summary>
 public interface IRecipeRepository
 {
-    /// <summary>
-    /// Create a new recipe with ingredients, nutrition, and allergen warnings
-    /// </summary>
-    Task<Guid> CreateRecipeAsync(ExpressRecipe.Shared.DTOs.Recipe.CreateRecipeRequest request, Guid createdBy);
-
-    // Convenience overload used by CQRS handlers
+    Task<Guid> CreateRecipeAsync(CreateRecipeRequest request, Guid createdBy);
     Task<Guid> CreateRecipeAsync(Guid userId, string name, string? description, int? prepTimeMinutes, int? cookTimeMinutes, int? totalTimeMinutes, int servings, string difficulty);
-
-    /// <summary>
-    /// Add ingredients to a recipe
-    /// </summary>
-
-    Task AddRecipeIngredientsAsync(Guid recipeId, List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto> ingredients, Guid? createdBy = null);
-
-    /// <summary>
-    /// Add nutrition information to a recipe
-    /// </summary>
-    Task AddRecipeNutritionAsync(Guid recipeId, ExpressRecipe.Shared.DTOs.Recipe.RecipeNutritionDto nutrition);
-
-    /// <summary>
-    /// Add allergen warnings to a recipe
-    /// </summary>
-    Task AddRecipeAllergensAsync(Guid recipeId, List<ExpressRecipe.Shared.DTOs.Recipe.RecipeAllergenWarningDto> allergens);
-
-    /// <summary>
-    /// Add tags to a recipe
-    /// </summary>
+    Task AddRecipeIngredientsAsync(Guid recipeId, List<RecipeIngredientDto> ingredients, Guid? createdBy = null);
+    Task AddRecipeNutritionAsync(Guid recipeId, RecipeNutritionDto nutrition);
+    Task AddRecipeAllergensAsync(Guid recipeId, List<RecipeAllergenWarningDto> allergens);
     Task AddRecipeTagsAsync(Guid recipeId, List<string> tagNames);
-
-    // Single-item helpers used by CQRS handlers
     Task AddRecipeCategoryAsync(Guid recipeId, string categoryName);
     Task AddRecipeTagAsync(Guid recipeId, string tagName);
     Task AddIngredientAsync(Guid recipeId, Guid? productId, string name, decimal quantity, string unit, string? notes, bool isOptional);
     Task AddInstructionAsync(Guid recipeId, int stepNumber, string instruction, int? timeMinutes);
     Task UpdateNutritionAsync(Guid recipeId, int? calories, decimal? protein, decimal? carbs, decimal? fat, decimal? fiber, decimal? sugar);
-
-    /// <summary>
-    /// Find potential duplicate recipes by name and author
-    /// </summary>
-    Task<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto?> FindDuplicateRecipeAsync(string name, Guid authorId);
-
-    /// <summary>
-    /// Get recipe by ID
-    /// </summary>
-    Task<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto?> GetRecipeByIdAsync(Guid id);
-
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> SearchRecipesAsync(string searchTerm, int limit = 50, int offset = 0);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetAllRecipesAsync(int limit = 50, int offset = 0);
+    Task<RecipeDto?> FindDuplicateRecipeAsync(string name, Guid authorId);
+    Task<RecipeDto?> GetRecipeByIdAsync(Guid id);
+    Task<List<RecipeDto>> SearchRecipesAsync(string searchTerm, int limit = 50, int offset = 0);
+    Task<List<RecipeDto>> GetAllRecipesAsync(int limit = 50, int offset = 0);
+    Task<HashSet<string>> GetAllRecipeTitlesAsync();
+    Task<Dictionary<string, bool>> GetAllRecipeTitlesCompletenessAsync();
     Task<(decimal AverageRating, int RatingCount)> GetAverageRatingAsync(Guid recipeId);
     Task<List<string>> GetRecipeCategoriesAsync(Guid recipeId);
     Task<List<string>> GetRecipeTagsAsync(Guid recipeId);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto>> GetIngredientsAsync(Guid recipeId);
+    Task<List<RecipeIngredientDto>> GetIngredientsAsync(Guid recipeId);
     Task<List<CQ.RecipeInstructionDto>> GetInstructionsAsync(Guid recipeId);
     Task<CQ.RecipeNutritionDto?> GetNutritionAsync(Guid recipeId);
     Task<CQ.RecipeDetailsDto?> GetRecipeDetailsAsync(Guid recipeId);
     Task IncrementViewCountAsync(Guid recipeId);
-
     Task UpdateRecipeInstructionsAsync(Guid recipeId, string instructions);
     Task ClearRecipeIngredientsAsync(Guid recipeId);
     Task ClearRecipeInstructionsAsync(Guid recipeId);
     Task ClearRecipeTagsAsync(Guid recipeId);
-
-    // Additional methods for RecipesController
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeIngredientDto>> GetRecipeIngredientsAsync(Guid recipeId);
-    Task<ExpressRecipe.Shared.DTOs.Recipe.RecipeNutritionDto?> GetRecipeNutritionAsync(Guid recipeId);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeAllergenWarningDto>> GetRecipeAllergensAsync(Guid recipeId);
-    Task UpdateRecipeAsync(Guid id, ExpressRecipe.Shared.DTOs.Recipe.UpdateRecipeRequest request, Guid userId);
+    Task AddRecipeImagesAsync(Guid recipeId, List<RecipeImageDto> images);
+    Task<int> BulkCreateFullRecipesAsync(List<FullRecipeImportDto> recipes);
+    Task<int> BulkCreateFullRecipesHighSpeedAsync(List<FullRecipeImportDto> recipes);
+    Task<List<RecipeIngredientDto>> GetRecipeIngredientsAsync(Guid recipeId);
+    Task<RecipeNutritionDto?> GetRecipeNutritionAsync(Guid recipeId);
+    Task<List<RecipeAllergenWarningDto>> GetRecipeAllergensAsync(Guid recipeId);
+    Task UpdateRecipeAsync(Guid id, UpdateRecipeRequest request, Guid userId);
     Task DeleteRecipeAsync(Guid id);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetUserRecipesAsync(Guid userId, int limit = 50);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByCategoryAsync(string category, int limit = 50);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByCuisineAsync(string cuisine, int limit = 50);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByTagAsync(string tag, int limit = 50);
-    Task<List<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>> GetRecipesByIngredientAsync(string ingredient, int limit = 50);
+    Task<List<RecipeDto>> GetUserRecipesAsync(Guid userId, int limit = 50);
+    Task<List<RecipeDto>> GetRecipesByCategoryAsync(string category, int limit = 50);
+    Task<List<RecipeDto>> GetRecipesByCuisineAsync(string cuisine, int limit = 50);
+    Task<List<RecipeDto>> GetRecipesByTagAsync(string tag, int limit = 50);
+    Task<List<RecipeDto>> GetRecipesByIngredientAsync(string ingredient, int limit = 50);
     Task<List<string>> GetAllCategoriesAsync();
     Task<List<string>> GetAllCuisinesAsync();
+    Task<object?> GetByExactTitleAsync(string title);
 }

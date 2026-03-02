@@ -1,4 +1,4 @@
-﻿<Project Sdk="Aspire.AppHost.Sdk/13.1.0">
+<Project Sdk="Aspire.AppHost.Sdk/13.1.2">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -16,14 +16,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.1.0" />
-    <PackageReference Include="Aspire.Hosting.Redis" Version="13.1.0" />
-    <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
-    <PackageReference Include="Aspire.Microsoft.Data.SqlClient" Version="13.1.0" />
-    <PackageReference Include="Aspire.StackExchange.Redis" Version="13.1.0" />
-    <PackageReference Include="Aspire.StackExchange.Redis.OutputCaching" Version="13.1.0" />
-    <PackageReference Include="FluentValidation" Version="12.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.1.0" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" />
+    <PackageReference Include="Aspire.Hosting.Redis" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" />
+    <PackageReference Include="Aspire.Microsoft.Data.SqlClient" />
+    <PackageReference Include="Aspire.StackExchange.Redis" />
+    <PackageReference Include="Aspire.StackExchange.Redis.OutputCaching" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,8 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Shared.Services;
+using Microsoft.Data.SqlClient;
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -27,6 +29,10 @@ public interface IProductRepository
     Task UpdateProductMetadataAsync(Guid productId, string key, string value);
     Task<ProductDto?> GetProductByExternalIdAsync(string source, string externalId);
     Task<int?> GetProductCountAsync();
+    
+    // High-speed bulk operations
+    Task<int> BulkCreateFullProductsHighSpeedAsync(List<FullProductImportDto> products);
+    Task<HashSet<string>> GetAllBarcodesAsync();
 }
 
 public class ProductRepository : SqlHelper, IProductRepository
@@ -49,11 +55,10 @@ public class ProductRepository : SqlHelper, IProductRepository
         if (_cache != null)
         {
             var cacheKey = CacheKeys.FormatKey("product:id:{0}", id);
-            return await _cache.GetOrSetAsync(
+            return await _cache.GetOrSetAsync<ProductDto?>(
                 cacheKey,
-                async () => await GetByIdFromDbAsync(id),
-                memoryExpiry: TimeSpan.FromMinutes(15),
-                distributedExpiry: TimeSpan.FromHours(1));
+                ct => new ValueTask<ProductDto?>(GetByIdFromDbAsync(id)),
+                expiration: TimeSpan.FromHours(1));
         }
 
         return await GetByIdFromDbAsync(id);
@@ -106,6 +111,20 @@ public class ProductRepository : SqlHelper, IProductRepository
 
     public async Task<ProductDto?> GetByBarcodeAsync(string barcode)
     {
+        if (_cache != null)
+        {
+            var cacheKey = CacheKeys.FormatKey("product:barcode:{0}", barcode);
+            return await _cache.GetOrSetAsync<ProductDto?>(
+                cacheKey,
+                ct => new ValueTask<ProductDto?>(GetByBarcodeFromDbAsync(barcode)),
+                expiration: TimeSpan.FromMinutes(15));
+        }
+
+        return await GetByBarcodeFromDbAsync(barcode);
+    }
+
+    private async Task<ProductDto?> GetByBarcodeFromDbAsync(string barcode)
+    {
         const string sql = @"
             SELECT Id, Name, Brand, Barcode, BarcodeType, Description, Category,
                    ServingSize, ServingUnit, ImageUrl, ApprovalStatus,
@@ -157,9 +176,8 @@ public class ProductRepository : SqlHelper, IProductRepository
             var cacheKey = GenerateSearchCacheKey(request);
             return await _cache!.GetOrSetAsync(
                 cacheKey,
-                async () => await SearchFromDbAsync(request),
-                memoryExpiry: TimeSpan.FromMinutes(5),
-                distributedExpiry: TimeSpan.FromMinutes(15));
+                ct => new ValueTask<List<ProductDto>>(SearchFromDbAsync(request)),
+                expiration: TimeSpan.FromMinutes(15));
         }
 
         return await SearchFromDbAsync(request);
@@ -771,13 +789,341 @@ public class ProductRepository : SqlHelper, IProductRepository
             return count > 0;
         }
 
-        public async Task<int?> GetProductCountAsync()
-        {
-            const string sql = "SELECT COUNT(*) FROM Product WHERE IsDeleted = 0";
-            return await ExecuteScalarAsync<int>(sql);
-        }
+            public async Task<int?> GetProductCountAsync()
+            {
+                const string sql = "SELECT COUNT(*) FROM Product WHERE IsDeleted = 0";
+                return await ExecuteScalarAsync<int>(sql);
+            }
+        
+            public async Task<HashSet<string>> GetAllBarcodesAsync()
+            {
+                const string sql = "SELECT Barcode FROM Product WITH (NOLOCK) WHERE Barcode IS NOT NULL AND IsDeleted = 0";
+                var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                await ExecuteReaderAsync<bool>(sql, reader => 
+                {
+                    result.Add(reader.GetString(0));
+                    return true;
+                });
+                return result;
+            }
+        
+            public async Task<int> BulkCreateFullProductsHighSpeedAsync(List<FullProductImportDto> importBatch)
+            {
+                if (!importBatch.Any()) return 0;
 
-    /// <summary>
+                return await ExecuteWithDeadlockRetryAsync(async () =>
+                {
+                    using var connection = new SqlConnection(ConnectionString);
+                    await connection.OpenAsync();
+
+                    using var transaction = connection.BeginTransaction();
+                    try
+                    {
+                        var timestamp = DateTime.UtcNow;
+                        var productData = new List<object[]>();
+                        var imageData = new List<object[]>();
+                        var ingredientMappingData = new List<object[]>();
+                        var allergenData = new List<object[]>();
+                        var metadataData = new List<object[]>();
+                        var externalLinkData = new List<object[]>();
+
+                        foreach (var item in importBatch)
+                        {
+                            var productId = Guid.NewGuid();
+
+                            // Product
+                            productData.Add(new object[] {
+                                productId, item.Product.Name, (object?)item.Product.Brand ?? DBNull.Value,
+                                (object?)item.Product.Barcode ?? DBNull.Value, (object?)item.Product.BarcodeType ?? "Unknown",
+                                (object?)item.Product.Description ?? DBNull.Value, (object?)item.Product.Category ?? "General",
+                                (object?)item.Product.ServingSize ?? DBNull.Value, (object?)item.Product.ServingUnit ?? DBNull.Value,
+                                (object?)item.Product.ImageUrl ?? DBNull.Value, "Approved", Guid.Empty, timestamp,
+                                DBNull.Value, Guid.Empty, timestamp, DBNull.Value, timestamp, false, DBNull.Value
+                            });
+
+                            // Images
+                            if (item.Images.Any())
+                            {
+                                foreach (var img in item.Images)
+                                {
+                                    imageData.Add(new object[] {
+                                        Guid.NewGuid(), productId, img.ImageType ?? "Front", img.ImageUrl,
+                                        (object?)img.LocalFilePath ?? DBNull.Value, img.IsPrimary, img.DisplayOrder,
+                                        (object?)img.SourceSystem ?? "Import", timestamp
+                                    });
+                                }
+                            }        
+
+                            // Ingredients
+                            int orderIdx = 0;
+                            foreach (var ingId in item.IngredientIds)
+                            {
+                                ingredientMappingData.Add(new object[] { Guid.NewGuid(), productId, ingId, orderIdx++, timestamp });
+                            }
+
+                            // Allergens
+                            foreach (var allergen in item.Allergens)
+                            {
+                                allergenData.Add(new object[] { Guid.NewGuid(), productId, allergen, timestamp });
+                            }
+
+                            // Metadata
+                            foreach (var meta in item.Metadata)
+                            {
+                                metadataData.Add(new object[] { Guid.NewGuid(), productId, meta.Key, meta.Value, timestamp });
+                            }
+
+                            // External Links
+                            if (!string.IsNullOrEmpty(item.ExternalId) && !string.IsNullOrEmpty(item.ExternalSource))
+                            {
+                                externalLinkData.Add(new object[] { Guid.NewGuid(), productId, item.ExternalSource, item.ExternalId, timestamp });
+                            }
+                        }
+
+                        // Disable non-essential indexes for faster bulk insert
+                        await DisableProductIndexesAsync(connection, transaction);
+
+                        // Sequential bulk inserts (no lock contention, reliable)
+                        await BulkInsertDataAsync(connection, transaction, "Product", productData, new[] {
+                            "Id", "Name", "Brand", "Barcode", "BarcodeType", "Description", "Category", 
+                            "ServingSize", "ServingUnit", "ImageUrl", "ApprovalStatus", "ApprovedBy", "ApprovedAt", 
+                            "RejectionReason", "SubmittedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "IsDeleted", "DeletedAt"
+                        });
+
+                        await BulkInsertDataAsync(connection, transaction, "ProductImage", imageData, new[] {
+                            "Id", "ProductId", "ImageType", "ImageUrl", "LocalFilePath", "IsPrimary", "DisplayOrder", "SourceSystem", "CreatedAt"
+                        });
+
+                        await BulkInsertDataAsync(connection, transaction, "ProductIngredient", ingredientMappingData, new[] {
+                            "Id", "ProductId", "IngredientId", "OrderIndex", "CreatedAt"
+                        });
+
+                        await BulkInsertDataAsync(connection, transaction, "ProductAllergen", allergenData, new[] {
+                            "Id", "ProductId", "AllergenName", "CreatedAt"
+                        });
+
+                        await BulkInsertDataAsync(connection, transaction, "ProductMetadata", metadataData, new[] {
+                            "Id", "ProductId", "MetaKey", "MetaValue", "CreatedAt"
+                        });
+
+                        // External Links - handle duplicates one by one to avoid failing the whole batch
+                        if (externalLinkData.Any())
+                        {
+                            foreach (var link in externalLinkData)
+                            {
+                                const string linkSql = @"
+                                    IF NOT EXISTS (SELECT 1 FROM ProductExternalLink WHERE Source = @Source AND ExternalId = @ExtId)
+                                    INSERT INTO ProductExternalLink (Id, ProductId, Source, ExternalId, CreatedAt)
+                                    VALUES (@Id, @PId, @Source, @ExtId, @Date)";
+
+                                using var cmd = new SqlCommand(linkSql, connection, transaction);
+                                cmd.Parameters.AddWithValue("@Id", link[0]);
+                                cmd.Parameters.AddWithValue("@PId", link[1]);
+                                cmd.Parameters.AddWithValue("@Source", link[2]);
+                                cmd.Parameters.AddWithValue("@ExtId", link[3]);
+                                cmd.Parameters.AddWithValue("@Date", link[4]);
+
+                                try { await cmd.ExecuteNonQueryAsync(); }
+                                catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601) { /* Skip */ }
+                            }
+                        }
+
+                        // Rebuild indexes after bulk insert
+                        await RebuildProductIndexesAsync(connection, transaction);
+
+                        await transaction.CommitAsync();
+                        return importBatch.Count;
+                    }
+                    catch
+                    {
+                        if (transaction.Connection != null) await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
+            }
+
+            private async Task BulkInsertDataAsync(SqlConnection connection, SqlTransaction transaction, string tableName, List<object[]> data, string[] columns)
+            {
+                if (!data.Any()) return;
+
+                var schema = GetTableSchema(tableName);
+                var dt = new DataTable();
+
+                foreach (var col in columns)
+                {
+                    if (schema.TryGetValue(col, out var type))
+                    {
+                        dt.Columns.Add(col, type);
+                    }
+                    else
+                    {
+                        dt.Columns.Add(col, typeof(string)); // Fallback
+                    }
+                }
+
+                foreach (var row in data)
+                {
+                    var dtRow = dt.NewRow();
+                    for (int i = 0; i < columns.Length; i++)
+                    {
+                        dtRow[i] = row[i] ?? DBNull.Value;
+                    }
+                    dt.Rows.Add(dtRow);
+                }
+
+                // Use SqlBulkCopy with optimal settings (no TableLock, EnableStreaming)
+                using var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction);
+                bulkCopy.DestinationTableName = tableName;
+                bulkCopy.BatchSize = 10000;
+                bulkCopy.BulkCopyTimeout = 600;
+                bulkCopy.EnableStreaming = true;
+
+                foreach (var col in columns) bulkCopy.ColumnMappings.Add(col, col);
+
+                await bulkCopy.WriteToServerAsync(dt);
+                dt.Clear();
+            }
+
+            private async Task DisableProductIndexesAsync(SqlConnection connection, SqlTransaction transaction)
+                            {
+                                // Disable non-clustered indexes for faster bulk insert
+                                const string disableSql = @"
+                                    -- Product indexes
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Product_Barcode' AND object_id = OBJECT_ID('Product'))
+                                        ALTER INDEX IX_Product_Barcode ON Product DISABLE;
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Product_Brand' AND object_id = OBJECT_ID('Product'))
+                                        ALTER INDEX IX_Product_Brand ON Product DISABLE;
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Product_Category' AND object_id = OBJECT_ID('Product'))
+                                        ALTER INDEX IX_Product_Category ON Product DISABLE;
+
+                                    -- ProductIngredient indexes
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductIngredient_ProductId' AND object_id = OBJECT_ID('ProductIngredient'))
+                                        ALTER INDEX IX_ProductIngredient_ProductId ON ProductIngredient DISABLE;
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductIngredient_IngredientId' AND object_id = OBJECT_ID('ProductIngredient'))
+                                        ALTER INDEX IX_ProductIngredient_IngredientId ON ProductIngredient DISABLE;
+
+                                    -- ProductImage indexes
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductImage_ProductId' AND object_id = OBJECT_ID('ProductImage'))
+                                        ALTER INDEX IX_ProductImage_ProductId ON ProductImage DISABLE;";
+
+                                using var cmd = new SqlCommand(disableSql, connection, transaction);
+                                cmd.CommandTimeout = 60;
+                                try
+                                {
+                                    await cmd.ExecuteNonQueryAsync();
+                                }
+                                catch (SqlException ex)
+                                {
+                                    // Log but don't fail - indexes may not exist yet
+                                    _logger?.LogWarning("Failed to disable some indexes (may not exist): {Message}", ex.Message);
+                                }
+                            }
+
+                            private async Task RebuildProductIndexesAsync(SqlConnection connection, SqlTransaction transaction)
+                            {
+                                // Rebuild indexes with optimized FILLFACTOR
+                                const string rebuildSql = @"
+                                    -- Product indexes
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Product_Barcode' AND object_id = OBJECT_ID('Product'))
+                                        ALTER INDEX IX_Product_Barcode ON Product REBUILD WITH (FILLFACTOR = 70);
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Product_Brand' AND object_id = OBJECT_ID('Product'))
+                                        ALTER INDEX IX_Product_Brand ON Product REBUILD WITH (FILLFACTOR = 70);
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Product_Category' AND object_id = OBJECT_ID('Product'))
+                                        ALTER INDEX IX_Product_Category ON Product REBUILD WITH (FILLFACTOR = 70);
+
+                                    -- ProductIngredient indexes
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductIngredient_ProductId' AND object_id = OBJECT_ID('ProductIngredient'))
+                                        ALTER INDEX IX_ProductIngredient_ProductId ON ProductIngredient REBUILD WITH (FILLFACTOR = 70);
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductIngredient_IngredientId' AND object_id = OBJECT_ID('ProductIngredient'))
+                                        ALTER INDEX IX_ProductIngredient_IngredientId ON ProductIngredient REBUILD WITH (FILLFACTOR = 70);
+
+                                    -- ProductImage indexes
+                                    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ProductImage_ProductId' AND object_id = OBJECT_ID('ProductImage'))
+                                        ALTER INDEX IX_ProductImage_ProductId ON ProductImage REBUILD WITH (FILLFACTOR = 70);";
+
+                                using var cmd = new SqlCommand(rebuildSql, connection, transaction);
+                                cmd.CommandTimeout = 300;
+                                try
+                                {
+                                    await cmd.ExecuteNonQueryAsync();
+                                }
+                                catch (SqlException ex)
+                                {
+                                    // Log but don't fail - indexes may not exist yet
+                                    _logger?.LogWarning("Failed to rebuild some indexes (may not exist): {Message}", ex.Message);
+                                }
+                            }
+
+                            private Dictionary<string, Type> GetTableSchema(string tableName)
+                            {
+                                var schema = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+                                
+                                switch (tableName)
+                                {
+                                    case "Product":
+                                        schema["Id"] = typeof(Guid);
+                                        schema["Name"] = typeof(string);
+                                        schema["Brand"] = typeof(string);
+                                        schema["Barcode"] = typeof(string);
+                                        schema["BarcodeType"] = typeof(string);
+                                        schema["Description"] = typeof(string);
+                                        schema["Category"] = typeof(string);
+                                        schema["ServingSize"] = typeof(string);
+                                        schema["ServingUnit"] = typeof(string);
+                                        schema["ImageUrl"] = typeof(string);
+                                        schema["ApprovalStatus"] = typeof(string);
+                                        schema["ApprovedBy"] = typeof(Guid);
+                                        schema["ApprovedAt"] = typeof(DateTime);
+                                        schema["RejectionReason"] = typeof(string);
+                                        schema["SubmittedBy"] = typeof(Guid);
+                                        schema["CreatedAt"] = typeof(DateTime);
+                                        schema["UpdatedBy"] = typeof(Guid);
+                                        schema["UpdatedAt"] = typeof(DateTime);
+                                        schema["IsDeleted"] = typeof(bool);
+                                        schema["DeletedAt"] = typeof(DateTime);
+                                        break;
+                                    case "ProductImage":
+                                        schema["Id"] = typeof(Guid);
+                                        schema["ProductId"] = typeof(Guid);
+                                        schema["ImageType"] = typeof(string);
+                                        schema["ImageUrl"] = typeof(string);
+                                        schema["LocalFilePath"] = typeof(string);
+                                        schema["IsPrimary"] = typeof(bool);
+                                        schema["DisplayOrder"] = typeof(int);
+                                        schema["SourceSystem"] = typeof(string);
+                                        schema["CreatedAt"] = typeof(DateTime);
+                                        break;
+                                    case "ProductIngredient":
+                                        schema["Id"] = typeof(Guid);
+                                        schema["ProductId"] = typeof(Guid);
+                                        schema["IngredientId"] = typeof(Guid);
+                                        schema["OrderIndex"] = typeof(int);
+                                        schema["CreatedAt"] = typeof(DateTime);
+                                        break;
+                                    case "ProductAllergen":
+                                        schema["Id"] = typeof(Guid);
+                                        schema["ProductId"] = typeof(Guid);
+                                        schema["AllergenName"] = typeof(string);
+                                        schema["CreatedAt"] = typeof(DateTime);
+                                        break;
+                                    case "ProductMetadata":
+                                        schema["Id"] = typeof(Guid);
+                                        schema["ProductId"] = typeof(Guid);
+                                        schema["MetaKey"] = typeof(string);
+                                        schema["MetaValue"] = typeof(string);
+                                        schema["CreatedAt"] = typeof(DateTime);
+                                        break;
+                                    case "ProductExternalLink":
+                                        schema["Id"] = typeof(Guid);
+                                        schema["ProductId"] = typeof(Guid);
+                                        schema["Source"] = typeof(string);
+                                        schema["ExternalId"] = typeof(string);
+                                        schema["CreatedAt"] = typeof(DateTime);
+                                        break;
+                                }
+                                
+                                return schema;
+                            }    /// <summary>
     /// Helper method to load product images and populate the Images collection
     /// </summary>
     private async Task LoadImagesAsync(ProductDto product)

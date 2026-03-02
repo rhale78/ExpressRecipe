@@ -3,6 +3,7 @@ using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
+using ExpressRecipe.Client.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using RabbitMQ.Client;
@@ -49,6 +50,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+
+// Register token provider (placeholder for service-to-service auth)
+builder.Services.AddScoped<ITokenProvider, EmptyTokenProvider>();
+
+// IngredientService client - REST API only (gRPC disabled until HTTP/2 issues resolved)
+builder.Services.AddHttpClient<IngredientServiceClient>(client =>
+{
+    client.BaseAddress = new Uri("http://ingredientservice");
+});
 
 // Register repositories
 var connectionString = builder.Configuration.GetConnectionString("productdb")
@@ -150,6 +160,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure the HTTP request pipeline
 app.MapDefaultEndpoints();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

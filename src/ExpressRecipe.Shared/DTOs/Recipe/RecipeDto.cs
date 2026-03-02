@@ -56,6 +56,7 @@ public class RecipeIngredientDto
     public bool IsOptional { get; set; }
     public string? SubstituteNotes { get; set; }
     public string? GroupName { get; set; }
+    public string? OriginalText { get; set; }
 }
 
 public class RecipeNutritionDto
@@ -318,4 +319,25 @@ public class RateRecipeRequest
 
     [Range(0, 1000)]
     public int MadeItCount { get; set; } = 1;
+}
+
+public class RecipeImageDto
+{
+    public Guid Id { get; set; }
+    public Guid RecipeId { get; set; }
+    public string ImageUrl { get; set; } = string.Empty;
+    public string? LocalPath { get; set; }
+    public bool IsPrimary { get; set; }
+    public int DisplayOrder { get; set; }
+    public string? SourceSystem { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class FullRecipeImportDto
+{
+    public CreateRecipeRequest Recipe { get; set; } = new();
+    public List<RecipeIngredientDto>? Ingredients { get; set; }
+    public List<RecipeImageDto>? Images { get; set; }
+    public List<CreateRecipeStepRequest>? Steps { get; set; }
+    public List<string>? Tags { get; set; }
 }

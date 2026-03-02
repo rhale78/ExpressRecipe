@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -8,12 +8,26 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.1" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.1" />
-    <PackageReference Include="System.Net.Http.Json" Version="10.0.1" />
-    <PackageReference Include="FluentValidation" Version="12.1.1" />
-    <PackageReference Include="Blazored.LocalStorage" Version="4.5.0" />
+    <Protobuf Include="Protos\ingredients.proto" GrpcServices="Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="System.Net.Http.Json" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="Blazored.LocalStorage" />
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Grpc.Tools">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Google.Protobuf" />
   </ItemGroup>
 
 </Project>

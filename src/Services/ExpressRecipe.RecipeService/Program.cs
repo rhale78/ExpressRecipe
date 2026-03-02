@@ -5,6 +5,7 @@ using ExpressRecipe.RecipeService.CQRS.Queries;
 using ExpressRecipe.Shared.CQRS;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
+using ExpressRecipe.Client.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using RabbitMQ.Client;
@@ -53,6 +54,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
+// Register token provider (placeholder for service-to-service auth)
+builder.Services.AddScoped<ITokenProvider, EmptyTokenProvider>();
+
+// IngredientService client - REST API only (gRPC disabled until HTTP/2 issues resolved)
+builder.Services.AddHttpClient<IngredientServiceClient>(client =>
+{
+    client.BaseAddress = new Uri("http://ingredientservice");
+});
+
 // Register repositories
 var connectionString = builder.Configuration.GetConnectionString("recipedb")
     ?? throw new InvalidOperationException("Database connection string 'recipedb' not found");
@@ -60,8 +70,13 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
 builder.Services.AddScoped<IRecipeRepository>(sp => new RecipeRepository(connectionString));
+builder.Services.AddScoped<IRecipeStagingRepository>(sp => new RecipeStagingRepository(connectionString));
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Data.IRatingRepository>(sp => 
     new ExpressRecipe.RecipeService.Data.RatingRepository(connectionString));
+
+// Register Background Workers
+builder.Services.AddHostedService<ExpressRecipe.RecipeService.Workers.RecipeImportWorker>();
+builder.Services.AddHostedService<ExpressRecipe.RecipeService.Workers.RecipeProcessingWorker>();
 
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
@@ -135,6 +150,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure the HTTP request pipeline
 app.MapDefaultEndpoints();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -144,6 +160,16 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+
+// Add Static Files mapping for C:\Recipes
+var imagePath = "C:\\Recipes";
+if (!Directory.Exists(imagePath)) Directory.CreateDirectory(imagePath);
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(imagePath),
+    RequestPath = "/images/recipes"
+});
 
 // Add rate limiting middleware
 app.UseRateLimiting(new RateLimitOptions

@@ -1,6 +1,8 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Shared.Services;
+using Microsoft.Data.SqlClient;
+using System.Data;
 using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.ProductService.Data;
@@ -20,7 +22,9 @@ public interface IIngredientRepository
 
     // Bulk operations for performance
     Task<Dictionary<string, Guid>> GetIngredientIdsByNamesAsync(IEnumerable<string> names);
+    Task<Dictionary<string, Guid>> GetIngredientIdsByNamesHighSpeedAsync(IEnumerable<string> names);
     Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, Guid? createdBy = null);
+    Task<Dictionary<string, Guid>> GetAllIngredientNamesAndIdsAsync();
 }
 
 public class IngredientRepository : SqlHelper, IIngredientRepository
@@ -65,11 +69,10 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
         if (_cache != null)
         {
             var cacheKey = CacheKeys.FormatKey("ingredient:id:{0}", id);
-            return await _cache.GetOrSetAsync(
+            return await _cache.GetOrSetAsync<IngredientDto?>(
                 cacheKey,
-                async () => await GetByIdFromDbAsync(id),
-                memoryExpiry: TimeSpan.FromMinutes(30),
-                distributedExpiry: TimeSpan.FromHours(2)
+                ct => new ValueTask<IngredientDto?>(GetByIdFromDbAsync(id)),
+                expiration: TimeSpan.FromHours(2)
             );
         }
 
@@ -426,9 +429,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 foreach (var item in chunkResults)
                 {
                     var cacheKey = CacheKeys.FormatKey("ingredient:name:{0}", item.Name.ToLowerInvariant());
-                    await _cache.SetAsync(cacheKey, item.Id, 
-                        memoryExpiry: TimeSpan.FromHours(12),
-                        distributedExpiry: TimeSpan.FromHours(24));
+                    await _cache.SetAsync(cacheKey, item.Id, expiration: TimeSpan.FromHours(24));
                 }
             }
 
@@ -451,46 +452,104 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
     public async Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, Guid? createdBy = null)
     {
         var namesList = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (!namesList.Any())
-            return 0;
+        if (!namesList.Any()) return 0;
 
         int createdCount = 0;
-
-        // Process in batches to avoid overwhelming the database
-        foreach (var batch in namesList.Chunk(100))
+        foreach (var batch in namesList.Chunk(50))
         {
-            var valuesClauses = new List<string>();
+            var sourceRows = new List<string>();
             var parameters = new List<Microsoft.Data.SqlClient.SqlParameter>();
 
             for (int i = 0; i < batch.Length; i++)
             {
-                var id = Guid.NewGuid();
                 var nameParam = $"@Name{i}";
-                var idParam = $"@Id{i}";
-
-                valuesClauses.Add($"({idParam}, {nameParam}, 'General', @CreatedBy, GETUTCDATE())");
+                sourceRows.Add($"SELECT {nameParam} as Name");
                 parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter(nameParam, batch[i]));
-                parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter(idParam, id));
             }
 
             parameters.Add((Microsoft.Data.SqlClient.SqlParameter)CreateParameter("@CreatedBy", createdBy));
 
             var sql = $@"
-                INSERT INTO Ingredient (Id, Name, Category, CreatedBy, CreatedAt)
-                VALUES {string.Join(", ", valuesClauses)}";
+                MERGE Ingredient WITH (HOLDLOCK) AS target
+                USING ({string.Join(" UNION ALL ", sourceRows)}) AS source
+                ON (target.Name = source.Name)
+                WHEN NOT MATCHED THEN
+                    INSERT (Id, Name, Category, CreatedBy, CreatedAt)
+                    VALUES (NEWID(), source.Name, 'General', @CreatedBy, GETUTCDATE());";
 
             try
             {
-                var inserted = await ExecuteNonQueryAsync(sql, timeoutSeconds: 120, parameters.ToArray());
-                createdCount += inserted;
+                createdCount += await ExecuteNonQueryAsync(sql, timeoutSeconds: 120, parameters.ToArray());
             }
             catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
             {
-                // Some duplicates exist - that's OK, they might have been created concurrently
-                // We'll just skip them
+                // Ignore concurrent duplicates
             }
         }
-
         return createdCount;
+    }
+
+    public async Task<Dictionary<string, Guid>> GetIngredientIdsByNamesHighSpeedAsync(IEnumerable<string> names)
+    {
+        var nameList = names.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (!nameList.Any()) return new Dictionary<string, Guid>();
+
+        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
+        await ExecuteTransactionAsync(async (connection, transaction) =>
+        {
+            using (var cmd = new SqlCommand("DROP TABLE IF EXISTS #CheckNames; CREATE TABLE #CheckNames (Name NVARCHAR(200))", connection, transaction))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            using (var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction))
+            {
+                bulkCopy.DestinationTableName = "#CheckNames";
+                var dt = new DataTable();
+                dt.Columns.Add("Name", typeof(string));
+                foreach (var name in nameList) dt.Rows.Add(name);
+                await bulkCopy.WriteToServerAsync(dt);
+            }
+
+            const string sql = @"
+                SELECT DISTINCT i.Name, i.Id 
+                FROM Ingredient i
+                INNER JOIN #CheckNames c ON i.Name = c.Name
+                WHERE i.IsDeleted = 0";
+
+            using (var cmd = new SqlCommand(sql, connection, transaction))
+            {
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        result[reader.GetString(0)] = reader.GetGuid(1);
+                    }
+                }
+            }
+
+            using (var cmd = new SqlCommand("DROP TABLE IF EXISTS #CheckNames", connection, transaction))
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+        });
+
+        return result;
+    }
+
+    public async Task<Dictionary<string, Guid>> GetAllIngredientNamesAndIdsAsync()
+    {
+        const string sql = "SELECT Name, Id FROM Ingredient WITH (NOLOCK) WHERE IsDeleted = 0";
+        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        
+        await ExecuteReaderAsync<bool>(sql, reader => 
+        {
+            var name = reader.GetString(0);
+            if (!result.ContainsKey(name)) result[name] = reader.GetGuid(1);
+            return true;
+        });
+        
+        return result;
     }
 }

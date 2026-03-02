@@ -90,9 +90,8 @@ public class ProductsController : ControllerBase
             // Cache for 30 minutes (letter counts don't change frequently)
             var letterCounts = await _cache.GetOrSetAsync(
                 cacheKey,
-                () => _productRepository.GetLetterCountsAsync(request),
-                memoryExpiry: TimeSpan.FromMinutes(10),
-                distributedExpiry: TimeSpan.FromMinutes(30)
+                ct => new ValueTask<Dictionary<string, int>>(_productRepository.GetLetterCountsAsync(request)),
+                expiration: TimeSpan.FromMinutes(30)
             );
 
             return Ok(letterCounts);
@@ -115,11 +114,10 @@ public class ProductsController : ControllerBase
             var cacheKey = CacheKeys.FormatKey(CacheKeys.ProductById, id);
 
             // Cache product for 1 hour (products don't change often)
-            var product = await _cache.GetOrSetAsync(
+            var product = await _cache.GetOrSetAsync<ProductDto?>(
                 cacheKey,
-                () => _productRepository.GetByIdAsync(id)!,
-                memoryExpiry: TimeSpan.FromMinutes(15),
-                distributedExpiry: TimeSpan.FromHours(1)
+                ct => new ValueTask<ProductDto?>(_productRepository.GetByIdAsync(id)),
+                expiration: TimeSpan.FromHours(1)
             );
 
             if (product == null)
@@ -133,16 +131,14 @@ public class ProductsController : ControllerBase
 
             product.Ingredients = await _cache.GetOrSetAsync(
                 ingredientsCacheKey,
-                () => _ingredientRepository.GetProductIngredientsAsync(id),
-                memoryExpiry: TimeSpan.FromMinutes(15),
-                distributedExpiry: TimeSpan.FromHours(1)
+                ct => new ValueTask<List<ProductIngredientDto>>(_ingredientRepository.GetProductIngredientsAsync(id)),
+                expiration: TimeSpan.FromHours(1)
             );
 
             product.Allergens = await _cache.GetOrSetAsync(
                 allergensCacheKey,
-                () => _allergenRepository.GetProductAllergensAsync(id),
-                memoryExpiry: TimeSpan.FromMinutes(15),
-                distributedExpiry: TimeSpan.FromHours(1)
+                ct => new ValueTask<List<string>>(_allergenRepository.GetProductAllergensAsync(id)),
+                expiration: TimeSpan.FromHours(1)
             );
 
             return Ok(product);
@@ -164,11 +160,10 @@ public class ProductsController : ControllerBase
         {
             var cacheKey = CacheKeys.FormatKey("product:barcode:{0}", barcode);
 
-            var product = await _cache.GetOrSetAsync(
+            var product = await _cache.GetOrSetAsync<ProductDto?>(
                 cacheKey,
-                () => _productRepository.GetByBarcodeAsync(barcode)!,
-                memoryExpiry: TimeSpan.FromMinutes(15),
-                distributedExpiry: TimeSpan.FromHours(2)
+                ct => new ValueTask<ProductDto?>(_productRepository.GetByBarcodeAsync(barcode)),
+                expiration: TimeSpan.FromHours(2)
             );
 
             if (product == null)
@@ -180,9 +175,8 @@ public class ProductsController : ControllerBase
             var ingredientsCacheKey = CacheKeys.FormatKey("product:ingredients:{0}", product.Id);
             product.Ingredients = await _cache.GetOrSetAsync(
                 ingredientsCacheKey,
-                () => _ingredientRepository.GetProductIngredientsAsync(product.Id),
-                memoryExpiry: TimeSpan.FromMinutes(15),
-                distributedExpiry: TimeSpan.FromHours(2)
+                ct => new ValueTask<List<ProductIngredientDto>>(_ingredientRepository.GetProductIngredientsAsync(product.Id)),
+                expiration: TimeSpan.FromHours(2)
             );
 
             return Ok(product);

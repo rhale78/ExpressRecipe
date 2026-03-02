@@ -75,10 +75,10 @@ public partial class RecipesViewModel : ObservableObject
                 Page = 1
             });
 
-            if (searchResult?.Results != null)
+            if (searchResult?.Recipes != null)
             {
                 Recipes.Clear();
-                foreach (var recipe in searchResult.Results)
+                foreach (var recipe in searchResult.Recipes)
                 {
                     Recipes.Add(recipe);
                 }

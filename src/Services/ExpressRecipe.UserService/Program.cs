@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.UserService.Data;
+using ExpressRecipe.Shared.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -132,6 +133,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure the HTTP request pipeline
 app.MapDefaultEndpoints();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

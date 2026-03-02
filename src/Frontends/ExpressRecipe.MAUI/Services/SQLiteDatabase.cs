@@ -80,7 +80,7 @@ public class OfflineInventoryItem
     public int Id { get; set; }
     public Guid ServerId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public int Quantity { get; set; }
+    public decimal Quantity { get; set; }
     public DateTime? ExpirationDate { get; set; }
     public bool IsSynced { get; set; }
     public DateTime LastModified { get; set; }
@@ -93,7 +93,7 @@ public class OfflineShoppingItem
     public int Id { get; set; }
     public Guid ServerId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public int Quantity { get; set; }
+    public decimal Quantity { get; set; }
     public bool IsCompleted { get; set; }
     public bool IsSynced { get; set; }
     public DateTime LastModified { get; set; }

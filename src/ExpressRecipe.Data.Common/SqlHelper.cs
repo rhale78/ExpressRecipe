@@ -269,7 +269,7 @@ public abstract class SqlHelper
     /// Executes an operation with automatic retry logic for deadlock exceptions.
     /// Implements exponential backoff for retries.
     /// </summary>
-    private async Task<T> ExecuteWithDeadlockRetryAsync<T>(Func<Task<T>> operation)
+    protected async Task<T> ExecuteWithDeadlockRetryAsync<T>(Func<Task<T>> operation)
     {
         for (int attempt = 0; attempt < MaxRetryAttempts; attempt++)
         {
@@ -293,7 +293,7 @@ public abstract class SqlHelper
     /// Executes an operation with automatic retry logic for deadlock exceptions (void return).
     /// Implements exponential backoff for retries.
     /// </summary>
-    private async Task ExecuteWithDeadlockRetryAsync(Func<Task> operation)
+    protected async Task ExecuteWithDeadlockRetryAsync(Func<Task> operation)
     {
         for (int attempt = 0; attempt < MaxRetryAttempts; attempt++)
         {

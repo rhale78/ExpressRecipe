@@ -1,5 +1,6 @@
 using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Services;
+using ExpressRecipe.Client.Shared.Services;
 using System.Threading.Tasks.Dataflow;
 
 namespace ExpressRecipe.ProductService.Workers;
@@ -76,14 +77,18 @@ public class ProductProcessingWorker : BackgroundService
                 {
                     _logger.LogInformation("Found {Count} pending products to process", pendingCount);
 
+                    var ingredientClient = scope.ServiceProvider.GetRequiredService<IngredientServiceClient>();
+
                     // Create batch processor with optimal settings
                     var maxParallelism = _configuration.GetValue<int>("ProductImport:MaxParallelism", 4);
-                    var batchSize = _configuration.GetValue<int>("ProductImport:BatchSize", 100);
-                    var bufferSize = _configuration.GetValue<int>("ProductImport:BufferSize", 500);
+                    var batchSize = _configuration.GetValue<int>("ProductImport:BatchSize", 5000);
+                    var bufferSize = _configuration.GetValue<int>("ProductImport:BufferSize", 50000);
 
                     var batchProcessor = new BatchProductProcessor(
                         batchProcessorLogger,
                         ingredientListParser,
+                        _configuration,
+                        ingredientClient,
                         maxParallelism,
                         batchSize,
                         bufferSize);

@@ -1,5 +1,6 @@
 using Blazored.LocalStorage;
 using Microsoft.JSInterop;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.Client.Shared.Services;
 

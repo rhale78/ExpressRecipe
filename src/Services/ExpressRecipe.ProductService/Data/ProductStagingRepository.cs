@@ -11,6 +11,7 @@ public interface IProductStagingRepository
     Task<int> BulkAugmentStagingProductsAsync(IEnumerable<StagedProduct> products, string sourceLabel);
     Task<List<StagedProduct>> GetPendingProductsAsync(int limit = 100);
     Task UpdateProcessingStatusAsync(Guid id, string status, string? error = null);
+    Task BulkUpdateStatusAsync(IEnumerable<Guid> ids, string status, string? error = null);
     Task<int> GetPendingCountAsync();
 }
 
@@ -74,183 +75,281 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
         using var transaction = connection.BeginTransaction();
         try
         {
-            int insertedCount = 0;
-
-            const string sql = @"
-                INSERT INTO ProductStaging (
-                    ExternalId, Barcode, ProductName, GenericName, Brands,
-                    IngredientsText, IngredientsTextEn, Allergens, AllergensHierarchy,
-                    Categories, CategoriesHierarchy, NutritionData,
-                    ImageUrl, ImageSmallUrl, Lang, Countries,
-                    NutriScore, NovaGroup, EcoScore, RawJson
-                )
-                VALUES (
-                    @ExternalId, @Barcode, @ProductName, @GenericName, @Brands,
-                    @IngredientsText, @IngredientsTextEn, @Allergens, @AllergensHierarchy,
-                    @Categories, @CategoriesHierarchy, @NutritionData,
-                    @ImageUrl, @ImageSmallUrl, @Lang, @Countries,
-                    @NutriScore, @NovaGroup, @EcoScore, @RawJson
+            // 1. Create temp table for staging
+            const string createTempSql = @"
+                CREATE TABLE #TempProductStaging (
+                    ExternalId NVARCHAR(100), Barcode NVARCHAR(50), ProductName NVARCHAR(500), 
+                    GenericName NVARCHAR(MAX), Brands NVARCHAR(500), IngredientsText NVARCHAR(MAX), 
+                    IngredientsTextEn NVARCHAR(MAX), Allergens NVARCHAR(MAX), AllergensHierarchy NVARCHAR(MAX),
+                    Categories NVARCHAR(MAX), CategoriesHierarchy NVARCHAR(MAX), NutritionData NVARCHAR(MAX),
+                    ImageUrl NVARCHAR(500), ImageSmallUrl NVARCHAR(500), Lang NVARCHAR(10), 
+                    Countries NVARCHAR(200), NutriScore NVARCHAR(20), NovaGroup INT, 
+                    EcoScore NVARCHAR(20), RawJson NVARCHAR(MAX)
                 )";
 
-            using var command = new SqlCommand(sql, connection, transaction);
-            command.Parameters.Add("@ExternalId", SqlDbType.NVarChar, 100);
-            command.Parameters.Add("@Barcode", SqlDbType.NVarChar, 50);
-            command.Parameters.Add("@ProductName", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@GenericName", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@Brands", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@IngredientsText", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@IngredientsTextEn", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@Allergens", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@AllergensHierarchy", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@Categories", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@CategoriesHierarchy", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@NutritionData", SqlDbType.NVarChar, -1);
-            command.Parameters.Add("@ImageUrl", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@ImageSmallUrl", SqlDbType.NVarChar, 500);
-            command.Parameters.Add("@Lang", SqlDbType.NVarChar, 10);
-            command.Parameters.Add("@Countries", SqlDbType.NVarChar, 200);
-            command.Parameters.Add("@NutriScore", SqlDbType.NVarChar, 10);
-            command.Parameters.Add("@NovaGroup", SqlDbType.Int);
-            command.Parameters.Add("@EcoScore", SqlDbType.NVarChar, 10);
-            command.Parameters.Add("@RawJson", SqlDbType.NVarChar, -1);
-
-            foreach (var product in productList)
+            using (var cmd = new SqlCommand(createTempSql, connection, transaction))
             {
-                command.Parameters["@ExternalId"].Value = product.ExternalId;
-                command.Parameters["@Barcode"].Value = (object?)product.Barcode ?? DBNull.Value;
-                command.Parameters["@ProductName"].Value = (object?)product.ProductName ?? DBNull.Value;
-                command.Parameters["@GenericName"].Value = (object?)product.GenericName ?? DBNull.Value;
-                command.Parameters["@Brands"].Value = (object?)product.Brands ?? DBNull.Value;
-                command.Parameters["@IngredientsText"].Value = (object?)product.IngredientsText ?? DBNull.Value;
-                command.Parameters["@IngredientsTextEn"].Value = (object?)product.IngredientsTextEn ?? DBNull.Value;
-                command.Parameters["@Allergens"].Value = (object?)product.Allergens ?? DBNull.Value;
-                command.Parameters["@AllergensHierarchy"].Value = (object?)product.AllergensHierarchy ?? DBNull.Value;
-                command.Parameters["@Categories"].Value = (object?)product.Categories ?? DBNull.Value;
-                command.Parameters["@CategoriesHierarchy"].Value = (object?)product.CategoriesHierarchy ?? DBNull.Value;
-                command.Parameters["@NutritionData"].Value = (object?)product.NutritionData ?? DBNull.Value;
-                command.Parameters["@ImageUrl"].Value = (object?)product.ImageUrl ?? DBNull.Value;
-                command.Parameters["@ImageSmallUrl"].Value = (object?)product.ImageSmallUrl ?? DBNull.Value;
-                command.Parameters["@Lang"].Value = (object?)product.Lang ?? DBNull.Value;
-                command.Parameters["@Countries"].Value = (object?)product.Countries ?? DBNull.Value;
-                command.Parameters["@NutriScore"].Value = (object?)product.NutriScore ?? DBNull.Value;
-                command.Parameters["@NovaGroup"].Value = (object?)product.NovaGroup ?? DBNull.Value;
-                command.Parameters["@EcoScore"].Value = (object?)product.EcoScore ?? DBNull.Value;
-                command.Parameters["@RawJson"].Value = (object?)product.RawJson ?? DBNull.Value;
-
-                try
-                {
-                    await command.ExecuteNonQueryAsync();
-                    insertedCount++;
-                }
-                catch (SqlException ex) when (ex.Number == 2627) // Unique constraint violation
-                {
-                    // Skip duplicates
-                    continue;
-                }
+                await cmd.ExecuteNonQueryAsync();
             }
 
-                    await transaction.CommitAsync();
-                    return insertedCount;
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+            // 2. Bulk Copy into temp table
+            var dt = new DataTable();
+            dt.Columns.Add("ExternalId", typeof(string));
+            dt.Columns.Add("Barcode", typeof(string));
+            dt.Columns.Add("ProductName", typeof(string));
+            dt.Columns.Add("GenericName", typeof(string));
+            dt.Columns.Add("Brands", typeof(string));
+            dt.Columns.Add("IngredientsText", typeof(string));
+            dt.Columns.Add("IngredientsTextEn", typeof(string));
+            dt.Columns.Add("Allergens", typeof(string));
+            dt.Columns.Add("AllergensHierarchy", typeof(string));
+            dt.Columns.Add("Categories", typeof(string));
+            dt.Columns.Add("CategoriesHierarchy", typeof(string));
+            dt.Columns.Add("NutritionData", typeof(string));
+            dt.Columns.Add("ImageUrl", typeof(string));
+            dt.Columns.Add("ImageSmallUrl", typeof(string));
+            dt.Columns.Add("Lang", typeof(string));
+            dt.Columns.Add("Countries", typeof(string));
+            dt.Columns.Add("NutriScore", typeof(string));
+            dt.Columns.Add("NovaGroup", typeof(int));
+            dt.Columns.Add("EcoScore", typeof(string));
+            dt.Columns.Add("RawJson", typeof(string));
+
+            foreach (var p in productList)
+            {
+                dt.Rows.Add(
+                    p.ExternalId,
+                    (object?)p.Barcode ?? DBNull.Value,
+                    (object?)p.ProductName ?? DBNull.Value,
+                    (object?)p.GenericName ?? DBNull.Value,
+                    (object?)p.Brands ?? DBNull.Value,
+                    (object?)p.IngredientsText ?? DBNull.Value,
+                    (object?)p.IngredientsTextEn ?? DBNull.Value,
+                    (object?)p.Allergens ?? DBNull.Value,
+                    (object?)p.AllergensHierarchy ?? DBNull.Value,
+                    (object?)p.Categories ?? DBNull.Value,
+                    (object?)p.CategoriesHierarchy ?? DBNull.Value,
+                    (object?)p.NutritionData ?? DBNull.Value,
+                    (object?)p.ImageUrl ?? DBNull.Value,
+                    (object?)p.ImageSmallUrl ?? DBNull.Value,
+                    (object?)p.Lang ?? DBNull.Value,
+                    (object?)p.Countries ?? DBNull.Value,
+                    (object?)p.NutriScore ?? DBNull.Value,
+                    (object?)p.NovaGroup ?? DBNull.Value,
+                    (object?)p.EcoScore ?? DBNull.Value,
+                    (object?)p.RawJson ?? DBNull.Value
+                );
             }
 
-            public async Task<int> BulkAugmentStagingProductsAsync(IEnumerable<StagedProduct> products, string sourceLabel)
+            using (var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction))
             {
-                var productList = products.ToList();
-                if (!productList.Any()) return 0;
+                bulkCopy.DestinationTableName = "#TempProductStaging";
+                bulkCopy.BatchSize = 5000;
+                foreach (DataColumn col in dt.Columns) bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+                await bulkCopy.WriteToServerAsync(dt);
+            }
 
-                using var connection = new SqlConnection(ConnectionString);
-                await connection.OpenAsync();
+            // 3. MERGE into real table
+            const string mergeSql = @"
+                MERGE ProductStaging AS target
+                USING (
+                    SELECT 
+                        ExternalId, 
+                        MAX(Barcode) as Barcode, 
+                        MAX(ProductName) as ProductName, 
+                        MAX(GenericName) as GenericName, 
+                        MAX(Brands) as Brands,
+                        MAX(IngredientsText) as IngredientsText, 
+                        MAX(IngredientsTextEn) as IngredientsTextEn, 
+                        MAX(Allergens) as Allergens, 
+                        MAX(AllergensHierarchy) as AllergensHierarchy,
+                        MAX(Categories) as Categories, 
+                        MAX(CategoriesHierarchy) as CategoriesHierarchy, 
+                        MAX(NutritionData) as NutritionData,
+                        MAX(ImageUrl) as ImageUrl, 
+                        MAX(ImageSmallUrl) as ImageSmallUrl, 
+                        MAX(Lang) as Lang, 
+                        MAX(Countries) as Countries,
+                        MAX(NutriScore) as NutriScore, 
+                        MAX(NovaGroup) as NovaGroup, 
+                        MAX(EcoScore) as EcoScore, 
+                        MAX(RawJson) as RawJson
+                    FROM #TempProductStaging
+                    GROUP BY ExternalId
+                ) AS source
+                ON (target.ExternalId = source.ExternalId)
+                WHEN MATCHED THEN
+                    UPDATE SET 
+                        Barcode = COALESCE(source.Barcode, target.Barcode),
+                        ProductName = COALESCE(source.ProductName, target.ProductName),
+                        GenericName = COALESCE(source.GenericName, target.GenericName),
+                        Brands = COALESCE(source.Brands, target.Brands),
+                        IngredientsText = COALESCE(source.IngredientsText, target.IngredientsText),
+                        IngredientsTextEn = COALESCE(source.IngredientsTextEn, target.IngredientsTextEn),
+                        NutritionData = COALESCE(source.NutritionData, target.NutritionData),
+                        ImageUrl = COALESCE(source.ImageUrl, target.ImageUrl),
+                        UpdatedAt = GETUTCDATE()
+                WHEN NOT MATCHED THEN
+                    INSERT (
+                        ExternalId, Barcode, ProductName, GenericName, Brands,
+                        IngredientsText, IngredientsTextEn, Allergens, AllergensHierarchy,
+                        Categories, CategoriesHierarchy, NutritionData,
+                        ImageUrl, ImageSmallUrl, Lang, Countries,
+                        NutriScore, NovaGroup, EcoScore, RawJson,
+                        CreatedAt, UpdatedAt, ProcessingStatus, ProcessingAttempts, IsDeleted
+                    )
+                    VALUES (
+                        source.ExternalId, source.Barcode, source.ProductName, source.GenericName, source.Brands,
+                        source.IngredientsText, source.IngredientsTextEn, source.Allergens, source.AllergensHierarchy,
+                        source.Categories, source.CategoriesHierarchy, source.NutritionData,
+                        source.ImageUrl, source.ImageSmallUrl, source.Lang, source.Countries,
+                        source.NutriScore, source.NovaGroup, source.EcoScore, source.RawJson,
+                        GETUTCDATE(), GETUTCDATE(), 'Pending', 0, 0
+                    );";
 
-                using var transaction = connection.BeginTransaction();
-                try
+            using (var cmd = new SqlCommand(mergeSql, connection, transaction))
+            {
+                cmd.CommandTimeout = 300;
+                var rows = await cmd.ExecuteNonQueryAsync();
+                await transaction.CommitAsync();
+                return rows;
+            }
+        }
+        catch
+        {
+            if (transaction.Connection != null) await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+                public async Task<int> BulkAugmentStagingProductsAsync(IEnumerable<StagedProduct> products, string sourceLabel)
                 {
-                    int augmentedCount = 0;
-
-                    const string sql = @"
-                        UPDATE ProductStaging
-                        SET 
-                            ProductName = COALESCE(ProductName, @ProductName),
-                            GenericName = COALESCE(GenericName, @GenericName),
-                            Brands = COALESCE(Brands, @Brands),
-                            IngredientsText = COALESCE(IngredientsText, @IngredientsText),
-                            IngredientsTextEn = COALESCE(IngredientsTextEn, @IngredientsTextEn),
-                            Allergens = COALESCE(Allergens, @Allergens),
-                            AllergensHierarchy = COALESCE(AllergensHierarchy, @AllergensHierarchy),
-                            Categories = COALESCE(Categories, @Categories),
-                            CategoriesHierarchy = COALESCE(CategoriesHierarchy, @CategoriesHierarchy),
-                            NutritionData = COALESCE(NutritionData, @NutritionData),
-                            ImageUrl = COALESCE(ImageUrl, @ImageUrl),
-                            ImageSmallUrl = COALESCE(ImageSmallUrl, @ImageSmallUrl),
-                            Countries = COALESCE(Countries, @Countries),
-                            NutriScore = COALESCE(NutriScore, @NutriScore),
-                            NovaGroup = COALESCE(NovaGroup, @NovaGroup),
-                            EcoScore = COALESCE(EcoScore, @EcoScore),
-                            UpdatedAt = GETUTCDATE()
-                        WHERE Barcode = @Barcode AND IsDeleted = 0";
-
-                    using var command = new SqlCommand(sql, connection, transaction);
-                    command.Parameters.Add("@Barcode", SqlDbType.NVarChar, 50);
-                    command.Parameters.Add("@ProductName", SqlDbType.NVarChar, 500);
-                    command.Parameters.Add("@GenericName", SqlDbType.NVarChar, 500);
-                    command.Parameters.Add("@Brands", SqlDbType.NVarChar, 500);
-                    command.Parameters.Add("@IngredientsText", SqlDbType.NVarChar, -1);
-                    command.Parameters.Add("@IngredientsTextEn", SqlDbType.NVarChar, -1);
-                    command.Parameters.Add("@Allergens", SqlDbType.NVarChar, -1);
-                    command.Parameters.Add("@AllergensHierarchy", SqlDbType.NVarChar, -1);
-                    command.Parameters.Add("@Categories", SqlDbType.NVarChar, -1);
-                    command.Parameters.Add("@CategoriesHierarchy", SqlDbType.NVarChar, -1);
-                    command.Parameters.Add("@NutritionData", SqlDbType.NVarChar, -1);
-                    command.Parameters.Add("@ImageUrl", SqlDbType.NVarChar, 500);
-                    command.Parameters.Add("@ImageSmallUrl", SqlDbType.NVarChar, 500);
-                    command.Parameters.Add("@Countries", SqlDbType.NVarChar, 200);
-                    command.Parameters.Add("@NutriScore", SqlDbType.NVarChar, 10);
-                    command.Parameters.Add("@NovaGroup", SqlDbType.Int);
-                    command.Parameters.Add("@EcoScore", SqlDbType.NVarChar, 10);
-
-                    foreach (var product in productList)
+                    var productList = products.ToList();
+                    if (!productList.Any()) return 0;
+            
+                    using var connection = new SqlConnection(ConnectionString);
+                    await connection.OpenAsync();
+            
+                    using var transaction = connection.BeginTransaction();
+                    try
                     {
-                        if (string.IsNullOrWhiteSpace(product.Barcode))
-                            continue;
-
-                        command.Parameters["@Barcode"].Value = product.Barcode;
-                        command.Parameters["@ProductName"].Value = (object?)product.ProductName ?? DBNull.Value;
-                        command.Parameters["@GenericName"].Value = (object?)product.GenericName ?? DBNull.Value;
-                        command.Parameters["@Brands"].Value = (object?)product.Brands ?? DBNull.Value;
-                        command.Parameters["@IngredientsText"].Value = (object?)product.IngredientsText ?? DBNull.Value;
-                        command.Parameters["@IngredientsTextEn"].Value = (object?)product.IngredientsTextEn ?? DBNull.Value;
-                        command.Parameters["@Allergens"].Value = (object?)product.Allergens ?? DBNull.Value;
-                        command.Parameters["@AllergensHierarchy"].Value = (object?)product.AllergensHierarchy ?? DBNull.Value;
-                        command.Parameters["@Categories"].Value = (object?)product.Categories ?? DBNull.Value;
-                        command.Parameters["@CategoriesHierarchy"].Value = (object?)product.CategoriesHierarchy ?? DBNull.Value;
-                        command.Parameters["@NutritionData"].Value = (object?)product.NutritionData ?? DBNull.Value;
-                        command.Parameters["@ImageUrl"].Value = (object?)product.ImageUrl ?? DBNull.Value;
-                        command.Parameters["@ImageSmallUrl"].Value = (object?)product.ImageSmallUrl ?? DBNull.Value;
-                        command.Parameters["@Countries"].Value = (object?)product.Countries ?? DBNull.Value;
-                        command.Parameters["@NutriScore"].Value = (object?)product.NutriScore ?? DBNull.Value;
-                        command.Parameters["@NovaGroup"].Value = (object?)product.NovaGroup ?? DBNull.Value;
-                        command.Parameters["@EcoScore"].Value = (object?)product.EcoScore ?? DBNull.Value;
-
-                        var rowsAffected = await command.ExecuteNonQueryAsync();
-                        if (rowsAffected > 0)
-                            augmentedCount++;
+                                                // 1. Create temp table for augmenting
+                                                const string createTempSql = @"
+                                                    CREATE TABLE #TempAugment (
+                                                        Barcode NVARCHAR(50), ProductName NVARCHAR(500), GenericName NVARCHAR(MAX), 
+                                                        Brands NVARCHAR(500), IngredientsText NVARCHAR(MAX), IngredientsTextEn NVARCHAR(MAX), 
+                                                        Allergens NVARCHAR(MAX), AllergensHierarchy NVARCHAR(MAX), Categories NVARCHAR(MAX), 
+                                                        CategoriesHierarchy NVARCHAR(MAX), NutritionData NVARCHAR(MAX), ImageUrl NVARCHAR(500), 
+                                                        ImageSmallUrl NVARCHAR(500), Countries NVARCHAR(200), NutriScore NVARCHAR(20), 
+                                                        NovaGroup INT, EcoScore NVARCHAR(20)
+                                                    )";                        using (var cmd = new SqlCommand(createTempSql, connection, transaction))
+                        {
+                            await cmd.ExecuteNonQueryAsync();
+                        }
+            
+                        // 2. Bulk Copy into temp table
+                        var dt = new DataTable();
+                        dt.Columns.Add("Barcode", typeof(string));
+                        dt.Columns.Add("ProductName", typeof(string));
+                        dt.Columns.Add("GenericName", typeof(string));
+                        dt.Columns.Add("Brands", typeof(string));
+                        dt.Columns.Add("IngredientsText", typeof(string));
+                        dt.Columns.Add("IngredientsTextEn", typeof(string));
+                        dt.Columns.Add("Allergens", typeof(string));
+                        dt.Columns.Add("AllergensHierarchy", typeof(string));
+                        dt.Columns.Add("Categories", typeof(string));
+                        dt.Columns.Add("CategoriesHierarchy", typeof(string));
+                        dt.Columns.Add("NutritionData", typeof(string));
+                        dt.Columns.Add("ImageUrl", typeof(string));
+                        dt.Columns.Add("ImageSmallUrl", typeof(string));
+                        dt.Columns.Add("Countries", typeof(string));
+                        dt.Columns.Add("NutriScore", typeof(string));
+                        dt.Columns.Add("NovaGroup", typeof(int));
+                        dt.Columns.Add("EcoScore", typeof(string));
+            
+                        foreach (var p in productList)
+                        {
+                            if (string.IsNullOrWhiteSpace(p.Barcode)) continue;
+                            dt.Rows.Add(
+                                p.Barcode,
+                                (object?)p.ProductName ?? DBNull.Value,
+                                (object?)p.GenericName ?? DBNull.Value,
+                                (object?)p.Brands ?? DBNull.Value,
+                                (object?)p.IngredientsText ?? DBNull.Value,
+                                (object?)p.IngredientsTextEn ?? DBNull.Value,
+                                (object?)p.Allergens ?? DBNull.Value,
+                                (object?)p.AllergensHierarchy ?? DBNull.Value,
+                                (object?)p.Categories ?? DBNull.Value,
+                                (object?)p.CategoriesHierarchy ?? DBNull.Value,
+                                (object?)p.NutritionData ?? DBNull.Value,
+                                (object?)p.ImageUrl ?? DBNull.Value,
+                                (object?)p.ImageSmallUrl ?? DBNull.Value,
+                                (object?)p.Countries ?? DBNull.Value,
+                                (object?)p.NutriScore ?? DBNull.Value,
+                                (object?)p.NovaGroup ?? DBNull.Value,
+                                (object?)p.EcoScore ?? DBNull.Value
+                            );
+                        }
+            
+                        using (var bulkCopy = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction))
+                        {
+                            bulkCopy.DestinationTableName = "#TempAugment";
+                            bulkCopy.BatchSize = 5000;
+                            foreach (DataColumn col in dt.Columns) bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+                            await bulkCopy.WriteToServerAsync(dt);
+                        }
+            
+                                    // 3. MERGE (UPDATE existing)
+                                    const string mergeSql = @"
+                                        UPDATE target
+                                        SET 
+                                            ProductName = COALESCE(target.ProductName, source.ProductName),
+                                            GenericName = COALESCE(target.GenericName, source.GenericName),
+                                            Brands = COALESCE(target.Brands, source.Brands),
+                                            IngredientsText = COALESCE(target.IngredientsText, source.IngredientsText),
+                                            IngredientsTextEn = COALESCE(target.IngredientsTextEn, source.IngredientsTextEn),
+                                            Allergens = COALESCE(target.Allergens, source.Allergens),
+                                            AllergensHierarchy = COALESCE(target.AllergensHierarchy, source.AllergensHierarchy),
+                                            Categories = COALESCE(target.Categories, source.Categories),
+                                            CategoriesHierarchy = COALESCE(target.CategoriesHierarchy, source.CategoriesHierarchy),
+                                            NutritionData = COALESCE(target.NutritionData, source.NutritionData),
+                                            ImageUrl = COALESCE(target.ImageUrl, source.ImageUrl),
+                                            ImageSmallUrl = COALESCE(target.ImageSmallUrl, source.ImageSmallUrl),
+                                            Countries = COALESCE(target.Countries, source.Countries),
+                                            NutriScore = COALESCE(target.NutriScore, source.NutriScore),
+                                            NovaGroup = COALESCE(target.NovaGroup, source.NovaGroup),
+                                            EcoScore = COALESCE(target.EcoScore, source.EcoScore),
+                                            UpdatedAt = GETUTCDATE()
+                                        FROM ProductStaging target
+                                        INNER JOIN (
+                                            SELECT 
+                                                Barcode, 
+                                                MAX(ProductName) as ProductName, MAX(GenericName) as GenericName, 
+                                                MAX(Brands) as Brands, MAX(IngredientsText) as IngredientsText, 
+                                                MAX(IngredientsTextEn) as IngredientsTextEn, MAX(Allergens) as Allergens, 
+                                                MAX(AllergensHierarchy) as AllergensHierarchy, MAX(Categories) as Categories, 
+                                                MAX(CategoriesHierarchy) as CategoriesHierarchy, MAX(NutritionData) as NutritionData, 
+                                                MAX(ImageUrl) as ImageUrl, MAX(ImageSmallUrl) as ImageSmallUrl, 
+                                                MAX(Countries) as Countries, MAX(NutriScore) as NutriScore, 
+                                                MAX(NovaGroup) as NovaGroup, MAX(EcoScore) as EcoScore
+                                            FROM #TempAugment
+                                            GROUP BY Barcode
+                                        ) source ON target.Barcode = source.Barcode
+                                        WHERE target.IsDeleted = 0";            
+                        using (var cmd = new SqlCommand(mergeSql, connection, transaction))
+                        {
+                            cmd.CommandTimeout = 300;
+                            var rows = await cmd.ExecuteNonQueryAsync();
+                            await transaction.CommitAsync();
+                            return rows;
+                        }
                     }
-
-                    await transaction.CommitAsync();
-                    return augmentedCount;
+                    catch
+                    {
+                        if (transaction.Connection != null) await transaction.RollbackAsync();
+                        throw;
+                    }
                 }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            }
-
             public async Task<List<StagedProduct>> GetPendingProductsAsync(int limit = 100)
     {
         const string sql = @"
@@ -288,6 +387,52 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
             new SqlParameter("@Status", status),
             new SqlParameter("@Error", (object?)error ?? DBNull.Value)
         );
+    }
+
+    public async Task BulkUpdateStatusAsync(IEnumerable<Guid> ids, string status, string? error = null)
+    {
+        var idList = ids.Distinct().ToList(); // Remove duplicates to prevent PK violation
+        if (!idList.Any()) return;
+
+        // OPTIMIZATION: Use batched updates with IN clause instead of temp tables
+        // SQL Server has a ~2100 parameter limit, so batch if needed
+        const int batchSize = 2000;
+
+        for (int i = 0; i < idList.Count; i += batchSize)
+        {
+            var batch = idList.Skip(i).Take(batchSize).ToList();
+            await ExecuteBatchUpdateAsync(batch, status, error);
+        }
+    }
+
+    private async Task ExecuteBatchUpdateAsync(List<Guid> ids, string status, string? error)
+    {
+        // Build parameterized IN clause (more efficient than temp table for small-medium batches)
+        var parameters = new List<SqlParameter>
+        {
+            new SqlParameter("@Status", status),
+            new SqlParameter("@Error", (object?)error ?? DBNull.Value)
+        };
+
+        // Create parameter placeholders for IN clause
+        var paramNames = new List<string>();
+        for (int i = 0; i < ids.Count; i++)
+        {
+            var paramName = $"@Id{i}";
+            paramNames.Add(paramName);
+            parameters.Add(new SqlParameter(paramName, ids[i]));
+        }
+
+        var sql = $@"
+            UPDATE ProductStaging
+            SET ProcessingStatus = @Status,
+                ProcessedAt = CASE WHEN @Status = 'Completed' THEN GETUTCDATE() ELSE ProcessedAt END,
+                ProcessingError = @Error,
+                ProcessingAttempts = ProcessingAttempts + 1,
+                UpdatedAt = GETUTCDATE()
+            WHERE Id IN ({string.Join(", ", paramNames)})";
+
+        await ExecuteNonQueryAsync(sql, parameters.ToArray());
     }
 
     public async Task<int> GetPendingCountAsync()

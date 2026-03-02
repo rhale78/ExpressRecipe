@@ -156,7 +156,7 @@ public static class MauiProgram
         services.AddTransient<ScannerViewModel>();
 
         services.AddTransient<ProductDetailPage>();
-        services.AddTransient<ProductDetailViewModel>();
+        services.AddTransient<ProductDetailPageViewModel>();
 
         services.AddTransient<InventoryPage>();
         services.AddTransient<InventoryViewModel>();
@@ -168,24 +168,24 @@ public static class MauiProgram
         services.AddTransient<RecipesViewModel>();
 
         services.AddTransient<RecipeDetailPage>();
-        services.AddTransient<RecipeDetailViewModel>();
+        services.AddTransient<RecipeDetailPageViewModel>();
 
         services.AddTransient<MealPlanPage>();
-        services.AddTransient<MealPlanViewModel>();
+        services.AddTransient<MealPlanPageViewModel>();
 
         services.AddTransient<RecallAlertsPage>();
-        services.AddTransient<RecallAlertsViewModel>();
+        services.AddTransient<RecallAlertsPageViewModel>();
 
         services.AddTransient<ProfilePage>();
-        services.AddTransient<ProfileViewModel>();
+        services.AddTransient<ProfilePageViewModel>();
 
         services.AddTransient<SettingsPage>();
-        services.AddTransient<SettingsViewModel>();
+        services.AddTransient<SettingsPageViewModel>();
 
         services.AddTransient<LoginPage>();
-        services.AddTransient<LoginViewModel>();
+        services.AddTransient<LoginPageViewModel>();
 
         services.AddTransient<SearchPage>();
-        services.AddTransient<SearchViewModel>();
+        services.AddTransient<SearchPageViewModel>();
     }
 }

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.Client.Shared.Services;
 
@@ -173,17 +174,6 @@ public abstract class ApiClientBase
             _ => new ApiException($"API error: {response.StatusCode}")
         };
     }
-}
-
-/// <summary>
-/// Interface for providing authentication tokens
-/// </summary>
-public interface ITokenProvider
-{
-    Task<string?> GetAccessTokenAsync();
-    Task<string?> GetRefreshTokenAsync();
-    Task SetTokensAsync(string accessToken, string refreshToken);
-    Task ClearTokensAsync();
 }
 
 /// <summary>

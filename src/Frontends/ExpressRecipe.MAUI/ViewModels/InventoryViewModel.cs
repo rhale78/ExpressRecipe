@@ -266,7 +266,7 @@ public partial class InventoryViewModel : ObservableObject
                 {
                     Id = item.ServerId,
                     Name = item.ProductName,
-                    Quantity = (int)item.Quantity,
+                    Quantity = item.Quantity,
                     ExpirationDate = item.ExpirationDate,
                     Category = "Cached",
                     Location = "Unknown"

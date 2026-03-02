@@ -26,6 +26,15 @@ public interface IIngredientListParser
 
 public class AdvancedIngredientParser : IIngredientListParser
 {
+    // COMPILED REGEX PATTERNS for performance (called 50K+ times per import)
+    private static readonly Regex ContainsPatternRegex = new(
+        @"(contains?\s+(?:\d+%?\s+)?(?:or\s+)?(?:less|more)\s+(?:than\s+)?(?:\d+%?\s+)?of[:\s]*)(.*)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ParenthesesPatternRegex = new(
+        @"^([^(]+)\s*\(([^)]+)\)(.*)$",
+        RegexOptions.Compiled);
+
     private static readonly HashSet<string> StopPhrases = new(StringComparer.OrdinalIgnoreCase)
     {
         "contains 2% or less of",
@@ -420,9 +429,8 @@ public class AdvancedIngredientParser : IIngredientListParser
 
     private void ExtractIngredients(string text, HashSet<string> ingredients)
     {
-        // Handle "contains X% or less of: ..." pattern
-        var containsMatch = Regex.Match(text, @"(contains?\s+(?:\d+%?\s+)?(?:or\s+)?(?:less|more)\s+(?:than\s+)?(?:\d+%?\s+)?of[:\s]*)(.*)",
-            RegexOptions.IgnoreCase);
+        // Handle "contains X% or less of: ..." pattern (using compiled regex)
+        var containsMatch = ContainsPatternRegex.Match(text);
 
         if (containsMatch.Success)
         {
@@ -452,8 +460,8 @@ public class AdvancedIngredientParser : IIngredientListParser
             if (string.IsNullOrWhiteSpace(trimmed))
                 continue;
 
-            // Check if this part has parentheses with subingredients
-            var parenMatch = Regex.Match(trimmed, @"^([^(]+)\s*\(([^)]+)\)(.*)$");
+            // Check if this part has parentheses with subingredients (using compiled regex)
+            var parenMatch = ParenthesesPatternRegex.Match(trimmed);
 
             if (parenMatch.Success)
             {

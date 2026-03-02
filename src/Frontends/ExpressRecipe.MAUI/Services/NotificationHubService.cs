@@ -26,7 +26,7 @@ public class NotificationHubService : INotificationHubService
         try
         {
             var hubUrl = _configuration["ApiBaseUrl"] + "/hubs/notifications";
-            var token = await _tokenProvider.GetTokenAsync();
+            var token = await _tokenProvider.GetAccessTokenAsync();
 
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(hubUrl, options =>
@@ -87,7 +87,7 @@ public class SyncHubService : ISyncHubService
         try
         {
             var hubUrl = _configuration["ApiBaseUrl"] + "/hubs/sync";
-            var token = await _tokenProvider.GetTokenAsync();
+            var token = await _tokenProvider.GetAccessTokenAsync();
 
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(hubUrl, options =>

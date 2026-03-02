@@ -2,6 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ExpressRecipe.MAUI.ViewModels;
 
-public partial class ProductDetailViewModel : ObservableObject
+public partial class ProductDetailPageViewModel : ObservableObject
 {
 }

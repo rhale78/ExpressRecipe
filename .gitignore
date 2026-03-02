@@ -159,6 +159,10 @@ node_modules/
 *.db-wal
 local.db
 
+# Recipe Images
+**/Images/
+**/Images/*
+
 # User secrets & Environment files (SECURITY CRITICAL)
 **/appsettings.Development.json
 **/appsettings.Local.json

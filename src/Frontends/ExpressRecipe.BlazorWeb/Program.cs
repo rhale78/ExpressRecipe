@@ -1,4 +1,5 @@
 using ExpressRecipe.BlazorWeb.Components;
+using ExpressRecipe.Shared.Services;
 using ExpressRecipe.Client.Shared.Services;
 using ExpressRecipe.Client.Shared.Services.LocalStorage;
 using ExpressRecipe.Client.Shared.Services.SignalR;
@@ -31,30 +32,15 @@ builder.Services.AddScoped<ITokenProvider, LocalStorageTokenProvider>();
 // Register toast notification service
 builder.Services.AddSingleton<IToastService, ToastService>();
 
-// Helper method to get service URL with fallback for development
-string GetServiceUrl(string serviceName)
-{
-    // Try to get from configuration (appsettings.Development.json)
-    var configUrl = builder.Configuration[$"Services:{serviceName}"];
-    if (!string.IsNullOrEmpty(configUrl))
-    {
-        return configUrl;
-    }
-    
-    // Fallback to Aspire service discovery format (works when running via AppHost)
-    return $"http://{serviceName.ToLowerInvariant()}";
-}
-
 // Register HTTP clients for each microservice with Aspire service discovery
 builder.Services.AddHttpClient<IAuthService, AuthService>(client =>
 {
-    // Aspire service discovery will automatically resolve "http://authservice" when running in AppHost
-    client.BaseAddress = new Uri(GetServiceUrl("AuthService"));
+    client.BaseAddress = new Uri("http://authservice");
 });
 
 builder.Services.AddHttpClient<IProductApiClient, ProductApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("ProductService"));
+    client.BaseAddress = new Uri("http://productservice");
 });
 
 // Register AdminApiClient with IHttpClientFactory for multi-service communication
@@ -63,82 +49,88 @@ builder.Services.AddScoped<IAdminApiClient, AdminApiClient>();
 // Register named HttpClients for AdminApiClient to use
 builder.Services.AddHttpClient("ProductService", client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("ProductService"));
+    client.BaseAddress = new Uri("http://productservice");
 });
 
 builder.Services.AddHttpClient("RecallService", client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("RecallService"));
+    client.BaseAddress = new Uri("http://recallservice");
 });
 
 builder.Services.AddHttpClient<IRecipeApiClient, RecipeApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("RecipeService"));
+    client.BaseAddress = new Uri("http://recipeservice");
 });
 
 builder.Services.AddHttpClient<IUserProfileApiClient, UserProfileApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("UserService"));
+    client.BaseAddress = new Uri("http://userservice");
+});
+
+// IngredientService client - REST API only (gRPC disabled until HTTP/2 issues resolved)
+builder.Services.AddHttpClient<IngredientServiceClient>(client =>
+{
+    client.BaseAddress = new Uri("http://ingredientservice");
 });
 
 builder.Services.AddHttpClient<IInventoryApiClient, InventoryApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("InventoryService"));
+    client.BaseAddress = new Uri("http://inventoryservice");
 });
 
 builder.Services.AddHttpClient<IShoppingListApiClient, ShoppingListApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("ShoppingService"));
+    client.BaseAddress = new Uri("http://shoppingservice");
 });
 
 builder.Services.AddHttpClient<IMealPlanApiClient, MealPlanApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("MealPlanningService"));
+    client.BaseAddress = new Uri("http://mealplanningservice");
 });
 
 builder.Services.AddHttpClient<INotificationApiClient, NotificationApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("NotificationService"));
+    client.BaseAddress = new Uri("http://notificationservice");
 });
 
 builder.Services.AddHttpClient<IAnalyticsApiClient, AnalyticsApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("AnalyticsService"));
+    client.BaseAddress = new Uri("http://analyticsservice");
 });
 
 builder.Services.AddHttpClient<ICommunityApiClient, CommunityApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("CommunityService"));
+    client.BaseAddress = new Uri("http://communityservice");
 });
 
 builder.Services.AddHttpClient<IPriceApiClient, PriceApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("PriceService"));
+    client.BaseAddress = new Uri("http://priceservice");
 });
 
 builder.Services.AddHttpClient<IAIApiClient, AIApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("AIService"));
+    client.BaseAddress = new Uri("http://aiservice");
 });
 
 builder.Services.AddHttpClient<IScannerApiClient, ScannerApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("ScannerService"));
+    client.BaseAddress = new Uri("http://scannerservice");
 });
 
 builder.Services.AddHttpClient<IRecallApiClient, RecallApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("RecallService"));
+    client.BaseAddress = new Uri("http://recallservice");
 });
 
 builder.Services.AddHttpClient<ISearchApiClient, SearchApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("SearchService"));
+    client.BaseAddress = new Uri("http://searchservice");
 });
 
 builder.Services.AddHttpClient<ISyncApiClient, SyncApiClient>(client =>
 {
-    client.BaseAddress = new Uri(GetServiceUrl("SyncService"));
+    client.BaseAddress = new Uri("http://syncservice");
 });
 
 // Register local storage services
@@ -157,7 +149,7 @@ builder.Services.AddScoped<NotificationHubClient>(sp =>
     var toast = sp.GetRequiredService<IToastService>();
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
-    var hubUrl = $"{GetServiceUrl("NotificationService")}/hubs/notifications";
+    var hubUrl = "http://notificationservice/hubs/notifications";
     var token = tokenProvider.GetAccessTokenAsync().Result; // Get auth token
 
     return new NotificationHubClient(hubUrl, token, logger, toast);
@@ -168,7 +160,7 @@ builder.Services.AddScoped<SyncHubClient>(sp =>
     var logger = sp.GetRequiredService<ILogger<SyncHubClient>>();
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
-    var hubUrl = $"{GetServiceUrl("SyncService")}/hubs/sync";
+    var hubUrl = "http://syncservice/hubs/sync";
     var token = tokenProvider.GetAccessTokenAsync().Result;
 
     return new SyncHubClient(hubUrl, token, logger);

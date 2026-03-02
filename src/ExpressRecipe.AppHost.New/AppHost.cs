@@ -25,6 +25,7 @@ var communityDb = sqlServer.AddDatabase("communitydb", "ExpressRecipe.Community"
 var syncDb = sqlServer.AddDatabase("syncdb", "ExpressRecipe.Sync");
 var searchDb = sqlServer.AddDatabase("searchdb", "ExpressRecipe.Search");
 var analyticsDb = sqlServer.AddDatabase("analyticsdb", "ExpressRecipe.Analytics");
+var ingredientDb = sqlServer.AddDatabase("ingredientdb", "ExpressRecipe.Ingredients");
 
 // Redis - Caching layer
 var redis = builder.AddRedis("redis")
@@ -46,6 +47,11 @@ var authService = builder.AddProject<Projects.ExpressRecipe_AuthService>("authse
     .WithReference(authDb)
     .WithReference(redis);
 
+// Ingredient Service - Centralized ingredient and allergen data
+var ingredientService = builder.AddProject<Projects.ExpressRecipe_IngredientService>("ingredientservice")
+    .WithReference(ingredientDb)
+    .WithReference(redis);
+
 // User Service - User profiles and dietary restrictions
 var userService = builder.AddProject<Projects.ExpressRecipe_UserService>("userservice")
     .WithReference(userDb)
@@ -55,12 +61,16 @@ var userService = builder.AddProject<Projects.ExpressRecipe_UserService>("userse
 // Product Service - Product catalog and ingredients
 var productService = builder.AddProject<Projects.ExpressRecipe_ProductService>("productservice")
     .WithReference(productDb)
+    .WithReference(ingredientDb)
+    .WithReference(ingredientService)
     .WithReference(redis)
     .WithReference(messaging);
 
 // Recipe Service - Recipe management
 var recipeService = builder.AddProject<Projects.ExpressRecipe_RecipeService>("recipeservice")
     .WithReference(recipeDb)
+    .WithReference(ingredientDb)
+    .WithReference(ingredientService)
     .WithReference(redis)
     .WithReference(messaging);
 
@@ -143,6 +153,7 @@ var aiService = builder.AddProject<Projects.ExpressRecipe_AIService>("aiservice"
 var webApp = builder.AddProject<Projects.ExpressRecipe_BlazorWeb>("webapp")
     .WithReference(authService)
     .WithReference(userService)
+    .WithReference(ingredientService)
     .WithReference(productService)
     .WithReference(recipeService)
     .WithReference(inventoryService)

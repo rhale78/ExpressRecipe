@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.1.0">
+<Project Sdk="Aspire.AppHost.Sdk/13.1.2">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -10,9 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.1.0" />
-    <PackageReference Include="Aspire.Hosting.Redis" Version="13.1.0" />
-    <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="13.1.0" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" />
+    <PackageReference Include="Aspire.Hosting.Redis" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +20,7 @@
       <IsAspireProjectResource>false</IsAspireProjectResource>
     </ProjectReference>
     <ProjectReference Include="..\Services\ExpressRecipe.AuthService\ExpressRecipe.AuthService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.IngredientService\ExpressRecipe.IngredientService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.RecipeService\ExpressRecipe.RecipeService.csproj" />

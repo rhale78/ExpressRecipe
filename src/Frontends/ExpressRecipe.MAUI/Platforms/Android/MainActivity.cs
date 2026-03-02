@@ -13,9 +13,6 @@ public class MainActivity : MauiAppCompatActivity
     {
         base.OnCreate(savedInstanceState);
 
-        // Request camera permission at startup
-        Platform.CurrentActivity = this;
-
         if (Build.VERSION.SdkInt >= BuildVersionCodes.M)
         {
             RequestPermissions(new[]

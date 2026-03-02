@@ -9,6 +9,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Load layered configuration (global + env + local)
 builder.AddLayeredConfiguration(args);
 
+// Add Aspire service defaults
+builder.AddServiceDefaults();
+
 // Add services to the container
 // Add controllers
 builder.Services.AddControllers();
@@ -77,7 +80,7 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 // Configure middleware pipeline
-// app.MapDefaultEndpoints(); // If ServiceDefaults referenced
+app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
 {

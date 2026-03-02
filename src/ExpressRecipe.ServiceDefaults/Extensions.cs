@@ -25,12 +25,20 @@ public static class Extensions
         builder.ConfigureOpenTelemetry();
         builder.AddDefaultHealthChecks();
         builder.Services.AddServiceDiscovery();
+
+#pragma warning disable EXTEXP0018 // Type is for evaluation purposes only and is subject to change or removal in future updates.
+        builder.Services.AddHybridCache();
+#pragma warning restore EXTEXP0018
+
+        builder.Services.AddSingleton<ExpressRecipe.Shared.Services.HybridCacheService>();
+
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
             // Turn on resilience by default
             http.AddStandardResilienceHandler();
 
             // Turn on service discovery by default
+            // Let Aspire handle HTTP version negotiation automatically
             http.AddServiceDiscovery();
         });
 

@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option csharp_namespace = "ExpressRecipe.IngredientService.Grpc";
+
+package ingredients;
+
+service IngredientApi {
+  rpc GetIngredientId (IngredientLookupRequest) returns (IngredientLookupResponse);
+  rpc LookupIngredientIds (BulkLookupRequest) returns (BulkLookupResponse);
+}
+
+message IngredientLookupRequest {
+  string name = 1;
+}
+
+message IngredientLookupResponse {
+  string id = 1; // Guid as string
+  bool found = 2;
+}
+
+message BulkLookupRequest {
+  repeated string names = 1;
+}
+
+message BulkLookupResponse {
+  map<string, string> results = 1; // name -> guid string
+}

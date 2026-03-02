@@ -381,7 +381,7 @@ public class BatchImportResult
 /// <summary>
 /// DTO for creating a product
 /// </summary>
-public class CreateProductRequest
+public class USDACreateProductRequest
 {
     public string Name { get; set; } = string.Empty;
     public string? Brand { get; set; }

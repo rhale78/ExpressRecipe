@@ -1,4 +1,4 @@
-using ExpressRecipe.Client.Shared.Services;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.MAUI.Services;
 
@@ -7,13 +7,14 @@ namespace ExpressRecipe.MAUI.Services;
 /// </summary>
 public class SecureStorageTokenProvider : ITokenProvider
 {
-    private const string TokenKey = "auth_token";
+    private const string AccessTokenKey = "access_token";
+    private const string RefreshTokenKey = "refresh_token";
 
-    public async Task<string?> GetTokenAsync()
+    public async Task<string?> GetAccessTokenAsync()
     {
         try
         {
-            return await SecureStorage.Default.GetAsync(TokenKey);
+            return await SecureStorage.Default.GetAsync(AccessTokenKey);
         }
         catch (Exception)
         {
@@ -21,11 +22,24 @@ public class SecureStorageTokenProvider : ITokenProvider
         }
     }
 
-    public async Task SetTokenAsync(string token)
+    public async Task<string?> GetRefreshTokenAsync()
     {
         try
         {
-            await SecureStorage.Default.SetAsync(TokenKey, token);
+            return await SecureStorage.Default.GetAsync(RefreshTokenKey);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    public async Task SetTokensAsync(string accessToken, string refreshToken)
+    {
+        try
+        {
+            await SecureStorage.Default.SetAsync(AccessTokenKey, accessToken);
+            await SecureStorage.Default.SetAsync(RefreshTokenKey, refreshToken);
         }
         catch (Exception)
         {
@@ -33,11 +47,12 @@ public class SecureStorageTokenProvider : ITokenProvider
         }
     }
 
-    public async Task ClearTokenAsync()
+    public async Task ClearTokensAsync()
     {
         try
         {
-            SecureStorage.Default.Remove(TokenKey);
+            SecureStorage.Default.Remove(AccessTokenKey);
+            SecureStorage.Default.Remove(RefreshTokenKey);
             await Task.CompletedTask;
         }
         catch (Exception)

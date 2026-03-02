@@ -1392,12 +1392,24 @@ public class OpenFoodFactsImportService
                         }
 
                         // Map CSV record to StagedProduct
+                        var genericName = csv.GetField<string>("generic_name");
+                        
+                        // Sanity check for GenericName: Some records put full ingredient lists here.
+                        // Generic names should be short (e.g., "Whole Milk", "Wheat Bread").
+                        if (!string.IsNullOrWhiteSpace(genericName) && 
+                            (genericName.Length > 200 || genericName.Count(c => c == ',') > 5))
+                        {
+                            _logger.LogDebug("Filtering out suspicious GenericName (likely ingredients): {Name}", 
+                                genericName.Substring(0, Math.Min(50, genericName.Length)));
+                            genericName = null;
+                        }
+
                         var stagedProduct = new StagedProduct
                         {
                             ExternalId = barcode,
                             Barcode = barcode,
                             ProductName = productName,
-                            GenericName = csv.GetField<string>("generic_name"),
+                            GenericName = genericName,
                             Brands = brand,
                             Lang = lang,
                             Countries = csv.GetField<string>("countries"),

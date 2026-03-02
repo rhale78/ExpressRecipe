@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Xml.Linq;
+using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace ExpressRecipe.RecallService.Services;
 
@@ -56,24 +58,28 @@ public class FDARecallImportService
                 return result;
             }
 
-            using var connection = new Microsoft.Data.SqlClient.SqlConnection(_connectionString);
-            await connection.OpenAsync();
+            var rawRecalls = results.EnumerateArray().ToList();
+            var batch = new List<RecallData>();
 
-            foreach (var recall in results.EnumerateArray())
+            foreach (var recall in rawRecalls)
             {
                 try
                 {
-                    await ProcessRecallAsync(recall, connection);
-                    result.SuccessCount++;
+                    var dataObj = MapRecallData(recall);
+                    if (dataObj != null) batch.Add(dataObj);
+                    result.TotalProcessed++;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to process recall");
+                    _logger.LogWarning(ex, "Failed to parse recall data");
                     result.FailureCount++;
-                    result.Errors.Add(ex.Message);
                 }
+            }
 
-                result.TotalProcessed++;
+            if (batch.Any())
+            {
+                var upsertResult = await BulkUpsertRecallsAsync(batch);
+                result.SuccessCount = upsertResult;
             }
 
             _logger.LogInformation("Import completed: {Success} successful, {Failed} failed",
@@ -607,6 +613,173 @@ public class FDARecallImportService
         await insertCmd.ExecuteNonQueryAsync();
 
         _logger.LogInformation("Imported USDA recall: {Title}", title.Substring(0, Math.Min(100, title.Length)));
+    }
+
+    private RecallData? MapRecallData(JsonElement recall)
+    {
+        var recallNumber = recall.TryGetProperty("recall_number", out var rn) ? rn.GetString() : null;
+        if (string.IsNullOrEmpty(recallNumber)) return null;
+
+        var classification = recall.TryGetProperty("classification", out var c) ? c.GetString() : "Unknown";
+        var status = recall.TryGetProperty("status", out var s) ? s.GetString() : "Active";
+        var productDescription = recall.TryGetProperty("product_description", out var pd) ? pd.GetString() : "";
+        var reason = recall.TryGetProperty("reason_for_recall", out var r) ? r.GetString() : "";
+        var recallInitDate = recall.TryGetProperty("recall_initiation_date", out var rid) ? rid.GetString() : null;
+        var reportDate = recall.TryGetProperty("report_date", out var rpd) ? rpd.GetString() : null;
+        var codeInfo = recall.TryGetProperty("code_info", out var ci) ? ci.GetString() : null;
+        var distributionPattern = recall.TryGetProperty("distribution_pattern", out var dp) ? dp.GetString() : null;
+
+        var severity = classification switch
+        {
+            "Class I" => "Critical",
+            "Class II" => "High",
+            "Class III" => "Medium",
+            _ => "Low"
+        };
+
+        DateTime? recallDate = null;
+        DateTime? publishedDate = null;
+        if (!string.IsNullOrEmpty(recallInitDate) && DateTime.TryParse(recallInitDate, out var rd)) recallDate = rd;
+        if (!string.IsNullOrEmpty(reportDate) && DateTime.TryParse(reportDate, out var pd2)) publishedDate = pd2;
+        publishedDate ??= recallDate ?? DateTime.UtcNow;
+        recallDate ??= publishedDate.Value;
+
+        var data = new RecallData
+        {
+            ExternalId = recallNumber,
+            Source = "FDA",
+            Title = productDescription.Length > 500 ? productDescription.Substring(0, 500) : productDescription,
+            Description = productDescription,
+            Reason = reason,
+            Severity = severity,
+            RecallDate = recallDate.Value,
+            PublishedDate = publishedDate.Value,
+            Status = status
+        };
+
+        if (!string.IsNullOrEmpty(productDescription))
+        {
+            var productNames = productDescription.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .Where(p => p.Length > 3)
+                .Take(10);
+
+            foreach (var p in productNames)
+            {
+                var parts = p.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                var brand = parts.Length > 0 && parts[0].All(char.IsUpper) && parts[0].Length > 2 ? parts[0] : null;
+                data.Products.Add(new RecallProductData { ProductName = p, Brand = brand, LotNumber = codeInfo, DistributionArea = distributionPattern });
+            }
+        }
+
+        return data;
+    }
+
+    private async Task<int> BulkUpsertRecallsAsync(List<RecallData> batch)
+    {
+        using var connection = new Microsoft.Data.SqlClient.SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            // 1. Create temp table for Recalls
+            const string createRecallTemp = @"
+                CREATE TABLE #TempRecall (
+                    ExternalId NVARCHAR(100), Source NVARCHAR(100), Title NVARCHAR(500), 
+                    Description NVARCHAR(MAX), Reason NVARCHAR(MAX), Severity NVARCHAR(50),
+                    RecallDate DATETIME2, PublishedDate DATETIME2, Status NVARCHAR(50)
+                )";
+            using (var cmd = new SqlCommand(createRecallTemp, connection, transaction)) await cmd.ExecuteNonQueryAsync();
+
+            var dt = new DataTable();
+            dt.Columns.Add("ExternalId", typeof(string)); dt.Columns.Add("Source", typeof(string));
+            dt.Columns.Add("Title", typeof(string)); dt.Columns.Add("Description", typeof(string));
+            dt.Columns.Add("Reason", typeof(string)); dt.Columns.Add("Severity", typeof(string));
+            dt.Columns.Add("RecallDate", typeof(DateTime)); dt.Columns.Add("PublishedDate", typeof(DateTime));
+            dt.Columns.Add("Status", typeof(string));
+
+            foreach (var r in batch) dt.Rows.Add(r.ExternalId, r.Source, r.Title, r.Description, r.Reason, r.Severity, r.RecallDate, r.PublishedDate, r.Status);
+
+            using (var bulkCopy = new Microsoft.Data.SqlClient.SqlBulkCopy(connection, Microsoft.Data.SqlClient.SqlBulkCopyOptions.Default, transaction))
+            {
+                bulkCopy.DestinationTableName = "#TempRecall";
+                await bulkCopy.WriteToServerAsync(dt);
+            }
+
+            // 2. MERGE into Recall table and capture IDs
+            const string mergeSql = @"
+                MERGE Recall AS target
+                USING #TempRecall AS source
+                ON (target.ExternalId = source.ExternalId AND target.Source = source.Source)
+                WHEN NOT MATCHED THEN
+                    INSERT (Id, ExternalId, Source, Title, Description, Reason, Severity, RecallDate, PublishedDate, Status, ImportedAt)
+                    VALUES (NEWID(), source.ExternalId, source.Source, source.Title, source.Description, source.Reason, source.Severity, source.RecallDate, source.PublishedDate, source.Status, GETUTCDATE())
+                OUTPUT INSERTED.Id, source.ExternalId INTO @OutputTable (Id, ExternalId);";
+
+            using (var cmd = new SqlCommand($"DECLARE @OutputTable TABLE (Id UNIQUEIDENTIFIER, ExternalId NVARCHAR(100)); {mergeSql} SELECT Id, ExternalId FROM @OutputTable", connection, transaction))
+            {
+                var idMap = new Dictionary<string, Guid>();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) idMap[reader.GetString(1)] = reader.GetGuid(0);
+                reader.Close();
+
+                // 3. Bulk insert products
+                var productDt = new DataTable();
+                productDt.Columns.Add("RecallId", typeof(Guid));
+                productDt.Columns.Add("ProductName", typeof(string));
+                productDt.Columns.Add("Brand", typeof(string));
+                productDt.Columns.Add("LotNumber", typeof(string));
+                productDt.Columns.Add("DistributionArea", typeof(string));
+
+                foreach (var r in batch)
+                {
+                    if (idMap.TryGetValue(r.ExternalId, out var recallId))
+                    {
+                        foreach (var p in r.Products)
+                            productDt.Rows.Add(recallId, p.ProductName.Length > 300 ? p.ProductName.Substring(0, 300) : p.ProductName, p.Brand, p.LotNumber, p.DistributionArea);
+                    }
+                }
+
+                if (productDt.Rows.Count > 0)
+                {
+                    using var bulkCopy = new Microsoft.Data.SqlClient.SqlBulkCopy(connection, Microsoft.Data.SqlClient.SqlBulkCopyOptions.Default, transaction);
+                    bulkCopy.DestinationTableName = "RecallProduct";
+                    await bulkCopy.WriteToServerAsync(productDt);
+                }
+            }
+
+            await transaction.CommitAsync();
+            return batch.Count;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed bulk upsert of recalls");
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    private class RecallData
+    {
+        public string ExternalId { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? Reason { get; set; }
+        public string Severity { get; set; } = "Low";
+        public DateTime RecallDate { get; set; }
+        public DateTime PublishedDate { get; set; }
+        public string Status { get; set; } = "Active";
+        public List<RecallProductData> Products { get; set; } = new();
+    }
+
+    private class RecallProductData
+    {
+        public string ProductName { get; set; } = string.Empty;
+        public string? Brand { get; set; }
+        public string? LotNumber { get; set; }
+        public string? DistributionArea { get; set; }
     }
 }
 
