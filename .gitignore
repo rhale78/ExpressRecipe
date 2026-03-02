@@ -192,3 +192,4 @@ user-secrets.json
 *.pem
 *.cert
 *.crt
+.nuget/
