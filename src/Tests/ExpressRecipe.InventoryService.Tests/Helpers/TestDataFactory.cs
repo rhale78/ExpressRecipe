@@ -73,21 +73,22 @@ public static class TestDataFactory
 
     public static InventoryItemDto CreateInventoryItemDto(
         Guid? id = null,
-        Guid? storageLocationId = null,
-        string productName = "Test Product",
-        decimal quantity = 1.0m)
+        string name = "Test Product",
+        decimal quantity = 1.0m,
+        DateTime? expirationDate = null)
     {
         return new InventoryItemDto
         {
             Id = id ?? Guid.NewGuid(),
             UserId = Guid.NewGuid(),
-            StorageLocationId = storageLocationId ?? Guid.NewGuid(),
-            StorageLocationName = "Pantry",
-            ProductName = productName,
+            ProductName = name,
+            CustomName = name,
             Quantity = quantity,
             Unit = "units",
-            PurchaseDate = DateTime.UtcNow.AddDays(-7),
-            ExpirationDate = DateTime.UtcNow.AddDays(30),
+            ExpirationDate = expirationDate,
+            ProductId = Guid.NewGuid(),
+            StorageLocationId = Guid.NewGuid(),
+            StorageLocationName = "Pantry",
             CreatedAt = DateTime.UtcNow
         };
     }
