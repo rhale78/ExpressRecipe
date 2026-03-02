@@ -1,6 +1,7 @@
 using System.Data;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ExpressRecipe.Messaging.Saga.Abstractions;
 using Microsoft.Data.SqlClient;
 
@@ -20,17 +21,25 @@ public sealed class SqlSagaRepository<TState> : ISagaBatchRepository<TState>
     private readonly string _tableName;
     private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    // Allow only safe SQL identifier characters: letters, digits, underscores
+    private static readonly Regex SafeIdentifierRegex = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+
     /// <summary>
     /// Initializes the repository.
     /// </summary>
     /// <param name="connectionString">ADO.NET connection string for SQL Server.</param>
     /// <param name="tableName">
     /// The table name to use. Defaults to the name of <typeparamref name="TState"/>.
+    /// Must contain only letters, digits, and underscores to prevent SQL injection.
     /// </param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="tableName"/> contains unsafe characters.</exception>
     public SqlSagaRepository(string connectionString, string? tableName = null)
     {
         _connectionString = connectionString;
-        _tableName = tableName ?? typeof(TState).Name;
+        var name = tableName ?? typeof(TState).Name;
+        if (!SafeIdentifierRegex.IsMatch(name))
+            throw new ArgumentException($"Table name '{name}' is not a valid SQL identifier. Use only letters, digits, and underscores.", nameof(tableName));
+        _tableName = name;
     }
 
     /// <inheritdoc />

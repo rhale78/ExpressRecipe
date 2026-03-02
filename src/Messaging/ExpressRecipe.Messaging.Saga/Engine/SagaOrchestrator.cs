@@ -129,7 +129,8 @@ public sealed class SagaOrchestrator<TState> : ISagaOrchestrator<TState>, IAsync
                     .MakeGenericMethod(cmdType);
 
                 var sendOptions = new SendOptions { CorrelationId = state.CorrelationId };
-                var destination = cmdType.Name.ToLowerInvariant();
+                // Use the explicitly configured destination if set; fall back to command type name
+                var destination = step.CommandDestination ?? cmdType.Name.ToLowerInvariant();
 
                 var sendTask = (Task)sendHelper.Invoke(null, [_bus, cmd, destination, sendOptions, cancellationToken])!;
                 await sendTask.ConfigureAwait(false);

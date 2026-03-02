@@ -9,8 +9,13 @@ namespace ExpressRecipe.Messaging.Saga.Builder;
 /// <typeparam name="TState">The saga state type.</typeparam>
 public sealed class SagaStepDefinition<TState> where TState : class, ISagaState
 {
+    /// <summary>The unique name of this step within the workflow.</summary>
     public string Name { get; }
+
+    /// <summary>The unique bit assigned to this step (1 &lt;&lt; stepIndex).</summary>
     public long Bit { get; }
+
+    /// <summary>Names of steps that must complete before this step can start.</summary>
     public List<string> DependencyNames { get; } = new();
 
     /// <summary>Bitmask of all dependency steps (computed at Build() time).</summary>
@@ -18,6 +23,12 @@ public sealed class SagaStepDefinition<TState> where TState : class, ISagaState
 
     /// <summary>Factory: takes state, returns (commandObject, commandType).</summary>
     public Func<TState, (object Command, Type CommandType)>? CommandFactory { get; set; }
+
+    /// <summary>
+    /// Explicit routing destination for the command. Defaults to the command type name in lowercase.
+    /// Set via <c>.SendsTo("my-queue")</c> to decouple from type naming.
+    /// </summary>
+    public string? CommandDestination { get; set; }
 
     /// <summary>The CLR type of the result message that completes this step.</summary>
     public Type? ResultType { get; set; }

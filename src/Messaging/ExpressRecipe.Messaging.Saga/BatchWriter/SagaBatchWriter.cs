@@ -148,7 +148,10 @@ public sealed class SagaBatchWriter<TState> : IAsyncDisposable
         foreach (var item in buffer)
         {
             if (item.MaskToAdd != 0)
-                maskUpdates[item.CorrelationId] = (maskUpdates.TryGetValue(item.CorrelationId, out var existing) ? existing : 0L) | item.MaskToAdd;
+            {
+                maskUpdates.TryGetValue(item.CorrelationId, out var existing);
+                maskUpdates[item.CorrelationId] = existing | item.MaskToAdd;
+            }
 
             if (item.NewStatus.HasValue)
                 statusUpdates[item.CorrelationId] = (item.NewStatus.Value, item.CompletedAt);

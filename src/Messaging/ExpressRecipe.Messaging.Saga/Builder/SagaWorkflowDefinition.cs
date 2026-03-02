@@ -10,8 +10,13 @@ namespace ExpressRecipe.Messaging.Saga.Builder;
 /// <typeparam name="TState">The saga state type.</typeparam>
 public sealed class SagaWorkflowDefinition<TState> where TState : class, ISagaState
 {
+    /// <summary>The name of this workflow.</summary>
     public string WorkflowName { get; }
+
+    /// <summary>All step definitions in declaration order.</summary>
     public IReadOnlyList<SagaStepDefinition<TState>> Steps { get; }
+
+    /// <summary>Bitmask representing all steps; set when all steps are complete.</summary>
     public long CompletionMask { get; }
 
     internal Func<TState, IMessageBus, CancellationToken, Task>? OnCompleted { get; }

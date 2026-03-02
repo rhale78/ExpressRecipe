@@ -88,3 +88,28 @@ public sealed class InMemorySagaRepositoryTests
         Assert.Null(stateB.CompletedAt);
     }
 }
+
+public sealed class SqlSagaRepositoryConstructorTests
+{
+    [Theory]
+    [InlineData("MyTable")]
+    [InlineData("saga_state")]
+    [InlineData("DocProcessingState")]
+    [InlineData("_internal")]
+    public void Constructor_ValidTableName_DoesNotThrow(string tableName)
+    {
+        var ex = Record.Exception(() => new SqlSagaRepository<DocumentProcessingState>("server=.;", tableName));
+        Assert.Null(ex);
+    }
+
+    [Theory]
+    [InlineData("my table")]
+    [InlineData("table; DROP TABLE Users--")]
+    [InlineData("table'name")]
+    [InlineData("1leading_digit")]
+    [InlineData("")]
+    public void Constructor_InvalidTableName_ThrowsArgumentException(string tableName)
+    {
+        Assert.Throws<ArgumentException>(() => new SqlSagaRepository<DocumentProcessingState>("server=.;", tableName));
+    }
+}
