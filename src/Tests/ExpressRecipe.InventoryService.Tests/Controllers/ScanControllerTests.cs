@@ -201,10 +201,6 @@ public class ScanControllerTests
             .Setup(r => r.ScanAddItemAsync(sessionId, request.Barcode, request.Quantity, request.StorageLocationId))
             .ReturnsAsync(itemId);
 
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
-
         // Act
         var result = await _controller.ScanAdd(sessionId, request);
 
@@ -234,16 +230,30 @@ public class ScanControllerTests
             .Setup(r => r.ScanAddItemAsync(sessionId, request.Barcode, 5.0m, request.StorageLocationId))
             .ReturnsAsync(itemId);
 
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
-
         // Act
         var result = await _controller.ScanAdd(sessionId, request);
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
         _mockRepository.Verify(r => r.ScanAddItemAsync(sessionId, request.Barcode, 5.0m, request.StorageLocationId), Times.Once);
+    }
+
+    [Fact]
+    public async Task ScanAdd_WhenRepositoryThrowsInvalidOperation_ReturnsBadRequest()
+    {
+        // Arrange
+        var sessionId = Guid.NewGuid();
+        var request = new ScanAddRequest { Barcode = "BAD", Quantity = 1.0m, StorageLocationId = Guid.NewGuid() };
+
+        _mockRepository
+            .Setup(r => r.ScanAddItemAsync(sessionId, request.Barcode, request.Quantity, request.StorageLocationId))
+            .ThrowsAsync(new InvalidOperationException("Session not found"));
+
+        // Act
+        var result = await _controller.ScanAdd(sessionId, request);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     #endregion
@@ -265,10 +275,6 @@ public class ScanControllerTests
         _mockRepository
             .Setup(r => r.ScanUseItemAsync(sessionId, request.Barcode, request.Quantity))
             .ReturnsAsync(itemId);
-
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
 
         // Act
         var result = await _controller.ScanUse(sessionId, request);
@@ -298,16 +304,30 @@ public class ScanControllerTests
             .Setup(r => r.ScanUseItemAsync(sessionId, request.Barcode, 0.5m))
             .ReturnsAsync(itemId);
 
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
-
         // Act
         var result = await _controller.ScanUse(sessionId, request);
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
         _mockRepository.Verify(r => r.ScanUseItemAsync(sessionId, request.Barcode, 0.5m), Times.Once);
+    }
+
+    [Fact]
+    public async Task ScanUse_WhenRepositoryThrowsInvalidOperation_ReturnsBadRequest()
+    {
+        // Arrange
+        var sessionId = Guid.NewGuid();
+        var request = new ScanUseRequest { Barcode = "NOTFOUND", Quantity = 1.0m };
+
+        _mockRepository
+            .Setup(r => r.ScanUseItemAsync(sessionId, request.Barcode, request.Quantity))
+            .ThrowsAsync(new InvalidOperationException("Item not in inventory"));
+
+        // Act
+        var result = await _controller.ScanUse(sessionId, request);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     #endregion
@@ -330,10 +350,6 @@ public class ScanControllerTests
         _mockRepository
             .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, request.DisposalReason, request.AllergenDetected))
             .ReturnsAsync(itemId);
-
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
 
         // Act
         var result = await _controller.ScanDispose(sessionId, request);
@@ -364,10 +380,6 @@ public class ScanControllerTests
             .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, "CausedAllergy", "Peanuts"))
             .ReturnsAsync(itemId);
 
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
-
         // Act
         var result = await _controller.ScanDispose(sessionId, request);
 
@@ -393,10 +405,6 @@ public class ScanControllerTests
             .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, "Bad", null))
             .ReturnsAsync(itemId);
 
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
-
         // Act
         var result = await _controller.ScanDispose(sessionId, request);
 
@@ -405,12 +413,30 @@ public class ScanControllerTests
         _mockRepository.Verify(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, "Bad", null), Times.Once);
     }
 
+    [Fact]
+    public async Task ScanDispose_WhenRepositoryThrowsInvalidOperation_ReturnsBadRequest()
+    {
+        // Arrange
+        var sessionId = Guid.NewGuid();
+        var request = new ScanDisposeRequest { Barcode = "GONE", DisposalReason = "Missing", AllergenDetected = null };
+
+        _mockRepository
+            .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, request.DisposalReason, request.AllergenDetected))
+            .ThrowsAsync(new InvalidOperationException("Item not found"));
+
+        // Act
+        var result = await _controller.ScanDispose(sessionId, request);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
     #endregion
 
     #region EndSession Tests
 
     [Fact]
-    public async Task EndSession_WithValidSessionId_ReturnsNoContent()
+    public async Task EndSession_WithValidSessionId_ReturnsOk()
     {
         // Arrange
         var sessionId = Guid.NewGuid();
@@ -459,10 +485,6 @@ public class ScanControllerTests
         _mockRepository
             .Setup(r => r.ScanAddItemAsync(sessionId, It.IsAny<string>(), It.IsAny<decimal>(), storageLocationId))
             .ReturnsAsync(Guid.NewGuid());
-
-        _mockRepository
-            .Setup(r => r.UpdateScanSessionItemCountAsync(sessionId, It.IsAny<int>()))
-            .Returns(Task.CompletedTask);
 
         // Act - Scan 3 items
         await _controller.ScanAdd(sessionId, new ScanAddRequest { Barcode = "111", Quantity = 1, StorageLocationId = storageLocationId });

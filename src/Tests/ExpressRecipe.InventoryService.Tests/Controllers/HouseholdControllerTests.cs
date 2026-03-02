@@ -356,13 +356,19 @@ public class HouseholdControllerTests
             .Setup(r => r.GetStorageLocationsByAddressAsync(addressId))
             .ReturnsAsync(locations);
 
-        // Act - Note: This method may be on InventoryController instead
-        // Keeping the test as placeholder for repository behavior
-        // var result = await _controller.GetStorageLocationsByAddress(addressId);
+        var inventoryController = new InventoryController(
+            new Mock<ILogger<InventoryController>>().Object,
+            _mockRepository.Object);
 
-        // Assert - Verify repository method directly
-        var result = await _mockRepository.Object.GetStorageLocationsByAddressAsync(addressId);
-        result.Should().BeEquivalentTo(locations);
+        // Act
+        var result = await inventoryController.GetLocationsByAddress(addressId);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+        var okResult = result as OkObjectResult;
+        okResult!.Value.Should().BeEquivalentTo(locations);
+
+        _mockRepository.Verify(r => r.GetStorageLocationsByAddressAsync(addressId), Times.Once);
     }
 
     [Fact]
@@ -380,12 +386,19 @@ public class HouseholdControllerTests
             .Setup(r => r.GetStorageLocationsByHouseholdAsync(householdId))
             .ReturnsAsync(locations);
 
-        // Act - Note: This method may be on InventoryController instead
-        // Verify repository method directly
-        var result = await _mockRepository.Object.GetStorageLocationsByHouseholdAsync(householdId);
+        var inventoryController = new InventoryController(
+            new Mock<ILogger<InventoryController>>().Object,
+            _mockRepository.Object);
+
+        // Act
+        var result = await inventoryController.GetLocationsByHousehold(householdId);
 
         // Assert
-        result.Should().BeEquivalentTo(locations);
+        result.Should().BeOfType<OkObjectResult>();
+        var okResult = result as OkObjectResult;
+        okResult!.Value.Should().BeEquivalentTo(locations);
+
+        _mockRepository.Verify(r => r.GetStorageLocationsByHouseholdAsync(householdId), Times.Once);
     }
 
     #endregion
