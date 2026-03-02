@@ -1,15 +1,21 @@
+using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
+using System.Data;
+using System.Data.Common;
+using System.Text;
 
 namespace ExpressRecipe.PriceService.Data;
 
-public class PriceRepository : IPriceRepository
+public class PriceRepository : SqlHelper, IPriceRepository
 {
-    private readonly string _connectionString;
-    private readonly ILogger<PriceRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private readonly ILogger<PriceRepository>? _logger;
 
-    public PriceRepository(string connectionString, ILogger<PriceRepository> logger)
+    public PriceRepository(string connectionString, HybridCacheService? cache = null, ILogger<PriceRepository>? logger = null)
+        : base(connectionString)
     {
-        _connectionString = connectionString;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -20,82 +26,33 @@ public class PriceRepository : IPriceRepository
             OUTPUT INSERTED.Id
             VALUES (@Name, @Address, @City, @State, @ZipCode, @Chain, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var result = await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@Name", name),
+            CreateParameter("@Address", address),
+            CreateParameter("@City", city),
+            CreateParameter("@State", state),
+            CreateParameter("@ZipCode", zipCode),
+            CreateParameter("@Chain", chain));
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Name", name);
-        command.Parameters.AddWithValue("@Address", address ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@City", city ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@State", state ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@ZipCode", zipCode ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Chain", chain ?? (object)DBNull.Value);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return result;
     }
 
     public async Task<List<StoreDto>> GetStoresAsync(string? city = null, string? state = null, string? chain = null)
     {
-        var sql = "SELECT Id, Name, Address, City, State, ZipCode, Chain, CreatedAt FROM Store WHERE 1=1";
-        if (city != null) sql += " AND City = @City";
-        if (state != null) sql += " AND State = @State";
-        if (chain != null) sql += " AND Chain = @Chain";
+        var sql = new StringBuilder("SELECT Id, Name, Address, City, State, ZipCode, Chain, CreatedAt FROM Store WHERE 1=1");
+        var parameters = new List<DbParameter>();
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        if (city != null) { sql.Append(" AND City = @City"); parameters.Add(CreateParameter("@City", city)); }
+        if (state != null) { sql.Append(" AND State = @State"); parameters.Add(CreateParameter("@State", state)); }
+        if (chain != null) { sql.Append(" AND Chain = @Chain"); parameters.Add(CreateParameter("@Chain", chain)); }
 
-        await using var command = new SqlCommand(sql, connection);
-        if (city != null) command.Parameters.AddWithValue("@City", city);
-        if (state != null) command.Parameters.AddWithValue("@State", state);
-        if (chain != null) command.Parameters.AddWithValue("@Chain", chain);
-
-        var stores = new List<StoreDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            stores.Add(new StoreDto
-            {
-                Id = reader.GetGuid(0),
-                Name = reader.GetString(1),
-                Address = reader.IsDBNull(2) ? null : reader.GetString(2),
-                City = reader.IsDBNull(3) ? null : reader.GetString(3),
-                State = reader.IsDBNull(4) ? null : reader.GetString(4),
-                ZipCode = reader.IsDBNull(5) ? null : reader.GetString(5),
-                Chain = reader.IsDBNull(6) ? null : reader.GetString(6),
-                CreatedAt = reader.GetDateTime(7)
-            });
-        }
-
-        return stores;
+        return await ExecuteReaderAsync(sql.ToString(), MapStore, parameters.ToArray());
     }
 
     public async Task<StoreDto?> GetStoreAsync(Guid storeId)
     {
         const string sql = "SELECT Id, Name, Address, City, State, ZipCode, Chain, CreatedAt FROM Store WHERE Id = @StoreId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@StoreId", storeId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            return new StoreDto
-            {
-                Id = reader.GetGuid(0),
-                Name = reader.GetString(1),
-                Address = reader.IsDBNull(2) ? null : reader.GetString(2),
-                City = reader.IsDBNull(3) ? null : reader.GetString(3),
-                State = reader.IsDBNull(4) ? null : reader.GetString(4),
-                ZipCode = reader.IsDBNull(5) ? null : reader.GetString(5),
-                Chain = reader.IsDBNull(6) ? null : reader.GetString(6),
-                CreatedAt = reader.GetDateTime(7)
-            };
-        }
-
-        return null;
+        return await ExecuteReaderSingleAsync(sql, MapStore, CreateParameter("@StoreId", storeId));
     }
 
     public async Task<Guid> RecordPriceAsync(Guid productId, Guid storeId, decimal price, Guid? userId, DateTime? observedAt)
@@ -105,64 +62,53 @@ public class PriceRepository : IPriceRepository
             OUTPUT INSERTED.Id
             VALUES (@ProductId, @StoreId, @Price, @UserId, @ObservedAt)";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var result = await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@StoreId", storeId),
+            CreateParameter("@Price", price),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@ObservedAt", observedAt ?? DateTime.UtcNow));
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ProductId", productId);
-        command.Parameters.AddWithValue("@StoreId", storeId);
-        command.Parameters.AddWithValue("@Price", price);
-        command.Parameters.AddWithValue("@UserId", userId ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@ObservedAt", observedAt ?? DateTime.UtcNow);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return result;
     }
 
     public async Task<List<PriceObservationDto>> GetProductPricesAsync(Guid productId, Guid? storeId = null, int daysBack = 90)
     {
-        var sql = @"
+        var sql = new StringBuilder(@"
             SELECT po.Id, po.ProductId, po.StoreId, s.Name AS StoreName, po.Price, po.UserId, po.ObservedAt
             FROM PriceObservation po
             INNER JOIN Store s ON po.StoreId = s.Id
             WHERE po.ProductId = @ProductId
-              AND po.ObservedAt >= DATEADD(day, -@DaysBack, GETUTCDATE())";
+              AND po.ObservedAt >= DATEADD(day, -@DaysBack, GETUTCDATE())");
 
-        if (storeId.HasValue)
-            sql += " AND po.StoreId = @StoreId";
-
-        sql += " ORDER BY po.ObservedAt DESC";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ProductId", productId);
-        command.Parameters.AddWithValue("@DaysBack", daysBack);
-        if (storeId.HasValue)
-            command.Parameters.AddWithValue("@StoreId", storeId.Value);
-
-        var prices = new List<PriceObservationDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var parameters = new List<DbParameter>
         {
-            prices.Add(new PriceObservationDto
-            {
-                Id = reader.GetGuid(0),
-                ProductId = reader.GetGuid(1),
-                StoreId = reader.GetGuid(2),
-                StoreName = reader.GetString(3),
-                Price = reader.GetDecimal(4),
-                UserId = reader.IsDBNull(5) ? null : reader.GetGuid(5),
-                ObservedAt = reader.GetDateTime(6)
-            });
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@DaysBack", daysBack)
+        };
+
+        if (storeId.HasValue)
+        {
+            sql.Append(" AND po.StoreId = @StoreId");
+            parameters.Add(CreateParameter("@StoreId", storeId.Value));
         }
 
-        return prices;
+        sql.Append(" ORDER BY po.ObservedAt DESC");
+
+        return await ExecuteReaderAsync(sql.ToString(), r => new PriceObservationDto
+        {
+            Id = GetGuid(r, "Id"),
+            ProductId = GetGuid(r, "ProductId"),
+            StoreId = GetGuid(r, "StoreId"),
+            StoreName = GetString(r, "StoreName") ?? string.Empty,
+            Price = GetDecimal(r, "Price"),
+            UserId = GetGuidNullable(r, "UserId"),
+            ObservedAt = GetDateTime(r, "ObservedAt")
+        }, parameters.ToArray());
     }
 
     public async Task<PriceTrendDto> GetPriceTrendAsync(Guid productId, Guid? storeId = null)
     {
-        // Stub - would calculate from price history
         return new PriceTrendDto
         {
             ProductId = productId,
@@ -185,67 +131,50 @@ public class PriceRepository : IPriceRepository
 
         var savingsPercent = originalPrice > 0 ? ((originalPrice - salePrice) / originalPrice) * 100 : 0;
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var result = await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@StoreId", storeId),
+            CreateParameter("@DealType", dealType),
+            CreateParameter("@OriginalPrice", originalPrice),
+            CreateParameter("@SalePrice", salePrice),
+            CreateParameter("@SavingsPercent", savingsPercent),
+            CreateParameter("@StartDate", startDate),
+            CreateParameter("@EndDate", endDate));
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ProductId", productId);
-        command.Parameters.AddWithValue("@StoreId", storeId);
-        command.Parameters.AddWithValue("@DealType", dealType);
-        command.Parameters.AddWithValue("@OriginalPrice", originalPrice);
-        command.Parameters.AddWithValue("@SalePrice", salePrice);
-        command.Parameters.AddWithValue("@SavingsPercent", savingsPercent);
-        command.Parameters.AddWithValue("@StartDate", startDate);
-        command.Parameters.AddWithValue("@EndDate", endDate);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return result;
     }
 
     public async Task<List<DealDto>> GetActiveDealsAsync(Guid? storeId = null, Guid? productId = null)
     {
-        var sql = @"
+        var sql = new StringBuilder(@"
             SELECT d.Id, d.ProductId, '' AS ProductName, d.StoreId, s.Name AS StoreName,
                    d.DealType, d.OriginalPrice, d.SalePrice, d.SavingsPercent, d.StartDate, d.EndDate
             FROM Deal d
             INNER JOIN Store s ON d.StoreId = s.Id
-            WHERE GETUTCDATE() BETWEEN d.StartDate AND d.EndDate";
+            WHERE GETUTCDATE() BETWEEN d.StartDate AND d.EndDate");
 
-        if (storeId.HasValue) sql += " AND d.StoreId = @StoreId";
-        if (productId.HasValue) sql += " AND d.ProductId = @ProductId";
+        var parameters = new List<DbParameter>();
+        if (storeId.HasValue) { sql.Append(" AND d.StoreId = @StoreId"); parameters.Add(CreateParameter("@StoreId", storeId.Value)); }
+        if (productId.HasValue) { sql.Append(" AND d.ProductId = @ProductId"); parameters.Add(CreateParameter("@ProductId", productId.Value)); }
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        if (storeId.HasValue) command.Parameters.AddWithValue("@StoreId", storeId.Value);
-        if (productId.HasValue) command.Parameters.AddWithValue("@ProductId", productId.Value);
-
-        var deals = new List<DealDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync(sql.ToString(), r => new DealDto
         {
-            deals.Add(new DealDto
-            {
-                Id = reader.GetGuid(0),
-                ProductId = reader.GetGuid(1),
-                ProductName = reader.GetString(2),
-                StoreId = reader.GetGuid(3),
-                StoreName = reader.GetString(4),
-                DealType = reader.GetString(5),
-                OriginalPrice = reader.GetDecimal(6),
-                SalePrice = reader.GetDecimal(7),
-                SavingsPercent = reader.GetDecimal(8),
-                StartDate = reader.GetDateTime(9),
-                EndDate = reader.GetDateTime(10)
-            });
-        }
-
-        return deals;
+            Id = GetGuid(r, "Id"),
+            ProductId = GetGuid(r, "ProductId"),
+            ProductName = GetString(r, "ProductName") ?? string.Empty,
+            StoreId = GetGuid(r, "StoreId"),
+            StoreName = GetString(r, "StoreName") ?? string.Empty,
+            DealType = GetString(r, "DealType") ?? string.Empty,
+            OriginalPrice = GetDecimal(r, "OriginalPrice"),
+            SalePrice = GetDecimal(r, "SalePrice"),
+            SavingsPercent = GetDecimal(r, "SavingsPercent"),
+            StartDate = GetDateTime(r, "StartDate"),
+            EndDate = GetDateTime(r, "EndDate")
+        }, parameters.ToArray());
     }
 
     public async Task<List<DealDto>> GetDealsNearMeAsync(string city, string state, int limit = 50)
     {
-        // Stub - same as GetActiveDealsAsync but filtered by location
         return await GetActiveDealsAsync();
     }
 
@@ -256,28 +185,395 @@ public class PriceRepository : IPriceRepository
             OUTPUT INSERTED.Id
             VALUES (@ProductId, @StoreId, @PredictedPrice, @Confidence, @PredictedFor, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var result = await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@StoreId", storeId),
+            CreateParameter("@PredictedPrice", predictedPrice),
+            CreateParameter("@Confidence", confidence),
+            CreateParameter("@PredictedFor", predictedFor));
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ProductId", productId);
-        command.Parameters.AddWithValue("@StoreId", storeId);
-        command.Parameters.AddWithValue("@PredictedPrice", predictedPrice);
-        command.Parameters.AddWithValue("@Confidence", confidence);
-        command.Parameters.AddWithValue("@PredictedFor", predictedFor);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return result;
     }
 
-    public async Task<PricePredictionDto?> GetPricePredictionAsync(Guid productId, Guid storeId)
+    public Task<PricePredictionDto?> GetPricePredictionAsync(Guid productId, Guid storeId)
     {
-        // Stub implementation
-        return null;
+        return Task.FromResult<PricePredictionDto?>(null);
     }
 
-    public async Task<List<StorePriceComparisonDto>> ComparePricesAsync(List<Guid> productIds, List<Guid> storeIds)
+    public Task<List<StorePriceComparisonDto>> ComparePricesAsync(List<Guid> productIds, List<Guid> storeIds)
     {
-        // Stub implementation - would compare prices across stores
-        return new List<StorePriceComparisonDto>();
+        return Task.FromResult(new List<StorePriceComparisonDto>());
+    }
+
+    // ── ProductPrice new methods ──────────────────────────────────────────────
+
+    public async Task<List<ProductPriceDto>> SearchPricesAsync(PriceSearchRequest request)
+    {
+        var cacheKey = $"prices:search:{request.ProductId}:{request.Upc}:{request.ProductName}:{request.StoreName}:{request.DataSource}:{request.Page}:{request.PageSize}";
+        if (_cache != null)
+        {
+            var cached = await _cache.GetAsync<List<ProductPriceDto>>(cacheKey);
+            if (cached != null) return cached;
+        }
+
+        var (sql, parameters) = BuildSearchQuery(request, countOnly: false);
+        var results = await ExecuteReaderAsync(sql.ToString(), MapProductPrice, parameters.ToArray());
+
+        if (_cache != null)
+            await _cache.SetAsync(cacheKey, results, TimeSpan.FromMinutes(5));
+
+        return results;
+    }
+
+    public async Task<int> GetSearchCountAsync(PriceSearchRequest request)
+    {
+        var (sql, parameters) = BuildSearchQuery(request, countOnly: true);
+        var result = await ExecuteScalarAsync<int>(sql.ToString(), parameters.ToArray());
+        return result;
+    }
+
+    public async Task<List<ProductPriceDto>> GetPricesByUpcAsync(string upc, int limit = 50)
+    {
+        const string sql = @"
+            SELECT TOP (@Limit) Id, ProductId, Upc, ProductName, StoreId, StoreName, StoreChain,
+                   City, State, Price, Currency, Unit, Quantity, PricePerUnit,
+                   DataSource, ExternalId, ObservedAt, ImportedAt
+            FROM ProductPrice
+            WHERE Upc = @Upc AND IsActive = 1
+            ORDER BY ObservedAt DESC";
+
+        return await ExecuteReaderAsync(sql, MapProductPrice,
+            CreateParameter("@Upc", upc),
+            CreateParameter("@Limit", limit));
+    }
+
+    public async Task<List<ProductPriceDto>> GetPricesByProductNameAsync(string productName, int limit = 50)
+    {
+        const string sql = @"
+            SELECT TOP (@Limit) Id, ProductId, Upc, ProductName, StoreId, StoreName, StoreChain,
+                   City, State, Price, Currency, Unit, Quantity, PricePerUnit,
+                   DataSource, ExternalId, ObservedAt, ImportedAt
+            FROM ProductPrice
+            WHERE ProductName LIKE @ProductName AND IsActive = 1
+            ORDER BY ObservedAt DESC";
+
+        return await ExecuteReaderAsync(sql, MapProductPrice,
+            CreateParameter("@ProductName", $"%{productName}%"),
+            CreateParameter("@Limit", limit));
+    }
+
+    public async Task<List<ProductPriceDto>> GetBestPricesAsync(Guid productId, int limit = 10)
+    {
+        var cacheKey = $"prices:best:{productId}:{limit}";
+        if (_cache != null)
+        {
+            var cached = await _cache.GetAsync<List<ProductPriceDto>>(cacheKey);
+            if (cached != null) return cached;
+        }
+
+        const string sql = @"
+            SELECT TOP (@Limit) Id, ProductId, Upc, ProductName, StoreId, StoreName, StoreChain,
+                   City, State, Price, Currency, Unit, Quantity, PricePerUnit,
+                   DataSource, ExternalId, ObservedAt, ImportedAt
+            FROM ProductPrice
+            WHERE ProductId = @ProductId AND IsActive = 1
+              AND ObservedAt >= DATEADD(day, -90, GETUTCDATE())
+            ORDER BY Price ASC";
+
+        var results = await ExecuteReaderAsync(sql, MapProductPrice,
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@Limit", limit));
+
+        if (_cache != null)
+            await _cache.SetAsync(cacheKey, results, TimeSpan.FromMinutes(15));
+
+        return results;
+    }
+
+    public async Task<List<ProductPriceDto>> GetBatchPricesAsync(IEnumerable<Guid> productIds)
+    {
+        var ids = productIds.ToList();
+        if (ids.Count == 0) return new List<ProductPriceDto>();
+
+        // Build IN clause with parameterized values
+        var paramNames = ids.Select((_, i) => $"@p{i}").ToList();
+        var sql = $@"
+            SELECT Id, ProductId, Upc, ProductName, StoreId, StoreName, StoreChain,
+                   City, State, Price, Currency, Unit, Quantity, PricePerUnit,
+                   DataSource, ExternalId, ObservedAt, ImportedAt
+            FROM ProductPrice
+            WHERE ProductId IN ({string.Join(",", paramNames)}) AND IsActive = 1
+            ORDER BY ProductId, Price ASC";
+
+        var parameters = ids.Select((id, i) => CreateParameter($"@p{i}", id)).ToArray();
+        return await ExecuteReaderAsync(sql, MapProductPrice, parameters);
+    }
+
+    public async Task<Guid> UpsertProductPriceAsync(UpsertProductPriceRequest request)
+    {
+        var pricePerUnit = request.Quantity.HasValue && request.Quantity > 0
+            ? (decimal?)(request.Price / request.Quantity.Value)
+            : null;
+
+        const string sql = @"
+            MERGE ProductPrice AS target
+            USING (SELECT @ExternalId AS ExternalId, @DataSource AS DataSource) AS source
+            ON target.ExternalId = source.ExternalId AND target.DataSource = source.DataSource
+            WHEN MATCHED THEN
+                UPDATE SET
+                    Price = @Price,
+                    ProductName = @ProductName,
+                    StoreName = @StoreName,
+                    StoreChain = @StoreChain,
+                    City = @City,
+                    State = @State,
+                    Unit = @Unit,
+                    Quantity = @Quantity,
+                    PricePerUnit = @PricePerUnit,
+                    ObservedAt = @ObservedAt,
+                    ImportedAt = GETUTCDATE(),
+                    IsActive = 1
+            WHEN NOT MATCHED THEN
+                INSERT (ProductId, Upc, ProductName, StoreId, StoreName, StoreChain,
+                        City, State, Price, Currency, Unit, Quantity, PricePerUnit,
+                        DataSource, ExternalId, ObservedAt, ImportedAt, IsActive)
+                VALUES (@ProductId, @Upc, @ProductName, @StoreId, @StoreName, @StoreChain,
+                        @City, @State, @Price, @Currency, @Unit, @Quantity, @PricePerUnit,
+                        @DataSource, @ExternalId, @ObservedAt, GETUTCDATE(), 1)
+            OUTPUT INSERTED.Id;";
+
+        var result = await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@ProductId", request.ProductId),
+            CreateParameter("@Upc", request.Upc),
+            CreateParameter("@ProductName", request.ProductName),
+            CreateParameter("@StoreId", request.StoreId),
+            CreateParameter("@StoreName", request.StoreName),
+            CreateParameter("@StoreChain", request.StoreChain),
+            CreateParameter("@City", request.City),
+            CreateParameter("@State", request.State),
+            CreateParameter("@Price", request.Price),
+            CreateParameter("@Currency", request.Currency),
+            CreateParameter("@Unit", request.Unit),
+            CreateParameter("@Quantity", request.Quantity),
+            CreateParameter("@PricePerUnit", pricePerUnit),
+            CreateParameter("@DataSource", request.DataSource),
+            CreateParameter("@ExternalId", request.ExternalId),
+            CreateParameter("@ObservedAt", request.ObservedAt));
+
+        return result;
+    }
+
+    public async Task<int> BulkUpsertProductPricesAsync(IEnumerable<UpsertProductPriceRequest> prices)
+    {
+        const int BatchSize = 500;
+        var batch = new List<UpsertProductPriceRequest>(BatchSize);
+        var totalImported = 0;
+
+        foreach (var price in prices)
+        {
+            batch.Add(price);
+            if (batch.Count >= BatchSize)
+            {
+                totalImported += await ProcessBatchAsync(batch);
+                batch.Clear();
+            }
+        }
+
+        if (batch.Count > 0)
+            totalImported += await ProcessBatchAsync(batch);
+
+        return totalImported;
+    }
+
+    private async Task<int> ProcessBatchAsync(List<UpsertProductPriceRequest> batch)
+    {
+        var imported = 0;
+        foreach (var request in batch)
+        {
+            try
+            {
+                await UpsertProductPriceAsync(request);
+                imported++;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Failed to upsert price for product {ProductId}", request.ProductId);
+            }
+        }
+        return imported;
+    }
+
+    public async Task<PriceImportLogDto> LogImportAsync(PriceImportLogDto log)
+    {
+        // Insert and retrieve the generated Id and server-assigned ImportedAt timestamp
+        const string sql = @"
+            INSERT INTO PriceImportLog (DataSource, ImportedAt, RecordsProcessed, RecordsImported,
+                RecordsUpdated, RecordsSkipped, ErrorCount, ErrorMessage, Success)
+            OUTPUT INSERTED.Id, INSERTED.ImportedAt
+            VALUES (@DataSource, GETUTCDATE(), @RecordsProcessed, @RecordsImported,
+                @RecordsUpdated, @RecordsSkipped, @ErrorCount, @ErrorMessage, @Success)";
+
+        var results = await ExecuteReaderAsync(sql, r => new { Id = GetGuid(r, "Id"), ImportedAt = GetDateTime(r, "ImportedAt") },
+            CreateParameter("@DataSource", log.DataSource),
+            CreateParameter("@RecordsProcessed", log.RecordsProcessed),
+            CreateParameter("@RecordsImported", log.RecordsImported),
+            CreateParameter("@RecordsUpdated", log.RecordsUpdated),
+            CreateParameter("@RecordsSkipped", log.RecordsSkipped),
+            CreateParameter("@ErrorCount", log.ErrorCount),
+            CreateParameter("@ErrorMessage", log.ErrorMessage),
+            CreateParameter("@Success", log.Success));
+
+        var inserted = results.FirstOrDefault();
+        if (inserted != null)
+        {
+            log.Id = inserted.Id;
+            log.ImportedAt = inserted.ImportedAt;
+        }
+
+        return log;
+    }
+
+    public async Task<PriceImportLogDto?> GetLastImportAsync(string dataSource)
+    {
+        const string sql = @"
+            SELECT TOP 1 Id, DataSource, ImportedAt, RecordsProcessed, RecordsImported,
+                   RecordsUpdated, RecordsSkipped, ErrorCount, ErrorMessage, Success
+            FROM PriceImportLog
+            WHERE DataSource = @DataSource
+            ORDER BY ImportedAt DESC";
+
+        return await ExecuteReaderSingleAsync(sql, r => new PriceImportLogDto
+        {
+            Id = GetGuid(r, "Id"),
+            DataSource = GetString(r, "DataSource") ?? string.Empty,
+            ImportedAt = GetDateTime(r, "ImportedAt"),
+            RecordsProcessed = GetInt32(r, "RecordsProcessed"),
+            RecordsImported = GetInt32(r, "RecordsImported"),
+            RecordsUpdated = GetInt32(r, "RecordsUpdated"),
+            RecordsSkipped = GetInt32(r, "RecordsSkipped"),
+            ErrorCount = GetInt32(r, "ErrorCount"),
+            ErrorMessage = GetNullableString(r, "ErrorMessage"),
+            Success = GetBoolean(r, "Success")
+        }, CreateParameter("@DataSource", dataSource));
+    }
+
+    public async Task<int> GetProductPriceCountAsync()
+    {
+        const string sql = "SELECT COUNT(1) FROM ProductPrice WHERE IsActive = 1";
+        return await ExecuteScalarAsync<int>(sql);
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static StoreDto MapStore(IDataRecord r) => new StoreDto
+    {
+        Id = GetGuid(r, "Id"),
+        Name = GetString(r, "Name") ?? string.Empty,
+        Address = GetNullableString(r, "Address"),
+        City = GetNullableString(r, "City"),
+        State = GetNullableString(r, "State"),
+        ZipCode = GetNullableString(r, "ZipCode"),
+        Chain = GetNullableString(r, "Chain"),
+        CreatedAt = GetDateTime(r, "CreatedAt")
+    };
+
+    private static ProductPriceDto MapProductPrice(IDataRecord r) => new ProductPriceDto
+    {
+        Id = GetGuid(r, "Id"),
+        ProductId = GetGuid(r, "ProductId"),
+        Upc = GetNullableString(r, "Upc"),
+        ProductName = GetString(r, "ProductName") ?? string.Empty,
+        StoreId = GetGuidNullable(r, "StoreId"),
+        StoreName = GetNullableString(r, "StoreName"),
+        StoreChain = GetNullableString(r, "StoreChain"),
+        City = GetNullableString(r, "City"),
+        State = GetNullableString(r, "State"),
+        Price = GetDecimal(r, "Price"),
+        Currency = GetString(r, "Currency") ?? "USD",
+        Unit = GetNullableString(r, "Unit"),
+        Quantity = GetDecimalNullable(r, "Quantity"),
+        PricePerUnit = GetDecimalNullable(r, "PricePerUnit"),
+        DataSource = GetString(r, "DataSource") ?? string.Empty,
+        ExternalId = GetNullableString(r, "ExternalId"),
+        ObservedAt = GetDateTime(r, "ObservedAt"),
+        ImportedAt = GetDateTime(r, "ImportedAt")
+    };
+
+    private static (string Sql, List<DbParameter> Parameters) BuildSearchQuery(PriceSearchRequest request, bool countOnly)
+    {
+        var select = countOnly
+            ? "SELECT COUNT(1) FROM ProductPrice WHERE IsActive = 1"
+            : @"SELECT Id, ProductId, Upc, ProductName, StoreId, StoreName, StoreChain,
+                       City, State, Price, Currency, Unit, Quantity, PricePerUnit,
+                       DataSource, ExternalId, ObservedAt, ImportedAt
+                FROM ProductPrice WHERE IsActive = 1";
+
+        var sql = new StringBuilder(select);
+        var parameters = new List<DbParameter>();
+
+        sql.Append(" AND ObservedAt >= DATEADD(day, -@DaysBack, GETUTCDATE())");
+        parameters.Add(CreateParameter("@DaysBack", request.DaysBack));
+
+        if (request.ProductId.HasValue)
+        {
+            sql.Append(" AND ProductId = @ProductId");
+            parameters.Add(CreateParameter("@ProductId", request.ProductId.Value));
+        }
+        if (!string.IsNullOrEmpty(request.Upc))
+        {
+            sql.Append(" AND Upc = @Upc");
+            parameters.Add(CreateParameter("@Upc", request.Upc));
+        }
+        if (!string.IsNullOrEmpty(request.ProductName))
+        {
+            sql.Append(" AND ProductName LIKE @ProductName");
+            parameters.Add(CreateParameter("@ProductName", $"%{request.ProductName}%"));
+        }
+        if (!string.IsNullOrEmpty(request.StoreName))
+        {
+            sql.Append(" AND StoreName LIKE @StoreName");
+            parameters.Add(CreateParameter("@StoreName", $"%{request.StoreName}%"));
+        }
+        if (!string.IsNullOrEmpty(request.StoreChain))
+        {
+            sql.Append(" AND StoreChain = @StoreChain");
+            parameters.Add(CreateParameter("@StoreChain", request.StoreChain));
+        }
+        if (!string.IsNullOrEmpty(request.City))
+        {
+            sql.Append(" AND City = @City");
+            parameters.Add(CreateParameter("@City", request.City));
+        }
+        if (!string.IsNullOrEmpty(request.State))
+        {
+            sql.Append(" AND State = @State");
+            parameters.Add(CreateParameter("@State", request.State));
+        }
+        if (!string.IsNullOrEmpty(request.DataSource))
+        {
+            sql.Append(" AND DataSource = @DataSource");
+            parameters.Add(CreateParameter("@DataSource", request.DataSource));
+        }
+        if (request.MinPrice.HasValue)
+        {
+            sql.Append(" AND Price >= @MinPrice");
+            parameters.Add(CreateParameter("@MinPrice", request.MinPrice.Value));
+        }
+        if (request.MaxPrice.HasValue)
+        {
+            sql.Append(" AND Price <= @MaxPrice");
+            parameters.Add(CreateParameter("@MaxPrice", request.MaxPrice.Value));
+        }
+
+        if (!countOnly)
+        {
+            sql.Append(" ORDER BY ObservedAt DESC");
+            var offset = (request.Page - 1) * request.PageSize;
+            sql.Append(" OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY");
+            parameters.Add(CreateParameter("@Offset", offset));
+            parameters.Add(CreateParameter("@PageSize", request.PageSize));
+        }
+
+        return (sql.ToString(), parameters);
     }
 }
