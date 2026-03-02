@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Diagnostics;
 using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.Parsers;
+using ExpressRecipe.RecipeService.Logging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using ExpressRecipe.Shared.DTOs.Recipe;
@@ -288,8 +289,9 @@ public class BatchRecipeProcessor : RecipeParserBase
 
             if (totalProcessedInSession - lastLogTotal >= 100)
             {
-                _logger.LogInformation("Progress: {Total} processed, {Success} success, {Fail} fail. Speed: {Rate:F2} recipes/sec", 
-                    totalProcessedInSession, result.SuccessCount, result.FailureCount, totalProcessedInSession / stopwatch.Elapsed.TotalSeconds);
+                var recordsPerSec = totalProcessedInSession / stopwatch.Elapsed.TotalSeconds;
+                var lagCount = stagingIds.Count + importBatch.Count;
+                _logger.LogProcessingProgress(totalProcessedInSession, recordsPerSec, lagCount);
                 lastLogTotal = totalProcessedInSession;
             }
         }

@@ -1,4 +1,5 @@
 using ExpressRecipe.IngredientService.Data;
+using ExpressRecipe.IngredientService.Logging;
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -51,10 +52,12 @@ public class IngredientController : ControllerBase
     {
         if (names == null || !names.Any()) return BadRequest("No names provided");
 
-        // Note: For extreme performance, we could cache each name individually, 
-        // but for a hard-hammered bulk endpoint, a direct high-speed repository call is often better 
-        // if the database is indexed correctly. Or use a combined cache key.
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = await _repository.GetIngredientIdsByNamesAsync(names);
+        sw.Stop();
+
+        _logger.LogBulkLookup(names.Count, result.Count, sw.ElapsedMilliseconds);
+
         return Ok(result);
     }
 
@@ -74,7 +77,14 @@ public class IngredientController : ControllerBase
     [Authorize]
     public async Task<ActionResult<int>> BulkCreateIngredients([FromBody] List<string> names)
     {
+        if (names == null || !names.Any()) return BadRequest("No names provided");
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var count = await _repository.BulkCreateIngredientsAsync(names);
+        sw.Stop();
+
+        _logger.LogBulkCreate(names.Count, count, sw.ElapsedMilliseconds);
+
         return Ok(count);
     }
 

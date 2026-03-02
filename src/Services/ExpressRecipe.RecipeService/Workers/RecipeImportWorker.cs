@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using System.Diagnostics;
 using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.Services;
+using ExpressRecipe.RecipeService.Logging;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
@@ -109,11 +110,11 @@ public class RecipeImportWorker : BackgroundService
         {
             await producerTask;
             await Task.WhenAll(consumerTasks);
-            
+
             stopwatch.Stop();
             var totalProcessed = metrics.TotalImported + metrics.TotalSkipped;
-            _logger.LogInformation("Import pipeline finished. Total: {Total} (Staged: {I}, Skipped: {S}) in {Time}. Avg: {RPS:F1} rec/sec", 
-                totalProcessed, metrics.TotalImported, metrics.TotalSkipped, stopwatch.Elapsed, totalProcessed / stopwatch.Elapsed.TotalSeconds);
+            var totalMinutes = stopwatch.Elapsed.TotalMinutes;
+            _logger.LogImportCompleted(totalProcessed, totalMinutes);
         }
         catch (Exception ex)
         {
@@ -173,11 +174,11 @@ public class RecipeImportWorker : BackgroundService
                     if (recipe.Tags.ValueKind != JsonValueKind.Undefined) recipe.Tags = recipe.Tags.Clone();
 
                     await writer.WriteAsync(recipe, stoppingToken);
-                    
+
                     var current = Interlocked.Increment(ref metrics.TotalRead);
                     if (current % 25000 == 0)
                     {
-                        _logger.LogInformation("Producer: Read {Count} recipes from file...", current);
+                        _logger.LogRecipesRead(current);
                     }
                 }
             }

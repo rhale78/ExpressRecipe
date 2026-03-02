@@ -23,6 +23,9 @@ builder.AddServiceDefaults();
 // Add database connection
 builder.AddSqlServerClient("recipedb");
 
+// Add Redis for caching
+builder.AddRedisClient("redis");
+
 // Add hybrid caching (memory + Redis)
 builder.AddHybridCache();
 
@@ -31,6 +34,10 @@ builder.AddIngredientClient();
 
 // Register hybrid cache service
 builder.Services.AddSingleton<HybridCacheService>();
+
+// Register CacheService for handlers that depend on it
+// CacheService requires IConnectionMultiplexer (provided by AddRedisClient)
+builder.Services.AddSingleton<ExpressRecipe.Shared.Services.CacheService>();
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -54,8 +61,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// Register token provider (placeholder for service-to-service auth)
-builder.Services.AddScoped<ITokenProvider, EmptyTokenProvider>();
+// Register token provider (service-to-service authentication)
+builder.Services.AddScoped<ITokenProvider>(sp =>
+    new ServiceTokenProvider("RecipeService", builder.Configuration));
+
+// Register authentication handler that adds tokens to all HTTP requests
+builder.Services.AddScoped<AuthenticationDelegatingHandler>();
+
+// Configure default HTTP client behavior to use authentication
+builder.Services.ConfigureHttpClientDefaults(http =>
+{
+    http.AddHttpMessageHandler<AuthenticationDelegatingHandler>();
+});
 
 // Register repositories
 var connectionString = builder.Configuration.GetConnectionString("recipedb")
@@ -68,7 +85,8 @@ builder.Services.AddScoped<IRecipeRepository>(sp =>
     var client = sp.GetRequiredService<IIngredientServiceClient>();
     return new RecipeRepository(connectionString, client);
 });
-builder.Services.AddScoped<IRecipeStagingRepository>(sp => new RecipeStagingRepository(connectionString));
+builder.Services.AddScoped<IRecipeStagingRepository>(sp => 
+    new RecipeStagingRepository(connectionString, sp.GetRequiredService<ILogger<RecipeStagingRepository>>()));
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Data.IRatingRepository>(sp => 
     new ExpressRecipe.RecipeService.Data.RatingRepository(connectionString));
 

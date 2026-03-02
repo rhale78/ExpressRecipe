@@ -1,6 +1,8 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.ProductService.Logging;
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.ProductService.Data;
 
@@ -17,8 +19,11 @@ public interface IProductStagingRepository
 
 public class ProductStagingRepository : SqlHelper, IProductStagingRepository
 {
-    public ProductStagingRepository(string connectionString) : base(connectionString)
+    private readonly ILogger<ProductStagingRepository>? _logger;
+
+    public ProductStagingRepository(string connectionString, ILogger<ProductStagingRepository>? logger = null) : base(connectionString)
     {
+        _logger = logger;
     }
 
     public async Task<Guid> InsertStagingProductAsync(StagedProduct product)
@@ -68,6 +73,8 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
     {
         var productList = products.ToList();
         if (!productList.Any()) return 0;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -212,6 +219,11 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
                 cmd.CommandTimeout = 300;
                 var rows = await cmd.ExecuteNonQueryAsync();
                 await transaction.CommitAsync();
+
+                sw.Stop();
+                var recordsPerSec = productList.Count / (sw.ElapsedMilliseconds / 1000.0);
+                _logger?.LogBulkInsert(productList.Count, rows, sw.ElapsedMilliseconds, recordsPerSec);
+
                 return rows;
             }
         }

@@ -5,6 +5,7 @@ using System.Data;
 using System.Collections.Concurrent;
 using Microsoft.Data.SqlClient;
 using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.ProductService.Logging;
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Client.Shared.Services;
 using Microsoft.Extensions.Logging;
@@ -361,8 +362,8 @@ public class BatchProductProcessor
 
             if (totalProcessedInSession - lastLogTotal >= 1000)
             {
-                _logger.LogInformation("Processing Progress: {Total} processed, {Success} success, {Fail} fail. Speed: {Rate:F2} products/sec", 
-                    totalProcessedInSession, result.SuccessCount, result.FailureCount, totalProcessedInSession / stopwatch.Elapsed.TotalSeconds);
+                var recordsPerSec = totalProcessedInSession / stopwatch.Elapsed.TotalSeconds;
+                _logger.LogBatchProcessed(totalProcessedInSession, (long)stopwatch.Elapsed.TotalMilliseconds, recordsPerSec);
                 lastLogTotal = totalProcessedInSession;
             }
 

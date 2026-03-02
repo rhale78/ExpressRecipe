@@ -1,5 +1,6 @@
 using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Services;
+using ExpressRecipe.ProductService.Logging;
 using ExpressRecipe.Client.Shared.Services;
 using System.Threading.Tasks.Dataflow;
 

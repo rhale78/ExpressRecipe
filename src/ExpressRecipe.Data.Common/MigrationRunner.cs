@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
+using ExpressRecipe.Data.Common.Logging;
 
 namespace ExpressRecipe.Data.Common;
 
@@ -37,7 +38,7 @@ public class MigrationRunner
         await using var command = new SqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
 
-        _logger?.LogInformation("Migration tracking table ensured");
+        _logger?.LogMigrationTableEnsured();
     }
 
     /// <summary>
@@ -69,7 +70,6 @@ public class MigrationRunner
         command.Parameters.AddWithValue("@MigrationId", migrationId);
 
         await command.ExecuteNonQueryAsync();
-        _logger?.LogInformation("Migration {MigrationId} recorded", migrationId);
     }
 
     /// <summary>
@@ -79,15 +79,16 @@ public class MigrationRunner
     /// <param name="sqlScript">The SQL script to execute</param>
     public async Task ApplyMigrationAsync(string migrationId, string sqlScript)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         await EnsureMigrationTableExistsAsync();
 
         if (await IsMigrationAppliedAsync(migrationId))
         {
-            _logger?.LogInformation("Migration {MigrationId} already applied, skipping", migrationId);
+            _logger?.LogMigrationSkipped(migrationId);
             return;
         }
 
-        _logger?.LogInformation("Applying migration {MigrationId}...", migrationId);
+        _logger?.LogApplyingMigration(migrationId);
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -145,7 +146,8 @@ public class MigrationRunner
 
             await RecordMigrationAsync(migrationId);
 
-            _logger?.LogInformation("Migration {MigrationId} applied successfully", migrationId);
+            sw.Stop();
+            _logger?.LogMigrationCompleted(migrationId, sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
@@ -154,7 +156,7 @@ public class MigrationRunner
                 await tx.RollbackAsync();
                 await tx.DisposeAsync();
             }
-            _logger?.LogError(ex, "Failed to apply migration {MigrationId}", migrationId);
+            _logger?.LogMigrationFailed(migrationId, ex);
             throw;
         }
     }
@@ -175,7 +177,7 @@ public class MigrationRunner
             await ApplyMigrationAsync(migration.Key, migration.Value);
         }
 
-        _logger?.LogInformation("All migrations applied successfully");
+        _logger?.LogAllMigrationsCompleted();
     }
 
     /// <summary>

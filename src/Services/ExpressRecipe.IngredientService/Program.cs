@@ -32,22 +32,43 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
-// Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "YourSuperSecretKeyForDevelopmentOnly";
+// Configure JWT Authentication
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"] ?? 
+                builder.Configuration["Jwt:Key"] ?? 
+                Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
+                "development-secret-key-change-in-production-min-32-chars-required!";
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
+            ValidateIssuer = true,
+            ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            ValidIssuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService",
+            ValidAudience = jwtSettings["Audience"] ?? "ExpressRecipe.API",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+            ClockSkew = TimeSpan.Zero
         };
     });
 
 builder.Services.AddAuthorization();
+
+// Register token provider (service-to-service authentication)
+builder.Services.AddScoped<ITokenProvider>(sp =>
+    new ServiceTokenProvider("IngredientService", builder.Configuration));
+
+// Register authentication handler that adds tokens to all HTTP requests
+builder.Services.AddScoped<AuthenticationDelegatingHandler>();
+
+// Configure default HTTP client behavior to use authentication
+builder.Services.ConfigureHttpClientDefaults(http =>
+{
+    http.AddHttpMessageHandler<AuthenticationDelegatingHandler>();
+});
 
 var app = builder.Build();
 

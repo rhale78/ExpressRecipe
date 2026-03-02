@@ -1,6 +1,8 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.RecipeService.Logging;
 using System.Data;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.RecipeService.Data;
 
@@ -23,8 +25,11 @@ public interface IRecipeStagingRepository
 
 public class RecipeStagingRepository : SqlHelper, IRecipeStagingRepository
 {
-    public RecipeStagingRepository(string connectionString) : base(connectionString)
+    private readonly ILogger<RecipeStagingRepository>? _logger;
+
+    public RecipeStagingRepository(string connectionString, ILogger<RecipeStagingRepository>? logger = null) : base(connectionString)
     {
+        _logger = logger;
     }
 
     public async Task<Guid> InsertStagingRecipeAsync(StagedRecipe recipe)
@@ -66,6 +71,8 @@ public class RecipeStagingRepository : SqlHelper, IRecipeStagingRepository
     {
         var recipeList = recipes.ToList();
         if (!recipeList.Any()) return 0;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         return await ExecuteWithDeadlockRetryAsync(async () =>
         {
@@ -131,6 +138,11 @@ public class RecipeStagingRepository : SqlHelper, IRecipeStagingRepository
 
                 await bulkCopy.WriteToServerAsync(dt);
                 await transaction.CommitAsync();
+
+                sw.Stop();
+                var recordsPerSec = recipeList.Count / (sw.ElapsedMilliseconds / 1000.0);
+                _logger?.LogBulkInsert(recipeList.Count, recipeList.Count, sw.ElapsedMilliseconds, recordsPerSec);
+
                 return recipeList.Count;
             }
             catch

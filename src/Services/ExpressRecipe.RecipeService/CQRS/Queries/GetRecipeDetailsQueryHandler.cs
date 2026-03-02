@@ -25,7 +25,8 @@ public class GetRecipeDetailsQueryHandler : IQueryHandler<GetRecipeDetailsQuery,
 
     public async Task<RecipeDetailsDto?> HandleAsync(GetRecipeDetailsQuery query, CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"recipe:details:{query.RecipeId}";
+        // Use CacheKeyHelper to ensure valid HybridCache key format
+        var cacheKey = CacheKeyHelper.RecipeDetails(query.RecipeId);
 
         // Try to get from cache
         var cached = await _cacheService.GetAsync<RecipeDetailsDto>(cacheKey);

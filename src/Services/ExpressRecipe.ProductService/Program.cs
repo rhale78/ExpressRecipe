@@ -54,8 +54,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// Register token provider (placeholder for service-to-service auth)
-builder.Services.AddScoped<ITokenProvider, EmptyTokenProvider>();
+// Register token provider (service-to-service authentication)
+builder.Services.AddScoped<ITokenProvider>(sp =>
+    new ServiceTokenProvider("ProductService", builder.Configuration));
+
+// Register authentication handler that adds tokens to all HTTP requests
+builder.Services.AddScoped<AuthenticationDelegatingHandler>();
+
+// Configure default HTTP client behavior to use authentication
+builder.Services.ConfigureHttpClientDefaults(http =>
+{
+    http.AddHttpMessageHandler<AuthenticationDelegatingHandler>();
+});
 
 // Register repositories
 var connectionString = builder.Configuration.GetConnectionString("productdb")
@@ -82,7 +92,8 @@ builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(con
 builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
 builder.Services.AddScoped<IStoreRepository>(sp => new StoreRepository(connectionString));
 builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connectionString));
-builder.Services.AddScoped<IProductStagingRepository>(sp => new ProductStagingRepository(connectionString));
+builder.Services.AddScoped<IProductStagingRepository>(sp => 
+    new ProductStagingRepository(connectionString, sp.GetRequiredService<ILogger<ProductStagingRepository>>()));
 builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(connectionString));
 
 // Register OpenFoodFacts import service
