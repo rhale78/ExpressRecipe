@@ -95,3 +95,39 @@ public class HybridCacheService
         await _cache.RemoveByTagAsync(tag, cancellationToken);
     }
 }
+
+/// <summary>
+/// Cache key constants for consistent key naming
+/// </summary>
+public static class CacheKeys
+{
+    // Products
+    public const string ProductById = "product:id:{0}";
+    public const string ProductByBarcode = "product:barcode:{0}";
+    public const string ProductSearch = "product:search:{0}";
+    public const string ProductLetterCounts = "product:lettercounts:{0}";
+
+    // Ingredients
+    public const string IngredientById = "ingredient:id:{0}";
+    public const string IngredientByName = "ingredient:name:{0}";
+    public const string IngredientsByNames = "ingredients:names:{0}";
+    public const string BaseIngredientByName = "baseingredient:name:{0}";
+
+    // Recipes
+    public const string RecipeById = "recipe:id:{0}";
+    public const string RecipeSearch = "recipe:search:{0}";
+
+    // Cookbooks
+    public const string CookbookById = "cookbook:id:{0}";
+    public const string CookbookBySlug = "cookbook:slug:{0}";
+    public const string CookbookList = "cookbook:list:{0}";
+
+    // User data
+    public const string UserProfile = "user:profile:{0}";
+
+    // Helper methods
+    public static string FormatKey(string template, params object[] args)
+    {
+        return string.Format(template, args);
+    }
+}
