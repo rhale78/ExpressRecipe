@@ -227,7 +227,7 @@ public class FamilyMembersController : ControllerBase
             
             // Verify current user is admin
             var currentMember = await _repository.GetByUserIdAsync(userId);
-            if (currentMember != null && currentMember.UserRole != "Admin")
+            if (currentMember == null || currentMember.UserRole != "Admin")
             {
                 return Forbid();
             }
@@ -304,7 +304,7 @@ public class FamilyMembersController : ControllerBase
 
             // Verify current user is admin
             var currentMember = await _repository.GetByUserIdAsync(userId);
-            if (currentMember != null && currentMember.UserRole != "Admin")
+            if (currentMember == null || currentMember.UserRole != "Admin")
             {
                 return Forbid();
             }

@@ -236,6 +236,12 @@ public class FamilyMembersControllerTests
         var createdUserId = Guid.NewGuid();
         var createdMemberId = Guid.NewGuid();
 
+        // Mock current user as Admin
+        var adminMember = new FamilyMemberDto { Id = Guid.NewGuid(), PrimaryUserId = _testUserId, UserRole = "Admin" };
+        _mockRepository
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
+            .ReturnsAsync(adminMember);
+
         // Mock AuthService HTTP response
         var authResponseContent = JsonSerializer.Serialize(new { userId = createdUserId.ToString(), email = request.Email });
         var authHttpMessageHandler = new Mock<HttpMessageHandler>();
@@ -346,6 +352,12 @@ public class FamilyMembersControllerTests
         _mockHttpClientFactory
             .Setup(f => f.CreateClient("AuthService"))
             .Returns(authHttpClient);
+
+        // Mock current user as Admin
+        var adminMember = new FamilyMemberDto { Id = Guid.NewGuid(), PrimaryUserId = _testUserId, UserRole = "Admin" };
+        _mockRepository
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
+            .ReturnsAsync(adminMember);
 
         // Act
         var result = await _controller.CreateWithAccount(request);
@@ -505,6 +517,12 @@ public class FamilyMembersControllerTests
             IsGuest = true
         };
 
+        // Mock current user as Admin
+        var adminMember = new FamilyMemberDto { Id = Guid.NewGuid(), PrimaryUserId = _testUserId, UserRole = "Admin" };
+        _mockRepository
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
+            .ReturnsAsync(adminMember);
+
         _mockRepository
             .Setup(r => r.GetByIdAsync(memberId))
             .ReturnsAsync(guestMember);
@@ -535,6 +553,12 @@ public class FamilyMembersControllerTests
             PrimaryUserId = _testUserId,
             IsGuest = false
         };
+
+        // Mock current user as Admin
+        var adminMember2 = new FamilyMemberDto { Id = Guid.NewGuid(), PrimaryUserId = _testUserId, UserRole = "Admin" };
+        _mockRepository
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
+            .ReturnsAsync(adminMember2);
 
         _mockRepository
             .Setup(r => r.GetByIdAsync(memberId))
