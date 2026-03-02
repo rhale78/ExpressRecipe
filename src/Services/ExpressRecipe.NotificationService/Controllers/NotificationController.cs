@@ -83,6 +83,34 @@ public class NotificationController : ControllerBase
             userId, request.NotificationType, request.EmailEnabled, request.PushEnabled, request.SmsEnabled, request.InAppEnabled);
         return Ok(new { id = prefId });
     }
+
+    /// <summary>
+    /// Send an email notification (internal service-to-service endpoint)
+    /// </summary>
+    [AllowAnonymous]  // Allow internal service calls
+    [HttpPost("send-email")]
+    public async Task<IActionResult> SendEmail([FromBody] SendEmailRequest request)
+    {
+        try
+        {
+            _logger.LogInformation("Email send request received for: {Email}", request.ToEmail);
+
+            // TODO: Implement actual email sending logic using SMTP or email service provider
+            // For now, just log the request
+            _logger.LogInformation("Sending email to {Email} with subject '{Subject}' using template '{Template}'", 
+                request.ToEmail, request.Subject, request.TemplateName);
+
+            // Simulate email sending
+            await Task.Delay(100);
+
+            return Ok(new { message = "Email queued for sending", recipientEmail = request.ToEmail });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send email to {Email}", request.ToEmail);
+            return StatusCode(500, new { message = "Failed to send email" });
+        }
+    }
 }
 
 public class SavePreferenceRequest
@@ -92,4 +120,13 @@ public class SavePreferenceRequest
     public bool PushEnabled { get; set; }
     public bool SmsEnabled { get; set; }
     public bool InAppEnabled { get; set; }
+}
+
+public class SendEmailRequest
+{
+    public string ToEmail { get; set; } = string.Empty;
+    public string ToName { get; set; } = string.Empty;
+    public string Subject { get; set; } = string.Empty;
+    public string TemplateName { get; set; } = string.Empty;
+    public object? TemplateData { get; set; }
 }

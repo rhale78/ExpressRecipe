@@ -83,6 +83,9 @@ builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(con
 builder.Services.AddScoped<IEnhancedAllergenRepository>(sp => new EnhancedAllergenRepository(connectionString));
 builder.Services.AddScoped<IDietaryRestrictionRepository>(sp => new DietaryRestrictionRepository(connectionString));
 builder.Services.AddScoped<IFamilyMemberRepository>(sp => new FamilyMemberRepository(connectionString));
+builder.Services.AddScoped<IFamilyRelationshipRepository>(sp => new FamilyRelationshipRepository(connectionString));
+builder.Services.AddScoped<IUserFavoritesRepository>(sp => new UserFavoritesRepository(connectionString));
+builder.Services.AddScoped<IUserProductRatingRepository>(sp => new UserProductRatingRepository(connectionString));
 builder.Services.AddScoped<ICuisineRepository>(sp => new CuisineRepository(connectionString));
 builder.Services.AddScoped<IHealthGoalRepository>(sp => new HealthGoalRepository(connectionString));
 builder.Services.AddScoped<IUserPreferenceRepository>(sp => new UserPreferenceRepository(connectionString));
@@ -92,6 +95,16 @@ builder.Services.AddScoped<IFamilyScoreRepository>(sp => new FamilyScoreReposito
 builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(connectionString));
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
+
+// Add HttpClient for service-to-service communication
+builder.Services.AddHttpClient("AuthService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:AuthService"] ?? "http://localhost:5001");
+});
+builder.Services.AddHttpClient("NotificationService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:NotificationService"] ?? "http://localhost:5015");
+});
 
 // Register background services
 builder.Services.AddHostedService<ExpressRecipe.UserService.Services.SubscriptionRenewalService>();
