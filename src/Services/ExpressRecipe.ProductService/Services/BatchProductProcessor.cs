@@ -30,7 +30,7 @@ public class BatchProductProcessor
     private readonly ILogger<BatchProductProcessor> _logger;
     private readonly IIngredientListParser _ingredientListParser;
     private readonly IConfiguration _configuration;
-    private readonly IngredientServiceClient _ingredientClient;
+    private readonly IIngredientServiceClient _ingredientClient;
     private readonly int _maxDegreeOfParallelism;
     private readonly int _batchSize;
     private readonly int _bufferSize;
@@ -43,7 +43,7 @@ public class BatchProductProcessor
         ILogger<BatchProductProcessor> logger,
         IIngredientListParser ingredientListParser,
         IConfiguration configuration,
-        IngredientServiceClient ingredientClient,
+        IIngredientServiceClient ingredientClient,
         int maxDegreeOfParallelism = 4,
         int batchSize = 5000,
         int bufferSize = 50000)

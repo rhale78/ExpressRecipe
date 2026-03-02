@@ -1,66 +1,125 @@
 using Grpc.Net.Client;
 using ExpressRecipe.IngredientService.Grpc;
 using ExpressRecipe.Shared.DTOs.Product;
+using ExpressRecipe.Shared.Services;
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 
 namespace ExpressRecipe.Client.Shared.Services;
 
 /// <summary>
 /// High-performance client for the Ingredient microservice.
-/// Uses REST API for all operations. gRPC support disabled until HTTP/2 issues resolved.
+/// Integrates .NET 9 HybridCache with Redis for ultra-fast local lookups.
+/// Uses gRPC for high-speed inter-service communication where possible.
 /// </summary>
-public class IngredientServiceClient : ApiClientBase
+public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
 {
-    // Feature flag to enable gRPC in the future
-    private const bool USE_GRPC = false;
-
-    // Keep gRPC client for future use but make it nullable
     private readonly IngredientApi.IngredientApiClient? _grpcClient;
+    private readonly HybridCacheService? _cache;
+    private readonly ILogger<IngredientServiceClient>? _logger;
+
+    // Feature flag for gRPC - can be toggled via config in production if needed
+    // Currently disabled due to HTTP/2 vs 1.1 issues in local development environment
+    private const bool USE_GRPC = false;
 
     public IngredientServiceClient(
         HttpClient httpClient, 
         ITokenProvider tokenProvider,
+        HybridCacheService? cache = null,
+        ILogger<IngredientServiceClient>? logger = null,
         IngredientApi.IngredientApiClient? grpcClient = null) 
         : base(httpClient, tokenProvider)
     {
+        _cache = cache;
+        _logger = logger;
         _grpcClient = grpcClient;
     }
 
     /// <summary>
-    /// Bulk lookup of ingredient IDs by name via REST API.
-    /// gRPC code commented out until HTTP/2 issues resolved.
+    /// Bulk lookup of ingredient IDs by name.
+    /// Uses HybridCache for local hits and gRPC for microservice communication.
     /// </summary>
     public async Task<Dictionary<string, Guid>> LookupIngredientIdsAsync(List<string> names)
     {
         if (names == null || !names.Any()) return new Dictionary<string, Guid>();
 
-        // TODO: Re-enable gRPC when HTTP/2 issues are resolved
-        // Set USE_GRPC = true and uncomment the gRPC code below
-        /*
+        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var uncachedNames = new List<string>();
+
+        // 1. Check local HybridCache first (L1/L2)
+        if (_cache != null)
+        {
+            foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var cacheKey = string.Format(CacheKeys.IngredientByName, name.ToLowerInvariant());
+                // We use GetAsync here because we don't want to trigger the factory for EACH individual name
+                // in a bulk lookup, as that would be inefficient.
+                var cachedId = await _cache.GetAsync<Guid?>(cacheKey);
+                if (cachedId.HasValue)
+                {
+                    result[name] = cachedId.Value;
+                }
+                else
+                {
+                    uncachedNames.Add(name);
+                }
+            }
+
+            if (!uncachedNames.Any()) return result; // All found in local cache!
+        }
+        else
+        {
+            uncachedNames = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        // 2. Fetch missing names from microservice via gRPC or REST
+        Dictionary<string, Guid> serviceResults = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
         if (USE_GRPC && _grpcClient != null)
         {
             try
             {
                 var request = new BulkLookupRequest();
-                request.Names.AddRange(names);
+                request.Names.AddRange(uncachedNames);
 
                 var response = await _grpcClient.LookupIngredientIdsAsync(request);
 
-                var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
                 foreach (var kvp in response.Results)
                 {
-                    if (Guid.TryParse(kvp.Value, out var id)) result[kvp.Key] = id;
+                    if (Guid.TryParse(kvp.Value, out var id)) 
+                    {
+                        serviceResults[kvp.Key] = id;
+                        result[kvp.Key] = id;
+                    }
                 }
-                return result;
             }
-            catch
+            catch (Exception ex)
             {
-                // Fall through to REST API
+                _logger?.LogWarning(ex, "gRPC BulkLookup failed, falling back to REST");
+                serviceResults = await LookupIngredientIdsRestAsync(uncachedNames);
             }
         }
-        */
+        else
+        {
+            serviceResults = await LookupIngredientIdsRestAsync(uncachedNames);
+        }
 
-        // Use REST API
+        // 3. Cache the results back into HybridCache
+        if (_cache != null && serviceResults.Any())
+        {
+            foreach (var kvp in serviceResults)
+            {
+                var cacheKey = string.Format(CacheKeys.IngredientByName, kvp.Key.ToLowerInvariant());
+                await _cache.SetAsync(cacheKey, (Guid?)kvp.Value, expiration: TimeSpan.FromHours(24));
+                result[kvp.Key] = kvp.Value;
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<Dictionary<string, Guid>> LookupIngredientIdsRestAsync(List<string> names)
+    {
         var restResponse = await HttpClient.PostAsJsonAsync("api/ingredient/bulk/lookup", names);
         if (!restResponse.IsSuccessStatusCode) return new Dictionary<string, Guid>();
         return await restResponse.Content.ReadFromJsonAsync<Dictionary<string, Guid>>() ?? new Dictionary<string, Guid>();
@@ -68,8 +127,23 @@ public class IngredientServiceClient : ApiClientBase
 
     public async Task<Guid?> GetIngredientIdByNameAsync(string name)
     {
-        // TODO: Re-enable gRPC when HTTP/2 issues are resolved
-        /*
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        var cacheKey = string.Format(CacheKeys.IngredientByName, name.ToLowerInvariant());
+
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync<Guid?>(cacheKey, async ct => 
+            {
+                return await GetIngredientIdByNameInternalAsync(name);
+            }, expiration: TimeSpan.FromHours(24));
+        }
+
+        return await GetIngredientIdByNameInternalAsync(name);
+    }
+
+    private async Task<Guid?> GetIngredientIdByNameInternalAsync(string name)
+    {
         if (USE_GRPC && _grpcClient != null)
         {
             try
@@ -78,24 +152,71 @@ public class IngredientServiceClient : ApiClientBase
                 if (response.Found && Guid.TryParse(response.Id, out var id)) return id;
                 return null;
             }
-            catch
+            catch (Exception ex)
             {
-                // Fall through to REST API
+                _logger?.LogWarning(ex, "gRPC GetIngredientId failed, falling back to REST");
             }
         }
-        */
 
-        // Use REST API
+        // Fallback to REST
         var ingredient = await GetAsync<IngredientDto>($"api/ingredient/name/{Uri.EscapeDataString(name)}");
         return ingredient?.Id;
     }
 
-    // CRUD operations via REST
-    public async Task<IngredientDto?> GetIngredientAsync(Guid id) => await GetAsync<IngredientDto>($"api/ingredient/{id}");
-    public async Task<Guid?> CreateIngredientAsync(CreateIngredientRequest request) => await PostAsync<CreateIngredientRequest, Guid>("api/ingredient", request);
+    public async Task<IngredientDto?> GetIngredientAsync(Guid id)
+    {
+        var cacheKey = string.Format(CacheKeys.IngredientById, id);
+
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync<IngredientDto?>(cacheKey, async ct => 
+            {
+                return await GetAsync<IngredientDto>($"api/ingredient/{id}");
+            }, expiration: TimeSpan.FromHours(4));
+        }
+
+        return await GetAsync<IngredientDto>($"api/ingredient/{id}");
+    }
+
+    public async Task<List<IngredientDto>> GetAllIngredientsAsync()
+    {
+        // Cache this for a short time as it might be large
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync("ingredients:all", async ct => 
+            {
+                return await GetAsync<List<IngredientDto>>("api/ingredient") ?? new List<IngredientDto>();
+            }, expiration: TimeSpan.FromMinutes(15));
+        }
+
+        return await GetAsync<List<IngredientDto>>("api/ingredient") ?? new List<IngredientDto>();
+    }
+
+    public async Task<Guid?> CreateIngredientAsync(CreateIngredientRequest request)
+    {
+        var id = await PostAsync<CreateIngredientRequest, Guid>("api/ingredient", request);
+        
+        // Invalidate name cache if successfully created
+        if (id != Guid.Empty && _cache != null)
+        {
+            var cacheKey = string.Format(CacheKeys.IngredientByName, request.Name.ToLowerInvariant());
+            await _cache.RemoveAsync(cacheKey);
+        }
+
+        return id == Guid.Empty ? null : id;
+    }
+
     public async Task<int> BulkCreateIngredientsAsync(List<string> names)
     {
         var response = await HttpClient.PostAsJsonAsync("api/ingredient/bulk/create", names);
-        return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<int>() : 0;
+        if (response.IsSuccessStatusCode)
+        {
+            var count = await response.Content.ReadFromJsonAsync<int>();
+            
+            // Note: We don't invalidate all names here because we don't know which ones were created.
+            // But usually this is called when we know they don't exist yet.
+            return count;
+        }
+        return 0;
     }
 }

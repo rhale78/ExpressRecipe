@@ -26,6 +26,9 @@ builder.AddRedisClient("cache");
 // Add hybrid caching (memory + Redis)
 builder.AddHybridCache();
 
+// Register ingredient client
+builder.AddIngredientClient();
+
 // Register hybrid cache service
 builder.Services.AddSingleton<HybridCacheService>();
 
@@ -54,12 +57,6 @@ builder.Services.AddAuthorization();
 // Register token provider (placeholder for service-to-service auth)
 builder.Services.AddScoped<ITokenProvider, EmptyTokenProvider>();
 
-// IngredientService client - REST API only (gRPC disabled until HTTP/2 issues resolved)
-builder.Services.AddHttpClient<IngredientServiceClient>(client =>
-{
-    client.BaseAddress = new Uri("http://ingredientservice");
-});
-
 // Register repositories
 var connectionString = builder.Configuration.GetConnectionString("productdb")
     ?? throw new InvalidOperationException("Database connection string 'productdb' not found");
@@ -70,13 +67,15 @@ builder.Services.AddScoped<IProductRepository>(sp =>
 {
     var cache = sp.GetRequiredService<HybridCacheService>();
     var logger = sp.GetRequiredService<ILogger<ProductRepository>>();
-    return new ProductRepository(connectionString, sp.GetRequiredService<IProductImageRepository>(), cache, logger);
+    var client = sp.GetRequiredService<IIngredientServiceClient>();
+    return new ProductRepository(connectionString, sp.GetRequiredService<IProductImageRepository>(), client, cache, logger);
 });
 builder.Services.AddScoped<IIngredientRepository>(sp =>
 {
+    var client = sp.GetRequiredService<IIngredientServiceClient>();
     var cache = sp.GetRequiredService<HybridCacheService>();
     var logger = sp.GetRequiredService<ILogger<IngredientRepository>>();
-    return new IngredientRepository(connectionString, cache, logger);
+    return new IngredientRepository(connectionString, client, cache, logger);
 });
 builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
 builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));

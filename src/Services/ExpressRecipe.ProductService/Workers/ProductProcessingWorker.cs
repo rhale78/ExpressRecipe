@@ -77,7 +77,7 @@ public class ProductProcessingWorker : BackgroundService
                 {
                     _logger.LogInformation("Found {Count} pending products to process", pendingCount);
 
-                    var ingredientClient = scope.ServiceProvider.GetRequiredService<IngredientServiceClient>();
+                    var ingredientClient = scope.ServiceProvider.GetRequiredService<IIngredientServiceClient>();
 
                     // Create batch processor with optimal settings
                     var maxParallelism = _configuration.GetValue<int>("ProductImport:MaxParallelism", 4);

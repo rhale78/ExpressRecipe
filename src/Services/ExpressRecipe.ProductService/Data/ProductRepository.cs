@@ -1,6 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Shared.Services;
+using ExpressRecipe.Client.Shared.Services;
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Security.Cryptography;
@@ -38,14 +39,20 @@ public interface IProductRepository
 public class ProductRepository : SqlHelper, IProductRepository
 {
     private readonly IProductImageRepository _productImageRepository;
+    private readonly IIngredientServiceClient? _ingredientClient;
     private readonly HybridCacheService? _cache;
     private readonly ILogger<ProductRepository>? _logger;
 
     // Constructor with cache and logger (recommended)
-    public ProductRepository(string connectionString, IProductImageRepository productImageRepository, 
-        HybridCacheService? cache = null, ILogger<ProductRepository>? logger = null) : base(connectionString)
+    public ProductRepository(
+        string connectionString, 
+        IProductImageRepository productImageRepository, 
+        IIngredientServiceClient? ingredientClient = null,
+        HybridCacheService? cache = null, 
+        ILogger<ProductRepository>? logger = null) : base(connectionString)
     {
         _productImageRepository = productImageRepository;
+        _ingredientClient = ingredientClient;
         _cache = cache;
         _logger = logger;
     }
@@ -553,23 +560,36 @@ public class ProductRepository : SqlHelper, IProductRepository
 
     public async Task AddIngredientToProductAsync(Guid productId, string ingredient, int orderIndex = 0)
     {
+        Guid? ingredientId = null;
+
+        // Ensure ingredient is registered in the microservice
+        if (_ingredientClient != null)
+        {
+            ingredientId = await _ingredientClient.GetIngredientIdByNameAsync(ingredient);
+            if (ingredientId == null)
+            {
+                ingredientId = await _ingredientClient.CreateIngredientAsync(new CreateIngredientRequest { Name = ingredient });
+            }
+        }
+
         const string sql = @"
             INSERT INTO ProductIngredient (Id, ProductId, IngredientId, OrderIndex, Quantity, Notes, IngredientListString, CreatedBy, CreatedAt)
-            VALUES (@Id, @ProductId, NULL, @OrderIndex, NULL, NULL, @IngredientListString, NULL, GETUTCDATE())";
+            VALUES (@Id, @ProductId, @IngredientId, @OrderIndex, NULL, NULL, @IngredientListString, NULL, GETUTCDATE())";
 
         await ExecuteNonQueryAsync(
             sql,
             CreateParameter("@Id", Guid.NewGuid()),
-                    CreateParameter("@ProductId", productId),
-                    CreateParameter("@OrderIndex", orderIndex),
-                    CreateParameter("@IngredientListString", ingredient));
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@IngredientId", (object?)ingredientId ?? DBNull.Value),
+            CreateParameter("@OrderIndex", orderIndex),
+            CreateParameter("@IngredientListString", ingredient));
 
-                // Invalidate product ingredients cache
-                if (_cache != null)
-                {
-                    await _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", productId));
-                }
-            }
+        // Invalidate product ingredients cache
+        if (_cache != null)
+        {
+            await _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", productId));
+        }
+    }
 
     public async Task AddLabelToProductAsync(Guid productId, string label)
     {

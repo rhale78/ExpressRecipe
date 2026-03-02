@@ -23,14 +23,14 @@ builder.AddServiceDefaults();
 // Add database connection
 builder.AddSqlServerClient("recipedb");
 
-// Add Redis for caching
-var redisConnectionString = builder.Configuration.GetConnectionString("redis") ?? "localhost:6379";
-builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
-    ConnectionMultiplexer.Connect(redisConnectionString));
-builder.Services.AddSingleton<CacheService>();
+// Add hybrid caching (memory + Redis)
+builder.AddHybridCache();
 
-// Add memory cache for rate limiting
-builder.Services.AddMemoryCache();
+// Register ingredient client
+builder.AddIngredientClient();
+
+// Register hybrid cache service
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
@@ -57,19 +57,17 @@ builder.Services.AddAuthorization();
 // Register token provider (placeholder for service-to-service auth)
 builder.Services.AddScoped<ITokenProvider, EmptyTokenProvider>();
 
-// IngredientService client - REST API only (gRPC disabled until HTTP/2 issues resolved)
-builder.Services.AddHttpClient<IngredientServiceClient>(client =>
-{
-    client.BaseAddress = new Uri("http://ingredientservice");
-});
-
 // Register repositories
 var connectionString = builder.Configuration.GetConnectionString("recipedb")
     ?? throw new InvalidOperationException("Database connection string 'recipedb' not found");
 
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
-builder.Services.AddScoped<IRecipeRepository>(sp => new RecipeRepository(connectionString));
+builder.Services.AddScoped<IRecipeRepository>(sp => 
+{
+    var client = sp.GetRequiredService<IIngredientServiceClient>();
+    return new RecipeRepository(connectionString, client);
+});
 builder.Services.AddScoped<IRecipeStagingRepository>(sp => new RecipeStagingRepository(connectionString));
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Data.IRatingRepository>(sp => 
     new ExpressRecipe.RecipeService.Data.RatingRepository(connectionString));

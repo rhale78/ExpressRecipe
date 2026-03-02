@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Recipe;
+using ExpressRecipe.Client.Shared.Services;
 using Shared = ExpressRecipe.Shared.DTOs.Recipe;
 using Microsoft.Data.SqlClient;
 using CQ = ExpressRecipe.RecipeService.CQRS.Queries;
@@ -14,8 +15,11 @@ namespace ExpressRecipe.RecipeService.Data;
 /// </summary>
 public class RecipeRepository : SqlHelper, IRecipeRepository
 {
-    public RecipeRepository(string connectionString) : base(connectionString)
+    private readonly IIngredientServiceClient? _ingredientClient;
+
+    public RecipeRepository(string connectionString, IIngredientServiceClient? ingredientClient = null) : base(connectionString)
     {
+        _ingredientClient = ingredientClient;
     }
 
     // Convenience overload used by CQRS handlers
@@ -183,6 +187,40 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
     public async Task AddRecipeIngredientsAsync(Guid recipeId, List<RecipeIngredientDto> ingredients, Guid? createdBy = null)
     {
         if (!ingredients.Any()) return;
+
+        // Ensure ingredients are registered in the microservice
+        if (_ingredientClient != null)
+        {
+            var ingredientNames = ingredients.Where(i => i.IngredientId == null && !string.IsNullOrWhiteSpace(i.IngredientName))
+                                            .Select(i => i.IngredientName!)
+                                            .Distinct()
+                                            .ToList();
+
+            if (ingredientNames.Any())
+            {
+                // Bulk lookup
+                var ingredientMap = await _ingredientClient.LookupIngredientIdsAsync(ingredientNames);
+                
+                // Identify completely missing ingredients
+                var missingNames = ingredientNames.Where(name => !ingredientMap.ContainsKey(name)).ToList();
+                if (missingNames.Any())
+                {
+                    await _ingredientClient.BulkCreateIngredientsAsync(missingNames);
+                    // Re-lookup to get the new IDs
+                    var updatedMap = await _ingredientClient.LookupIngredientIdsAsync(missingNames);
+                    foreach (var kvp in updatedMap) ingredientMap[kvp.Key] = kvp.Value;
+                }
+
+                // Update the DTOs with the correct IngredientId
+                foreach (var ing in ingredients.Where(i => i.IngredientId == null && !string.IsNullOrWhiteSpace(i.IngredientName)))
+                {
+                    if (ingredientMap.TryGetValue(ing.IngredientName!, out var id))
+                    {
+                        ing.IngredientId = id;
+                    }
+                }
+            }
+        }
 
         using var connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -434,6 +472,47 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
     public async Task<int> BulkCreateFullRecipesHighSpeedAsync(List<FullRecipeImportDto> importBatch)
     {
         if (!importBatch.Any()) return 0;
+
+        // 1. Pre-register all ingredients in the microservice for ultra-high speed lookups
+        if (_ingredientClient != null)
+        {
+            var allIngredientNames = importBatch
+                .Where(r => r.Ingredients != null)
+                .SelectMany(r => r.Ingredients!)
+                .Where(i => i.IngredientId == null && !string.IsNullOrWhiteSpace(i.IngredientName))
+                .Select(i => i.IngredientName!)
+                .Distinct()
+                .ToList();
+
+            if (allIngredientNames.Any())
+            {
+                // Bulk lookup from microservice (high speed gRPC/REST + local HybridCache)
+                var ingredientMap = await _ingredientClient.LookupIngredientIdsAsync(allIngredientNames);
+                
+                // Identify completely missing ingredients
+                var missingNames = allIngredientNames.Where(name => !ingredientMap.ContainsKey(name)).ToList();
+                if (missingNames.Any())
+                {
+                    await _ingredientClient.BulkCreateIngredientsAsync(missingNames);
+                    // Re-lookup to get the new IDs
+                    var updatedMap = await _ingredientClient.LookupIngredientIdsAsync(missingNames);
+                    foreach (var kvp in updatedMap) ingredientMap[kvp.Key] = kvp.Value;
+                }
+
+                // Update the DTOs in the batch with the correct IngredientId
+                foreach (var r in importBatch.Where(r => r.Ingredients != null))
+                {
+                    foreach (var ing in r.Ingredients!.Where(i => i.IngredientId == null && !string.IsNullOrWhiteSpace(i.IngredientName)))
+                    {
+                        if (ingredientMap.TryGetValue(ing.IngredientName!, out var id))
+                        {
+                            ing.IngredientId = id;
+                        }
+                    }
+                }
+            }
+        }
+
         int retryCount = 0;
         const int maxRetries = 3;
         while (retryCount <= maxRetries)
