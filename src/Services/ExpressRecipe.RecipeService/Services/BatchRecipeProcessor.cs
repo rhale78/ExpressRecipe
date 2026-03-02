@@ -28,7 +28,7 @@ public class BatchRecipeProcessor : RecipeParserBase
 {
     private readonly ILogger<BatchRecipeProcessor> _logger;
     private readonly IConfiguration _configuration;
-    private readonly IngredientServiceClient _ingredientClient;
+    private readonly IIngredientServiceClient _ingredientClient;
     private readonly string _imageSourcePath;
     private readonly string _imageDestPath;
     private readonly int _maxDegreeOfParallelism;
@@ -47,7 +47,7 @@ public class BatchRecipeProcessor : RecipeParserBase
     public BatchRecipeProcessor(
         ILogger<BatchRecipeProcessor> logger,
         IConfiguration configuration,
-        IngredientServiceClient ingredientClient,
+        IIngredientServiceClient ingredientClient,
         int maxDegreeOfParallelism = 4,
         int batchSize = 5000,
         int bufferSize = 50000)
@@ -76,7 +76,6 @@ public class BatchRecipeProcessor : RecipeParserBase
         CancellationToken cancellationToken = default)
     {
         var result = new ProcessingResult();
-        var startTime = DateTime.UtcNow;
         var stopwatch = Stopwatch.StartNew();
         
         await EnsureImageIndexAsync();
@@ -98,40 +97,28 @@ public class BatchRecipeProcessor : RecipeParserBase
             SingleWriter = false
         });
 
-        _logger.LogInformation("Starting high-performance recipe processing pipeline. Pipeline: {BufSize} buffer, {Batch} batch, {Parallel} workers", 
-            _bufferSize, _batchSize, _maxDegreeOfParallelism);
-
         // 1. PRODUCER: Fetch from DB and write to stagingChannel
         var producerTask = Task.Run(() => FetchStagedRecipesAsync(stagingRepo, stagingChannel.Writer, cancellationToken), cancellationToken);
 
-        // 2. WORKERS: Map StagedRecipe to FullRecipeImportDto
+        // 2. WORKERS: Map StagedRecipe to FullRecipeImportDto (Uses Bulk Parsing)
         var mappingTasks = Enumerable.Range(0, _maxDegreeOfParallelism)
-            .Select(_ => Task.Run(() => MapRecipesAsync(stagingChannel.Reader, mappedChannel.Writer, cancellationToken), cancellationToken))
+            .Select(_ => Task.Run(() => MapRecipesParallelAsync(stagingChannel.Reader, mappedChannel.Writer, cancellationToken), cancellationToken))
             .ToList();
 
         // 3. CONSUMER: Bulk insert into DB in batches
         var consumerTask = Task.Run(() => SaveRecipesAsync(recipeRepository, stagingRepo, mappedChannel.Reader, result, stopwatch, cancellationToken), cancellationToken);
 
-        try
-        {
-            await producerTask;
-            stagingChannel.Writer.Complete();
-            
-            await Task.WhenAll(mappingTasks);
-            mappedChannel.Writer.Complete();
-            
-            await consumerTask;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "Recipe processing pipeline failed.");
-        }
+        await producerTask;
+        stagingChannel.Writer.Complete();
+
+        await Task.WhenAll(mappingTasks);
+        mappedChannel.Writer.Complete();
+
+        await consumerTask;
 
         stopwatch.Stop();
-        var totalTime = stopwatch.Elapsed;
-        var totalProcessed = result.SuccessCount + result.FailureCount;
-        _logger.LogInformation("Batch Processing Finished: {Success} successful, {Failed} failed. Time: {Elapsed}. Speed: {RPS:F1} rec/sec",
-            result.SuccessCount, result.FailureCount, totalTime, totalProcessed / totalTime.TotalSeconds);
+        _logger.LogInformation("Processing complete. Success: {Success}, Failed: {Failed}, Total: {Total}. Rate: {Rate:F2} recipes/sec", 
+            result.SuccessCount, result.FailureCount, result.SuccessCount + result.FailureCount, (result.SuccessCount + result.FailureCount) / stopwatch.Elapsed.TotalSeconds);
 
         return result;
     }
@@ -142,11 +129,12 @@ public class BatchRecipeProcessor : RecipeParserBase
         {
             while (!ct.IsCancellationRequested)
             {
-                var batch = await stagingRepo.GetPendingRecipesAsync(_batchSize * 2);
-                if (batch.Count == 0) break;
+                var batch = await stagingRepo.GetPendingRecipesAsync(_batchSize);
+                if (!batch.Any()) break;
 
                 foreach (var recipe in batch)
                 {
+                    if (!await writer.WaitToWriteAsync(ct)) break;
                     await writer.WriteAsync(recipe, ct);
                 }
             }
@@ -157,13 +145,40 @@ public class BatchRecipeProcessor : RecipeParserBase
         }
     }
 
-    private async Task MapRecipesAsync(ChannelReader<StagedRecipe> reader, ChannelWriter<(StagedRecipe, FullRecipeImportDto?, bool)> writer, CancellationToken ct)
+    private async Task MapRecipesParallelAsync(ChannelReader<StagedRecipe> reader, ChannelWriter<(StagedRecipe, FullRecipeImportDto?, bool)> writer, CancellationToken ct)
     {
         while (await reader.WaitToReadAsync(ct))
         {
-            while (reader.TryRead(out var staged))
+            var batch = new List<StagedRecipe>();
+            while (batch.Count < 50 && reader.TryRead(out var staged))
             {
-                try
+                batch.Add(staged);
+            }
+
+            if (!batch.Any()) continue;
+
+            try
+            {
+                // 1. Collect all unique ingredient strings across this small batch
+                var allRawLines = new HashSet<string>();
+                foreach(var staged in batch)
+                {
+                    if (!string.IsNullOrWhiteSpace(staged.IngredientsRaw))
+                    {
+                        var lines = JsonSerializer.Deserialize<List<string>>(staged.IngredientsRaw);
+                        if (lines != null) foreach(var l in lines) allRawLines.Add(l);
+                    }
+                }
+
+                // 2. Bulk parse them via microservice
+                Dictionary<string, ParsedIngredientResult> parsedResults = new();
+                if (allRawLines.Any())
+                {
+                    parsedResults = await _ingredientClient.BulkParseIngredientStringsAsync(allRawLines.ToList());
+                }
+
+                // 3. Map each recipe using pre-parsed results
+                foreach(var staged in batch)
                 {
                     var title = staged.Title.Trim();
                     bool alreadyComplete = false;
@@ -182,14 +197,14 @@ public class BatchRecipeProcessor : RecipeParserBase
                         continue;
                     }
 
-                    var dto = await MapToFullImportDtoAsync(staged);
+                    var dto = await MapToFullImportDtoAsync(staged, parsedResults);
                     await writer.WriteAsync((staged, dto, false), ct);
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning("Mapping error for '{Title}': {Msg}", staged.Title, ex.Message);
-                    await writer.WriteAsync((staged, null, false), ct);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Parallel mapping error: {Msg}", ex.Message);
+                foreach(var s in batch) await writer.WriteAsync((s, null, false), ct);
             }
         }
     }
@@ -220,7 +235,7 @@ public class BatchRecipeProcessor : RecipeParserBase
                 {
                     // CENTRALIZED INGREDIENT LOOKUP/CREATE
                     var allIngredientNames = importBatch
-                        .SelectMany(i => i.Ingredients)
+                        .SelectMany(i => i.Ingredients ?? new List<RecipeIngredientDto>())
                         .Select(ing => ing.IngredientName)
                         .Where(name => !string.IsNullOrEmpty(name))
                         .Cast<string>()
@@ -234,11 +249,14 @@ public class BatchRecipeProcessor : RecipeParserBase
 
                         foreach(var item in importBatch)
                         {
-                            foreach(var ing in item.Ingredients)
+                            if (item.Ingredients != null)
                             {
-                                if (ing.IngredientName != null && nameToId.TryGetValue(ing.IngredientName, out var id))
+                                foreach(var ing in item.Ingredients)
                                 {
-                                    ing.IngredientId = id;
+                                    if (ing.IngredientName != null && nameToId.TryGetValue(ing.IngredientName, out var id))
+                                    {
+                                        ing.IngredientId = id;
+                                    }
                                 }
                             }
                         }
@@ -248,23 +266,12 @@ public class BatchRecipeProcessor : RecipeParserBase
                     
                     var successfulStagingIds = stagingIds.Take(createdCount).ToList();
                     await stagingRepo.BulkUpdateStatusAsync(successfulStagingIds, "Completed");
-                    
+
                     var failedStagingIds = stagingIds.Skip(createdCount).ToList();
                     if (failedStagingIds.Any())
                     {
-                        await stagingRepo.BulkUpdateStatusAsync(failedStagingIds, "Failed", "Bulk insert did not include this record");
+                        await stagingRepo.BulkUpdateStatusAsync(failedStagingIds, "Failed", "Bulk Insert Failure Part 2");
                         Interlocked.Add(ref result.FailureCount, failedStagingIds.Count);
-                    }
-
-                    lock(_titleLock)
-                    {
-                        if (_recipeCompleteness != null)
-                        {
-                            foreach(var item in importBatch.Take(createdCount))
-                            {
-                                if (item.Recipe.Name != null) _recipeCompleteness[item.Recipe.Name.Trim()] = true;
-                            }
-                        }
                     }
 
                     Interlocked.Add(ref result.SuccessCount, createdCount);
@@ -275,26 +282,14 @@ public class BatchRecipeProcessor : RecipeParserBase
                     await stagingRepo.BulkUpdateStatusAsync(stagingIds, "Failed", ex.Message);
                     Interlocked.Add(ref result.FailureCount, stagingIds.Count);
                 }
-                
                 importBatch.Clear();
                 stagingIds.Clear();
             }
 
-            if (failedIds.Any())
+            if (totalProcessedInSession - lastLogTotal >= 100)
             {
-                await stagingRepo.BulkUpdateStatusAsync(failedIds, "Failed", "Mapping failed");
-                Interlocked.Add(ref result.FailureCount, failedIds.Count);
-                failedIds.Clear();
-            }
-
-            if (totalProcessedInSession >= lastLogTotal + 1000)
-            {
-                var elapsed = stopwatch.Elapsed.TotalSeconds;
-                var rps = elapsed > 0 ? totalProcessedInSession / elapsed : 0;
-                var channelLag = reader.Count; 
-                
-                _logger.LogInformation("Writer: Processed {Total} | Speed: {RPS:F1} rec/sec | Lag: {Lag} records", 
-                    totalProcessedInSession, rps, channelLag);
+                _logger.LogInformation("Progress: {Total} processed, {Success} success, {Fail} fail. Speed: {Rate:F2} recipes/sec", 
+                    totalProcessedInSession, result.SuccessCount, result.FailureCount, totalProcessedInSession / stopwatch.Elapsed.TotalSeconds);
                 lastLogTotal = totalProcessedInSession;
             }
         }
@@ -303,30 +298,45 @@ public class BatchRecipeProcessor : RecipeParserBase
         {
             while (reader.TryRead(out var item))
             {
-                if (item.Skipped) skipIds.Add(item.Staged.Id);
-                else if (item.Dto != null) { importBatch.Add(item.Dto); stagingIds.Add(item.Staged.Id); }
-                else failedIds.Add(item.Staged.Id);
+                if (item.Skipped)
+                {
+                    skipIds.Add(item.Staged.Id);
+                }
+                else if (item.Dto != null)
+                {
+                    importBatch.Add(item.Dto);
+                    stagingIds.Add(item.Staged.Id);
+                }
+                else
+                {
+                    failedIds.Add(item.Staged.Id);
+                }
 
-                if (importBatch.Count + skipIds.Count + failedIds.Count >= _batchSize) await FlushAsync();
+                if (importBatch.Count >= _batchSize) await FlushAsync();
             }
         }
         await FlushAsync();
     }
 
-    private async Task<FullRecipeImportDto> MapToFullImportDtoAsync(StagedRecipe staged)
+    private async Task<FullRecipeImportDto> MapToFullImportDtoAsync(StagedRecipe staged, Dictionary<string, ParsedIngredientResult> preParsedIngredients)
     {
         var dto = new FullRecipeImportDto
         {
             Recipe = new CreateRecipeRequest
             {
-                Name = Truncate(staged.Title, 450) ?? "Untitled Recipe",
+                Name = staged.Title,
                 Description = staged.Description,
+                Category = staged.Source, // Using Source as Category if available
+                Cuisine = null,
+                Difficulty = null,
+                PrepTimeMinutes = null,
                 CookTimeMinutes = staged.CookingTimeMinutes,
+                TotalTimeMinutes = staged.CookingTimeMinutes,
                 Servings = staged.Servings,
-                SourceUrl = staged.SourceUrl,
-                Notes = "Batch Import",
+                Instructions = staged.DirectionsRaw, // Directions as Instructions
+                Notes = null,
                 IsPublic = true,
-                CreatedBy = Guid.Empty
+                SourceUrl = staged.SourceUrl
             },
             Ingredients = new List<RecipeIngredientDto>(),
             Images = new List<RecipeImageDto>(),
@@ -334,54 +344,73 @@ public class BatchRecipeProcessor : RecipeParserBase
             Tags = new List<string>()
         };
 
-        if (!string.IsNullOrWhiteSpace(staged.ImageName))
+        // IMAGE MAPPING
+        if (_imageIndex != null && !string.IsNullOrEmpty(staged.ImageName))
         {
-            var names = staged.ImageName.Split(',', StringSplitOptions.RemoveEmptyEntries);
-            int idx = 0;
-            foreach (var name in names)
+            if (_imageIndex.TryGetValue(staged.ImageName, out var fullSourcePath))
             {
-                var localPath = await FindAndCopyImageAsync(name.Trim());
-                if (localPath != null)
-                {
-                    dto.Images.Add(new RecipeImageDto
-                    {
-                        ImageUrl = Truncate(name.Trim(), 2000) ?? string.Empty,
-                        LocalPath = localPath,
-                        IsPrimary = idx == 0,
-                        DisplayOrder = idx++
+                var extension = Path.GetExtension(fullSourcePath);
+                var localFilename = $"{Guid.NewGuid()}{extension}";
+                var localPath = Path.Combine(_imageDestPath, localFilename);
+
+                if (!Directory.Exists(_imageDestPath)) Directory.CreateDirectory(_imageDestPath);
+                
+                try {
+                    File.Copy(fullSourcePath, localPath, true);
+                    dto.Images.Add(new RecipeImageDto {
+                        ImageUrl = localFilename,
+                        ImageType = "Front",
+                        IsPrimary = true,
+                        DisplayOrder = 0
                     });
-                    if (idx == 1) dto.Recipe.ImageUrl = localPath;
-                }
+                    dto.Recipe.ImageUrl = localFilename;
+                } catch {}
             }
         }
 
+        // INGREDIENT MAPPING - Use pre-parsed results from microservice
         if (!string.IsNullOrWhiteSpace(staged.IngredientsRaw))
         {
             try 
             {
-                var rawIngredients = JsonSerializer.Deserialize<List<string>>(staged.IngredientsRaw);
-                if (rawIngredients != null)
+                var rawLines = JsonSerializer.Deserialize<List<string>>(staged.IngredientsRaw);
+                if (rawLines != null)
                 {
                     int ingIdx = 0;
-                    foreach (var raw in rawIngredients)
+                    foreach (var raw in rawLines)
                     {
-                        var (qty, unit, name) = ParseQuantityAndUnit(raw);
-                        var (ingredName, prep) = ExtractPreparation(name);
-                        dto.Ingredients.Add(new RecipeIngredientDto
+                        if (preParsedIngredients.TryGetValue(raw, out var parsedResult) && parsedResult.Components.Any())
                         {
-                            IngredientName = ingredName,
-                            Quantity = qty,
-                            Unit = Truncate(unit, 50),
-                            OrderIndex = ingIdx++,
-                            PreparationNote = prep,
-                            IsOptional = IsOptionalIngredient(raw),
-                            OriginalText = raw
-                        });
+                            // Map components to recipe ingredients
+                            foreach (var comp in parsedResult.Components)
+                            {
+                                dto.Ingredients.Add(new RecipeIngredientDto
+                                {
+                                    IngredientName = comp.CleanName ?? comp.Name,
+                                    Quantity = comp.Quantity,
+                                    Unit = Truncate(comp.Unit, 50),
+                                    OrderIndex = ingIdx++,
+                                    IsOptional = IsOptionalIngredient(raw),
+                                    OriginalText = raw,
+                                    IngredientId = comp.BaseIngredientId // Might be matched if microservice knows it
+                                });
+                            }
+                        }
+                        else
+                        {
+                            // Fallback if not in pre-parsed (shouldn't happen with our logic)
+                            dto.Ingredients.Add(new RecipeIngredientDto { 
+                                IngredientName = Truncate(raw, 200) ?? "Unknown", 
+                                OrderIndex = ingIdx++, 
+                                OriginalText = raw 
+                            });
+                        }
                     }
                 }
             } catch {}
         }
 
+        // DIRECTIONS AND TAGS
         if (!string.IsNullOrWhiteSpace(staged.DirectionsRaw))
         {
             try
@@ -448,46 +477,14 @@ public class BatchRecipeProcessor : RecipeParserBase
                     try
                     {
                         var files = Directory.EnumerateFiles(_imageSourcePath, "*.*", SearchOption.AllDirectories);
-                        foreach (var file in files)
-                        {
-                            var fileName = Path.GetFileName(file);
-                            if (!index.ContainsKey(fileName)) index[fileName] = file;
-                            if (index.Count > 500000) break;
+                        foreach(var f in files) {
+                            var name = Path.GetFileName(f);
+                            if (!index.ContainsKey(name)) index[name] = f;
                         }
                     } catch {}
                 }
                 _imageIndex = index;
             }
         });
-    }
-
-    private async Task<string?> FindAndCopyImageAsync(string imageName)
-    {
-        string? sourcePath = null;
-        if (_imageIndex == null || !_imageIndex.TryGetValue(imageName, out sourcePath))
-        {
-            var extensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
-            foreach (var ext in extensions)
-            {
-                if (_imageIndex != null && _imageIndex.TryGetValue(imageName + ext, out sourcePath)) break;
-            }
-            if (sourcePath == null) return null;
-        }
-
-        try
-        {
-            var prefix = Guid.NewGuid().ToString().Substring(0, 8);
-            var extension = Path.GetExtension(sourcePath!);
-            var safeName = Path.GetFileNameWithoutExtension(imageName);
-            if (safeName.Length > 50) safeName = safeName.Substring(0, 50);
-            var destFileName = $"{prefix}_{safeName}{extension}";
-            var destPath = Path.Combine(_imageDestPath, destFileName);
-            using (var sourceStream = File.OpenRead(sourcePath!))
-            using (var destStream = File.Create(destPath))
-            {
-                await sourceStream.CopyToAsync(destStream);
-            }
-            return $"/images/recipes/{destFileName}";
-        } catch { return null; }
     }
 }

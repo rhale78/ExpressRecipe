@@ -104,6 +104,9 @@ public class ParsedIngredientResult
 public class ParsedIngredientComponent
 {
     public string Name { get; set; } = string.Empty;
+    public string? CleanName { get; set; } // Name without quantity/unit
+    public decimal? Quantity { get; set; }
+    public string? Unit { get; set; }
     public Guid? BaseIngredientId { get; set; } // Matched base ingredient if found
     public string? MatchedName { get; set; } // Name of matched base ingredient
     public int OrderIndex { get; set; }

@@ -1,6 +1,7 @@
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Services;
+using ExpressRecipe.Client.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -12,16 +13,16 @@ namespace ExpressRecipe.ProductService.Controllers;
 public class BaseIngredientsController : ControllerBase
 {
     private readonly IBaseIngredientRepository _repository;
-    private readonly IIngredientParser _parser;
+    private readonly IIngredientServiceClient _ingredientClient;
     private readonly ILogger<BaseIngredientsController> _logger;
 
     public BaseIngredientsController(
         IBaseIngredientRepository repository,
-        IIngredientParser parser,
+        IIngredientServiceClient ingredientClient,
         ILogger<BaseIngredientsController> logger)
     {
         _repository = repository;
-        _parser = parser;
+        _ingredientClient = ingredientClient;
         _logger = logger;
     }
 
@@ -266,19 +267,19 @@ public class BaseIngredientsController : ControllerBase
     }
 
     /// <summary>
-    /// Parse an ingredient string into base components
+    /// Parse an ingredient string into base components (proxies to microservice)
     /// </summary>
     [HttpPost("parse")]
     public async Task<ActionResult<ParsedIngredientResult>> ParseIngredientString([FromBody] string ingredientString)
     {
         try
         {
-            var result = await _parser.ParseIngredientStringAsync(ingredientString);
+            var result = await _ingredientClient.ParseIngredientStringAsync(ingredientString);
             return Ok(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error parsing ingredient string");
+            _logger.LogError(ex, "Error parsing ingredient string via microservice");
             return StatusCode(500, new { message = "An error occurred" });
         }
     }

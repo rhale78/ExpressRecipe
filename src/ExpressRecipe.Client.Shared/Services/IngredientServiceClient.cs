@@ -219,4 +219,44 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
         }
         return 0;
     }
+
+    public async Task<List<string>> ParseIngredientListAsync(string ingredientsText)
+    {
+        var response = await HttpClient.PostAsJsonAsync("api/ingredient/parse/list", ingredientsText);
+        return response.IsSuccessStatusCode 
+            ? await response.Content.ReadFromJsonAsync<List<string>>() ?? new List<string>()
+            : new List<string>();
+    }
+
+    public async Task<Dictionary<string, List<string>>> BulkParseIngredientListsAsync(List<string> texts)
+    {
+        var response = await HttpClient.PostAsJsonAsync("api/ingredient/parse/list/bulk", texts);
+        return response.IsSuccessStatusCode 
+            ? await response.Content.ReadFromJsonAsync<Dictionary<string, List<string>>>() ?? new Dictionary<string, List<string>>()
+            : new Dictionary<string, List<string>>();
+    }
+
+    public async Task<ParsedIngredientResult?> ParseIngredientStringAsync(string text)
+    {
+        var response = await HttpClient.PostAsJsonAsync("api/ingredient/parse/string", text);
+        return response.IsSuccessStatusCode 
+            ? await response.Content.ReadFromJsonAsync<ParsedIngredientResult>()
+            : null;
+    }
+
+    public async Task<Dictionary<string, ParsedIngredientResult>> BulkParseIngredientStringsAsync(List<string> texts)
+    {
+        var response = await HttpClient.PostAsJsonAsync("api/ingredient/parse/string/bulk", texts);
+        return response.IsSuccessStatusCode 
+            ? await response.Content.ReadFromJsonAsync<Dictionary<string, ParsedIngredientResult>>() ?? new Dictionary<string, ParsedIngredientResult>()
+            : new Dictionary<string, ParsedIngredientResult>();
+    }
+
+    public async Task<IngredientValidationResult?> ValidateIngredientAsync(string ingredient)
+    {
+        var response = await HttpClient.GetAsync($"api/ingredient/parse/validate?ingredient={Uri.EscapeDataString(ingredient)}");
+        return response.IsSuccessStatusCode 
+            ? await response.Content.ReadFromJsonAsync<IngredientValidationResult>()
+            : null;
+    }
 }

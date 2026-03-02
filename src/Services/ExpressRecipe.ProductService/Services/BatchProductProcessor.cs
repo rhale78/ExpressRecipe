@@ -28,7 +28,6 @@ public class ProcessingResult
 public class BatchProductProcessor
 {
     private readonly ILogger<BatchProductProcessor> _logger;
-    private readonly IIngredientListParser _ingredientListParser;
     private readonly IConfiguration _configuration;
     private readonly IIngredientServiceClient _ingredientClient;
     private readonly int _maxDegreeOfParallelism;
@@ -41,7 +40,6 @@ public class BatchProductProcessor
 
     public BatchProductProcessor(
         ILogger<BatchProductProcessor> logger,
-        IIngredientListParser ingredientListParser,
         IConfiguration configuration,
         IIngredientServiceClient ingredientClient,
         int maxDegreeOfParallelism = 4,
@@ -49,7 +47,6 @@ public class BatchProductProcessor
         int bufferSize = 50000)
     {
         _logger = logger;
-        _ingredientListParser = ingredientListParser;
         _configuration = configuration;
         _ingredientClient = ingredientClient;
         _maxDegreeOfParallelism = Math.Max(1, maxDegreeOfParallelism);
@@ -94,59 +91,43 @@ public class BatchProductProcessor
 
         // 2. WORKERS: Map StagedProduct to FullProductImportDto
         var mappingTasks = Enumerable.Range(0, _maxDegreeOfParallelism)
-            .Select(_ => Task.Run(() => MapProductsAsync(stagingChannel.Reader, mappedChannel.Writer, cancellationToken), cancellationToken))
+            .Select(_ => Task.Run(() => MapProductsParallelAsync(stagingChannel.Reader, mappedChannel.Writer, cancellationToken), cancellationToken))
             .ToList();
 
         // 3. CONSUMER: Bulk insert into DB in batches
         var consumerTask = Task.Run(() => SaveProductsAsync(productRepo, stagingRepo, mappedChannel.Reader, result, stopwatch, cancellationToken), cancellationToken);
 
-        try
-        {
-            await producerTask;
-            stagingChannel.Writer.Complete();
-            
-            await Task.WhenAll(mappingTasks);
-            mappedChannel.Writer.Complete();
-            
-            await consumerTask;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "Product processing pipeline failed.");
-        }
+        await producerTask;
+        stagingChannel.Writer.Complete();
+
+        await Task.WhenAll(mappingTasks);
+        mappedChannel.Writer.Complete();
+
+        await consumerTask;
 
         stopwatch.Stop();
-        var totalTime = stopwatch.Elapsed;
-        var totalProcessed = result.SuccessCount + result.FailureCount;
-        _logger.LogInformation("Batch Product Processing Finished: {Success} successful, {Failed} failed. Time: {Elapsed}. Speed: {RPS:F1} rec/sec",
-            result.SuccessCount, result.FailureCount, totalTime, totalProcessed / totalTime.TotalSeconds);
+        _logger.LogInformation("Processing complete. Success: {Success}, Failed: {Failed}, Total: {Total}. Rate: {Rate:F2} products/sec", 
+            result.SuccessCount, result.FailureCount, result.SuccessCount + result.FailureCount, (result.SuccessCount + result.FailureCount) / stopwatch.Elapsed.TotalSeconds);
 
         return result;
     }
 
     private async Task EnsureCachesLoadedAsync(IProductRepository productRepo, IIngredientRepository ingredientRepo)
     {
-        if (_barcodeCache != null && _ingredientCache != null) return;
+        if (_barcodeCache != null) return;
+        
+        _logger.LogInformation("Pre-loading caches...");
+        var sw = Stopwatch.StartNew();
 
-        // Load barcode cache
-        if (_barcodeCache == null)
-        {
-            _logger.LogInformation("Building in-memory Barcode cache...");
-            var barcodes = await productRepo.GetAllBarcodesAsync();
-            _barcodeCache = new ConcurrentDictionary<string, bool>(
-                barcodes.Select(b => new KeyValuePair<string, bool>(b, true)),
-                StringComparer.OrdinalIgnoreCase);
-            _logger.LogInformation("Barcode cache built with {Count} records", _barcodeCache.Count);
-        }
+        var barCodes = await productRepo.GetAllBarcodesAsync();
+        _barcodeCache = new ConcurrentDictionary<string, bool>(barCodes.Select(b => new KeyValuePair<string, bool>(b, true)));
 
-        // Load ingredient cache
-        if (_ingredientCache == null)
-        {
-            _logger.LogInformation("Building in-memory Ingredient cache...");
-            var ingredients = await ingredientRepo.GetAllIngredientNamesAndIdsAsync();
-            _ingredientCache = new ConcurrentDictionary<string, Guid>(ingredients, StringComparer.OrdinalIgnoreCase);
-            _logger.LogInformation("Ingredient cache built with {Count} records", _ingredientCache.Count);
-        }
+        // Load all known ingredient mappings from microservice (via our proxy repository)
+        var ings = await ingredientRepo.GetAllIngredientNamesAndIdsAsync();
+        _ingredientCache = new ConcurrentDictionary<string, Guid>(ings, StringComparer.OrdinalIgnoreCase);
+
+        _logger.LogInformation("Pre-loading finished in {Ms}ms. Barcodes: {B}, Ingredients: {I}", 
+            sw.ElapsedMilliseconds, _barcodeCache.Count, _ingredientCache.Count);
     }
 
     private async Task FetchStagedProductsAsync(IProductStagingRepository stagingRepo, ChannelWriter<StagedProduct> writer, CancellationToken ct)
@@ -158,63 +139,137 @@ public class BatchProductProcessor
             while (!ct.IsCancellationRequested)
             {
                 var batch = await stagingRepo.GetPendingProductsAsync(_batchSize * 2);
-                if (batch.Count == 0) break;
+                if (!batch.Any()) break;
 
-                foreach (var product in batch)
+                foreach (var staged in batch)
                 {
-                    if (!string.IsNullOrEmpty(product.Barcode) && 
-                        _barcodeCache!.ContainsKey(product.Barcode))
+                    if (!string.IsNullOrEmpty(staged.Barcode) && _barcodeCache!.ContainsKey(staged.Barcode))
                     {
                         totalSkipped++;
-                        continue; 
-                    }
-
-                    await writer.WriteAsync(product, ct);
-                    totalFetched++;
-                }
-
-                if ((totalFetched + totalSkipped) % 10000 == 0 && _logger.IsEnabled(LogLevel.Debug))
-                    _logger.LogDebug("Producer: Fetched {Total} products ({Skipped} pre-filtered as duplicates)", 
-                        totalFetched, totalSkipped);
-            }
-
-            if (totalSkipped > 0)
-                _logger.LogInformation("Producer: Pre-filtered {Skipped} duplicate barcodes (saved {Percent:F1}% processing time)", 
-                    totalSkipped, (totalSkipped * 100.0) / (totalFetched + totalSkipped));
-        }
-        catch (Exception ex) { _logger.LogError(ex, "Error fetching products from staging."); }
-    }
-
-    private async Task MapProductsAsync(ChannelReader<StagedProduct> reader, ChannelWriter<(StagedProduct, FullProductImportDto?, bool)> writer, CancellationToken ct)
-    {
-        while (await reader.WaitToReadAsync(ct))
-        {
-            while (reader.TryRead(out var staged))
-            {
-                try
-                {
-                    if (!string.IsNullOrEmpty(staged.Barcode) && 
-                        _barcodeCache!.ContainsKey(staged.Barcode))
-                    {
-                        await writer.WriteAsync((staged, null, true), ct);
                         continue;
                     }
 
-                    var dto = MapToFullImportDto(staged);
+                    if (!await writer.WaitToWriteAsync(ct)) break;
+                    await writer.WriteAsync(staged, ct);
+                    totalFetched++;
+                }
+
+                if (batch.Count < _batchSize) break;
+            }
+            _logger.LogInformation("Producer finished. Total fetched: {Count}, Total skipped (already exists): {Skipped}", totalFetched, totalSkipped);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Producer error");
+        }
+    }
+
+    private async Task MapProductsParallelAsync(ChannelReader<StagedProduct> reader, ChannelWriter<(StagedProduct Staged, FullProductImportDto? Dto, bool Skipped)> writer, CancellationToken ct)
+    {
+        while (await reader.WaitToReadAsync(ct))
+        {
+            var batch = new List<StagedProduct>();
+            while (batch.Count < 50 && reader.TryRead(out var staged))
+            {
+                batch.Add(staged);
+            }
+
+            if (!batch.Any()) continue;
+
+            try 
+            {
+                // 1. Collect all ingredient texts for bulk parsing
+                var textsToParse = batch
+                    .Select(s => s.IngredientsTextEn ?? s.IngredientsText)
+                    .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Cast<string>()
+                    .Distinct()
+                    .ToList();
+
+                Dictionary<string, List<string>> parsedResults = new();
+                if (textsToParse.Any())
+                {
+                    parsedResults = await _ingredientClient.BulkParseIngredientListsAsync(textsToParse);
+                }
+
+                // 2. Map products using parsed results
+                foreach (var staged in batch)
+                {
+                    var ingredientsText = staged.IngredientsTextEn ?? staged.IngredientsText;
+                    List<string> parsedNames = new();
+                    if (!string.IsNullOrEmpty(ingredientsText) && parsedResults.TryGetValue(ingredientsText, out var names))
+                    {
+                        parsedNames = names.Take(50).ToList();
+                    }
+
+                    var dto = MapToFullImportDto(staged, parsedNames);
                     await writer.WriteAsync((staged, dto, false), ct);
 
                     if (!string.IsNullOrEmpty(staged.Barcode))
                     {
-                        _barcodeCache.TryAdd(staged.Barcode, true);
+                        _barcodeCache!.TryAdd(staged.Barcode, true);
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning("Mapping error for product '{Name}': {Msg}", staged.ProductName, ex.Message);
-                    await writer.WriteAsync((staged, null, false), ct);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Parallel mapper error");
+                // Attempt mapping one by one as fallback or just fail the batch segment
+                foreach(var s in batch) await writer.WriteAsync((s, null, false), ct);
             }
         }
+    }
+
+    private FullProductImportDto MapToFullImportDto(StagedProduct staged, List<string> parsedIngredientNames)
+    {
+        var dto = new FullProductImportDto
+        {
+            Product = new CreateProductRequest
+            {
+                Name = staged.ProductName ?? "Unknown Product",
+                Brand = staged.Brands,
+                Barcode = staged.Barcode,
+                BarcodeType = DetermineBarcodeType(staged.Barcode),
+                Description = staged.GenericName,
+                Category = ExtractPrimaryCategory(staged.Categories),
+                ImageUrl = staged.ImageUrl
+            },
+            ExternalId = staged.ExternalId,
+            ExternalSource = "OpenFoodFacts"
+        };
+
+        foreach (var name in parsedIngredientNames)
+        {
+            if (_ingredientCache!.TryGetValue(name, out var ingId))
+                dto.IngredientIds.Add(ingId);
+            else
+                dto.IngredientNames.Add(name);
+        }
+
+        if (!string.IsNullOrWhiteSpace(staged.ImageUrl))
+        {
+            dto.Images.Add(new ProductImageDto {
+                ImageUrl = staged.ImageUrl,
+                ImageType = DetermineImageType(staged.ImageUrl),
+                IsPrimary = true,
+                DisplayOrder = 0,
+                SourceSystem = "OpenFoodFacts"
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(staged.Allergens))
+        {
+            dto.Allergens = staged.Allergens.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Take(20).ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(staged.NutritionData))
+        {
+            dto.Metadata["nutrition_json"] = staged.NutritionData;
+        }
+
+        return dto;
     }
 
     private async Task SaveProductsAsync(IProductRepository productRepo, IProductStagingRepository stagingRepo, ChannelReader<(StagedProduct Staged, FullProductImportDto? Dto, bool Skipped)> reader, ProcessingResult result, Stopwatch stopwatch, CancellationToken ct)
@@ -246,7 +301,7 @@ public class BatchProductProcessor
             {
                 try
                 {
-                    // 2a. Pre-create/lookup ingredients using the new centralized service
+                    // 2a. Pre-create/lookup ingredients using the microservice
                     var missingIngredientNames = importBatch
                         .SelectMany(i => i.IngredientNames)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -304,14 +359,28 @@ public class BatchProductProcessor
                 failedIds.Clear();
             }
 
-            if (totalProcessedInSession >= lastLogTotal + 1000)
+            if (totalProcessedInSession - lastLogTotal >= 1000)
             {
-                var elapsed = stopwatch.Elapsed.TotalSeconds;
-                var rps = elapsed > 0 ? totalProcessedInSession / elapsed : 0;
-                var lag = reader.Count;
-                _logger.LogInformation("Writer: Processed {Total} | Speed: {RPS:F1} rec/sec | Lag: {Lag} records", 
-                    totalProcessedInSession, rps, lag);
+                _logger.LogInformation("Processing Progress: {Total} processed, {Success} success, {Fail} fail. Speed: {Rate:F2} products/sec", 
+                    totalProcessedInSession, result.SuccessCount, result.FailureCount, totalProcessedInSession / stopwatch.Elapsed.TotalSeconds);
                 lastLogTotal = totalProcessedInSession;
+            }
+
+            // Update staging status in DB periodically
+            if (allSuccessIds.Any())
+            {
+                await stagingRepo.BulkUpdateStatusAsync(allSuccessIds, "Completed");
+                allSuccessIds.Clear();
+            }
+            if (allSkipIds.Any())
+            {
+                await stagingRepo.BulkUpdateStatusAsync(allSkipIds, "Completed");
+                allSkipIds.Clear();
+            }
+            if (allFailedIds.Any())
+            {
+                await stagingRepo.BulkUpdateStatusAsync(allFailedIds, "Failed");
+                allFailedIds.Clear();
             }
         }
 
@@ -319,80 +388,24 @@ public class BatchProductProcessor
         {
             while (reader.TryRead(out var item))
             {
-                if (item.Skipped) skipIds.Add(item.Staged.Id);
-                else if (item.Dto != null) { importBatch.Add(item.Dto); stagingIds.Add(item.Staged.Id); }
-                else failedIds.Add(item.Staged.Id);
+                if (item.Skipped)
+                {
+                    skipIds.Add(item.Staged.Id);
+                }
+                else if (item.Dto != null)
+                {
+                    importBatch.Add(item.Dto);
+                    stagingIds.Add(item.Staged.Id);
+                }
+                else
+                {
+                    failedIds.Add(item.Staged.Id);
+                }
 
-                if (importBatch.Count + skipIds.Count + failedIds.Count >= _batchSize) await FlushAsync();
+                if (importBatch.Count >= _batchSize) await FlushAsync();
             }
         }
         await FlushAsync();
-
-        if (allSkipIds.Any())
-            await stagingRepo.BulkUpdateStatusAsync(allSkipIds, "Completed", "Skipped: Already exists in Product table");
-
-        if (allSuccessIds.Any())
-            await stagingRepo.BulkUpdateStatusAsync(allSuccessIds, "Completed");
-
-        if (allFailedIds.Any())
-            await stagingRepo.BulkUpdateStatusAsync(allFailedIds, "Failed", "Processing error");
-    }
-
-    private FullProductImportDto MapToFullImportDto(StagedProduct staged)
-    {
-        var dto = new FullProductImportDto
-        {
-            Product = new CreateProductRequest
-            {
-                Name = staged.ProductName ?? "Unknown Product",
-                Brand = staged.Brands,
-                Barcode = staged.Barcode,
-                BarcodeType = DetermineBarcodeType(staged.Barcode),
-                Description = staged.GenericName,
-                Category = ExtractPrimaryCategory(staged.Categories),
-                ImageUrl = staged.ImageUrl
-            },
-            ExternalId = staged.ExternalId,
-            ExternalSource = "OpenFoodFacts"
-        };
-
-        var ingredientsText = staged.IngredientsTextEn ?? staged.IngredientsText;
-        if (!string.IsNullOrWhiteSpace(ingredientsText))
-        {
-            var parsedNames = _ingredientListParser.ParseIngredients(ingredientsText).Take(50).ToList();
-
-            foreach (var name in parsedNames)
-            {
-                if (_ingredientCache!.TryGetValue(name, out var ingId))
-                    dto.IngredientIds.Add(ingId);
-                else
-                    dto.IngredientNames.Add(name);
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(staged.ImageUrl))
-        {
-            dto.Images.Add(new ProductImageDto {
-                ImageUrl = staged.ImageUrl,
-                ImageType = DetermineImageType(staged.ImageUrl),
-                IsPrimary = true,
-                DisplayOrder = 0,
-                SourceSystem = "OpenFoodFacts"
-            });
-        }
-
-        if (!string.IsNullOrWhiteSpace(staged.Allergens))
-        {
-            dto.Allergens = staged.Allergens.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Take(20).ToList();
-        }
-
-        if (!string.IsNullOrWhiteSpace(staged.NutritionData))
-        {
-            dto.Metadata["nutrition_json"] = staged.NutritionData;
-        }
-
-        return dto;
     }
 
     private static string? DetermineBarcodeType(string? barcode)

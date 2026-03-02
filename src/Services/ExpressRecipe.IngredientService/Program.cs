@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.IngredientService.Data;
+using ExpressRecipe.IngredientService.Services.Parsing;
 using ExpressRecipe.Shared.CQRS;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
@@ -18,6 +19,10 @@ var connectionString = builder.Configuration.GetConnectionString("ingredientdb")
 
 // Repositories
 builder.Services.AddScoped<IIngredientRepository>(sp => new IngredientRepository(connectionString));
+
+// Parsing Services
+builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>();
+builder.Services.AddScoped<IIngredientParser, IngredientParser>();
 
 // Add gRPC
 builder.Services.AddGrpc();

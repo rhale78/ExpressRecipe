@@ -95,21 +95,22 @@ public class RecipeProcessingWorker : BackgroundService
                 {
                     _logger.LogInformation("Found {Count} pending recipes to process", pendingCount);
 
-                    var ingredientClient = scope.ServiceProvider.GetRequiredService<IngredientServiceClient>();
+                    var ingredientClient = scope.ServiceProvider.GetRequiredService<IIngredientServiceClient>();
 
                     var maxParallelism = _configuration.GetValue<int>("RecipeImport:MaxParallelism", 4);
-                    var batchSize = _configuration.GetValue<int>("RecipeImport:BatchSize", 5000);
-                    var bufferSize = _configuration.GetValue<int>("RecipeImport:BufferSize", 50000);
+                    var batchSize = _configuration.GetValue<int>("RecipeImport:BatchSize", 100);
+                    var bufferSize = _configuration.GetValue<int>("RecipeImport:BufferSize", 1000);
+var processor = new BatchRecipeProcessor(
+    processorLogger,
+    _configuration,
+    ingredientClient,
+    maxParallelism,
+    batchSize,
+    bufferSize);
 
-                    var batchProcessor = new BatchRecipeProcessor(
-                        processorLogger,
-                        _configuration,
-                        ingredientClient,
-                        maxParallelism,
-                        batchSize,
-                        bufferSize);
 
-                    var result = await batchProcessor.ProcessStagedRecipesAsync(
+
+                    var result = await processor.ProcessStagedRecipesAsync(
                         stagingRepo,
                         recipeRepo,
                         stoppingToken);

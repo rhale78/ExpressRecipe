@@ -67,7 +67,6 @@ public class ProductProcessingWorker : BackgroundService
                 var productRepo = scope.ServiceProvider.GetRequiredService<IProductRepository>();
                 var ingredientRepo = scope.ServiceProvider.GetRequiredService<IIngredientRepository>();
                 var productImageRepo = scope.ServiceProvider.GetRequiredService<IProductImageRepository>();
-                var ingredientListParser = scope.ServiceProvider.GetRequiredService<IIngredientListParser>();
                 var batchProcessorLogger = scope.ServiceProvider.GetRequiredService<ILogger<BatchProductProcessor>>();
 
                 // Check for pending products
@@ -86,7 +85,6 @@ public class ProductProcessingWorker : BackgroundService
 
                     var batchProcessor = new BatchProductProcessor(
                         batchProcessorLogger,
-                        ingredientListParser,
                         _configuration,
                         ingredientClient,
                         maxParallelism,

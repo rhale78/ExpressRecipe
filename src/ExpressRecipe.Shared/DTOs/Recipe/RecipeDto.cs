@@ -326,6 +326,7 @@ public class RecipeImageDto
     public Guid Id { get; set; }
     public Guid RecipeId { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
+    public string? ImageType { get; set; }
     public string? LocalPath { get; set; }
     public bool IsPrimary { get; set; }
     public int DisplayOrder { get; set; }

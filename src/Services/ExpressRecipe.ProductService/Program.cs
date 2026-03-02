@@ -85,10 +85,6 @@ builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connect
 builder.Services.AddScoped<IProductStagingRepository>(sp => new ProductStagingRepository(connectionString));
 builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(connectionString));
 
-// Register parsers
-builder.Services.AddScoped<IIngredientParser, IngredientParser>(); // For parsing individual ingredient components
-builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>(); // For parsing full ingredient lists
-
 // Register OpenFoodFacts import service
 builder.Services.AddHttpClient<OpenFoodFactsImportService>();
 builder.Services.AddScoped<OpenFoodFactsImportService>(sp => 
@@ -98,9 +94,9 @@ builder.Services.AddScoped<OpenFoodFactsImportService>(sp =>
     var stagingRepo = sp.GetRequiredService<IProductStagingRepository>();
     var imageRepo = sp.GetRequiredService<IProductImageRepository>();
     var logger = sp.GetRequiredService<ILogger<OpenFoodFactsImportService>>();
-    var ingredientParser = sp.GetRequiredService<IIngredientListParser>();
+    var ingredientClient = sp.GetRequiredService<IIngredientServiceClient>();
     var configuration = sp.GetRequiredService<IConfiguration>();
-    return new OpenFoodFactsImportService(httpClient, productRepo, stagingRepo, imageRepo, logger, ingredientParser, configuration);
+    return new OpenFoodFactsImportService(httpClient, productRepo, stagingRepo, imageRepo, logger, ingredientClient, configuration);
 });
 builder.Services.AddScoped<USDAFoodDataImportService>();
 

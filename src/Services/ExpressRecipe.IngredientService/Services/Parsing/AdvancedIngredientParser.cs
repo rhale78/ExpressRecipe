@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace ExpressRecipe.ProductService.Services;
+namespace ExpressRecipe.IngredientService.Services.Parsing;
 
 /// <summary>
 /// Result of ingredient validation indicating if it needs further processing
@@ -21,6 +21,7 @@ public class IngredientValidationResult
 public interface IIngredientListParser
 {
     List<string> ParseIngredients(string ingredientsText);
+    Dictionary<string, List<string>> BulkParseIngredients(IEnumerable<string> ingredientTexts);
     IngredientValidationResult ValidateIngredient(string ingredient);
 }
 
@@ -86,6 +87,16 @@ public class AdvancedIngredientParser : IIngredientListParser
             .ToList();
 
         return cleaned;
+    }
+
+    public Dictionary<string, List<string>> BulkParseIngredients(IEnumerable<string> ingredientTexts)
+    {
+        var results = new Dictionary<string, List<string>>();
+        foreach (var text in ingredientTexts.Distinct())
+        {
+            results[text] = ParseIngredients(text);
+        }
+        return results;
     }
 
     /// <summary>
