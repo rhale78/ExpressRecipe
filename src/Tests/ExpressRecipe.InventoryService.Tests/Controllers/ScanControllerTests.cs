@@ -48,9 +48,9 @@ public class ScanControllerTests
         var result = await _controller.StartSession(request);
 
         // Assert
-        result.Should().BeOfType<OkObjectResult>();
-        var okResult = result as OkObjectResult;
-        okResult!.Value.Should().BeEquivalentTo(sessionDto);
+        result.Should().BeOfType<CreatedAtActionResult>();
+        var createdResult = result as CreatedAtActionResult;
+        createdResult!.Value.Should().BeEquivalentTo(sessionDto);
 
         _mockRepository.Verify(r => r.StartScanSessionAsync(_testUserId, null, request.SessionType, request.StorageLocationId), Times.Once);
     }
@@ -77,7 +77,7 @@ public class ScanControllerTests
         var result = await _controller.StartSession(request);
 
         // Assert
-        result.Should().BeOfType<OkObjectResult>();
+        result.Should().BeOfType<CreatedAtActionResult>();
         _mockRepository.Verify(r => r.StartScanSessionAsync(_testUserId, null, "Adding", request.StorageLocationId), Times.Once);
     }
 
@@ -103,9 +103,9 @@ public class ScanControllerTests
         var result = await _controller.StartSession(request);
 
         // Assert
-        result.Should().BeOfType<OkObjectResult>();
-        var okResult = result as OkObjectResult;
-        var session = okResult!.Value as ScanSessionDto;
+        result.Should().BeOfType<CreatedAtActionResult>();
+        var createdResult = result as CreatedAtActionResult;
+        var session = createdResult!.Value as ScanSessionDto;
         session.Should().NotBeNull();
         session!.SessionType.Should().Be("Using");
     }
@@ -132,9 +132,9 @@ public class ScanControllerTests
         var result = await _controller.StartSession(request);
 
         // Assert
-        result.Should().BeOfType<OkObjectResult>();
-        var okResult = result as OkObjectResult;
-        var session = okResult!.Value as ScanSessionDto;
+        result.Should().BeOfType<CreatedAtActionResult>();
+        var createdResult = result as CreatedAtActionResult;
+        var session = createdResult!.Value as ScanSessionDto;
         session!.SessionType.Should().Be("Disposing");
     }
 
@@ -177,7 +177,7 @@ public class ScanControllerTests
         var result = await _controller.GetActiveSession();
 
         // Assert
-        result.Should().BeOfType<NotFoundResult>();
+        result.Should().BeOfType<NotFoundObjectResult>();
     }
 
     #endregion
@@ -423,7 +423,7 @@ public class ScanControllerTests
         var result = await _controller.EndSession(sessionId);
 
         // Assert
-        result.Should().BeOfType<NoContentResult>();
+        result.Should().BeOfType<OkObjectResult>();
         _mockRepository.Verify(r => r.EndScanSessionAsync(sessionId), Times.Once);
     }
 
