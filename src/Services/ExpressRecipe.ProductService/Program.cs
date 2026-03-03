@@ -35,6 +35,8 @@ builder.Services.AddSingleton<HybridCacheService>();
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
+if (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" && builder.Environment.IsProduction())
+    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY environment variable must be configured in production.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

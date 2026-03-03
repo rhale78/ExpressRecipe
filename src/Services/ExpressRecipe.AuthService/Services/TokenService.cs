@@ -34,6 +34,8 @@ public class TokenService : ITokenService
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");
         var secretKey = jwtSettings["SecretKey"] ?? _configuration["JWT_SECRET_KEY"] ?? "development-secret-key-change-in-production-min-32-chars-required!";
+        if (secretKey == "development-secret-key-change-in-production-min-32-chars-required!")
+            _logger.LogWarning("JWT secret key is using development fallback. Configure JWT_SECRET_KEY for production use.");
         var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe";
         var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
         var expirationMinutes = int.Parse(jwtSettings["ExpirationMinutes"] ?? "60");
@@ -66,6 +68,8 @@ public class TokenService : ITokenService
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");
         var secretKey = jwtSettings["SecretKey"] ?? _configuration["JWT_SECRET_KEY"] ?? "development-secret-key-change-in-production-min-32-chars-required!";
+        if (secretKey == "development-secret-key-change-in-production-min-32-chars-required!")
+            _logger.LogWarning("JWT secret key is using development fallback. Configure JWT_SECRET_KEY for production use.");
         var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe";
         var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
         var expirationMinutes = int.Parse(jwtSettings["ExpirationMinutes"] ?? "60");
