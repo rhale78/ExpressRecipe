@@ -745,6 +745,16 @@ public class FDARecallImportService
                 {
                     using var bulkCopy = new Microsoft.Data.SqlClient.SqlBulkCopy(connection, Microsoft.Data.SqlClient.SqlBulkCopyOptions.Default, transaction);
                     bulkCopy.DestinationTableName = "RecallProduct";
+                    bulkCopy.BatchSize = 5000;
+
+                    // IMPORTANT: map by column name to avoid ordinal mismatch with destination schema
+                    // (RecallProduct likely has an identity/Id column at ordinal 0)
+                    bulkCopy.ColumnMappings.Add("RecallId", "RecallId");
+                    bulkCopy.ColumnMappings.Add("ProductName", "ProductName");
+                    bulkCopy.ColumnMappings.Add("Brand", "Brand");
+                    bulkCopy.ColumnMappings.Add("LotNumber", "LotNumber");
+                    bulkCopy.ColumnMappings.Add("DistributionArea", "DistributionArea");
+
                     await bulkCopy.WriteToServerAsync(productDt);
                 }
             }

@@ -1,6 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using System.Data;
 
 namespace ExpressRecipe.IngredientService.Data;
@@ -21,8 +22,12 @@ public interface IIngredientRepository
 
 public class IngredientRepository : SqlHelper, IIngredientRepository
 {
-    public IngredientRepository(string connectionString) : base(connectionString)
+    private const int MaxIngredientNameLength = 200;
+    private readonly ILogger<IngredientRepository>? _logger;
+
+    public IngredientRepository(string connectionString, ILogger<IngredientRepository>? logger = null) : base(connectionString)
     {
+        _logger = logger;
     }
 
     public async Task<IngredientDto?> GetIngredientByIdAsync(Guid id)
@@ -60,9 +65,15 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             OUTPUT INSERTED.Id
             VALUES (@Id, @Name, @AltNames, @Desc, @Category, @Allergen, @IngList, @CreatedBy, GETUTCDATE())";
 
+        var safeName = (request.Name ?? string.Empty).Trim();
+        if (safeName.Length > MaxIngredientNameLength)
+        {
+            safeName = safeName[..MaxIngredientNameLength];
+        }
+
         return await ExecuteScalarAsync<Guid>(sql,
             new SqlParameter("@Id", Guid.NewGuid()),
-            new SqlParameter("@Name", request.Name),
+            new SqlParameter("@Name", safeName),
             new SqlParameter("@AltNames", (object?)request.AlternativeNames ?? DBNull.Value),
             new SqlParameter("@Desc", (object?)request.Description ?? DBNull.Value),
             new SqlParameter("@Category", (object?)request.Category ?? DBNull.Value),
@@ -80,9 +91,15 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
                 UpdatedBy = @UpdatedBy, UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND IsDeleted = 0";
 
+        var safeName = (request.Name ?? string.Empty).Trim();
+        if (safeName.Length > MaxIngredientNameLength)
+        {
+            safeName = safeName[..MaxIngredientNameLength];
+        }
+
         var rows = await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
-            new SqlParameter("@Name", request.Name),
+            new SqlParameter("@Name", safeName),
             new SqlParameter("@AltNames", (object?)request.AlternativeNames ?? DBNull.Value),
             new SqlParameter("@Desc", (object?)request.Description ?? DBNull.Value),
             new SqlParameter("@Category", (object?)request.Category ?? DBNull.Value),
@@ -102,7 +119,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
     public async Task<Dictionary<string, Guid>> GetIngredientIdsByNamesAsync(IEnumerable<string> names)
     {
-        var nameList = names.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var nameList = NormalizeIngredientNames(names);
         if (!nameList.Any()) return new Dictionary<string, Guid>();
 
         var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
@@ -146,7 +163,7 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
     public async Task<int> BulkCreateIngredientsAsync(IEnumerable<string> names, Guid? createdBy = null)
     {
-        var namesList = names.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var namesList = NormalizeIngredientNames(names);
         if (!namesList.Any()) return 0;
 
         int createdCount = 0;
@@ -167,6 +184,33 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             createdCount += await ExecuteNonQueryAsync(sql, parameters.ToArray());
         }
         return createdCount;
+    }
+
+    private List<string> NormalizeIngredientNames(IEnumerable<string> names)
+    {
+        var list = new List<string>();
+        var skippedTooLong = 0;
+
+        foreach (var raw in names)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+
+            var name = raw.Trim();
+            if (name.Length > MaxIngredientNameLength)
+            {
+                skippedTooLong++;
+                continue;
+            }
+
+            list.Add(name);
+        }
+
+        if (skippedTooLong > 0)
+        {
+            _logger?.LogWarning("Skipped {Count} ingredient names longer than {MaxLength} characters", skippedTooLong, MaxIngredientNameLength);
+        }
+
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static IngredientDto MapIngredient(SqlDataReader reader)

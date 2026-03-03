@@ -1,0 +1,254 @@
+@page "/prices"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Models.Price
+@using ExpressRecipe.Client.Shared.Services
+@inject IPriceApiClient PriceApi
+@inject NavigationManager Navigation
+
+<PageTitle>Prices - ExpressRecipe</PageTitle>
+
+<style>
+    .prices-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    .prices-header { margin-bottom: 1.5rem; }
+    .search-section { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; }
+    .search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 0.75rem; }
+    .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; color: #555; }
+    .form-input { width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem; box-sizing: border-box; }
+    .search-actions { display: flex; gap: 0.5rem; }
+    .btn { padding: 0.4rem 1rem; border-radius: 4px; border: 1px solid transparent; cursor: pointer; font-size: 0.9rem; }
+    .btn-primary { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .btn-outline { background: #fff; color: #0d6efd; border-color: #0d6efd; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .loading-container { text-align: center; padding: 2rem; color: #666; }
+    .spinner { display: inline-block; width: 2rem; height: 2rem; border: 3px solid #ddd; border-top-color: #0d6efd; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+    .alert-error { background: #f8d7da; color: #842029; border: 1px solid #f5c2c7; border-radius: 4px; padding: 0.75rem; margin-top: 1rem; }
+    .results-summary { color: #555; margin-bottom: 0.75rem; font-size: 0.9rem; }
+    .prices-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .prices-table th { background: #f0f0f0; padding: 0.6rem; text-align: left; border-bottom: 2px solid #ddd; }
+    .prices-table td { padding: 0.6rem; border-bottom: 1px solid #eee; }
+    .prices-table tr:hover td { background: #f8f9ff; }
+    .price-value { font-weight: 700; color: #198754; }
+    .empty-state { text-align: center; padding: 3rem; color: #888; }
+    .pagination { display: flex; gap: 0.4rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
+    .page-number { padding: 0.3rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; background: #fff; }
+    .page-number.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+    .pagination-info { font-size: 0.85rem; color: #666; margin-top: 0.5rem; }
+    .unauthorized-container { text-align: center; padding: 3rem; }
+</style>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="prices-container">
+            <div class="prices-header">
+                <h1>Price Search</h1>
+            </div>
+
+            <div class="search-section">
+                <div class="search-grid">
+                    <div class="form-group">
+                        <label>Product Name</label>
+                        <input type="text" class="form-input" placeholder="e.g. Milk" @bind="_productName" />
+                    </div>
+                    <div class="form-group">
+                        <label>UPC</label>
+                        <input type="text" class="form-input" placeholder="e.g. 012345678901" @bind="_upc" />
+                    </div>
+                    <div class="form-group">
+                        <label>Store Name</label>
+                        <input type="text" class="form-input" placeholder="e.g. Walmart" @bind="_storeName" />
+                    </div>
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" class="form-input" placeholder="e.g. Chicago" @bind="_city" />
+                    </div>
+                    <div class="form-group">
+                        <label>State</label>
+                        <input type="text" class="form-input" placeholder="e.g. IL" @bind="_state" />
+                    </div>
+                    <div class="form-group">
+                        <label>Min Price ($)</label>
+                        <input type="number" class="form-input" placeholder="0.00" step="0.01" @bind="_minPrice" />
+                    </div>
+                    <div class="form-group">
+                        <label>Max Price ($)</label>
+                        <input type="number" class="form-input" placeholder="999.99" step="0.01" @bind="_maxPrice" />
+                    </div>
+                </div>
+                <div class="search-actions">
+                    <button class="btn btn-primary" @onclick="SearchPrices" disabled="@_isLoading">
+                        🔍 Search
+                    </button>
+                    <button class="btn btn-outline" @onclick="ClearSearch" disabled="@_isLoading">
+                        Clear
+                    </button>
+                </div>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="loading-container">
+                    <div class="spinner"></div>
+                    <p>Searching prices...</p>
+                </div>
+            }
+            else if (_searchResult is not null)
+            {
+                <div class="results-summary">
+                    Showing @_searchResult.Prices.Count of @_searchResult.TotalCount.ToString("N0") results
+                </div>
+
+                @if (_searchResult.Prices.Any())
+                {
+                    <table class="prices-table">
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Store</th>
+                                <th>Location</th>
+                                <th>Price</th>
+                                <th>Unit</th>
+                                <th>Date</th>
+                                <th>Source</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var price in _searchResult.Prices)
+                            {
+                                <tr>
+                                    <td>@price.ProductName</td>
+                                    <td>@(price.StoreName ?? price.StoreChain ?? "—")</td>
+                                    <td>@GetLocation(price)</td>
+                                    <td class="price-value">@price.Price.ToString("C")</td>
+                                    <td>@(price.Unit ?? "—")</td>
+                                    <td>@price.ObservedAt.ToString("MMM d, yyyy")</td>
+                                    <td>@price.DataSource</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    @if (_searchResult.TotalPages > 1)
+                    {
+                        <div class="pagination">
+                            <button class="btn btn-outline" @onclick="() => ChangePage(_currentPage - 1)" disabled="@(_currentPage <= 1)">← Prev</button>
+                            @for (int p = Math.Max(1, _currentPage - 2); p <= Math.Min(_searchResult.TotalPages, _currentPage + 2); p++)
+                            {
+                                var pageNum = p;
+                                <button class="page-number @(pageNum == _currentPage ? "active" : "")" @onclick="() => ChangePage(pageNum)">@pageNum</button>
+                            }
+                            <button class="btn btn-outline" @onclick="() => ChangePage(_currentPage + 1)" disabled="@(_currentPage >= _searchResult.TotalPages)">Next →</button>
+                        </div>
+                        <div class="pagination-info">Page @_currentPage of @_searchResult.TotalPages</div>
+                    }
+                }
+                else
+                {
+                    <div class="empty-state">
+                        <div style="font-size:2rem">🏷️</div>
+                        <h3>No prices found</h3>
+                        <p>Try adjusting your search criteria.</p>
+                    </div>
+                }
+            }
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert-error"><strong>Error:</strong> @_errorMessage</div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> to search prices.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string? _productName;
+    private string? _upc;
+    private string? _storeName;
+    private string? _city;
+    private string? _state;
+    private decimal? _minPrice;
+    private decimal? _maxPrice;
+
+    private PriceSearchResponse? _searchResult;
+    private int _currentPage = 1;
+    private const int PageSize = 25;
+    private bool _isLoading = false;
+    private string? _errorMessage;
+
+    private async Task SearchPrices()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        _currentPage = 1;
+        await LoadPage();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        if (page < 1 || (_searchResult is not null && page > _searchResult.TotalPages)) return;
+        _currentPage = page;
+        await LoadPage();
+    }
+
+    private async Task LoadPage()
+    {
+        _isLoading = true;
+        try
+        {
+            var request = new PriceSearchRequest
+            {
+                ProductName = string.IsNullOrWhiteSpace(_productName) ? null : _productName,
+                Upc = string.IsNullOrWhiteSpace(_upc) ? null : _upc,
+                StoreName = string.IsNullOrWhiteSpace(_storeName) ? null : _storeName,
+                City = string.IsNullOrWhiteSpace(_city) ? null : _city,
+                State = string.IsNullOrWhiteSpace(_state) ? null : _state,
+                MinPrice = _minPrice,
+                MaxPrice = _maxPrice,
+                Page = _currentPage,
+                PageSize = PageSize
+            };
+
+            _searchResult = await PriceApi.SearchPricesAsync(request);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to search prices: {ex.Message}";
+            _searchResult = new PriceSearchResponse();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        _productName = null;
+        _upc = null;
+        _storeName = null;
+        _city = null;
+        _state = null;
+        _minPrice = null;
+        _maxPrice = null;
+        _searchResult = null;
+        _currentPage = 1;
+        _errorMessage = null;
+        await Task.CompletedTask;
+    }
+
+    private static string GetLocation(ProductPriceItemDto price)
+    {
+        if (!string.IsNullOrEmpty(price.City) && !string.IsNullOrEmpty(price.State))
+            return $"{price.City}, {price.State}";
+        if (!string.IsNullOrEmpty(price.City)) return price.City;
+        if (!string.IsNullOrEmpty(price.State)) return price.State;
+        return "—";
+    }
+}
