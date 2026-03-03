@@ -82,7 +82,6 @@ public class UserProductRatingDto
 
 public class CreateUserProductRatingRequest
 {
-    [Required]
     public Guid ProductId { get; set; }
     
     [Required]

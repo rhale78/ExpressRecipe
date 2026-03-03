@@ -37,7 +37,7 @@ public class UserProductRatingRepository : SqlHelper, IUserProductRatingReposito
                 Rating = GetInt(reader, "Rating") ?? 0,
                 ReviewText = GetString(reader, "ReviewText"),
                 CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow,
-                UpdatedAt = GetDateTime(reader, "UpdatedAt")
+                UpdatedAt = GetDateTimeNullable(reader, "UpdatedAt")
             },
             CreateParameter("@UserId", userId));
     }
@@ -60,7 +60,7 @@ public class UserProductRatingRepository : SqlHelper, IUserProductRatingReposito
                 Rating = GetInt(reader, "Rating") ?? 0,
                 ReviewText = GetString(reader, "ReviewText"),
                 CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow,
-                UpdatedAt = GetDateTime(reader, "UpdatedAt")
+                UpdatedAt = GetDateTimeNullable(reader, "UpdatedAt")
             },
             CreateParameter("@ProductId", productId));
     }
@@ -82,7 +82,7 @@ public class UserProductRatingRepository : SqlHelper, IUserProductRatingReposito
                 Rating = GetInt(reader, "Rating") ?? 0,
                 ReviewText = GetString(reader, "ReviewText"),
                 CreatedAt = GetDateTimeNullable(reader, "CreatedAt") ?? DateTime.UtcNow,
-                UpdatedAt = GetDateTime(reader, "UpdatedAt")
+                UpdatedAt = GetDateTimeNullable(reader, "UpdatedAt")
             },
             CreateParameter("@UserId", userId),
             CreateParameter("@ProductId", productId));

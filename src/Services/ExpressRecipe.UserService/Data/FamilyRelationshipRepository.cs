@@ -68,7 +68,7 @@ public class FamilyRelationshipRepository : SqlHelper, IFamilyRelationshipReposi
                 fr.Notes
             FROM FamilyRelationship fr
             INNER JOIN FamilyMember fm ON fr.FamilyMemberId2 = fm.Id
-            WHERE fr.Id = @Id AND fr.IsDeleted = 0";
+            WHERE fr.Id = @Id AND fr.IsDeleted = 0 AND fm.IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
             sql,
