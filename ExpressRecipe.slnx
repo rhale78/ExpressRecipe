@@ -255,5 +255,8 @@
     <Project Path="src/Tests/ExpressRecipe.UserService.Tests/ExpressRecipe.UserService.Tests.csproj">
       <Build Project="false" />
     </Project>
+    <Project Path="src/Tests/ExpressRecipe.RecipeService.Tests/ExpressRecipe.RecipeService.Tests.csproj">
+      <Build Project="false" />
+    </Project>
   </Folder>
 </Solution>
