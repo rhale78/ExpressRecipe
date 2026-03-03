@@ -124,10 +124,11 @@ builder.Services.AddQueryHandler<SearchRecipesQuery, SearchRecipesResult, Search
 // Register services
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.RecipeImportService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.NutritionExtractionService>();
-builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectionService>(sp =>
-    new ExpressRecipe.RecipeService.Services.AllergenDetectionService(
+builder.Services.AddScoped<IAllergenRepository>(sp =>
+    new SqlAllergenRepository(
         connectionString,
-        sp.GetRequiredService<ILogger<ExpressRecipe.RecipeService.Services.AllergenDetectionService>>()));
+        sp.GetRequiredService<ILogger<SqlAllergenRepository>>()));
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectionService>();
 builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloadService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ServingSizeService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ShoppingListIntegrationService>();
