@@ -193,3 +193,8 @@ user-secrets.json
 *.cert
 *.crt
 .nuget/
+/ExpressRecipe.sln.backup
+/ExpressRecipe.sln.backup2
+/ExpressRecipe.sln.backup3
+/Reorganize-Solution-v3.ps1
+/Reorganize-Solution.ps1

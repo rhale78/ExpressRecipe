@@ -28,8 +28,6 @@
 - **AI**: Ollama (llama2, mistral, codellama)
 
 ## Project Structure
-
-```
 src/
 ├── ExpressRecipe.AppHost/          # Aspire orchestration
 ├── ExpressRecipe.ServiceDefaults/   # Shared defaults
@@ -52,8 +50,6 @@ src/
     ├── ExpressRecipe.BlazorWeb/
     ├── ExpressRecipe.Windows/
     └── ExpressRecipe.MAUI/
-```
-
 ## Coding Standards
 
 ### Naming Conventions
@@ -77,16 +73,12 @@ src/
 
 ### API Design
 
-**RESTful conventions:**
-```
-GET    /api/products          - List products
+**RESTful conventions:**GET    /api/products          - List products
 GET    /api/products/{id}     - Get product by ID
 POST   /api/products          - Create product
 PUT    /api/products/{id}     - Update product
 DELETE /api/products/{id}     - Delete product
 GET    /api/products/search   - Search products
-```
-
 **Always use DTOs for API contracts, never expose domain models directly.**
 
 ## Critical Rules
@@ -101,9 +93,7 @@ GET    /api/products/search   - Search products
 6. **Deadlock handling is automatic** - SqlHelper includes built-in retry logic with exponential backoff
 7. **Use helper methods for safe reading** - SqlHelper provides `GetGuid()`, `GetString()`, `GetInt32()`, etc. that handle nulls and column names
 
-Example:
-```csharp
-public class ProductRepository : SqlHelper
+Example:public class ProductRepository : SqlHelper
 {
     public ProductRepository(string connectionString) : base(connectionString) { }
 
@@ -129,8 +119,6 @@ public class ProductRepository : SqlHelper
         return products.FirstOrDefault();
     }
 }
-```
-
 **SqlHelper provides helper methods for safe data reading:**
 - `GetGuid(reader, "ColumnName")` - Get Guid by column name
 - `GetGuidNullable(reader, "ColumnName")` - Get nullable Guid
@@ -166,9 +154,7 @@ Each microservice MUST have:
 
 ### Database Schema Rules
 
-All tables MUST include these base columns:
-```sql
-Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+All tables MUST include these base columns:Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
 CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
 CreatedBy UNIQUEIDENTIFIER NULL,
 UpdatedAt DATETIME2 NULL,
@@ -176,8 +162,6 @@ UpdatedBy UNIQUEIDENTIFIER NULL,
 IsDeleted BIT NOT NULL DEFAULT 0,
 DeletedAt DATETIME2 NULL,
 RowVersion ROWVERSION
-```
-
 ### Async/Await
 
 1. **Always use async/await** for I/O operations
@@ -212,8 +196,6 @@ RowVersion ROWVERSION
 ## Common Pitfalls to Avoid
 
 ### ❌ DON'T
-
-```csharp
 // DON'T mix concerns - no database access in controllers
 public class ProductsController : ControllerBase
 {
@@ -231,11 +213,7 @@ var result = _service.GetAsync().Result; // Deadlock risk!
 // DON'T expose domain models
 [HttpPost]
 public async Task<Product> Create(Product product) // Domain model exposed
-```
-
 ### ✅ DO
-
-```csharp
 // DO separate concerns - Controller → Service → Repository
 public class ProductsController : ControllerBase
 {
@@ -255,13 +233,9 @@ var result = await _service.GetAsync();
 // DO use DTOs for APIs
 [HttpPost]
 public async Task<ProductResponse> Create(CreateProductRequest request)
-```
-
 ## Development Workflow
 
 ### Building and Testing
-
-```bash
 # Restore dependencies
 dotnet restore
 
@@ -278,11 +252,7 @@ dotnet run
 # Run with Aspire (all services)
 cd src/ExpressRecipe.AppHost
 dotnet run
-```
-
 ### Docker Development
-
-```bash
 # Start all services
 docker compose up -d
 
@@ -291,8 +261,6 @@ docker compose logs -f
 
 # Stop services
 docker compose down
-```
-
 ### Migrations
 
 - SQL scripts in `Data/Migrations/` folder
@@ -309,8 +277,6 @@ docker compose down
 ## Aspire Service Registration
 
 Each service should register with Aspire defaults:
-
-```csharp
 var builder = WebApplication.CreateBuilder(args);
 
 // Add Aspire defaults (logging, health checks, telemetry)
@@ -337,8 +303,6 @@ var app = builder.Build();
 app.MapDefaultEndpoints(); // Aspire health checks
 app.MapControllers();
 app.Run();
-```
-
 ## Security
 
 1. **NEVER commit secrets** - use User Secrets, environment variables, or Azure Key Vault
@@ -355,6 +319,10 @@ app.Run();
 - Use `codellama` for technical queries
 - Always provide context and examples in prompts
 - Handle timeout gracefully (AI operations can be slow)
+
+## Solution Structure
+
+- When reorganizing solution structure, preserve and validate the active `.slnx` file format and avoid replacing it with a reconstructed `.sln` file.
 
 ---
 
