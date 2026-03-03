@@ -2,6 +2,7 @@ using ExpressRecipe.Data.Common;
 using ExpressRecipe.SyncService.Data;
 using ExpressRecipe.SyncService.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using ExpressRecipe.Shared.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -77,6 +78,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

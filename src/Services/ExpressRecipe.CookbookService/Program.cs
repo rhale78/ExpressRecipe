@@ -74,6 +74,7 @@ var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath)
 await app.RunMigrationsAsync(connectionString, migrations);
 
 app.MapDefaultEndpoints();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors();
 

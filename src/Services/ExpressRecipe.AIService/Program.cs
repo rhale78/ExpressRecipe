@@ -3,6 +3,7 @@ using ExpressRecipe.AIService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using ExpressRecipe.Shared.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,6 +82,7 @@ var app = builder.Build();
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

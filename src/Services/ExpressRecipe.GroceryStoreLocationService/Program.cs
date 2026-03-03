@@ -6,6 +6,7 @@ using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using ExpressRecipe.Shared.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -103,6 +104,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors("AllowAll");
 app.UseAuthentication();
