@@ -38,6 +38,8 @@ var secretKey = jwtSettings["SecretKey"] ??
                 builder.Configuration["Jwt:Key"] ?? 
                 Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
                 "development-secret-key-change-in-production-min-32-chars-required!";
+if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
+    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

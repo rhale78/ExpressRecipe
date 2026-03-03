@@ -96,6 +96,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

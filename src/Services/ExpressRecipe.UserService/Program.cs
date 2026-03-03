@@ -22,6 +22,8 @@ builder.AddRedisClient("redis");
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
+if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
+    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
 var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService";
 var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
 
@@ -83,6 +85,9 @@ builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(con
 builder.Services.AddScoped<IEnhancedAllergenRepository>(sp => new EnhancedAllergenRepository(connectionString));
 builder.Services.AddScoped<IDietaryRestrictionRepository>(sp => new DietaryRestrictionRepository(connectionString));
 builder.Services.AddScoped<IFamilyMemberRepository>(sp => new FamilyMemberRepository(connectionString));
+builder.Services.AddScoped<IFamilyRelationshipRepository>(sp => new FamilyRelationshipRepository(connectionString));
+builder.Services.AddScoped<IUserFavoritesRepository>(sp => new UserFavoritesRepository(connectionString));
+builder.Services.AddScoped<IUserProductRatingRepository>(sp => new UserProductRatingRepository(connectionString));
 builder.Services.AddScoped<ICuisineRepository>(sp => new CuisineRepository(connectionString));
 builder.Services.AddScoped<IHealthGoalRepository>(sp => new HealthGoalRepository(connectionString));
 builder.Services.AddScoped<IUserPreferenceRepository>(sp => new UserPreferenceRepository(connectionString));
@@ -92,6 +97,20 @@ builder.Services.AddScoped<IFamilyScoreRepository>(sp => new FamilyScoreReposito
 builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(connectionString));
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
+
+// Register named HTTP clients for service-to-service calls
+builder.Services.AddHttpClient("AuthService", client =>
+{
+    var authServiceUrl = builder.Configuration["Services:AuthService"] ?? "http://authservice";
+    client.BaseAddress = new Uri(authServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient("NotificationService", client =>
+{
+    var notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
+    client.BaseAddress = new Uri(notificationServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 // Register background services
 builder.Services.AddHostedService<ExpressRecipe.UserService.Services.SubscriptionRenewalService>();

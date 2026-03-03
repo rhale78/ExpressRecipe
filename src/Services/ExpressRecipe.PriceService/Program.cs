@@ -4,6 +4,7 @@ using ExpressRecipe.PriceService.Services;
 using ExpressRecipe.PriceService.Workers;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using ExpressRecipe.Shared.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -113,6 +114,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors("AllowAll");
 app.UseAuthentication();

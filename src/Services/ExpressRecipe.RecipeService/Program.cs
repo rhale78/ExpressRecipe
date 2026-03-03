@@ -42,6 +42,8 @@ builder.Services.AddSingleton<ExpressRecipe.Shared.Services.CacheService>();
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
+if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
+    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -122,10 +124,11 @@ builder.Services.AddQueryHandler<SearchRecipesQuery, SearchRecipesResult, Search
 // Register services
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.RecipeImportService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.NutritionExtractionService>();
-builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectionService>(sp =>
-    new ExpressRecipe.RecipeService.Services.AllergenDetectionService(
+builder.Services.AddScoped<IAllergenRepository>(sp =>
+    new SqlAllergenRepository(
         connectionString,
-        sp.GetRequiredService<ILogger<ExpressRecipe.RecipeService.Services.AllergenDetectionService>>()));
+        sp.GetRequiredService<ILogger<SqlAllergenRepository>>()));
+builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectionService>();
 builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloadService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ServingSizeService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ShoppingListIntegrationService>();

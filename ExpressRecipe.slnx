@@ -222,10 +222,19 @@
     <Project Path="src/Tests/ExpressRecipe.AIService.Tests/ExpressRecipe.AIService.Tests.csproj">
       <Build Project="false" />
     </Project>
+    <Project Path="src/Tests/ExpressRecipe.AuthService.Tests/ExpressRecipe.AuthService.Tests.csproj">
+      <Build Project="false" />
+    </Project>
     <Project Path="src/Tests/ExpressRecipe.CookbookService.Tests/ExpressRecipe.CookbookService.Tests.csproj">
       <Build Project="false" />
     </Project>
     <Project Path="src/Tests/ExpressRecipe.GroceryStoreLocationService.Tests/ExpressRecipe.GroceryStoreLocationService.Tests.csproj">
+      <Build Project="false" />
+    </Project>
+    <Project Path="src/Tests/ExpressRecipe.IngredientService.Tests/ExpressRecipe.IngredientService.Tests.csproj">
+      <Build Project="false" />
+    </Project>
+    <Project Path="src/Tests/ExpressRecipe.InventoryService.Tests/ExpressRecipe.InventoryService.Tests.csproj">
       <Build Project="false" />
     </Project>
     <Project Path="src/Tests/ExpressRecipe.Messaging.Benchmarks/ExpressRecipe.Messaging.Benchmarks.csproj">
@@ -238,6 +247,15 @@
       <Build Project="false" />
     </Project>
     <Project Path="src/Tests/ExpressRecipe.PriceService.Tests/ExpressRecipe.PriceService.Tests.csproj">
+      <Build Project="false" />
+    </Project>
+    <Project Path="src/Tests/ExpressRecipe.ShoppingService.Tests/ExpressRecipe.ShoppingService.Tests.csproj">
+      <Build Project="false" />
+    </Project>
+    <Project Path="src/Tests/ExpressRecipe.UserService.Tests/ExpressRecipe.UserService.Tests.csproj">
+      <Build Project="false" />
+    </Project>
+    <Project Path="src/Tests/ExpressRecipe.RecipeService.Tests/ExpressRecipe.RecipeService.Tests.csproj">
       <Build Project="false" />
     </Project>
   </Folder>
