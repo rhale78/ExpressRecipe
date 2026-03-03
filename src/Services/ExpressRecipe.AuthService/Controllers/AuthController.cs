@@ -280,6 +280,7 @@ public class AuthController : ControllerBase
     /// Internal endpoint for creating user accounts from other services (e.g., UserService)
     /// </summary>
     [HttpPost("register-internal")]
+    [Authorize(Policy = "InternalService")]
     public async Task<IActionResult> RegisterInternal([FromBody] RegisterRequest request)
     {
         try
