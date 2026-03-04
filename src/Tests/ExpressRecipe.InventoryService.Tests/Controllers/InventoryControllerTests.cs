@@ -475,6 +475,9 @@ public class InventoryControllerTests
         result.Should().BeOfType<OkObjectResult>();
         var okResult = result as OkObjectResult;
         okResult!.Value.Should().BeEquivalentTo(items);
+
+        _mockRepository.Verify(r => r.GetAddressByIdAsync(addressId), Times.Once);
+        _mockRepository.Verify(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId), Times.Once);
     }
 
     #endregion

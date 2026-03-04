@@ -402,6 +402,7 @@ public class HouseholdControllerTests
         var okResult = result as OkObjectResult;
         okResult!.Value.Should().BeEquivalentTo(locations);
 
+        _mockRepository.Verify(r => r.GetAddressByIdAsync(addressId), Times.Once);
         _mockRepository.Verify(r => r.GetStorageLocationsByAddressAsync(addressId), Times.Once);
     }
 
