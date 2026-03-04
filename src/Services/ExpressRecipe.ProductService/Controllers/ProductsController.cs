@@ -332,7 +332,7 @@ public class ProductsController : ControllerBase
     /// Approve or reject a product (admin only)
     /// </summary>
     [HttpPost("{id:guid}/approve")]
-    [Authorize] // TODO: Add admin role check
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> Approve(Guid id, [FromBody] ApproveProductRequest request)
     {
         try

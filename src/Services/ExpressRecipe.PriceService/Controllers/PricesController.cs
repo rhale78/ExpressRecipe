@@ -131,7 +131,7 @@ public class PricesController : ControllerBase
     }
 
     /// <summary>POST /api/prices/import/trigger — Trigger a manual import (admin only)</summary>
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     [HttpPost("import/trigger")]
     public async Task<IActionResult> TriggerImport([FromQuery] string source = "OpenPrices")
     {

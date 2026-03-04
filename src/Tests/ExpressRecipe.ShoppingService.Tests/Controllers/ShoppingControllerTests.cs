@@ -216,6 +216,10 @@ public class ShoppingControllerTests
         var listId = Guid.NewGuid();
         var request = new UpdateListRequest { Name = "Updated Name", Description = "Updated desc" };
 
+        // Ownership check: return a list so the user is treated as the owner
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "Old Name" });
         _mockRepository
             .Setup(r => r.UpdateShoppingListAsync(listId, request.Name, request.Description, null))
             .Returns(Task.CompletedTask);
@@ -234,6 +238,10 @@ public class ShoppingControllerTests
         var listId = Guid.NewGuid();
         var request = new UpdateListRequest { Name = "New Name", Description = "New Description" };
 
+        // Ownership check: return a list so the user is treated as the owner
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "Old Name" });
         _mockRepository
             .Setup(r => r.UpdateShoppingListAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>()))
             .Returns(Task.CompletedTask);
@@ -243,6 +251,26 @@ public class ShoppingControllerTests
 
         // Assert
         _mockRepository.Verify(r => r.UpdateShoppingListAsync(listId, request.Name, request.Description, null), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateList_WhenListNotOwnedByUser_ReturnsNotFound()
+    {
+        // Arrange
+        var listId = Guid.NewGuid();
+        var request = new UpdateListRequest { Name = "Name", Description = null };
+
+        // Ownership check: list not found for this user
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync((ShoppingListDto?)null);
+
+        // Act
+        var result = await _controller.UpdateList(listId, request);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+        _mockRepository.Verify(r => r.UpdateShoppingListAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<Guid?>()), Times.Never);
     }
 
     #endregion

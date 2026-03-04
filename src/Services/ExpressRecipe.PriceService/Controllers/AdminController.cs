@@ -8,7 +8,7 @@ namespace ExpressRecipe.PriceService.Controllers;
 /// <summary>
 /// Admin endpoints for managing price imports and batch operations
 /// </summary>
-[Authorize]
+[Authorize(Roles = "Admin")]
 [ApiController]
 [Route("api/[controller]")]
 public class AdminController : ControllerBase

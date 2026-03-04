@@ -19,7 +19,11 @@ public class InventoryController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Get all inventory items for the authenticated user
@@ -27,11 +31,19 @@ public class InventoryController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetInventory()
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting inventory for user {UserId}", userId);
-
-        var items = await _repository.GetUserInventoryAsync(userId);
-        return Ok(items);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting inventory for user {UserId}", userId);
+            var items = await _repository.GetUserInventoryAsync(userId.Value);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving inventory");
+            return StatusCode(500, new { message = "An error occurred while retrieving inventory" });
+        }
     }
 
     /// <summary>
@@ -40,25 +52,32 @@ public class InventoryController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> AddItem([FromBody] AddInventoryItemRequest request)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Adding inventory item for user {UserId}", userId);
-
-        var itemId = await _repository.AddInventoryItemAsync(
-            userId,
-            request.HouseholdId,
-            request.ProductId,
-            request.CustomName,
-            request.StorageLocationId,
-            request.Quantity,
-            request.Unit,
-            request.ExpirationDate,
-            request.Barcode,
-            request.Price,
-            request.PreferredStore,
-            request.StoreLocation);
-
-        var item = await _repository.GetInventoryItemAsync(itemId, userId);
-        return CreatedAtAction(nameof(GetItem), new { id = itemId }, item);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Adding inventory item for user {UserId}", userId);
+            var itemId = await _repository.AddInventoryItemAsync(
+                userId.Value,
+                request.HouseholdId,
+                request.ProductId,
+                request.CustomName,
+                request.StorageLocationId,
+                request.Quantity,
+                request.Unit,
+                request.ExpirationDate,
+                request.Barcode,
+                request.Price,
+                request.PreferredStore,
+                request.StoreLocation);
+            var item = await _repository.GetInventoryItemAsync(itemId, userId.Value);
+            return CreatedAtAction(nameof(GetItem), new { id = itemId }, item);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding inventory item");
+            return StatusCode(500, new { message = "An error occurred while adding the inventory item" });
+        }
     }
 
     /// <summary>
@@ -67,14 +86,21 @@ public class InventoryController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetItem(Guid id)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting inventory item {ItemId} for user {UserId}", id, userId);
-
-        var item = await _repository.GetInventoryItemAsync(id, userId);
-        if (item == null)
-            return NotFound();
-
-        return Ok(item);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting inventory item {ItemId} for user {UserId}", id, userId);
+            var item = await _repository.GetInventoryItemAsync(id, userId.Value);
+            if (item == null)
+                return NotFound();
+            return Ok(item);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving inventory item {ItemId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving the inventory item" });
+        }
     }
 
     /// <summary>
@@ -83,12 +109,20 @@ public class InventoryController : ControllerBase
     [HttpPut("{id}/quantity")]
     public async Task<IActionResult> UpdateQuantity(Guid id, [FromBody] UpdateQuantityRequest request)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Updating quantity for item {ItemId}", id);
-
-        await _repository.UpdateInventoryQuantityAsync(id, request.Quantity, request.ActionType, userId, request.Reason, request.DisposalReason, request.AllergenDetected);
-        var item = await _repository.GetInventoryItemAsync(id, userId);
-        return Ok(item);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Updating quantity for item {ItemId}", id);
+            await _repository.UpdateInventoryQuantityAsync(id, request.Quantity, request.ActionType, userId.Value, request.Reason, request.DisposalReason, request.AllergenDetected);
+            var item = await _repository.GetInventoryItemAsync(id, userId.Value);
+            return Ok(item);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating quantity for inventory item {ItemId}", id);
+            return StatusCode(500, new { message = "An error occurred while updating the item quantity" });
+        }
     }
 
     /// <summary>
@@ -97,11 +131,19 @@ public class InventoryController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteItem(Guid id)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Deleting inventory item {ItemId}", id);
-
-        await _repository.DeleteInventoryItemAsync(id, userId);
-        return NoContent();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Deleting inventory item {ItemId}", id);
+            await _repository.DeleteInventoryItemAsync(id, userId.Value);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting inventory item {ItemId}", id);
+            return StatusCode(500, new { message = "An error occurred while deleting the inventory item" });
+        }
     }
 
     /// <summary>
@@ -110,11 +152,19 @@ public class InventoryController : ControllerBase
     [HttpGet("expiring")]
     public async Task<IActionResult> GetExpiringItems([FromQuery] int daysAhead = 7)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting expiring items for user {UserId}", userId);
-
-        var items = await _repository.GetExpiringItemsAsync(userId, daysAhead);
-        return Ok(items);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting expiring items for user {UserId}", userId);
+            var items = await _repository.GetExpiringItemsAsync(userId.Value, daysAhead);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving expiring items");
+            return StatusCode(500, new { message = "An error occurred while retrieving expiring items" });
+        }
     }
 
     /// <summary>
@@ -123,11 +173,19 @@ public class InventoryController : ControllerBase
     [HttpGet("locations")]
     public async Task<IActionResult> GetStorageLocations()
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting storage locations for user {UserId}", userId);
-
-        var locations = await _repository.GetStorageLocationsAsync(userId);
-        return Ok(locations);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting storage locations for user {UserId}", userId);
+            var locations = await _repository.GetStorageLocationsAsync(userId.Value);
+            return Ok(locations);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving storage locations");
+            return StatusCode(500, new { message = "An error occurred while retrieving storage locations" });
+        }
     }
 
     /// <summary>
@@ -136,12 +194,20 @@ public class InventoryController : ControllerBase
     [HttpPost("locations")]
     public async Task<IActionResult> CreateStorageLocation([FromBody] CreateStorageLocationRequest request)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Creating storage location for user {UserId}", userId);
-
-        var locationId = await _repository.CreateStorageLocationAsync(userId, request.HouseholdId, request.AddressId, request.Name, request.Description, request.Temperature);
-        var locations = await _repository.GetStorageLocationsAsync(userId);
-        return CreatedAtAction(nameof(GetStorageLocations), new { id = locationId }, locations.First(l => l.Id == locationId));
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Creating storage location for user {UserId}", userId);
+            var locationId = await _repository.CreateStorageLocationAsync(userId.Value, request.HouseholdId, request.AddressId, request.Name, request.Description, request.Temperature);
+            var locations = await _repository.GetStorageLocationsAsync(userId.Value);
+            return CreatedAtAction(nameof(GetStorageLocations), new { id = locationId }, locations.First(l => l.Id == locationId));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating storage location");
+            return StatusCode(500, new { message = "An error occurred while creating the storage location" });
+        }
     }
 
     /// <summary>
@@ -150,10 +216,17 @@ public class InventoryController : ControllerBase
     [HttpGet("addresses/{addressId}/locations")]
     public async Task<IActionResult> GetLocationsByAddress(Guid addressId)
     {
-        _logger.LogInformation("Getting storage locations for address {AddressId}", addressId);
-
-        var locations = await _repository.GetStorageLocationsByAddressAsync(addressId);
-        return Ok(locations);
+        try
+        {
+            _logger.LogInformation("Getting storage locations for address {AddressId}", addressId);
+            var locations = await _repository.GetStorageLocationsByAddressAsync(addressId);
+            return Ok(locations);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving storage locations for address {AddressId}", addressId);
+            return StatusCode(500, new { message = "An error occurred while retrieving storage locations" });
+        }
     }
 
     /// <summary>
@@ -162,10 +235,17 @@ public class InventoryController : ControllerBase
     [HttpGet("households/{householdId}/locations")]
     public async Task<IActionResult> GetLocationsByHousehold(Guid householdId)
     {
-        _logger.LogInformation("Getting storage locations for household {HouseholdId}", householdId);
-
-        var locations = await _repository.GetStorageLocationsByHouseholdAsync(householdId);
-        return Ok(locations);
+        try
+        {
+            _logger.LogInformation("Getting storage locations for household {HouseholdId}", householdId);
+            var locations = await _repository.GetStorageLocationsByHouseholdAsync(householdId);
+            return Ok(locations);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving storage locations for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving storage locations" });
+        }
     }
 
     /// <summary>
@@ -174,8 +254,16 @@ public class InventoryController : ControllerBase
     [HttpPut("locations/{id}")]
     public async Task<IActionResult> UpdateStorageLocation(Guid id, [FromBody] UpdateStorageLocationRequest request)
     {
-        await _repository.UpdateStorageLocationAsync(id, request.Name, request.Description, request.Temperature, request.AddressId);
-        return NoContent();
+        try
+        {
+            await _repository.UpdateStorageLocationAsync(id, request.Name, request.Description, request.Temperature, request.AddressId);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating storage location {LocationId}", id);
+            return StatusCode(500, new { message = "An error occurred while updating the storage location" });
+        }
     }
 
     /// <summary>
@@ -184,8 +272,16 @@ public class InventoryController : ControllerBase
     [HttpDelete("locations/{id}")]
     public async Task<IActionResult> DeleteStorageLocation(Guid id)
     {
-        await _repository.DeleteStorageLocationAsync(id);
-        return NoContent();
+        try
+        {
+            await _repository.DeleteStorageLocationAsync(id);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting storage location {LocationId}", id);
+            return StatusCode(500, new { message = "An error occurred while deleting the storage location" });
+        }
     }
 
     /// <summary>
@@ -194,10 +290,17 @@ public class InventoryController : ControllerBase
     [HttpGet("households/{householdId}")]
     public async Task<IActionResult> GetHouseholdInventory(Guid householdId)
     {
-        _logger.LogInformation("Getting inventory for household {HouseholdId}", householdId);
-
-        var items = await _repository.GetHouseholdInventoryAsync(householdId);
-        return Ok(items);
+        try
+        {
+            _logger.LogInformation("Getting inventory for household {HouseholdId}", householdId);
+            var items = await _repository.GetHouseholdInventoryAsync(householdId);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving inventory for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving household inventory" });
+        }
     }
 
     /// <summary>
@@ -206,10 +309,17 @@ public class InventoryController : ControllerBase
     [HttpGet("addresses/{addressId}")]
     public async Task<IActionResult> GetInventoryByAddress(Guid addressId)
     {
-        _logger.LogInformation("Getting inventory for address {AddressId}", addressId);
-
-        var items = await _repository.GetInventoryByAddressAsync(addressId);
-        return Ok(items);
+        try
+        {
+            _logger.LogInformation("Getting inventory for address {AddressId}", addressId);
+            var items = await _repository.GetInventoryByAddressAsync(addressId);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving inventory for address {AddressId}", addressId);
+            return StatusCode(500, new { message = "An error occurred while retrieving inventory by address" });
+        }
     }
 
     /// <summary>
@@ -218,10 +328,17 @@ public class InventoryController : ControllerBase
     [HttpGet("locations/{locationId}/items")]
     public async Task<IActionResult> GetInventoryByLocation(Guid locationId)
     {
-        _logger.LogInformation("Getting inventory for location {LocationId}", locationId);
-
-        var items = await _repository.GetInventoryByStorageLocationAsync(locationId);
-        return Ok(items);
+        try
+        {
+            _logger.LogInformation("Getting inventory for location {LocationId}", locationId);
+            var items = await _repository.GetInventoryByStorageLocationAsync(locationId);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving inventory for location {LocationId}", locationId);
+            return StatusCode(500, new { message = "An error occurred while retrieving inventory by location" });
+        }
     }
 
     /// <summary>
@@ -230,11 +347,19 @@ public class InventoryController : ControllerBase
     [HttpGet("low-stock")]
     public async Task<IActionResult> GetLowStockItems([FromQuery] decimal threshold = 2.0m)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting low stock items for user {UserId}", userId);
-
-        var items = await _repository.GetLowStockItemsAsync(userId, threshold);
-        return Ok(items);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting low stock items for user {UserId}", userId);
+            var items = await _repository.GetLowStockItemsAsync(userId.Value, threshold);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving low stock items");
+            return StatusCode(500, new { message = "An error occurred while retrieving low stock items" });
+        }
     }
 
     /// <summary>
@@ -243,11 +368,19 @@ public class InventoryController : ControllerBase
     [HttpGet("running-out")]
     public async Task<IActionResult> GetItemsRunningOut([FromQuery] int withinDays = 7)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting items running out for user {UserId} within {Days} days", userId, withinDays);
-
-        var items = await _repository.GetItemsRunningOutAsync(userId, withinDays);
-        return Ok(items);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting items running out for user {UserId} within {Days} days", userId, withinDays);
+            var items = await _repository.GetItemsRunningOutAsync(userId.Value, withinDays);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving items running out");
+            return StatusCode(500, new { message = "An error occurred while retrieving items running out" });
+        }
     }
 
     /// <summary>
@@ -256,11 +389,19 @@ public class InventoryController : ControllerBase
     [HttpGet("about-to-expire")]
     public async Task<IActionResult> GetItemsAboutToExpire([FromQuery] int daysAhead = 3)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting items about to expire for user {UserId} in {Days} days", userId, daysAhead);
-
-        var items = await _repository.GetItemsAboutToExpireAsync(userId, daysAhead);
-        return Ok(items);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting items about to expire for user {UserId} in {Days} days", userId, daysAhead);
+            var items = await _repository.GetItemsAboutToExpireAsync(userId.Value, daysAhead);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving items about to expire");
+            return StatusCode(500, new { message = "An error occurred while retrieving items about to expire" });
+        }
     }
 
     /// <summary>
@@ -269,11 +410,19 @@ public class InventoryController : ControllerBase
     [HttpGet("report")]
     public async Task<IActionResult> GetInventoryReport([FromQuery] Guid? householdId = null)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting inventory report for user {UserId}", userId);
-
-        var report = await _repository.GetInventoryReportAsync(userId, householdId);
-        return Ok(report);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting inventory report for user {UserId}", userId);
+            var report = await _repository.GetInventoryReportAsync(userId.Value, householdId);
+            return Ok(report);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving inventory report");
+            return StatusCode(500, new { message = "An error occurred while retrieving the inventory report" });
+        }
     }
 
     /// <summary>
@@ -282,11 +431,19 @@ public class InventoryController : ControllerBase
     [HttpGet("{id}/history")]
     public async Task<IActionResult> GetUsageHistory(Guid id, [FromQuery] int limit = 50)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Getting usage history for item {ItemId}", id);
-
-        var history = await _repository.GetUsageHistoryAsync(id, limit);
-        return Ok(history);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Getting usage history for item {ItemId}", id);
+            var history = await _repository.GetUsageHistoryAsync(id, limit);
+            return Ok(history);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving usage history for item {ItemId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving usage history" });
+        }
     }
 }
 

@@ -62,13 +62,22 @@ public class UserProfileController : ControllerBase
     }
 
     /// <summary>
-    /// Get user profile by user ID
+    /// Get user profile by user ID (self or Admin only)
     /// </summary>
     [HttpGet("user/{userId:guid}")]
     public async Task<ActionResult<UserProfileDto>> GetByUserId(Guid userId)
     {
         try
         {
+            var requestingUserId = GetCurrentUserId();
+
+            // Only the profile owner or an Admin can view a profile by user ID
+            var isAdmin = User.IsInRole("Admin");
+            if (requestingUserId != userId && !isAdmin)
+            {
+                return Forbid();
+            }
+
             var profile = await _repository.GetByUserIdAsync(userId);
 
             if (profile == null)
@@ -77,6 +86,10 @@ public class UserProfileController : ControllerBase
             }
 
             return Ok(profile);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
         catch (Exception ex)
         {
