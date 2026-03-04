@@ -366,9 +366,17 @@
 
         try
         {
+            // Get or create the user's default active shopping list
+            var listId = await GetOrCreateDefaultShoppingListAsync();
+            if (listId == null)
+            {
+                ToastService.ShowError("Error", "Could not find or create a shopping list");
+                return;
+            }
+
             var request = new ExpressRecipe.Client.Shared.Models.Shopping.AddShoppingListItemRequest
             {
-                ShoppingListId = Guid.Empty, // TODO: Get from user's default/active shopping list
+                ShoppingListId = listId.Value,
                 Name = scanResult.Product.Name,
                 Brand = scanResult.Product.Brand,
                 Quantity = 1,
@@ -390,6 +398,34 @@
         catch (Exception ex)
         {
             ToastService.ShowError("Error", $"Failed to add to shopping list: {ex.Message}");
+        }
+    }
+
+    private async Task<Guid?> GetOrCreateDefaultShoppingListAsync()
+    {
+        try
+        {
+            // Try to find an existing active list
+            var searchResult = await ShoppingClient.SearchShoppingListsAsync(
+                new ExpressRecipe.Client.Shared.Models.Shopping.ShoppingListSearchRequest
+                {
+                    Status = "Active",
+                    PageSize = 1
+                });
+            if (searchResult?.Lists?.Count > 0)
+                return searchResult.Lists[0].Id;
+
+            // No active list found — create a default one
+            var newListId = await ShoppingClient.CreateShoppingListAsync(
+                new ExpressRecipe.Client.Shared.Models.Shopping.CreateShoppingListRequest
+                {
+                    Name = "My Shopping List"
+                });
+            return newListId;
+        }
+        catch
+        {
+            return null;
         }
     }
 }

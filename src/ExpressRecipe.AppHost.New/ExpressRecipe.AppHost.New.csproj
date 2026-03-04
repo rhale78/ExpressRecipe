@@ -25,6 +25,7 @@
     <ProjectReference Include="..\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.RecipeService\ExpressRecipe.RecipeService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.CookbookService\ExpressRecipe.CookbookService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.InventoryService\ExpressRecipe.InventoryService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.ScannerService\ExpressRecipe.ScannerService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.ShoppingService\ExpressRecipe.ShoppingService.csproj" />

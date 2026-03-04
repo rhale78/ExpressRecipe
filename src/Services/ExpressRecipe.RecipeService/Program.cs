@@ -142,16 +142,7 @@ builder.Services.AddControllers();
 // builder.Services.AddSwaggerGen();
 
 // Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
-    });
-});
+builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 var app = builder.Build();
 

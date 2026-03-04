@@ -229,4 +229,52 @@ public class UserProfileController : ControllerBase
             return StatusCode(500, new { message = "An error occurred" });
         }
     }
+
+    /// <summary>
+    /// Suspend a user account (Admin only)
+    /// </summary>
+    [HttpPost("admin/{userId:guid}/suspend")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> SuspendUser(Guid userId)
+    {
+        try
+        {
+            var adminId = GetCurrentUserId();
+            var success = await _repository.SetSuspendedAsync(userId, true, adminId);
+            if (!success)
+                return NotFound(new { message = "User not found" });
+
+            _logger.LogInformation("User {UserId} suspended by admin {AdminId}", userId, adminId);
+            return Ok(new { message = "User suspended successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error suspending user {UserId}", userId);
+            return StatusCode(500, new { message = "An error occurred" });
+        }
+    }
+
+    /// <summary>
+    /// Activate a suspended user account (Admin only)
+    /// </summary>
+    [HttpPost("admin/{userId:guid}/activate")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> ActivateUser(Guid userId)
+    {
+        try
+        {
+            var adminId = GetCurrentUserId();
+            var success = await _repository.SetSuspendedAsync(userId, false, adminId);
+            if (!success)
+                return NotFound(new { message = "User not found" });
+
+            _logger.LogInformation("User {UserId} activated by admin {AdminId}", userId, adminId);
+            return Ok(new { message = "User activated successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error activating user {UserId}", userId);
+            return StatusCode(500, new { message = "An error occurred" });
+        }
+    }
 }

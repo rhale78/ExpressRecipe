@@ -86,9 +86,31 @@ public class NotificationEventSubscriber : EventSubscriber
         var @event = DeserializeEvent<RecallPublishedEvent>(message);
         if (@event == null) return;
 
-        // TODO: Query users who have affected products in their inventory
-        // For now, this is a placeholder
         Logger.LogInformation("Recall published: {RecallId} - {Severity}", @event.RecallId, @event.Severity);
+
+        // Notify each user identified as having affected products in their inventory
+        foreach (var userId in @event.AffectedUserIds)
+        {
+            try
+            {
+                await repository.CreateNotificationAsync(
+                    userId,
+                    "RecallAlert",
+                    $"⚠️ {(@event.Severity == "High" ? "Urgent " : "")}Product Recall Alert",
+                    $"A product you may have has been recalled (Severity: {@event.Severity}). Please check your inventory.",
+                    "/recalls",
+                    new Dictionary<string, string>
+                    {
+                        ["recallId"] = @event.RecallId.ToString(),
+                        ["severity"] = @event.Severity
+                    }
+                );
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to create recall notification for user {UserId}", userId);
+            }
+        }
     }
 
     private async Task HandlePriceChangedAsync(string message, INotificationRepository repository)
@@ -96,10 +118,34 @@ public class NotificationEventSubscriber : EventSubscriber
         var @event = DeserializeEvent<PriceChangedEvent>(message);
         if (@event == null) return;
 
-        if (@event.PercentChange <= -10) // 10% price drop
+        if (@event.PercentChange <= -10) // 10% or more price drop
         {
-            // TODO: Notify users who have this product in their shopping lists
             Logger.LogInformation("Price dropped {Percent}% for product {ProductId}", @event.PercentChange, @event.ProductId);
+
+            // Notify users who have price alerts for this product
+            foreach (var userId in @event.InterestedUserIds)
+            {
+                try
+                {
+                    await repository.CreateNotificationAsync(
+                        userId,
+                        "PriceDrop",
+                        "💰 Price Drop Alert",
+                        $"A product on your list dropped {Math.Abs(@event.PercentChange):F0}% in price (now {@event.NewPrice:C}).",
+                        "/prices",
+                        new Dictionary<string, string>
+                        {
+                            ["productId"] = @event.ProductId.ToString(),
+                            ["percentChange"] = @event.PercentChange.ToString("F1"),
+                            ["newPrice"] = @event.NewPrice.ToString("F2")
+                        }
+                    );
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to create price drop notification for user {UserId}", userId);
+                }
+            }
         }
     }
 
@@ -133,6 +179,8 @@ public class RecallPublishedEvent
     public Guid RecallId { get; set; }
     public string Severity { get; set; } = string.Empty;
     public List<Guid> ProductIds { get; set; } = new();
+    /// <summary>User IDs who have affected products in their inventory. Populated by RecallService.</summary>
+    public List<Guid> AffectedUserIds { get; set; } = new();
 }
 
 public class PriceChangedEvent
@@ -141,6 +189,8 @@ public class PriceChangedEvent
     public decimal OldPrice { get; set; }
     public decimal NewPrice { get; set; }
     public decimal PercentChange { get; set; }
+    /// <summary>User IDs who have price alerts for this product. Populated by PriceService.</summary>
+    public List<Guid> InterestedUserIds { get; set; } = new();
 }
 
 public class ProductCreatedEvent

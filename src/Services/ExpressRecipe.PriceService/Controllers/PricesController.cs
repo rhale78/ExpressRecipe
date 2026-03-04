@@ -37,6 +37,24 @@ public class PricesController : ControllerBase
         return Ok(new { data = prices, total, page = request.Page, pageSize = request.PageSize });
     }
 
+    /// <summary>POST /api/prices/search — Search prices with filters (body-based)</summary>
+    [AllowAnonymous]
+    [HttpPost("search")]
+    public async Task<IActionResult> SearchPricesPost([FromBody] PriceSearchRequest request)
+    {
+        var prices = await _repository.SearchPricesAsync(request);
+        var total = await _repository.GetSearchCountAsync(request);
+        var pageSize = request.PageSize > 0 ? request.PageSize : 50;
+        return Ok(new
+        {
+            prices,
+            totalCount = total,
+            page = request.Page,
+            pageSize,
+            totalPages = (int)Math.Ceiling((double)total / pageSize)
+        });
+    }
+
     /// <summary>GET /api/prices/product/{productId} — Get prices for a specific product</summary>
     [AllowAnonymous]
     [HttpGet("product/{productId:guid}")]

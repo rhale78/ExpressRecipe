@@ -234,15 +234,21 @@
 
     private async Task SuspendUser(Guid userId)
     {
-        // TODO: Implement suspend user
-        ToastService.ShowWarning("User suspended successfully");
+        var success = await UserApi.SuspendUserAsync(userId);
+        if (success)
+            ToastService.ShowWarning("User suspended successfully");
+        else
+            ToastService.ShowError("Failed to suspend user");
         await LoadUsers();
     }
 
     private async Task ActivateUser(Guid userId)
     {
-        // TODO: Implement activate user
-        ToastService.ShowSuccess("User activated successfully");
+        var success = await UserApi.ActivateUserAsync(userId);
+        if (success)
+            ToastService.ShowSuccess("User activated successfully");
+        else
+            ToastService.ShowError("Failed to activate user");
         await LoadUsers();
     }
 }

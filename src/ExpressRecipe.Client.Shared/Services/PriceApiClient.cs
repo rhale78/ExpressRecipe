@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using ExpressRecipe.Client.Shared.Models.Price;
 
 namespace ExpressRecipe.Client.Shared.Services;
@@ -402,7 +403,8 @@ public class PriceApiClient : IPriceApiClient
         {
             var response = await _httpClient.PostAsJsonAsync("/api/prices/search", request);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<PriceSearchResponse>();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = await response.Content.ReadFromJsonAsync<PriceSearchResponse>(options);
             return result ?? new PriceSearchResponse();
         }
         catch

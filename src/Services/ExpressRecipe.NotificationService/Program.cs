@@ -92,16 +92,7 @@ if (rabbitEnabled)
 builder.Services.AddControllers();
 
 // CORS with SignalR support
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
-    });
-});
+builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 var app = builder.Build();
 
@@ -127,7 +118,7 @@ if (app.Environment.IsDevelopment())
     // app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAll");
+app.UseCors();
 
 // Add rate limiting middleware
 app.UseRateLimiting(new RateLimitOptions
