@@ -67,4 +67,16 @@ public static partial class RecipeServiceLogs
         Level = LogLevel.Error,
         Message = "[RecipeService] Database operation failed")]
     public static partial void LogDatabaseError(this ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 3011,
+        Level = LogLevel.Information,
+        Message = "[RecipeProcessing→IngredientSvc] Batch: {BatchSize} recipes, {UniqueStrings} unique ingredient strings → bulk parse")]
+    public static partial void LogIngredientParseBatch(this ILogger logger, int batchSize, int uniqueStrings);
+
+    [LoggerMessage(
+        EventId = 3012,
+        Level = LogLevel.Information,
+        Message = "[RecipeProcessing→IngredientSvc] Flush: {RecipeCount} recipes, {IngredientCount} unique ingredients → bulk create+lookup")]
+    public static partial void LogIngredientFlush(this ILogger logger, int recipeCount, int ingredientCount);
 }

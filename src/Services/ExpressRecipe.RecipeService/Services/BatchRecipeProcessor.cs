@@ -175,6 +175,7 @@ public class BatchRecipeProcessor : RecipeParserBase
                 Dictionary<string, ParsedIngredientResult> parsedResults = new();
                 if (allRawLines.Any())
                 {
+                    _logger.LogIngredientParseBatch(batch.Count, allRawLines.Count);
                     parsedResults = await _ingredientClient.BulkParseIngredientStringsAsync(allRawLines.ToList());
                 }
 
@@ -245,6 +246,7 @@ public class BatchRecipeProcessor : RecipeParserBase
 
                     if (allIngredientNames.Any())
                     {
+                        _logger.LogIngredientFlush(importBatch.Count, allIngredientNames.Count);
                         await _ingredientClient.BulkCreateIngredientsAsync(allIngredientNames);
                         var nameToId = await _ingredientClient.LookupIngredientIdsAsync(allIngredientNames);
 

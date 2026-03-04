@@ -61,4 +61,16 @@ public static partial class ProductServiceLogs
         Level = LogLevel.Error,
         Message = "[ProductService] Database operation failed")]
     public static partial void LogDatabaseError(this ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 2010,
+        Level = LogLevel.Information,
+        Message = "[ProductProcessing→IngredientSvc] Batch: {BatchSize} products, {TextCount} unique ingredient texts → bulk parse")]
+    public static partial void LogIngredientParseBatch(this ILogger logger, int batchSize, int textCount);
+
+    [LoggerMessage(
+        EventId = 2011,
+        Level = LogLevel.Information,
+        Message = "[ProductProcessing→IngredientSvc] Flush: {ProductCount} products, {IngredientCount} new ingredient names → bulk create+lookup")]
+    public static partial void LogIngredientFlush(this ILogger logger, int productCount, int ingredientCount);
 }

@@ -191,6 +191,7 @@ public class BatchProductProcessor
                 Dictionary<string, List<string>> parsedResults = new();
                 if (textsToParse.Any())
                 {
+                    _logger.LogIngredientParseBatch(batch.Count, textsToParse.Count);
                     parsedResults = await _ingredientClient.BulkParseIngredientListsAsync(textsToParse);
                 }
 
@@ -311,6 +312,7 @@ public class BatchProductProcessor
                     if (missingIngredientNames.Any())
                     {
                         // Bulk create/get IDs from the microservice
+                        _logger.LogIngredientFlush(importBatch.Count, missingIngredientNames.Count);
                         await _ingredientClient.BulkCreateIngredientsAsync(missingIngredientNames);
                         var newIngs = await _ingredientClient.LookupIngredientIdsAsync(missingIngredientNames);
 

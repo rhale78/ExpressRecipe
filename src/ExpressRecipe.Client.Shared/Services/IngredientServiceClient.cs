@@ -65,6 +65,9 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
                 }
             }
 
+            _logger?.LogInformation("[IngredientClient] Bulk lookup: {Total} names, {CacheHits} cache hits, {ToFetch} → service",
+                names.Count, result.Count, uncachedNames.Count);
+
             if (!uncachedNames.Any()) return result; // All found in local cache!
         }
         else
@@ -248,17 +251,33 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
     public async Task<List<string>> ParseIngredientListAsync(string ingredientsText)
     {
         var response = await HttpClient.PostAsJsonAsync("api/ingredient/parse/list", ingredientsText);
-        return response.IsSuccessStatusCode 
-            ? await response.Content.ReadFromJsonAsync<List<string>>() ?? new List<string>()
-            : new List<string>();
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<List<string>>() ?? new List<string>();
+            _logger?.LogInformation("[IngredientService] Parse-list: → {Count} ingredients parsed", result.Count);
+            return result;
+        }
+        _logger?.LogWarning("[IngredientService] Parse-list failed: {StatusCode}", response.StatusCode);
+        return new List<string>();
     }
 
     public async Task<Dictionary<string, List<string>>> BulkParseIngredientListsAsync(List<string> texts)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var response = await HttpClient.PostAsJsonAsync("api/ingredient/parse/list/bulk", texts);
-        return response.IsSuccessStatusCode 
-            ? await response.Content.ReadFromJsonAsync<Dictionary<string, List<string>>>() ?? new Dictionary<string, List<string>>()
-            : new Dictionary<string, List<string>>();
+        sw.Stop();
+
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<Dictionary<string, List<string>>>() ?? new Dictionary<string, List<string>>();
+            _logger?.LogInformation("[IngredientService] Bulk parse-list: {Requested} texts → {Parsed} parsed in {Ms}ms",
+                texts.Count, result.Count, sw.ElapsedMilliseconds);
+            return result;
+        }
+
+        _logger?.LogWarning("[IngredientService] Bulk parse-list failed: {Count} texts → {StatusCode} in {Ms}ms",
+            texts.Count, response.StatusCode, sw.ElapsedMilliseconds);
+        return new Dictionary<string, List<string>>();
     }
 
     public async Task<ParsedIngredientResult?> ParseIngredientStringAsync(string text)
