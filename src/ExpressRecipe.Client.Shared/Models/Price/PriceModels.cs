@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ExpressRecipe.Client.Shared.Models.Price;
 
 // Product Price History
@@ -11,6 +13,8 @@ public class ProductPriceDto
     public decimal Price { get; set; }
     public string? Size { get; set; }
     public string? Unit { get; set; }
+    /// <summary>Maps the service-side "ObservedAt" field (camelCase JSON).</summary>
+    [JsonPropertyName("observedAt")]
     public DateTime RecordedAt { get; set; }
     public Guid? RecordedByUserId { get; set; }
 }
@@ -18,11 +22,14 @@ public class ProductPriceDto
 public class RecordPriceRequest
 {
     public Guid ProductId { get; set; }
-    public string StoreName { get; set; } = string.Empty;
+    /// <summary>The store to record the price at. Use the store ID from <see cref="IPriceApiClient.GetUserBudgetsAsync"/>.</summary>
+    public Guid? StoreId { get; set; }
+    /// <summary>Fallback store name when StoreId is not available (server will resolve/create).</summary>
+    public string? StoreName { get; set; }
     public decimal Price { get; set; }
     public string? Size { get; set; }
     public string? Unit { get; set; }
-    public DateTime? RecordedAt { get; set; }
+    public DateTime? ObservedAt { get; set; }
 }
 
 // Price History Summary

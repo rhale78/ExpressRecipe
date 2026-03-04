@@ -44,15 +44,7 @@ public class PricesController : ControllerBase
     {
         var prices = await _repository.SearchPricesAsync(request);
         var total = await _repository.GetSearchCountAsync(request);
-        var pageSize = request.PageSize > 0 ? request.PageSize : 50;
-        return Ok(new
-        {
-            prices,
-            totalCount = total,
-            page = request.Page,
-            pageSize,
-            totalPages = (int)Math.Ceiling((double)total / pageSize)
-        });
+        return Ok(new { data = prices, total, page = request.Page, pageSize = request.PageSize });
     }
 
     /// <summary>GET /api/prices/product/{productId} — Get prices for a specific product</summary>

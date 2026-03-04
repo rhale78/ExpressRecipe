@@ -415,13 +415,30 @@ public class PriceApiClient : IPriceApiClient
             var response = await _httpClient.PostAsJsonAsync("/api/prices/search", request);
             response.EnsureSuccessStatusCode();
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var result = await response.Content.ReadFromJsonAsync<PriceSearchResponse>(options);
-            return result ?? new PriceSearchResponse();
+            // Server returns { data, total, page, pageSize } — map into PriceSearchResponse
+            var raw = await response.Content.ReadFromJsonAsync<PriceSearchRawResponse>(options);
+            if (raw == null) return new PriceSearchResponse();
+            return new PriceSearchResponse
+            {
+                Prices = raw.Data ?? new List<ProductPriceItemDto>(),
+                TotalCount = raw.Total,
+                Page = raw.Page,
+                PageSize = raw.PageSize > 0 ? raw.PageSize : request.PageSize
+            };
         }
         catch
         {
             return new PriceSearchResponse();
         }
+    }
+
+    // Internal intermediary for deserializing unified search response shape
+    private sealed class PriceSearchRawResponse
+    {
+        public List<ProductPriceItemDto>? Data { get; set; }
+        public int Total { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
     }
 
     public async Task<List<ProductPriceItemDto>> GetPricesByUpcAsync(string upc)

@@ -84,9 +84,12 @@ public class ScanController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             var session = await _repository.GetScanSessionByIdAsync(id);
             if (session == null)
                 return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             return Ok(session);
         }
         catch (Exception ex)
@@ -105,6 +108,11 @@ public class ScanController : ControllerBase
         _logger.LogInformation("Scanning barcode {Barcode} to add in session {SessionId}", request.Barcode, sessionId);
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             var itemId = await _repository.ScanAddItemAsync(
                 sessionId,
                 request.Barcode,
@@ -132,6 +140,11 @@ public class ScanController : ControllerBase
         _logger.LogInformation("Scanning barcode {Barcode} to use in session {SessionId}", request.Barcode, sessionId);
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             var itemId = await _repository.ScanUseItemAsync(
                 sessionId,
                 request.Barcode,
@@ -158,6 +171,11 @@ public class ScanController : ControllerBase
         _logger.LogInformation("Scanning barcode {Barcode} to dispose in session {SessionId}", request.Barcode, sessionId);
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             var itemId = await _repository.ScanDisposeItemAsync(
                 sessionId,
                 request.Barcode,
@@ -187,6 +205,11 @@ public class ScanController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             _logger.LogInformation("Ending scan session {SessionId}", sessionId);
             await _repository.EndScanSessionAsync(sessionId);
             return Ok(new { message = "Scan session ended" });

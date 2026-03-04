@@ -22,6 +22,7 @@ public class HouseholdControllerTests
         _mockLogger = new Mock<ILogger<HouseholdController>>();
         _controller = new HouseholdController(_mockLogger.Object, _mockRepository.Object);
         _testUserId = Guid.NewGuid();
+        _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }
 
     #region CreateHousehold Tests
@@ -147,6 +148,9 @@ public class HouseholdControllerTests
         var household = TestDataFactory.CreateHouseholdDto(householdId, "Test Household");
 
         _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
+        _mockRepository
             .Setup(r => r.GetHouseholdByIdAsync(householdId))
             .ReturnsAsync(household);
 
@@ -167,6 +171,9 @@ public class HouseholdControllerTests
         // Arrange
         var householdId = Guid.NewGuid();
 
+        _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
         _mockRepository
             .Setup(r => r.GetHouseholdByIdAsync(householdId))
             .ReturnsAsync((HouseholdDto?)null);
@@ -193,6 +200,9 @@ public class HouseholdControllerTests
 
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
+        _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
         _mockRepository
             .Setup(r => r.AddHouseholdMemberAsync(householdId, newUserId, "Member", _testUserId))
             .ReturnsAsync(memberId);
@@ -221,6 +231,9 @@ public class HouseholdControllerTests
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
         _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
+        _mockRepository
             .Setup(r => r.AddHouseholdMemberAsync(householdId, newUserId, "Admin", _testUserId))
             .ReturnsAsync(memberId);
 
@@ -245,6 +258,9 @@ public class HouseholdControllerTests
         var request = TestDataFactory.CreateAddressRequest("Home", "123 Main St");
         var addressDto = TestDataFactory.CreateAddressDto(addressId, householdId, "Home");
 
+        _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
         _mockRepository
             .Setup(r => r.CreateAddressAsync(householdId, request.Name, request.Street, request.City, 
                 request.State, request.ZipCode, request.Country ?? "", request.Latitude, request.Longitude, request.IsPrimary))
@@ -275,6 +291,9 @@ public class HouseholdControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
+        _mockRepository
             .Setup(r => r.GetHouseholdAddressesAsync(householdId))
             .ReturnsAsync(addresses);
 
@@ -302,6 +321,9 @@ public class HouseholdControllerTests
         addressDto.DistanceKm = 0.5;
 
         _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
+        _mockRepository
             .Setup(r => r.DetectNearestAddressAsync(householdId, request.Latitude, request.Longitude, 1.0))
             .ReturnsAsync(addressDto);
 
@@ -327,6 +349,9 @@ public class HouseholdControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
+        _mockRepository
             .Setup(r => r.DetectNearestAddressAsync(householdId, request.Latitude, request.Longitude, 1.0))
             .ReturnsAsync((AddressDto?)null);
 
@@ -346,12 +371,20 @@ public class HouseholdControllerTests
     {
         // Arrange
         var addressId = Guid.NewGuid();
+        var householdId = Guid.NewGuid();
         var locations = new List<StorageLocationDto>
         {
             TestDataFactory.CreateStorageLocationDto(addressId: addressId, name: "Fridge"),
             TestDataFactory.CreateStorageLocationDto(addressId: addressId, name: "Freezer")
         };
+        var addressDto = TestDataFactory.CreateAddressDto(addressId, householdId);
 
+        _mockRepository
+            .Setup(r => r.GetAddressByIdAsync(addressId))
+            .ReturnsAsync(addressDto);
+        _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
         _mockRepository
             .Setup(r => r.GetStorageLocationsByAddressAsync(addressId))
             .ReturnsAsync(locations);
@@ -359,6 +392,7 @@ public class HouseholdControllerTests
         var inventoryController = new InventoryController(
             new Mock<ILogger<InventoryController>>().Object,
             _mockRepository.Object);
+        inventoryController.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
         // Act
         var result = await inventoryController.GetLocationsByAddress(addressId);
@@ -383,12 +417,16 @@ public class HouseholdControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
+        _mockRepository
             .Setup(r => r.GetStorageLocationsByHouseholdAsync(householdId))
             .ReturnsAsync(locations);
 
         var inventoryController = new InventoryController(
             new Mock<ILogger<InventoryController>>().Object,
             _mockRepository.Object);
+        inventoryController.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
         // Act
         var result = await inventoryController.GetLocationsByHousehold(householdId);

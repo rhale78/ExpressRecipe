@@ -113,22 +113,55 @@ public class AnalyticsRepository : SqlHelper, IAnalyticsRepository
 
     public async Task<List<UsageStatisticsDto>> GetUserUsageStatsAsync(Guid userId, DateTime startDate, DateTime endDate)
     {
+        // The table stores one row per (UserId, PeriodStart, MetricType) — we need to pivot
+        // multiple metric rows per period into a single UsageStatisticsDto per day.
         const string sql = @"
             SELECT Id, UserId, MetricType, MetricValue, PeriodType, PeriodStart, PeriodEnd, CalculatedAt
             FROM UsageStatistics
             WHERE UserId = @UserId AND PeriodStart >= @Start AND PeriodEnd <= @End
             ORDER BY PeriodStart DESC";
 
-        return await ExecuteReaderAsync(sql,
-            r => new UsageStatisticsDto
+        var rows = await ExecuteReaderAsync(sql,
+            r => new
             {
                 Id = GetGuid(r, "Id"),
                 UserId = GetGuid(r, "UserId"),
-                Date = (DateTime)r["PeriodStart"]
+                MetricType = GetString(r, "MetricType") ?? string.Empty,
+                MetricValue = (decimal)r["MetricValue"],
+                PeriodStart = (DateTime)r["PeriodStart"]
             },
             CreateParameter("@UserId", userId),
             CreateParameter("@Start", startDate),
             CreateParameter("@End", endDate));
+
+        // Group metric rows by period date and aggregate into one DTO per day
+        return rows
+            .GroupBy(r => r.PeriodStart.Date)
+            .Select(g =>
+            {
+                var dto = new UsageStatisticsDto
+                {
+                    Id = g.First().Id,
+                    UserId = g.First().UserId,
+                    Date = g.Key
+                };
+                foreach (var row in g)
+                {
+                    var v = (int)row.MetricValue;
+                    switch (row.MetricType)
+                    {
+                        case "Sessions": dto.SessionCount = v; break;
+                        case "Actions": dto.ActionCount = v; break;
+                        case "MinutesActive": dto.MinutesActive = v; break;
+                        case "RecipesViewed": dto.RecipesViewed = v; break;
+                        case "ProductsScanned": dto.ProductsScanned = v; break;
+                        case "MealsPlanned": dto.MealsPlanned = v; break;
+                    }
+                }
+                return dto;
+            })
+            .OrderByDescending(d => d.Date)
+            .ToList();
     }
 
     public async Task<UsageSummaryDto> GetUsageSummaryAsync(Guid userId, string period)

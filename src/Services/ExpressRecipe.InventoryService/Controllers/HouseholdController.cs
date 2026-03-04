@@ -79,6 +79,10 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(id, userId.Value))
+                return Forbid();
             var household = await _repository.GetHouseholdByIdAsync(id);
             if (household == null)
                 return NotFound();
@@ -99,6 +103,10 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(id, userId.Value))
+                return Forbid();
             var members = await _repository.GetHouseholdMembersAsync(id);
             return Ok(members);
         }
@@ -119,6 +127,8 @@ public class HouseholdController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(id, userId.Value))
+                return Forbid();
             var memberId = await _repository.AddHouseholdMemberAsync(id, request.UserId, request.Role, userId.Value);
             return Ok(new { id = memberId });
         }
@@ -181,6 +191,10 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
             var addressId = await _repository.CreateAddressAsync(
                 householdId,
                 request.Name,
@@ -210,6 +224,10 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
             var addresses = await _repository.GetHouseholdAddressesAsync(householdId);
             return Ok(addresses);
         }
@@ -228,9 +246,13 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             var address = await _repository.GetAddressByIdAsync(id);
             if (address == null)
                 return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
             return Ok(address);
         }
         catch (Exception ex)
@@ -248,6 +270,10 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
             var address = await _repository.DetectNearestAddressAsync(
                 householdId,
                 request.Latitude,
@@ -272,6 +298,12 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var address = await _repository.GetAddressByIdAsync(id);
+            if (address == null) return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
             await _repository.UpdateAddressCoordinatesAsync(id, request.Latitude, request.Longitude);
             return NoContent();
         }
@@ -290,6 +322,10 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
             await _repository.SetPrimaryAddressAsync(householdId, addressId);
             return NoContent();
         }
@@ -308,6 +344,12 @@ public class HouseholdController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var address = await _repository.GetAddressByIdAsync(id);
+            if (address == null) return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
             await _repository.DeleteAddressAsync(id);
             return NoContent();
         }

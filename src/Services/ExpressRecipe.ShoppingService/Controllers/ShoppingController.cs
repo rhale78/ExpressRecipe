@@ -183,6 +183,12 @@ public class ShoppingController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var item = await _repository.GetShoppingListItemAsync(id);
+            if (item == null) return NotFound();
+            var list = await _repository.GetShoppingListAsync(item.ShoppingListId, userId.Value);
+            if (list == null) return Forbid();
             await _repository.UpdateItemQuantityAsync(id, request.Quantity);
             return NoContent();
         }
@@ -201,6 +207,12 @@ public class ShoppingController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var item = await _repository.GetShoppingListItemAsync(id);
+            if (item == null) return NotFound();
+            var list = await _repository.GetShoppingListAsync(item.ShoppingListId, userId.Value);
+            if (list == null) return Forbid();
             await _repository.ToggleItemCheckedAsync(id);
             return NoContent();
         }
@@ -219,6 +231,12 @@ public class ShoppingController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var item = await _repository.GetShoppingListItemAsync(id);
+            if (item == null) return NotFound();
+            var list = await _repository.GetShoppingListAsync(item.ShoppingListId, userId.Value);
+            if (list == null) return Forbid();
             await _repository.RemoveItemFromListAsync(id);
             return NoContent();
         }

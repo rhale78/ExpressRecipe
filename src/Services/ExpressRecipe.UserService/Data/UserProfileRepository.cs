@@ -152,7 +152,8 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
             SET IsSuspended = @Suspended,
                 SuspendedAt = CASE WHEN @Suspended = 1 THEN GETUTCDATE() ELSE NULL END,
                 SuspendedBy = CASE WHEN @Suspended = 1 THEN @AdminId ELSE NULL END,
-                UpdatedAt = GETUTCDATE()
+                UpdatedAt = GETUTCDATE(),
+                UpdatedBy = @AdminId
             WHERE UserId = @UserId AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(

@@ -22,6 +22,7 @@ public class ScanControllerTests
         _mockLogger = new Mock<ILogger<ScanController>>();
         _controller = new ScanController(_mockLogger.Object, _mockRepository.Object);
         _testUserId = Guid.NewGuid();
+        _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }
 
     #region StartSession Tests
@@ -198,6 +199,9 @@ public class ScanControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
+        _mockRepository
             .Setup(r => r.ScanAddItemAsync(sessionId, request.Barcode, request.Quantity, request.StorageLocationId))
             .ReturnsAsync(itemId);
 
@@ -227,6 +231,9 @@ public class ScanControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
+        _mockRepository
             .Setup(r => r.ScanAddItemAsync(sessionId, request.Barcode, 5.0m, request.StorageLocationId))
             .ReturnsAsync(itemId);
 
@@ -245,6 +252,9 @@ public class ScanControllerTests
         var sessionId = Guid.NewGuid();
         var request = new ScanAddRequest { Barcode = "BAD", Quantity = 1.0m, StorageLocationId = Guid.NewGuid() };
 
+        _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
         _mockRepository
             .Setup(r => r.ScanAddItemAsync(sessionId, request.Barcode, request.Quantity, request.StorageLocationId))
             .ThrowsAsync(new InvalidOperationException("Session not found"));
@@ -272,6 +282,9 @@ public class ScanControllerTests
             Quantity = 1.0m
         };
 
+        _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
         _mockRepository
             .Setup(r => r.ScanUseItemAsync(sessionId, request.Barcode, request.Quantity))
             .ReturnsAsync(itemId);
@@ -301,6 +314,9 @@ public class ScanControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
+        _mockRepository
             .Setup(r => r.ScanUseItemAsync(sessionId, request.Barcode, 0.5m))
             .ReturnsAsync(itemId);
 
@@ -319,6 +335,9 @@ public class ScanControllerTests
         var sessionId = Guid.NewGuid();
         var request = new ScanUseRequest { Barcode = "NOTFOUND", Quantity = 1.0m };
 
+        _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
         _mockRepository
             .Setup(r => r.ScanUseItemAsync(sessionId, request.Barcode, request.Quantity))
             .ThrowsAsync(new InvalidOperationException("Item not in inventory"));
@@ -347,6 +366,9 @@ public class ScanControllerTests
             AllergenDetected = null
         };
 
+        _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
         _mockRepository
             .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, request.DisposalReason, request.AllergenDetected))
             .ReturnsAsync(itemId);
@@ -377,6 +399,9 @@ public class ScanControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
+        _mockRepository
             .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, "CausedAllergy", "Peanuts"))
             .ReturnsAsync(itemId);
 
@@ -402,6 +427,9 @@ public class ScanControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
+        _mockRepository
             .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, "Bad", null))
             .ReturnsAsync(itemId);
 
@@ -420,6 +448,9 @@ public class ScanControllerTests
         var sessionId = Guid.NewGuid();
         var request = new ScanDisposeRequest { Barcode = "GONE", DisposalReason = "Missing", AllergenDetected = null };
 
+        _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
         _mockRepository
             .Setup(r => r.ScanDisposeItemAsync(sessionId, request.Barcode, request.DisposalReason, request.AllergenDetected))
             .ThrowsAsync(new InvalidOperationException("Item not found"));
@@ -442,6 +473,9 @@ public class ScanControllerTests
         var sessionId = Guid.NewGuid();
 
         _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
+        _mockRepository
             .Setup(r => r.EndScanSessionAsync(sessionId))
             .Returns(Task.CompletedTask);
 
@@ -459,6 +493,9 @@ public class ScanControllerTests
         // Arrange
         var sessionId = Guid.NewGuid();
 
+        _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
         _mockRepository
             .Setup(r => r.EndScanSessionAsync(sessionId))
             .Returns(Task.CompletedTask);
@@ -482,6 +519,9 @@ public class ScanControllerTests
         var sessionId = Guid.NewGuid();
         var storageLocationId = Guid.NewGuid();
 
+        _mockRepository
+            .Setup(r => r.GetScanSessionByIdAsync(sessionId))
+            .ReturnsAsync(new ScanSessionDto { Id = sessionId, UserId = _testUserId });
         _mockRepository
             .Setup(r => r.ScanAddItemAsync(sessionId, It.IsAny<string>(), It.IsAny<decimal>(), storageLocationId))
             .ReturnsAsync(Guid.NewGuid());

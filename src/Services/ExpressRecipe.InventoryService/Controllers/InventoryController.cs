@@ -218,7 +218,13 @@ public class InventoryController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             _logger.LogInformation("Getting storage locations for address {AddressId}", addressId);
+            var address = await _repository.GetAddressByIdAsync(addressId);
+            if (address == null) return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
             var locations = await _repository.GetStorageLocationsByAddressAsync(addressId);
             return Ok(locations);
         }
@@ -237,7 +243,11 @@ public class InventoryController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             _logger.LogInformation("Getting storage locations for household {HouseholdId}", householdId);
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
             var locations = await _repository.GetStorageLocationsByHouseholdAsync(householdId);
             return Ok(locations);
         }
@@ -292,7 +302,11 @@ public class InventoryController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             _logger.LogInformation("Getting inventory for household {HouseholdId}", householdId);
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
             var items = await _repository.GetHouseholdInventoryAsync(householdId);
             return Ok(items);
         }
@@ -311,7 +325,13 @@ public class InventoryController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             _logger.LogInformation("Getting inventory for address {AddressId}", addressId);
+            var address = await _repository.GetAddressByIdAsync(addressId);
+            if (address == null) return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
             var items = await _repository.GetInventoryByAddressAsync(addressId);
             return Ok(items);
         }

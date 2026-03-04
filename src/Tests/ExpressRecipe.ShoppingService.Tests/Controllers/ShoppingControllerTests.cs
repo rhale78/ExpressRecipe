@@ -480,7 +480,14 @@ public class ShoppingControllerTests
     {
         // Arrange
         var itemId = Guid.NewGuid();
+        var listId = Guid.NewGuid();
 
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(itemId))
+            .ReturnsAsync(new ShoppingListItemDto { Id = itemId, ShoppingListId = listId });
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "List" });
         _mockRepository
             .Setup(r => r.ToggleItemCheckedAsync(itemId))
             .Returns(Task.CompletedTask);
@@ -498,8 +505,15 @@ public class ShoppingControllerTests
     {
         // Arrange
         var itemId = Guid.NewGuid();
+        var listId = Guid.NewGuid();
         var otherId = Guid.NewGuid();
 
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(itemId))
+            .ReturnsAsync(new ShoppingListItemDto { Id = itemId, ShoppingListId = listId });
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "List" });
         _mockRepository
             .Setup(r => r.ToggleItemCheckedAsync(It.IsAny<Guid>()))
             .Returns(Task.CompletedTask);
@@ -521,7 +535,14 @@ public class ShoppingControllerTests
     {
         // Arrange
         var itemId = Guid.NewGuid();
+        var listId = Guid.NewGuid();
 
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(itemId))
+            .ReturnsAsync(new ShoppingListItemDto { Id = itemId, ShoppingListId = listId });
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "List" });
         _mockRepository
             .Setup(r => r.RemoveItemFromListAsync(itemId))
             .Returns(Task.CompletedTask);
@@ -539,7 +560,14 @@ public class ShoppingControllerTests
     {
         // Arrange
         var itemId = Guid.NewGuid();
+        var listId = Guid.NewGuid();
 
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(itemId))
+            .ReturnsAsync(new ShoppingListItemDto { Id = itemId, ShoppingListId = listId });
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "List" });
         _mockRepository
             .Setup(r => r.RemoveItemFromListAsync(It.IsAny<Guid>()))
             .Returns(Task.CompletedTask);
@@ -560,8 +588,15 @@ public class ShoppingControllerTests
     {
         // Arrange
         var itemId = Guid.NewGuid();
+        var listId = Guid.NewGuid();
         var request = new UpdateQuantityRequest { Quantity = 5.0m };
 
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(itemId))
+            .ReturnsAsync(new ShoppingListItemDto { Id = itemId, ShoppingListId = listId });
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "List" });
         _mockRepository
             .Setup(r => r.UpdateItemQuantityAsync(itemId, request.Quantity))
             .Returns(Task.CompletedTask);
@@ -578,8 +613,15 @@ public class ShoppingControllerTests
     {
         // Arrange
         var itemId = Guid.NewGuid();
+        var listId = Guid.NewGuid();
         var request = new UpdateQuantityRequest { Quantity = 3.5m };
 
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(itemId))
+            .ReturnsAsync(new ShoppingListItemDto { Id = itemId, ShoppingListId = listId });
+        _mockRepository
+            .Setup(r => r.GetShoppingListAsync(listId, _testUserId))
+            .ReturnsAsync(new ShoppingListDto { Id = listId, UserId = _testUserId, Name = "List" });
         _mockRepository
             .Setup(r => r.UpdateItemQuantityAsync(It.IsAny<Guid>(), It.IsAny<decimal>()))
             .Returns(Task.CompletedTask);
@@ -766,6 +808,13 @@ public class ShoppingControllerTests
         _mockRepository
             .Setup(r => r.AddItemToListAsync(listId, _testUserId, null, "Bread", 1, "loaf", "Bakery", false, false, null, null))
             .ReturnsAsync(item2Id);
+        // Ownership checks for item mutations
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(item1Id))
+            .ReturnsAsync(new ShoppingListItemDto { Id = item1Id, ShoppingListId = listId });
+        _mockRepository
+            .Setup(r => r.GetShoppingListItemAsync(item2Id))
+            .ReturnsAsync(new ShoppingListItemDto { Id = item2Id, ShoppingListId = listId });
         _mockRepository
             .Setup(r => r.ToggleItemCheckedAsync(item1Id))
             .Returns(Task.CompletedTask);
@@ -803,7 +852,8 @@ public class ShoppingControllerTests
 
         // Assert - Verify all repository methods called with correct args
         _mockRepository.Verify(r => r.CreateShoppingListAsync(_testUserId, null, createRequest.Name, createRequest.Description, "Standard", null), Times.Once);
-        _mockRepository.Verify(r => r.GetShoppingListAsync(listId, _testUserId), Times.Once);
+        // GetShoppingListAsync is called for list creation return value plus item ownership checks
+        _mockRepository.Verify(r => r.GetShoppingListAsync(listId, _testUserId), Times.AtLeast(1));
         _mockRepository.Verify(r => r.AddItemToListAsync(listId, _testUserId, null, "Milk", 2, "liters", "Dairy", false, false, null, null), Times.Once);
         _mockRepository.Verify(r => r.AddItemToListAsync(listId, _testUserId, null, "Bread", 1, "loaf", "Bakery", false, false, null, null), Times.Once);
         _mockRepository.Verify(r => r.ToggleItemCheckedAsync(item1Id), Times.Once);

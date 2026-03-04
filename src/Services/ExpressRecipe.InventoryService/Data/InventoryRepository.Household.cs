@@ -45,6 +45,22 @@ public partial class InventoryRepository
         }
     }
 
+    public async Task<bool> IsUserMemberOfHouseholdAsync(Guid householdId, Guid userId)
+    {
+        const string sql = @"
+            SELECT COUNT(1) FROM HouseholdMember
+            WHERE HouseholdId = @HouseholdId AND UserId = @UserId AND IsActive = 1";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@HouseholdId", householdId);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        return (int)await command.ExecuteScalarAsync()! > 0;
+    }
+
     public async Task<List<HouseholdDto>> GetUserHouseholdsAsync(Guid userId)
     {
         const string sql = @"

@@ -47,8 +47,11 @@ public class NotificationController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             var notification = await _repository.GetNotificationAsync(id);
             if (notification == null) return NotFound();
+            if (notification.UserId != userId.Value) return Forbid();
             return Ok(notification);
         }
         catch (Exception ex)
@@ -63,6 +66,11 @@ public class NotificationController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var notification = await _repository.GetNotificationAsync(id);
+            if (notification == null) return NotFound();
+            if (notification.UserId != userId.Value) return Forbid();
             await _repository.MarkAsReadAsync(id);
             return NoContent();
         }
@@ -95,6 +103,11 @@ public class NotificationController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var notification = await _repository.GetNotificationAsync(id);
+            if (notification == null) return NotFound();
+            if (notification.UserId != userId.Value) return Forbid();
             await _repository.DeleteNotificationAsync(id);
             return NoContent();
         }
