@@ -78,7 +78,18 @@ public class PriceApiClient : IPriceApiClient
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<ProductPriceHistoryDto>($"/api/prices/products/{productId}/history");
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var prices = await _httpClient.GetFromJsonAsync<List<ProductPriceDto>>($"/api/prices/product/{productId}", options);
+            if (prices == null) return null;
+            return new ProductPriceHistoryDto
+            {
+                ProductId = productId,
+                CurrentPrice = prices.Count > 0 ? prices[0].Price : 0,
+                LowestPrice = prices.Count > 0 ? prices.Min(p => p.Price) : 0,
+                HighestPrice = prices.Count > 0 ? prices.Max(p => p.Price) : 0,
+                AveragePrice = prices.Count > 0 ? prices.Average(p => p.Price) : 0,
+                PriceHistory = prices
+            };
         }
         catch
         {
@@ -93,7 +104,7 @@ public class PriceApiClient : IPriceApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/prices/record", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/price/prices", request);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -320,7 +331,7 @@ public class PriceApiClient : IPriceApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/prices/compare", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/price/compare", request);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<PriceComparisonResult>();
         }

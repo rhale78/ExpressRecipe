@@ -4,6 +4,7 @@
 @inject IInventoryApiClient InventoryClient
 @inject IShoppingListApiClient ShoppingClient
 @inject IToastService ToastService
+@inject ILogger<BarcodeScanner> Logger
 @rendermode InteractiveServer
 
 <PageTitle>Barcode Scanner - ExpressRecipe</PageTitle>
@@ -423,8 +424,9 @@
                 });
             return newListId;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to get or create default shopping list");
             return null;
         }
     }

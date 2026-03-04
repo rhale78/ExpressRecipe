@@ -32,7 +32,7 @@ var connectionString = builder.Configuration.GetConnectionString("analyticsdb")
 
 // Register repositories
 builder.Services.AddScoped<IAnalyticsRepository>(sp =>
-    new AnalyticsRepository(connectionString, sp.GetRequiredService<ILogger<AnalyticsRepository>>()));
+    new AnalyticsRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();

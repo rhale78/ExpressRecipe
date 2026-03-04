@@ -1,18 +1,11 @@
-using Microsoft.Data.SqlClient;
+using ExpressRecipe.Data.Common;
 using System.Text.Json;
 
 namespace ExpressRecipe.AnalyticsService.Data;
 
-public class AnalyticsRepository : IAnalyticsRepository
+public class AnalyticsRepository : SqlHelper, IAnalyticsRepository
 {
-    private readonly string _connectionString;
-    private readonly ILogger<AnalyticsRepository> _logger;
-
-    public AnalyticsRepository(string connectionString, ILogger<AnalyticsRepository> logger)
-    {
-        _connectionString = connectionString;
-        _logger = logger;
-    }
+    public AnalyticsRepository(string connectionString) : base(connectionString) { }
 
     // ── User Events ──────────────────────────────────────────────────────────
 
@@ -24,16 +17,13 @@ public class AnalyticsRepository : IAnalyticsRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @EventType, @EventCategory, @Metadata, @SessionId, @DeviceInfo, GETUTCDATE())";
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@EventType", eventType);
-        cmd.Parameters.AddWithValue("@EventCategory", eventName);
-        cmd.Parameters.AddWithValue("@Metadata", properties.Count > 0 ? JsonSerializer.Serialize(properties) : (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@SessionId", sessionId ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@DeviceInfo", deviceId ?? (object)DBNull.Value);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        return await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@EventType", eventType),
+            CreateParameter("@EventCategory", eventName),
+            CreateParameter("@Metadata", properties.Count > 0 ? JsonSerializer.Serialize(properties) : null),
+            CreateParameter("@SessionId", sessionId),
+            CreateParameter("@DeviceInfo", deviceId))!;
     }
 
     public async Task<List<UserEventDto>> GetUserEventsAsync(Guid userId, DateTime? startDate = null,
@@ -47,18 +37,11 @@ public class AnalyticsRepository : IAnalyticsRepository
               AND (@End IS NULL OR Timestamp <= @End)
             ORDER BY Timestamp DESC";
 
-        var results = new List<UserEventDto>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Limit", limit);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@Start", startDate.HasValue ? (object)startDate.Value : DBNull.Value);
-        cmd.Parameters.AddWithValue("@End", endDate.HasValue ? (object)endDate.Value : DBNull.Value);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            results.Add(MapUserEvent(reader));
-        return results;
+        return await ExecuteReaderAsync(sql, MapUserEvent,
+            CreateParameter("@Limit", limit),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Start", startDate),
+            CreateParameter("@End", endDate));
     }
 
     public async Task<List<UserEventDto>> GetEventsByTypeAsync(string eventType, DateTime startDate, DateTime endDate)
@@ -69,17 +52,10 @@ public class AnalyticsRepository : IAnalyticsRepository
             WHERE EventType = @EventType AND Timestamp BETWEEN @Start AND @End
             ORDER BY Timestamp DESC";
 
-        var results = new List<UserEventDto>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@EventType", eventType);
-        cmd.Parameters.AddWithValue("@Start", startDate);
-        cmd.Parameters.AddWithValue("@End", endDate);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            results.Add(MapUserEvent(reader));
-        return results;
+        return await ExecuteReaderAsync(sql, MapUserEvent,
+            CreateParameter("@EventType", eventType),
+            CreateParameter("@Start", startDate),
+            CreateParameter("@End", endDate));
     }
 
     public async Task<Dictionary<string, int>> GetEventCountsAsync(Guid userId, DateTime startDate, DateTime endDate)
@@ -90,17 +66,13 @@ public class AnalyticsRepository : IAnalyticsRepository
             WHERE UserId = @UserId AND Timestamp BETWEEN @Start AND @End
             GROUP BY EventType";
 
-        var result = new Dictionary<string, int>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@Start", startDate);
-        cmd.Parameters.AddWithValue("@End", endDate);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            result[reader.GetString(0)] = reader.GetInt32(1);
-        return result;
+        var rows = await ExecuteReaderAsync(sql,
+            r => (GetString(r, "EventType") ?? string.Empty, r.GetInt32(r.GetOrdinal("Cnt"))),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Start", startDate),
+            CreateParameter("@End", endDate));
+
+        return rows.ToDictionary(x => x.Item1, x => x.Item2);
     }
 
     // ── Usage Statistics ──────────────────────────────────────────────────────
@@ -123,23 +95,19 @@ public class AnalyticsRepository : IAnalyticsRepository
         var periodStart = date.Date;
         var periodEnd = date.Date.AddDays(1).AddTicks(-1);
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-
         foreach (var (metric, value) in new[] {
             ("Sessions", (decimal)sessionCount),
             ("Actions", (decimal)actionCount),
             ("MinutesActive", (decimal)minutesActive)
         })
         {
-            await using var cmd = new SqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@UserId", userId);
-            cmd.Parameters.AddWithValue("@MetricType", metric);
-            cmd.Parameters.AddWithValue("@Value", value);
-            cmd.Parameters.AddWithValue("@PeriodType", "Daily");
-            cmd.Parameters.AddWithValue("@PeriodStart", periodStart);
-            cmd.Parameters.AddWithValue("@PeriodEnd", periodEnd);
-            await cmd.ExecuteNonQueryAsync();
+            await ExecuteNonQueryAsync(sql,
+                CreateParameter("@UserId", userId),
+                CreateParameter("@MetricType", metric),
+                CreateParameter("@Value", value),
+                CreateParameter("@PeriodType", "Daily"),
+                CreateParameter("@PeriodStart", periodStart),
+                CreateParameter("@PeriodEnd", periodEnd));
         }
     }
 
@@ -151,48 +119,37 @@ public class AnalyticsRepository : IAnalyticsRepository
             WHERE UserId = @UserId AND PeriodStart >= @Start AND PeriodEnd <= @End
             ORDER BY PeriodStart DESC";
 
-        var results = new List<UsageStatisticsDto>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@Start", startDate);
-        cmd.Parameters.AddWithValue("@End", endDate);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            results.Add(new UsageStatisticsDto
+        return await ExecuteReaderAsync(sql,
+            r => new UsageStatisticsDto
             {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                Date = reader.GetDateTime(5) // PeriodStart
-            });
-        }
-        return results;
+                Id = GetGuid(r, "Id"),
+                UserId = GetGuid(r, "UserId"),
+                Date = (DateTime)r["PeriodStart"]
+            },
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Start", startDate),
+            CreateParameter("@End", endDate));
     }
 
     public async Task<UsageSummaryDto> GetUsageSummaryAsync(Guid userId, string period)
     {
         var (start, end) = GetPeriodRange(period);
         const string sql = @"
-            SELECT MetricType, SUM(MetricValue)
+            SELECT MetricType, SUM(MetricValue) AS Total
             FROM UsageStatistics
             WHERE UserId = @UserId AND PeriodStart >= @Start AND PeriodEnd <= @End AND PeriodType = 'Daily'
             GROUP BY MetricType";
 
+        var rows = await ExecuteReaderAsync(sql,
+            r => (GetString(r, "MetricType") ?? string.Empty, (int)(decimal)r["Total"]),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Start", start),
+            CreateParameter("@End", end));
+
         var summary = new UsageSummaryDto { UserId = userId, Period = period };
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@Start", start);
-        cmd.Parameters.AddWithValue("@End", end);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        foreach (var (metric, value) in rows)
         {
-            var metricType = reader.GetString(0);
-            var value = (int)reader.GetDecimal(1);
-            switch (metricType)
+            switch (metric)
             {
                 case "Sessions": summary.TotalSessions = value; break;
                 case "Actions": summary.TotalActions = value; break;
@@ -212,15 +169,12 @@ public class AnalyticsRepository : IAnalyticsRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @PatternType, @Desc, @Confidence, @Evidence, GETUTCDATE(), 1, GETUTCDATE())";
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@PatternType", patternType);
-        cmd.Parameters.AddWithValue("@Desc", description);
-        cmd.Parameters.AddWithValue("@Confidence", confidence);
-        cmd.Parameters.AddWithValue("@Evidence", metadata.Count > 0 ? JsonSerializer.Serialize(metadata) : (object)DBNull.Value);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        return await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@PatternType", patternType),
+            CreateParameter("@Desc", description),
+            CreateParameter("@Confidence", confidence),
+            CreateParameter("@Evidence", metadata.Count > 0 ? JsonSerializer.Serialize(metadata) : null))!;
     }
 
     public async Task<List<PatternDetectionDto>> GetUserPatternsAsync(Guid userId, string? patternType = null)
@@ -232,16 +186,9 @@ public class AnalyticsRepository : IAnalyticsRepository
               AND (@PatternType IS NULL OR PatternType = @PatternType)
             ORDER BY DetectedAt DESC";
 
-        var results = new List<PatternDetectionDto>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@PatternType", patternType ?? (object)DBNull.Value);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            results.Add(MapPattern(reader));
-        return results;
+        return await ExecuteReaderAsync(sql, MapPattern,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@PatternType", patternType));
     }
 
     public async Task<List<PatternDetectionDto>> GetGlobalPatternsAsync(string patternType, int limit = 50)
@@ -252,16 +199,9 @@ public class AnalyticsRepository : IAnalyticsRepository
             WHERE PatternType = @PatternType AND IsActive = 1
             ORDER BY Confidence DESC, DetectedAt DESC";
 
-        var results = new List<PatternDetectionDto>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Limit", limit);
-        cmd.Parameters.AddWithValue("@PatternType", patternType);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            results.Add(MapPattern(reader));
-        return results;
+        return await ExecuteReaderAsync(sql, MapPattern,
+            CreateParameter("@Limit", limit),
+            CreateParameter("@PatternType", patternType));
     }
 
     // ── Insights ───────────────────────────────────────────────────────────────
@@ -274,16 +214,13 @@ public class AnalyticsRepository : IAnalyticsRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @InsightType, @Title, @Message, @Priority, @Data, 0, 0, GETUTCDATE())";
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@InsightType", insightType);
-        cmd.Parameters.AddWithValue("@Title", title);
-        cmd.Parameters.AddWithValue("@Message", description);
-        cmd.Parameters.AddWithValue("@Priority", category);
-        cmd.Parameters.AddWithValue("@Data", data.Count > 0 ? JsonSerializer.Serialize(data) : (object)DBNull.Value);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        return await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@InsightType", insightType),
+            CreateParameter("@Title", title),
+            CreateParameter("@Message", description),
+            CreateParameter("@Priority", category),
+            CreateParameter("@Data", data.Count > 0 ? JsonSerializer.Serialize(data) : null))!;
     }
 
     public async Task<List<InsightDto>> GetUserInsightsAsync(Guid userId, bool unreadOnly = false)
@@ -295,16 +232,9 @@ public class AnalyticsRepository : IAnalyticsRepository
               AND (@UnreadOnly = 0 OR IsViewed = 0)
             ORDER BY GeneratedAt DESC";
 
-        var results = new List<InsightDto>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@UnreadOnly", unreadOnly ? 1 : 0);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            results.Add(MapInsight(reader));
-        return results;
+        return await ExecuteReaderAsync(sql, MapInsight,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@UnreadOnly", unreadOnly ? 1 : 0));
     }
 
     public async Task<InsightDto?> GetInsightAsync(Guid insightId)
@@ -313,32 +243,20 @@ public class AnalyticsRepository : IAnalyticsRepository
             SELECT Id, UserId, InsightType, Title, Message, Priority, IsViewed, IsDismissed, GeneratedAt
             FROM Insight WHERE Id = @Id";
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Id", insightId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? MapInsight(reader) : null;
+        var results = await ExecuteReaderAsync(sql, MapInsight, CreateParameter("@Id", insightId));
+        return results.FirstOrDefault();
     }
 
     public async Task MarkInsightAsReadAsync(Guid insightId)
     {
         const string sql = "UPDATE Insight SET IsViewed = 1, ViewedAt = GETUTCDATE() WHERE Id = @Id";
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Id", insightId);
-        await cmd.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@Id", insightId));
     }
 
     public async Task DismissInsightAsync(Guid insightId)
     {
         const string sql = "UPDATE Insight SET IsDismissed = 1, DismissedAt = GETUTCDATE() WHERE Id = @Id";
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@Id", insightId);
-        await cmd.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@Id", insightId));
     }
 
     // ── Aggregate Metrics ─────────────────────────────────────────────────────
@@ -358,16 +276,13 @@ public class AnalyticsRepository : IAnalyticsRepository
                 INSERT (MetricName, MetricValue, Dimensions, AggregationType, PeriodStart, PeriodEnd, CalculatedAt)
                 VALUES (@MetricName, @Value, @Dimensions, @AggType, @PeriodStart, @PeriodEnd, GETUTCDATE());";
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@MetricName", metricName);
-        cmd.Parameters.AddWithValue("@AggType", aggregationType);
-        cmd.Parameters.AddWithValue("@PeriodStart", periodStart);
-        cmd.Parameters.AddWithValue("@PeriodEnd", periodEnd);
-        cmd.Parameters.AddWithValue("@Value", value);
-        cmd.Parameters.AddWithValue("@Dimensions", dimensions?.Count > 0 ? JsonSerializer.Serialize(dimensions) : (object)DBNull.Value);
-        await cmd.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@MetricName", metricName),
+            CreateParameter("@AggType", aggregationType),
+            CreateParameter("@PeriodStart", periodStart),
+            CreateParameter("@PeriodEnd", periodEnd),
+            CreateParameter("@Value", value),
+            CreateParameter("@Dimensions", dimensions?.Count > 0 ? JsonSerializer.Serialize(dimensions) : null));
     }
 
     public async Task<List<AggregateMetricDto>> GetMetricsAsync(string metricName, DateTime startDate,
@@ -379,29 +294,21 @@ public class AnalyticsRepository : IAnalyticsRepository
             WHERE MetricName = @MetricName AND PeriodStart >= @Start AND PeriodEnd <= @End
             ORDER BY PeriodStart DESC";
 
-        var results = new List<AggregateMetricDto>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@MetricName", metricName);
-        cmd.Parameters.AddWithValue("@Start", startDate);
-        cmd.Parameters.AddWithValue("@End", endDate);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            results.Add(new AggregateMetricDto
+        return await ExecuteReaderAsync(sql,
+            r => new AggregateMetricDto
             {
-                Id = reader.GetGuid(0),
-                MetricName = reader.GetString(1),
-                AggregationType = reader.GetString(2),
-                PeriodStart = reader.GetDateTime(3),
-                PeriodEnd = reader.GetDateTime(4),
-                Value = reader.GetDecimal(5),
-                Dimensions = reader.IsDBNull(6) ? new() : JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(6)) ?? new(),
-                CalculatedAt = reader.GetDateTime(7)
-            });
-        }
-        return results;
+                Id = GetGuid(r, "Id"),
+                MetricName = GetString(r, "MetricName") ?? string.Empty,
+                AggregationType = GetString(r, "AggregationType") ?? string.Empty,
+                PeriodStart = (DateTime)r["PeriodStart"],
+                PeriodEnd = (DateTime)r["PeriodEnd"],
+                Value = (decimal)r["MetricValue"],
+                Dimensions = r["Dimensions"] is string d ? JsonSerializer.Deserialize<Dictionary<string, string>>(d) ?? new() : new(),
+                CalculatedAt = (DateTime)r["CalculatedAt"]
+            },
+            CreateParameter("@MetricName", metricName),
+            CreateParameter("@Start", startDate),
+            CreateParameter("@End", endDate));
     }
 
     public async Task<Dictionary<string, decimal>> GetDashboardMetricsAsync(Guid userId)
@@ -412,54 +319,50 @@ public class AnalyticsRepository : IAnalyticsRepository
             WHERE UserId = @UserId AND PeriodStart >= @Start
             GROUP BY MetricType";
 
-        var result = new Dictionary<string, decimal>();
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@Start", DateTime.UtcNow.AddDays(-30));
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            result[reader.GetString(0)] = reader.GetDecimal(1);
-        return result;
+        var rows = await ExecuteReaderAsync(sql,
+            r => (GetString(r, "MetricType") ?? string.Empty, (decimal)r["Total"]),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Start", DateTime.UtcNow.AddDays(-30)));
+
+        return rows.ToDictionary(x => x.Item1, x => x.Item2);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // ── Private mappers ───────────────────────────────────────────────────────
 
-    private static UserEventDto MapUserEvent(SqlDataReader r) => new()
+    private static UserEventDto MapUserEvent(System.Data.IDataRecord r) => new()
     {
-        Id = r.GetGuid(0),
-        UserId = r.GetGuid(1),
-        EventType = r.GetString(2),
-        EventName = r.IsDBNull(3) ? string.Empty : r.GetString(3),
-        Properties = r.IsDBNull(4) ? new() : JsonSerializer.Deserialize<Dictionary<string, string>>(r.GetString(4)) ?? new(),
-        SessionId = r.IsDBNull(5) ? null : r.GetString(5),
-        DeviceId = r.IsDBNull(6) ? null : r.GetString(6),
-        Timestamp = r.GetDateTime(7)
+        Id = (Guid)r["Id"],
+        UserId = (Guid)r["UserId"],
+        EventType = (string)r["EventType"],
+        EventName = r["EventCategory"] is string s ? s : string.Empty,
+        Properties = r["Metadata"] is string m ? JsonSerializer.Deserialize<Dictionary<string, string>>(m) ?? new() : new(),
+        SessionId = r["SessionId"] as string,
+        DeviceId = r["DeviceInfo"] as string,
+        Timestamp = (DateTime)r["Timestamp"]
     };
 
-    private static PatternDetectionDto MapPattern(SqlDataReader r) => new()
+    private static PatternDetectionDto MapPattern(System.Data.IDataRecord r) => new()
     {
-        Id = r.GetGuid(0),
-        UserId = r.GetGuid(1),
-        PatternType = r.GetString(2),
-        Description = r.GetString(3),
-        Confidence = r.GetDecimal(4),
-        Metadata = r.IsDBNull(5) ? new() : JsonSerializer.Deserialize<Dictionary<string, string>>(r.GetString(5)) ?? new(),
-        DetectedAt = r.GetDateTime(6)
+        Id = (Guid)r["Id"],
+        UserId = (Guid)r["UserId"],
+        PatternType = (string)r["PatternType"],
+        Description = (string)r["PatternDescription"],
+        Confidence = (decimal)r["Confidence"],
+        Metadata = r["Evidence"] is string e ? JsonSerializer.Deserialize<Dictionary<string, string>>(e) ?? new() : new(),
+        DetectedAt = (DateTime)r["DetectedAt"]
     };
 
-    private static InsightDto MapInsight(SqlDataReader r) => new()
+    private static InsightDto MapInsight(System.Data.IDataRecord r) => new()
     {
-        Id = r.GetGuid(0),
-        UserId = r.GetGuid(1),
-        InsightType = r.GetString(2),
-        Title = r.GetString(3),
-        Description = r.GetString(4),
-        Category = r.GetString(5),
-        IsRead = r.GetBoolean(6),
-        IsDismissed = r.GetBoolean(7),
-        GeneratedAt = r.GetDateTime(8)
+        Id = (Guid)r["Id"],
+        UserId = (Guid)r["UserId"],
+        InsightType = (string)r["InsightType"],
+        Title = (string)r["Title"],
+        Description = (string)r["Message"],
+        Category = (string)r["Priority"],
+        IsRead = (bool)r["IsViewed"],
+        IsDismissed = (bool)r["IsDismissed"],
+        GeneratedAt = (DateTime)r["GeneratedAt"]
     };
 
     private static (DateTime start, DateTime end) GetPeriodRange(string period) => period switch

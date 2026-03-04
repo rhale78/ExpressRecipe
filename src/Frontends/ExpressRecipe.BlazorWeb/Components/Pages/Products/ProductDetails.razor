@@ -9,6 +9,7 @@
 @inject IInventoryApiClient InventoryApi
 @inject IShoppingListApiClient ShoppingApi
 @inject IToastService ToastService
+@inject ILogger<ProductDetails> Logger
 @inject NavigationManager Navigation
 
 <PageTitle>@(_product?.Name ?? "Product Details") - ExpressRecipe</PageTitle>
@@ -336,8 +337,9 @@
 
             return await ShoppingApi.CreateShoppingListAsync(new CreateShoppingListRequest { Name = "My Shopping List" });
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to get or create default shopping list");
             return null;
         }
     }

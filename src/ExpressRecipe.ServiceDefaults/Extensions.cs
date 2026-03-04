@@ -180,7 +180,12 @@ public static class Extensions
                     }
                     else
                     {
-                        // Deny all cross-origin requests when no origins configured in production
+                        // No origins configured in production — deny all cross-origin requests
+                        // Set the 'AllowedOrigins' configuration section to allow specific origins
+                        Console.WriteLine("[WARN] No AllowedOrigins configured in production. " +
+                            "All cross-origin requests will be denied. " +
+                            "Set the 'AllowedOrigins' configuration section to enable CORS.");
+
                         policy.WithOrigins("https://localhost")
                               .AllowAnyMethod()
                               .AllowAnyHeader();
