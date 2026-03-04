@@ -181,7 +181,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 
 // Add Static Files mapping for C:\Recipes
-var imagePath = "C:\\Recipes";
+var imagePath = "E:\\Recipes";
 if (!Directory.Exists(imagePath)) Directory.CreateDirectory(imagePath);
 
 app.UseStaticFiles(new StaticFileOptions

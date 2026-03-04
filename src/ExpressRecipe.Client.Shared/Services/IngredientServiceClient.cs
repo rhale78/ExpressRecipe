@@ -120,9 +120,24 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
 
     private async Task<Dictionary<string, Guid>> LookupIngredientIdsRestAsync(List<string> names)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         var restResponse = await HttpClient.PostAsJsonAsync("api/ingredient/bulk/lookup", names);
-        if (!restResponse.IsSuccessStatusCode) return new Dictionary<string, Guid>();
-        return await restResponse.Content.ReadFromJsonAsync<Dictionary<string, Guid>>() ?? new Dictionary<string, Guid>();
+
+        if (!restResponse.IsSuccessStatusCode)
+        {
+            _logger?.LogWarning("[IngredientService] Bulk lookup failed: {Count} names -> {StatusCode}",
+                names.Count, restResponse.StatusCode);
+            return new Dictionary<string, Guid>();
+        }
+
+        var result = await restResponse.Content.ReadFromJsonAsync<Dictionary<string, Guid>>() ?? new Dictionary<string, Guid>();
+
+        sw.Stop();
+        _logger?.LogInformation("[IngredientService] Bulk lookup: {Requested} names -> {Found} ingredients in {Ms}ms",
+            names.Count, result.Count, sw.ElapsedMilliseconds);
+
+        return result;
     }
 
     public async Task<Guid?> GetIngredientIdByNameAsync(string name)
@@ -208,15 +223,25 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
 
     public async Task<int> BulkCreateIngredientsAsync(List<string> names)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         var response = await HttpClient.PostAsJsonAsync("api/ingredient/bulk/create", names);
+
         if (response.IsSuccessStatusCode)
         {
             var count = await response.Content.ReadFromJsonAsync<int>();
-            
-            // Note: We don't invalidate all names here because we don't know which ones were created.
-            // But usually this is called when we know they don't exist yet.
+
+            sw.Stop();
+            _logger?.LogInformation("[IngredientService] Bulk create: {Requested} names -> {Created} created in {Ms}ms",
+                names.Count, count, sw.ElapsedMilliseconds);
+
             return count;
         }
+
+        sw.Stop();
+        _logger?.LogWarning("[IngredientService] Bulk create failed: {Count} names -> {StatusCode} in {Ms}ms",
+            names.Count, response.StatusCode, sw.ElapsedMilliseconds);
+
         return 0;
     }
 
@@ -246,10 +271,27 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
 
     public async Task<Dictionary<string, ParsedIngredientResult>> BulkParseIngredientStringsAsync(List<string> texts)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         var response = await HttpClient.PostAsJsonAsync("api/ingredient/parse/string/bulk", texts);
-        return response.IsSuccessStatusCode 
-            ? await response.Content.ReadFromJsonAsync<Dictionary<string, ParsedIngredientResult>>() ?? new Dictionary<string, ParsedIngredientResult>()
-            : new Dictionary<string, ParsedIngredientResult>();
+
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<Dictionary<string, ParsedIngredientResult>>() 
+                ?? new Dictionary<string, ParsedIngredientResult>();
+
+            sw.Stop();
+            _logger?.LogInformation("[IngredientService] Bulk parse: {Requested} strings -> {Parsed} parsed in {Ms}ms",
+                texts.Count, result.Count, sw.ElapsedMilliseconds);
+
+            return result;
+        }
+
+        sw.Stop();
+        _logger?.LogWarning("[IngredientService] Bulk parse failed: {Count} strings -> {StatusCode} in {Ms}ms",
+            texts.Count, response.StatusCode, sw.ElapsedMilliseconds);
+
+        return new Dictionary<string, ParsedIngredientResult>();
     }
 
     public async Task<IngredientValidationResult?> ValidateIngredientAsync(string ingredient)

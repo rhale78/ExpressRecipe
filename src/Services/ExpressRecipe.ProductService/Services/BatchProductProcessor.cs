@@ -331,6 +331,17 @@ public class BatchProductProcessor
 
                     int createdCount = await productRepo.BulkCreateFullProductsHighSpeedAsync(importBatch);
 
+                    if (createdCount > 0 && importBatch.Count > 0)
+                    {
+                        var firstProduct = importBatch.First().Product;
+                        var lastProduct = importBatch.Last().Product;
+                        _logger.LogInformation(
+                            "[PRODUCTS] Batch saved: {Created}/{Total} products. First: [{FirstBarcode}] {FirstName} ({FirstBrand}). Last: [{LastBarcode}] {LastName} ({LastBrand})",
+                            createdCount, importBatch.Count,
+                            firstProduct.Barcode ?? "N/A", firstProduct.Name, firstProduct.Brand ?? "N/A",
+                            lastProduct.Barcode ?? "N/A", lastProduct.Name, lastProduct.Brand ?? "N/A");
+                    }
+
                     var successfulStagingIds = stagingIds.Take(createdCount).ToList();
                     allSuccessIds.AddRange(successfulStagingIds);
 

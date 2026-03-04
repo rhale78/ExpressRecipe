@@ -31,7 +31,7 @@ public class RecipeProcessingWorker : BackgroundService
         // Check if processing is enabled
         var processingEnabled = _configuration.GetValue<bool>("RecipeImport:AutoProcessing", true);
         _logger.LogInformation("Recipe auto-processing is: {Status}", processingEnabled ? "ENABLED" : "DISABLED");
-        
+
         if (!processingEnabled)
         {
             _logger.LogInformation("Auto-processing is disabled in configuration. Worker will not run.");
@@ -50,10 +50,10 @@ public class RecipeProcessingWorker : BackgroundService
         {
             using var scope = _serviceProvider.CreateScope();
             var stagingRepo = scope.ServiceProvider.GetRequiredService<IRecipeStagingRepository>();
-            
+
             _logger.LogInformation("Performing initial recovery: Resetting stale 'Processing' recipes to 'Pending' (>{P}m)...", processingResetMins);
             await stagingRepo.ResetProcessingStatusAsync(olderThanMinutes: processingResetMins);
-            
+
             _logger.LogInformation("Performing initial recovery: Resetting stale 'Failed' recipes to 'Pending' (>{F}m)...", failedResetMins);
             await stagingRepo.ResetFailedStatusAsync(olderThanMinutes: failedResetMins);
         }
@@ -62,9 +62,9 @@ public class RecipeProcessingWorker : BackgroundService
             _logger.LogError(ex, "Failed to perform initial recipe recovery.");
         }
 
-        _logger.LogInformation("RecipeProcessingWorker entering main loop. Monitoring for stale (>{P}m) and failed (>{F}m) records.", 
+        _logger.LogInformation("RecipeProcessingWorker entering main loop. Monitoring for stale (>{P}m) and failed (>{F}m) records.",
             processingResetMins, failedResetMins);
-            
+
         DateTime lastWatchdogCheck = DateTime.UtcNow;
 
         while (!stoppingToken.IsCancellationRequested)
@@ -79,12 +79,12 @@ public class RecipeProcessingWorker : BackgroundService
                 // PERIODIC WATCHDOG: Every 15 mins, check for stale or failed records
                 if (DateTime.UtcNow - lastWatchdogCheck > TimeSpan.FromMinutes(15))
                 {
-                    _logger.LogInformation("Watchdog: Checking for stale 'Processing' (>{P}m) or 'Failed' (>{F}m) recipes...", 
+                    _logger.LogInformation("Watchdog: Checking for stale 'Processing' (>{P}m) or 'Failed' (>{F}m) recipes...",
                         processingResetMins, failedResetMins);
-                    
+
                     await stagingRepo.ResetProcessingStatusAsync(olderThanMinutes: processingResetMins);
                     await stagingRepo.ResetFailedStatusAsync(olderThanMinutes: failedResetMins);
-                    
+
                     lastWatchdogCheck = DateTime.UtcNow;
                 }
 
@@ -100,15 +100,13 @@ public class RecipeProcessingWorker : BackgroundService
                     var maxParallelism = _configuration.GetValue<int>("RecipeImport:MaxParallelism", 4);
                     var batchSize = _configuration.GetValue<int>("RecipeImport:BatchSize", 100);
                     var bufferSize = _configuration.GetValue<int>("RecipeImport:BufferSize", 1000);
-var processor = new BatchRecipeProcessor(
-    processorLogger,
-    _configuration,
-    ingredientClient,
-    maxParallelism,
-    batchSize,
-    bufferSize);
-
-
+                    var processor = new BatchRecipeProcessor(
+                        processorLogger,
+                        _configuration,
+                        ingredientClient,
+                        maxParallelism,
+                        batchSize,
+                        bufferSize);
 
                     var result = await processor.ProcessStagedRecipesAsync(
                         stagingRepo,

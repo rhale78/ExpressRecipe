@@ -1,10 +1,13 @@
+using System.Text;
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.PriceService.Data;
 using ExpressRecipe.PriceService.Services;
 using ExpressRecipe.PriceService.Workers;
+using ExpressRecipe.Shared.CQRS;
+using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using ExpressRecipe.Shared.Middleware;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,31 +17,57 @@ builder.AddLayeredConfiguration(args);
 // Add Aspire service defaults (telemetry, health checks, service discovery)
 builder.AddServiceDefaults();
 
-// Add authentication
-builder.Services.AddAuthentication("Bearer")
-    .AddJwtBearer("Bearer", options =>
+// Add database connection
+builder.AddSqlServerClient("pricedb");
+
+// Add Redis for caching
+builder.AddRedisClient("redis");
+
+// Add hybrid caching (memory + Redis)
+builder.AddHybridCache();
+
+// Register ProductServiceClient using Aspire service discovery
+// This is optional - price import will work even if ProductService is unavailable
+builder.Services.AddHttpClient<IProductServiceClient, ProductServiceClient>(client =>
+{
+    // Use Aspire service name - service discovery will resolve to actual endpoint
+    client.BaseAddress = new Uri("http://productservice");
+    client.Timeout = TimeSpan.FromSeconds(5); // Short timeout - don't block price imports
+})
+.AddServiceDiscovery(); // Use Aspire service discovery - NO AuthenticationDelegatingHandler
+
+builder.Services.AddSingleton<HybridCacheService>();
+builder.Services.AddSingleton<ExpressRecipe.Shared.Services.CacheService>();
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
+if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
+    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["Auth:Authority"] ?? "http://localhost:5000";
-        options.RequireHttpsMetadata = false;
-        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateAudience = false,
-            NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService",
+            ValidAudience = jwtSettings["Audience"] ?? "ExpressRecipe.API",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+            ClockSkew = TimeSpan.Zero
         };
     });
 
 builder.Services.AddAuthorization();
 
-// SQL Server via Aspire
-builder.AddSqlServerClient("pricedb");
+// Register token provider (service-to-service authentication)
+builder.Services.AddScoped<ITokenProvider>(sp =>
+    new ServiceTokenProvider("PriceService", builder.Configuration));
 
-// Redis cache via Aspire
-builder.AddRedisClient("cache");
-
-// Memory cache + HybridCacheService
-builder.AddHybridCache();
-builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<HybridCacheService>();
+// Register authentication handler that adds tokens to HTTP requests
+// NOTE: No longer using ConfigureHttpClientDefaults - ProductServiceClient doesn't need JWT auth
+builder.Services.AddScoped<AuthenticationDelegatingHandler>();
 
 // Register database connection string for direct use
 var connectionString = builder.Configuration.GetConnectionString("pricedb")
@@ -51,17 +80,29 @@ builder.Services.AddScoped<IPriceRepository>(sp =>
         sp.GetService<HybridCacheService>(),
         sp.GetService<ILogger<PriceRepository>>()));
 
-// Register import services
-builder.Services.AddHttpClient<OpenPricesImportService>(client =>
+// Register OpenPrices import service
+builder.Services.AddHttpClient<IOpenPricesImportService, OpenPricesImportService>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(30);
+    client.Timeout = TimeSpan.FromSeconds(60);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "ExpressRecipe.PriceService/1.0 (+https://github.com/rhale78/ExpressRecipe)");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "*/*");
 });
-builder.Services.AddScoped<OpenPricesImportService>(sp =>
+builder.Services.AddScoped<IOpenPricesImportService>(sp =>
     new OpenPricesImportService(
-        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(OpenPricesImportService)),
+        sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(IOpenPricesImportService)),
+        sp.GetRequiredService<IProductServiceClient>(),
         sp.GetRequiredService<IPriceRepository>(),
         sp.GetRequiredService<ILogger<OpenPricesImportService>>(),
         sp.GetRequiredService<IConfiguration>()));
+
+// Register batched product lookup service (reduces strain on ProductService)
+builder.Services.AddSingleton<IBatchProductLookupService, BatchProductLookupService>();
+
+// Register batched price insert service (improves throughput)
+builder.Services.AddSingleton<IBatchPriceInsertService, BatchPriceInsertService>();
+
+// Register dataflow-based import service (optional, for high-performance scenarios)
+builder.Services.AddScoped<DataflowOpenPricesImportService>();
 
 builder.Services.AddHttpClient<GroceryDbImportService>(client =>
 {
@@ -87,14 +128,15 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PriceDataImportWor
 // Add controllers
 builder.Services.AddControllers();
 
-// CORS
+// Add CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddDefaultPolicy(policy =>
     {
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
     });
 });
 

@@ -218,8 +218,8 @@ public class RecipeImportService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing import job {JobId}", jobId);
-            result.Errors.Add($"Job processing error: {ex.Message}");
+            _logger.LogError(ex, "Import job {JobId} failed", jobId);
+            result.Errors.Add($"Job failed: {ex.Message}");
         }
 
         return result;

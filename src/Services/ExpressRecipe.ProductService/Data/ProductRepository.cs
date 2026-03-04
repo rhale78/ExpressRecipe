@@ -13,6 +13,7 @@ public interface IProductRepository
 {
     Task<ProductDto?> GetByIdAsync(Guid id);
     Task<ProductDto?> GetByBarcodeAsync(string barcode);
+    Task<Dictionary<string, ProductDto>> GetByBarcodesAsync(IEnumerable<string> barcodes);
     Task<ProductDto?> GetProductByBarcodeAsync(string barcode);
     Task<List<ProductDto>> SearchAsync(ProductSearchRequest request);
     Task<int> GetSearchCountAsync(ProductSearchRequest request);
@@ -30,7 +31,7 @@ public interface IProductRepository
     Task UpdateProductMetadataAsync(Guid productId, string key, string value);
     Task<ProductDto?> GetProductByExternalIdAsync(string source, string externalId);
     Task<int?> GetProductCountAsync();
-    
+
     // High-speed bulk operations
     Task<int> BulkCreateFullProductsHighSpeedAsync(List<FullProductImportDto> products);
     Task<HashSet<string>> GetAllBarcodesAsync();
@@ -1202,5 +1203,108 @@ public class ProductRepository : SqlHelper, IProductRepository
         {
             await LoadImagesAsync(product);
         }
+    }
+
+    /// <summary>
+    /// Bulk lookup products by barcodes (optimized for batch operations)
+    /// </summary>
+    public async Task<Dictionary<string, ProductDto>> GetByBarcodesAsync(IEnumerable<string> barcodes)
+    {
+        var barcodeList = barcodes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        if (!barcodeList.Any())
+        {
+            return new Dictionary<string, ProductDto>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
+        // Create table-valued parameter for bulk lookup
+        var dt = new DataTable();
+        dt.Columns.Add("Barcode", typeof(string));
+
+        foreach (var barcode in barcodeList)
+        {
+            dt.Rows.Add(barcode);
+        }
+
+        const string sql = @"
+            SELECT p.Id, p.Name, p.Brand, p.Barcode, p.BarcodeType, p.Description, p.Category,
+                   p.ServingSize, p.ServingUnit, p.ImageUrl, p.ApprovalStatus,
+                   p.ApprovedBy, p.ApprovedAt, p.RejectionReason, p.SubmittedBy, p.CreatedAt
+            FROM Product p
+            INNER JOIN @Barcodes b ON p.Barcode = b.Barcode COLLATE SQL_Latin1_General_CP1_CI_AS
+            WHERE p.IsDeleted = 0 AND p.ApprovalStatus = 'Approved'";
+
+        var param = new SqlParameter("@Barcodes", SqlDbType.Structured)
+        {
+            TypeName = "dbo.BarcodeListType",
+            Value = dt
+        };
+
+        List<ProductDto> products;
+
+        try
+        {
+            products = await ExecuteReaderAsync(
+                sql,
+                reader => new ProductDto
+                {
+                    Id = GetGuid(reader, "Id"),
+                    Name = GetString(reader, "Name") ?? string.Empty,
+                    Brand = GetString(reader, "Brand"),
+                    Barcode = GetString(reader, "Barcode"),
+                    BarcodeType = GetString(reader, "BarcodeType"),
+                    Description = GetString(reader, "Description"),
+                    Category = GetString(reader, "Category"),
+                    ServingSize = GetString(reader, "ServingSize"),
+                    ServingUnit = GetString(reader, "ServingUnit"),
+                    ImageUrl = GetString(reader, "ImageUrl"),
+                    ApprovalStatus = GetString(reader, "ApprovalStatus") ?? "Pending",
+                    ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
+                    ApprovedAt = GetDateTime(reader, "ApprovedAt"),
+                    RejectionReason = GetString(reader, "RejectionReason"),
+                    SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
+                    CreatedAt = GetDateTime(reader, "CreatedAt")
+                },
+                param);
+        }
+        catch (SqlException ex) when (ex.Message.Contains("BarcodeListType"))
+        {
+            // Table type doesn't exist yet, fall back to individual queries
+            _logger?.LogWarning("BarcodeListType not found, falling back to individual queries. Run DatabaseMigrator to create the type.");
+            return await GetByBarcodesAsyncFallback(barcodeList);
+        }
+
+        // Load images for all products in parallel
+        await Task.WhenAll(products.Select(p => LoadImagesAsync(p)));
+
+        sw.Stop();
+
+        // Convert to dictionary keyed by barcode
+        var result = products
+            .Where(p => !string.IsNullOrEmpty(p.Barcode))
+            .ToDictionary(p => p.Barcode!, p => p, StringComparer.OrdinalIgnoreCase);
+
+        _logger?.LogDebug("[Products] DB bulk lookup: {Requested} barcodes -> {Found} products in {Ms}ms",
+            barcodeList.Count, result.Count, sw.ElapsedMilliseconds);
+
+        return result;
+    }
+
+    private async Task<Dictionary<string, ProductDto>> GetByBarcodesAsyncFallback(List<string> barcodes)
+    {
+        // Fallback: individual queries if table type doesn't exist
+        var tasks = barcodes.Select(async barcode =>
+        {
+            var product = await GetByBarcodeAsync(barcode);
+            return (Barcode: barcode, Product: product);
+        });
+
+        var results = await Task.WhenAll(tasks);
+
+        return results
+            .Where(r => r.Product != null)
+            .ToDictionary(r => r.Barcode, r => r.Product!, StringComparer.OrdinalIgnoreCase);
     }
     }

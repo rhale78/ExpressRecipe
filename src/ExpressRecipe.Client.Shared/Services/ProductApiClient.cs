@@ -6,6 +6,7 @@ public interface IProductApiClient
 {
     Task<ProductDto?> GetProductAsync(Guid id);
     Task<ProductDto?> GetProductByUpcAsync(string upc);
+    Task<ProductDto?> GetProductByBarcodeAsync(string barcode);
     Task<ProductSearchResult?> SearchProductsAsync(ProductSearchRequest request);
     Task<Dictionary<string, int>?> GetLetterCountsAsync(ProductSearchRequest request);
     Task<Guid?> CreateProductAsync(CreateProductRequest request);
@@ -28,6 +29,11 @@ public class ProductApiClient : ApiClientBase, IProductApiClient
     public async Task<ProductDto?> GetProductByUpcAsync(string upc)
     {
         return await GetAsync<ProductDto>($"/api/products/upc/{upc}");
+    }
+
+    public async Task<ProductDto?> GetProductByBarcodeAsync(string barcode)
+    {
+        return await GetAsync<ProductDto>($"/api/products/barcode/{barcode}");
     }
 
     public async Task<ProductSearchResult?> SearchProductsAsync(ProductSearchRequest request)

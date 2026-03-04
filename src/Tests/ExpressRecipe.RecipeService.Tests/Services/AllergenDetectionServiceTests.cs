@@ -265,7 +265,7 @@ public class AllergenDetectionServiceTests
     {
         var result = AllergenDetectionService.DetectByKeywords(ingredient);
 
-        result.Should().Contain(r => r.AllergenName == expectedAllergen,
+        result.Should().Contain(r => r.Item1 == expectedAllergen,
             $"'{ingredient}' should match allergen '{expectedAllergen}'");
     }
 

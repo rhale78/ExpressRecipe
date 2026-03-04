@@ -3,11 +3,11 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Serilog;
+using Serilog.Sinks.SystemConsole.Themes;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -22,6 +22,7 @@ public static class Extensions
     /// </summary>
     public static IHostApplicationBuilder AddServiceDefaults(this IHostApplicationBuilder builder)
     {
+        builder.AddSerilog();
         builder.ConfigureOpenTelemetry();
         builder.AddDefaultHealthChecks();
         builder.Services.AddServiceDiscovery();
@@ -50,11 +51,7 @@ public static class Extensions
     /// </summary>
     public static IHostApplicationBuilder ConfigureOpenTelemetry(this IHostApplicationBuilder builder)
     {
-        builder.Logging.AddOpenTelemetry(logging =>
-        {
-            logging.IncludeFormattedMessage = true;
-            logging.IncludeScopes = true;
-        });
+        //builder.Logging.AddOpenTelemetry();
 
         builder.Services.AddOpenTelemetry()
             .WithMetrics(metrics =>
@@ -114,7 +111,7 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Configures Serilog for structured logging.
+    /// Configures Serilog for structured logging with colored console output.
     /// </summary>
     public static IHostApplicationBuilder AddSerilog(this IHostApplicationBuilder builder)
     {
@@ -123,7 +120,9 @@ public static class Extensions
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Application", builder.Environment.ApplicationName)
             .Enrich.WithProperty("Environment", builder.Environment.EnvironmentName)
-            .WriteTo.Console()
+            .WriteTo.Console(
+                outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+                theme: AnsiConsoleTheme.Literate) // Literate theme has proper colors: Error=Red, Info=White, Debug=Gray
             .WriteTo.OpenTelemetry()
             .CreateLogger();
 

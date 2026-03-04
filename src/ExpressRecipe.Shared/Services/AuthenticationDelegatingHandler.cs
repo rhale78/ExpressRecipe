@@ -27,11 +27,12 @@ public class AuthenticationDelegatingHandler : DelegatingHandler
         {
             // Add authorization header if token is available
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            _logger.LogDebug("Added authorization header to {Method} {RequestUri}", request.Method, request.RequestUri?.PathAndQuery);
+            // Changed to Trace to reduce log flooding
+            _logger.LogTrace("Auth header added: {Method} {Path}", request.Method, request.RequestUri?.PathAndQuery);
         }
         else
         {
-            _logger.LogWarning("No token available for {Method} {RequestUri}", request.Method, request.RequestUri?.PathAndQuery);
+            _logger.LogWarning("No token available for {Method} {Path}", request.Method, request.RequestUri?.PathAndQuery);
         }
 
         return await base.SendAsync(request, cancellationToken);

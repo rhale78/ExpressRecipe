@@ -9,8 +9,8 @@ public class PriceDataImportWorker : BackgroundService
     private readonly ILogger<PriceDataImportWorker> _logger;
     private readonly IConfiguration _configuration;
 
-    // Run daily at 3:00 AM
     private static readonly TimeOnly RunTime = new(3, 0, 0);
+    private const string DefaultOpenPricesUrl = "https://huggingface.co/datasets/openfoodfacts/openprices/resolve/main/data/prices.parquet";
 
     public PriceDataImportWorker(
         IServiceProvider serviceProvider,
@@ -26,15 +26,14 @@ public class PriceDataImportWorker : BackgroundService
     {
         _logger.LogInformation("PriceDataImportWorker started");
 
-        var autoImport = _configuration.GetValue<bool>("PriceImport:AutoImport", false);
+        var autoImport = _configuration.GetValue<bool>("PriceImport:AutoImport", true);
         if (!autoImport)
         {
-            _logger.LogInformation("PriceDataImportWorker: auto-import is disabled (PriceImport:AutoImport=false)");
+            _logger.LogInformation("PriceDataImportWorker: auto-import is disabled");
             return;
         }
 
-        // Startup check: trigger import if we have fewer than 1000 prices
-        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+        await Task.Delay(TimeSpan.FromSeconds(45), stoppingToken);
         if (!stoppingToken.IsCancellationRequested)
         {
             await TriggerImportIfNeededAsync(stoppingToken);
@@ -51,59 +50,70 @@ public class PriceDataImportWorker : BackgroundService
                 if (!stoppingToken.IsCancellationRequested)
                     await RunImportAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "PriceDataImportWorker encountered an error; will retry in 1 hour");
+                _logger.LogError(ex, "PriceDataImportWorker encountered an error; retrying in 1 hour");
                 await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
             }
         }
-
-        _logger.LogInformation("PriceDataImportWorker stopped");
     }
 
     public async Task RunImportAsync(CancellationToken cancellationToken = default)
     {
-        var openPricesEnabled = _configuration.GetValue<bool>("PriceImport:OpenPricesEnabled", false);
-
-        if (!openPricesEnabled)
-        {
-            _logger.LogInformation("PriceDataImportWorker: OpenPrices import is disabled");
-            return;
-        }
-
-        _logger.LogInformation("PriceDataImportWorker: starting scheduled import");
+        _logger.LogInformation("PriceDataImportWorker: starting import process. Working Dir: {Dir}", Directory.GetCurrentDirectory());
 
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var importService = scope.ServiceProvider.GetRequiredService<OpenPricesImportService>();
+            var importService = scope.ServiceProvider.GetRequiredService<IOpenPricesImportService>();
 
-            // In production the caller would provide a stream from a downloaded/mounted file.
-            // Here we emit a warning if no file is configured so the service doesn't crash.
             var dataFile = _configuration["PriceImport:OpenPricesFilePath"];
-            if (string.IsNullOrWhiteSpace(dataFile) || !File.Exists(dataFile))
+            var url = _configuration["PriceImport:OpenPricesUrl"] ?? DefaultOpenPricesUrl;
+            var format = _configuration["PriceImport:OpenPricesFormat"] ?? "parquet";
+
+            // 1. PRIORITY: Local File (If exists, do NOT call web)
+            if (!string.IsNullOrWhiteSpace(dataFile) && importService.FileExists(dataFile))
             {
-                _logger.LogWarning("PriceDataImportWorker: OpenPrices data file not found at '{Path}'. Skipping import.",
-                    dataFile);
-                return;
+                _logger.LogInformation("STRATEGY: Local file found at {Path}. Skipping web call.", dataFile);
+                var result = await importService.ImportFromFileAsync(dataFile, cancellationToken);
+                _logger.LogInformation("PriceDataImportWorker: File import result - processed={Processed} imported={Imported}", result.Processed, result.Imported);
+                return; // Exit successfully
             }
 
-            var result = await importService.ImportFromFileAsync(dataFile, cancellationToken);
-            _logger.LogInformation(
-                "PriceDataImportWorker: import complete – processed={Processed} imported={Imported} errors={Errors}",
-                result.Processed, result.Imported, result.Errors);
+            // 2. ATTEMPT WEB
+            _logger.LogInformation("STRATEGY: Local file not found. Attempting web import from {Url}", url);
+            try
+            {
+                var webResult = await importService.ImportFromUrlAsync(url, format, cancellationToken);
+                if (webResult.Success && webResult.Imported > 0)
+                {
+                    _logger.LogInformation("PriceDataImportWorker: Web import successful");
+                    return;
+                }
+                
+                _logger.LogWarning("PriceDataImportWorker: Web import returned no data or was unsuccessful.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "STRATEGY: Web import failed. Initiating fallback to local file search.");
+            }
+
+            // 3. FALLBACK: Search for file again if web failed
+            if (!string.IsNullOrWhiteSpace(dataFile) && importService.FileExists(dataFile))
+            {
+                _logger.LogInformation("FALLBACK: Found local file {Path} after web failure. Importing...", dataFile);
+                await importService.ImportFromFileAsync(dataFile, cancellationToken);
+            }
+            else
+            {
+                _logger.LogError("CRITICAL: Both web and local file ({Path}) are unavailable.", dataFile ?? "N/A");
+            }
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
+        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "PriceDataImportWorker: import failed");
+            _logger.LogError(ex, "PriceDataImportWorker: Import process failed completely");
         }
     }
 
@@ -120,10 +130,6 @@ public class PriceDataImportWorker : BackgroundService
                 _logger.LogInformation("PriceDataImportWorker: price count is {Count} (< 1000), triggering startup import", count);
                 await RunImportAsync(cancellationToken);
             }
-            else
-            {
-                _logger.LogInformation("PriceDataImportWorker: price count is {Count}, skipping startup import", count);
-            }
         }
         catch (Exception ex)
         {
@@ -135,8 +141,7 @@ public class PriceDataImportWorker : BackgroundService
     {
         var now = DateTime.UtcNow;
         var next = now.Date.Add(RunTime.ToTimeSpan());
-        if (next <= now)
-            next = next.AddDays(1);
+        if (next <= now) next = next.AddDays(1);
         return next - now;
     }
 }

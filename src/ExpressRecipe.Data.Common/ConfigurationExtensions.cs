@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 
 namespace ExpressRecipe.Data.Common;
@@ -76,12 +78,47 @@ public static class ConfigurationExtensions
     /// </summary>
     public static WebApplicationBuilder AddLayeredConfiguration(this WebApplicationBuilder builder, string[]? args = null)
     {
-        // Clear existing configuration sources (except the ones we want to keep)
-        var existingSources = builder.Configuration.Sources.ToList();
-        builder.Configuration.Sources.Clear();
+        // Get the solution root directory and config path
+        var currentDirectory = Directory.GetCurrentDirectory();
+        var solutionRoot = FindSolutionRoot(currentDirectory);
+        var configDirectory = Path.Combine(solutionRoot, "Config");
 
-        // Add layered configuration
-        builder.Configuration.AddLayeredConfiguration(builder.Environment, args);
+        if (!Directory.Exists(configDirectory))
+            throw new DirectoryNotFoundException($"Config directory not found at: {configDirectory}");
+
+        var environmentName = builder.Environment.EnvironmentName;
+
+        // Create a file provider for the config directory
+        var fileProvider = new PhysicalFileProvider(configDirectory);
+
+        // Insert global JSON files at the front of the source list so that service-specific
+        // appsettings.json (added by WebApplicationBuilder) overrides them, and Aspire-injected
+        // providers (service discovery, env vars) remain at the end with highest priority.
+        // Do NOT call Sources.Clear() — that would destroy Aspire's configuration providers.
+        builder.Configuration.Sources.Insert(0, new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+        {
+            FileProvider = fileProvider,
+            Path = "appsettings.DatabaseManagement.json",
+            Optional = true,
+            ReloadOnChange = true
+        });
+        builder.Configuration.Sources.Insert(0, new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+        {
+            FileProvider = fileProvider,
+            Path = $"appsettings.{environmentName}.json",
+            Optional = true,
+            ReloadOnChange = true
+        });
+        builder.Configuration.Sources.Insert(0, new Microsoft.Extensions.Configuration.Json.JsonConfigurationSource
+        {
+            FileProvider = fileProvider,
+            Path = "appsettings.Global.json",
+            Optional = false,
+            ReloadOnChange = true
+        });
+
+        if (args != null && args.Length > 0)
+            builder.Configuration.AddCommandLine(args);
 
         return builder;
     }

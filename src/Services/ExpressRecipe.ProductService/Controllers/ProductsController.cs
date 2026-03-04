@@ -154,30 +154,23 @@ public class ProductsController : ControllerBase
     /// Get product by barcode (for scanner)
     /// </summary>
     [HttpGet("barcode/{barcode}")]
+    [AllowAnonymous] // Allow service-to-service calls without JWT
     public async Task<ActionResult<ProductDto>> GetByBarcode(string barcode)
     {
         try
         {
-            var cacheKey = CacheKeys.FormatKey("product:barcode:{0}", barcode);
-
-            var product = await _cache.GetOrSetAsync<ProductDto?>(
-                cacheKey,
-                ct => new ValueTask<ProductDto?>(_productRepository.GetByBarcodeAsync(barcode)),
-                expiration: TimeSpan.FromHours(2)
-            );
+            // Bypass cache - go directly to database to avoid Redis hanging issues
+            // Cache is causing 10-second timeouts during price imports
+            var product = await _productRepository.GetByBarcodeAsync(barcode);
 
             if (product == null)
             {
                 return NotFound(new { message = "Product not found with this barcode" });
             }
 
-            // Load ingredients (also cached)
-            var ingredientsCacheKey = CacheKeys.FormatKey("product:ingredients:{0}", product.Id);
-            product.Ingredients = await _cache.GetOrSetAsync(
-                ingredientsCacheKey,
-                ct => new ValueTask<List<ProductIngredientDto>>(_ingredientRepository.GetProductIngredientsAsync(product.Id)),
-                expiration: TimeSpan.FromHours(2)
-            );
+            // Skip loading ingredients for service-to-service calls to improve performance
+            // PriceService doesn't need ingredient details
+            product.Ingredients = new List<ProductIngredientDto>();
 
             return Ok(product);
         }
@@ -442,4 +435,47 @@ public class ProductsController : ControllerBase
             return StatusCode(500, new { message = "An error occurred" });
         }
     }
+
+    /// <summary>
+    /// Bulk lookup products by barcodes (for batched operations from PriceService)
+    /// </summary>
+    [HttpPost("barcode/bulk")]
+    [AllowAnonymous]
+    public async Task<ActionResult<Dictionary<string, ProductDto>>> GetByBarcodesBulk([FromBody] BulkBarcodeRequest request)
+    {
+        try
+        {
+            if (request?.Barcodes == null || !request.Barcodes.Any())
+            {
+                return BadRequest(new { message = "Barcodes list cannot be empty" });
+            }
+
+            // Limit bulk requests to prevent abuse
+            const int maxBulkSize = 500;
+            if (request.Barcodes.Count > maxBulkSize)
+            {
+                return BadRequest(new { message = $"Bulk request exceeds maximum size of {maxBulkSize}" });
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            var result = await _productRepository.GetByBarcodesAsync(request.Barcodes);
+
+            sw.Stop();
+            _logger.LogInformation("[Products] Bulk barcode lookup: {Requested} barcodes -> {Found} products in {Ms}ms",
+                request.Barcodes.Count, result.Count, sw.ElapsedMilliseconds);
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Products] Bulk barcode lookup error: {Count} barcodes", request?.Barcodes?.Count ?? 0);
+            return StatusCode(500, new { message = "An error occurred" });
+        }
+    }
+}
+
+public class BulkBarcodeRequest
+{
+    public List<string> Barcodes { get; set; } = new();
 }

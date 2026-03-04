@@ -7,7 +7,7 @@ using ExpressRecipe.RecipeService.Logging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using ExpressRecipe.Shared.DTOs.Recipe;
-using ExpressRecipe.Shared.DTOs.Product;
+using ExpressRecipe.Shared.DTOs.Product; // Needed for ParsedIngredientResult
 using ExpressRecipe.Client.Shared.Services;
 
 namespace ExpressRecipe.RecipeService.Services;
@@ -264,7 +264,18 @@ public class BatchRecipeProcessor : RecipeParserBase
                     }
 
                     int createdCount = await recipeRepo.BulkCreateFullRecipesHighSpeedAsync(importBatch);
-                    
+
+                    if (createdCount > 0 && importBatch.Count > 0)
+                    {
+                        var firstRecipe = importBatch.First().Recipe;
+                        var lastRecipe = importBatch.Last().Recipe;
+                        _logger.LogInformation(
+                            "[RECIPES] Batch saved: {Created}/{Total} recipes. First: {FirstName} ({FirstServings} servings). Last: {LastName} ({LastServings} servings)",
+                            createdCount, importBatch.Count,
+                            firstRecipe.Name, firstRecipe.Servings,
+                            lastRecipe.Name, lastRecipe.Servings);
+                    }
+
                     var successfulStagingIds = stagingIds.Take(createdCount).ToList();
                     await stagingRepo.BulkUpdateStatusAsync(successfulStagingIds, "Completed");
 

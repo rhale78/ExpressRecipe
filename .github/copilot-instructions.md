@@ -50,6 +50,7 @@ src/
     ├── ExpressRecipe.BlazorWeb/
     ├── ExpressRecipe.Windows/
     └── ExpressRecipe.MAUI/
+
 ## Coding Standards
 
 ### Naming Conventions
@@ -73,12 +74,14 @@ src/
 
 ### API Design
 
-**RESTful conventions:**GET    /api/products          - List products
-GET    /api/products/{id}     - Get product by ID
-POST   /api/products          - Create product
-PUT    /api/products/{id}     - Update product
-DELETE /api/products/{id}     - Delete product
-GET    /api/products/search   - Search products
+**RESTful conventions:**
+- GET    /api/products          - List products
+- GET    /api/products/{id}     - Get product by ID
+- POST   /api/products          - Create product
+- PUT    /api/products/{id}     - Update product
+- DELETE /api/products/{id}     - Delete product
+- GET    /api/products/search   - Search products
+
 **Always use DTOs for API contracts, never expose domain models directly.**
 
 ## Critical Rules
@@ -154,14 +157,16 @@ Each microservice MUST have:
 
 ### Database Schema Rules
 
-All tables MUST include these base columns:Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-CreatedBy UNIQUEIDENTIFIER NULL,
-UpdatedAt DATETIME2 NULL,
-UpdatedBy UNIQUEIDENTIFIER NULL,
-IsDeleted BIT NOT NULL DEFAULT 0,
-DeletedAt DATETIME2 NULL,
-RowVersion ROWVERSION
+All tables MUST include these base columns:
+- Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+- CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+- CreatedBy UNIQUEIDENTIFIER NULL,
+- UpdatedAt DATETIME2 NULL,
+- UpdatedBy UNIQUEIDENTIFIER NULL,
+- IsDeleted BIT NOT NULL DEFAULT 0,
+- DeletedAt DATETIME2 NULL,
+- RowVersion ROWVERSION
+
 ### Async/Await
 
 1. **Always use async/await** for I/O operations
@@ -196,8 +201,7 @@ RowVersion ROWVERSION
 ## Common Pitfalls to Avoid
 
 ### ❌ DON'T
-// DON'T mix concerns - no database access in controllers
-public class ProductsController : ControllerBase
+// DON'T mix concerns - no database access in controllerspublic class ProductsController : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get()
@@ -206,16 +210,11 @@ public class ProductsController : ControllerBase
         // Direct SQL in controller - BAD
     }
 }
-
-// DON'T use blocking calls
-var result = _service.GetAsync().Result; // Deadlock risk!
-
-// DON'T expose domain models
-[HttpPost]
+// DON'T use blocking callsvar result = _service.GetAsync().Result; // Deadlock risk!
+// DON'T expose domain models[HttpPost]
 public async Task<Product> Create(Product product) // Domain model exposed
 ### ✅ DO
-// DO separate concerns - Controller → Service → Repository
-public class ProductsController : ControllerBase
+// DO separate concerns - Controller → Service → Repositorypublic class ProductsController : ControllerBase
 {
     private readonly IProductService _service;
 
@@ -226,41 +225,23 @@ public class ProductsController : ControllerBase
         return Ok(products);
     }
 }
-
-// DO use proper async
-var result = await _service.GetAsync();
-
-// DO use DTOs for APIs
-[HttpPost]
+// DO use proper asyncvar result = await _service.GetAsync();
+// DO use DTOs for APIs[HttpPost]
 public async Task<ProductResponse> Create(CreateProductRequest request)
 ## Development Workflow
 
 ### Building and Testing
-# Restore dependencies
-dotnet restore
-
-# Build solution
-dotnet build
-
-# Run all tests
-dotnet test
-
-# Run specific service
-cd src/Services/ExpressRecipe.ProductService
+# Restore dependenciesdotnet restore
+# Build solutiondotnet build
+# Run all testsdotnet test
+# Run specific servicecd src/Services/ExpressRecipe.ProductService
 dotnet run
-
-# Run with Aspire (all services)
-cd src/ExpressRecipe.AppHost
+# Run with Aspire (all services)cd src/ExpressRecipe.AppHost
 dotnet run
 ### Docker Development
-# Start all services
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop services
-docker compose down
+# Start all servicesdocker compose up -d
+# View logsdocker compose logs -f
+# Stop servicesdocker compose down
 ### Migrations
 
 - SQL scripts in `Data/Migrations/` folder
@@ -276,8 +257,7 @@ docker compose down
 
 ## Aspire Service Registration
 
-Each service should register with Aspire defaults:
-var builder = WebApplication.CreateBuilder(args);
+Each service should register with Aspire defaults:var builder = WebApplication.CreateBuilder(args);
 
 // Add Aspire defaults (logging, health checks, telemetry)
 builder.AddServiceDefaults();
@@ -322,7 +302,7 @@ app.Run();
 
 ## Solution Structure
 
-- When reorganizing solution structure, preserve and validate the active `.slnx` file format and avoid replacing it with a reconstructed `.sln` file.
+- When reorganizing solution structure, preserve and validate the active `.sln` file format and avoid relying on `.slnx` for changes/build guidance unless explicitly requested.
 
 ---
 

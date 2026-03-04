@@ -66,13 +66,18 @@ builder.Services.AddScoped<IGroceryStoreRepository>(sp =>
 });
 
 // Register import services with HttpClient
-builder.Services.AddHttpClient<UsdaSnapImportService>()
+builder.Services.AddHttpClient<UsdaSnapImportService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(60);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "ExpressRecipe.GroceryStoreLocationService/1.0 (+https://github.com/rhale78/ExpressRecipe)");
+    client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "text/csv,application/octet-stream,*/*");
+})
     .AddStandardResilienceHandler();
 
 builder.Services.AddHttpClient<OpenStreetMapImportService>()
     .AddStandardResilienceHandler();
 
-builder.Services.AddHttpClient<OpenPricesLocationImportService>()
+builder.Services.AddHttpClient<IOpenPricesLocationImportService, OpenPricesLocationImportService>()
     .AddStandardResilienceHandler();
 
 // Register background worker as singleton so it can be injected into controllers

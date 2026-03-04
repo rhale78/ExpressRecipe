@@ -11,7 +11,8 @@
       "Bash(Select-Object -First 10)",
       "Bash(Select-String -Pattern \"error CS\" -Context 0,1)",
       "Bash(ls:*)",
-      "WebFetch(domain:openfoodfacts.github.io)"
+      "WebFetch(domain:openfoodfacts.github.io)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []
