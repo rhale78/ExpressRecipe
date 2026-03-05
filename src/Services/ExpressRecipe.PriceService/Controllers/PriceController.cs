@@ -14,18 +14,18 @@ public class PriceController : ControllerBase
     private readonly ILogger<PriceController> _logger;
     private readonly IPriceRepository _repository;
     private readonly IPriceEventPublisher _events;
-    private readonly IPriceIngestionChannel _ingestionChannel;
+    private readonly IPriceBatchChannel _batchChannel;
 
     public PriceController(
         ILogger<PriceController> logger,
         IPriceRepository repository,
         IPriceEventPublisher events,
-        IPriceIngestionChannel ingestionChannel)
+        IPriceBatchChannel batchChannel)
     {
         _logger = logger;
         _repository = repository;
         _events = events;
-        _ingestionChannel = ingestionChannel;
+        _batchChannel = batchChannel;
     }
 
     private Guid? GetUserId()
@@ -112,8 +112,8 @@ public class PriceController : ControllerBase
 
     /// <summary>
     /// Submit multiple price observations in one call – asynchronous channel path.
-    /// Items are written to the <see cref="IPriceIngestionChannel"/> and processed by
-    /// <see cref="PriceIngestionChannelWorker"/> in the background. Returns immediately
+    /// Items are written to the <see cref="IPriceBatchChannel"/> and processed by
+    /// <see cref="PriceBatchChannelWorker"/> in the background. Returns immediately
     /// with a session ID that clients can use to correlate the batch.
     /// </summary>
     [HttpPost("prices/batch")]
@@ -136,7 +136,7 @@ public class PriceController : ControllerBase
 
             foreach (var item in request.Prices)
             {
-                var ingestionRequest = new PriceIngestionRequest
+                var batchItem = new PriceBatchItem
                 {
                     ProductId   = item.ProductId,
                     StoreId     = item.StoreId,
@@ -146,10 +146,10 @@ public class PriceController : ControllerBase
                     SessionId   = sessionId
                 };
 
-                if (!_ingestionChannel.TryWrite(ingestionRequest))
+                if (!_batchChannel.TryWrite(batchItem))
                 {
                     // Channel momentarily full – apply backpressure and wait for space
-                    await _ingestionChannel.WriteAsync(ingestionRequest, HttpContext.RequestAborted);
+                    await _batchChannel.WriteAsync(batchItem, HttpContext.RequestAborted);
                 }
                 accepted++;
             }

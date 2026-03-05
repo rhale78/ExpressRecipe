@@ -10,34 +10,34 @@ using Xunit;
 namespace ExpressRecipe.PriceService.Tests.Services;
 
 /// <summary>
-/// Tests for <see cref="PriceIngestionChannelWorker"/> – the background service that reads
-/// from the ingestion channel and persists + publishes events.
+/// Tests for <see cref="PriceBatchChannelWorker"/> – the background service that reads
+/// from the batch channel and persists + publishes events.
 /// </summary>
-public class PriceIngestionChannelWorkerTests
+public class PriceBatchChannelWorkerTests
 {
     private readonly Mock<IPriceRepository>   _repoMock;
     private readonly Mock<IPriceEventPublisher> _eventsMock;
-    private readonly Mock<ILogger<PriceIngestionChannelWorker>> _loggerMock;
+    private readonly Mock<ILogger<PriceBatchChannelWorker>> _loggerMock;
 
-    public PriceIngestionChannelWorkerTests()
+    public PriceBatchChannelWorkerTests()
     {
         _repoMock   = new Mock<IPriceRepository>();
         _eventsMock = new Mock<IPriceEventPublisher>();
-        _loggerMock = new Mock<ILogger<PriceIngestionChannelWorker>>();
+        _loggerMock = new Mock<ILogger<PriceBatchChannelWorker>>();
     }
 
-    private (PriceIngestionChannelWorker worker, Channel<PriceIngestionRequest> innerChannel)
+    private (PriceBatchChannelWorker worker, Channel<PriceBatchItem> innerChannel)
         CreateWorkerWithChannel()
     {
         // Use an unbounded channel so writes never block in tests
-        var inner   = Channel.CreateUnbounded<PriceIngestionRequest>();
-        var channel = new TestPriceIngestionChannel(inner);
+        var inner   = Channel.CreateUnbounded<PriceBatchItem>();
+        var channel = new TestPriceBatchChannel(inner);
 
         var services = new ServiceCollection();
         services.AddScoped<IPriceRepository>(_ => _repoMock.Object);
         var sp = services.BuildServiceProvider();
 
-        var worker = new PriceIngestionChannelWorker(
+        var worker = new PriceBatchChannelWorker(
             channel, sp.GetRequiredService<IServiceScopeFactory>(),
             _eventsMock.Object, _loggerMock.Object);
 
@@ -60,7 +60,7 @@ public class PriceIngestionChannelWorkerTests
         using var cts = new CancellationTokenSource();
 
         // Write one item before starting so it will be processed
-        await inner.Writer.WriteAsync(new PriceIngestionRequest
+        await inner.Writer.WriteAsync(new PriceBatchItem
         {
             ProductId = productId, StoreId = storeId, Price = 1.99m, SubmittedBy = userId
         });
@@ -95,11 +95,11 @@ public class PriceIngestionChannelWorkerTests
         var (worker, inner) = CreateWorkerWithChannel();
         using var cts = new CancellationTokenSource();
 
-        await inner.Writer.WriteAsync(new PriceIngestionRequest
+        await inner.Writer.WriteAsync(new PriceBatchItem
         {
             ProductId = productId1, StoreId = storeId, Price = 1.00m, SubmittedBy = userId
         });
-        await inner.Writer.WriteAsync(new PriceIngestionRequest
+        await inner.Writer.WriteAsync(new PriceBatchItem
         {
             ProductId = productId2, StoreId = storeId, Price = 1.00m, SubmittedBy = userId
         });
@@ -133,7 +133,7 @@ public class PriceIngestionChannelWorkerTests
         var (worker, inner) = CreateWorkerWithChannel();
         using var cts = new CancellationTokenSource();
 
-        await inner.Writer.WriteAsync(new PriceIngestionRequest
+        await inner.Writer.WriteAsync(new PriceBatchItem
         {
             ProductId = productId, StoreId = storeId, Price = 2.00m, SubmittedBy = userId
         });
@@ -149,16 +149,16 @@ public class PriceIngestionChannelWorkerTests
 
     // ── Test double ──────────────────────────────────────────────────────────
 
-    private sealed class TestPriceIngestionChannel : IPriceIngestionChannel
+    private sealed class TestPriceBatchChannel : IPriceBatchChannel
     {
-        private readonly Channel<PriceIngestionRequest> _inner;
+        private readonly Channel<PriceBatchItem> _inner;
 
-        public TestPriceIngestionChannel(Channel<PriceIngestionRequest> inner) => _inner = inner;
+        public TestPriceBatchChannel(Channel<PriceBatchItem> inner) => _inner = inner;
 
-        public bool TryWrite(PriceIngestionRequest r) => _inner.Writer.TryWrite(r);
-        public ValueTask WriteAsync(PriceIngestionRequest r, CancellationToken ct = default)
-            => _inner.Writer.WriteAsync(r, ct);
-        public IAsyncEnumerable<PriceIngestionRequest> ReadAllAsync(CancellationToken ct = default)
+        public bool TryWrite(PriceBatchItem item) => _inner.Writer.TryWrite(item);
+        public ValueTask WriteAsync(PriceBatchItem item, CancellationToken ct = default)
+            => _inner.Writer.WriteAsync(item, ct);
+        public IAsyncEnumerable<PriceBatchItem> ReadAllAsync(CancellationToken ct = default)
             => _inner.Reader.ReadAllAsync(ct);
         public int Count => _inner.Reader.Count;
     }

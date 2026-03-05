@@ -174,9 +174,9 @@ else
         new NullPriceEventPublisher(sp.GetRequiredService<ILogger<NullPriceEventPublisher>>()));
 }
 
-// Register price ingestion channel (async batch path) – always available regardless of messaging
-builder.Services.AddSingleton<IPriceIngestionChannel, PriceIngestionChannel>();
-builder.Services.AddHostedService<PriceIngestionChannelWorker>();
+// Register price batch channel (async batch path) – always available regardless of messaging
+builder.Services.AddSingleton<IPriceBatchChannel, PriceBatchChannel>();
+builder.Services.AddHostedService<PriceBatchChannelWorker>();
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);

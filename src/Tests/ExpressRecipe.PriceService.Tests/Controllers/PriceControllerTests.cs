@@ -15,7 +15,7 @@ public class PriceControllerTests
     private readonly Mock<IPriceRepository> _repositoryMock;
     private readonly Mock<ILogger<PriceController>> _loggerMock;
     private readonly Mock<IPriceEventPublisher> _eventsMock;
-    private readonly Mock<IPriceIngestionChannel> _channelMock;
+    private readonly Mock<IPriceBatchChannel> _channelMock;
     private readonly PriceController _controller;
     private readonly Guid _userId = Guid.NewGuid();
 
@@ -24,7 +24,7 @@ public class PriceControllerTests
         _repositoryMock = new Mock<IPriceRepository>();
         _loggerMock     = new Mock<ILogger<PriceController>>();
         _eventsMock     = new Mock<IPriceEventPublisher>();
-        _channelMock    = new Mock<IPriceIngestionChannel>();
+        _channelMock    = new Mock<IPriceBatchChannel>();
 
         _controller = new PriceController(
             _loggerMock.Object,
@@ -374,7 +374,7 @@ public class PriceControllerTests
     public async Task RecordPricesBatch_ValidRequest_ReturnsAccepted()
     {
         // Arrange – channel accepts writes
-        _channelMock.Setup(c => c.TryWrite(It.IsAny<PriceIngestionRequest>())).Returns(true);
+        _channelMock.Setup(c => c.TryWrite(It.IsAny<PriceBatchItem>())).Returns(true);
 
         var request = new BatchRecordPriceRequest
         {
@@ -390,14 +390,14 @@ public class PriceControllerTests
 
         // Assert
         result.Should().BeOfType<AcceptedResult>();
-        _channelMock.Verify(c => c.TryWrite(It.IsAny<PriceIngestionRequest>()), Times.Exactly(2));
+        _channelMock.Verify(c => c.TryWrite(It.IsAny<PriceBatchItem>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task RecordPricesBatch_AfterChannelWrite_FiresBatchSubmittedEvent()
     {
         // Arrange
-        _channelMock.Setup(c => c.TryWrite(It.IsAny<PriceIngestionRequest>())).Returns(true);
+        _channelMock.Setup(c => c.TryWrite(It.IsAny<PriceBatchItem>())).Returns(true);
 
         var request = new BatchRecordPriceRequest
         {
@@ -425,7 +425,7 @@ public class PriceControllerTests
         var result = await _controller.RecordPricesBatch(request);
 
         result.Should().BeOfType<BadRequestObjectResult>();
-        _channelMock.Verify(c => c.TryWrite(It.IsAny<PriceIngestionRequest>()), Times.Never);
+        _channelMock.Verify(c => c.TryWrite(It.IsAny<PriceBatchItem>()), Times.Never);
     }
 
     [Fact]
