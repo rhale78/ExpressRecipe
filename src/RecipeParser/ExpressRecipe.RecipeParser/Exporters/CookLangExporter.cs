@@ -13,7 +13,7 @@ public sealed class CookLangExporter : IRecipeExporter
         var sb = new StringBuilder();
 
         // Metadata
-        sb.AppendLine($">> recipe: {recipe.Title}");
+        sb.AppendLine($">> title: {recipe.Title}");
         if (!string.IsNullOrEmpty(recipe.Description)) sb.AppendLine($">> description: {recipe.Description}");
         if (!string.IsNullOrEmpty(recipe.Author)) sb.AppendLine($">> author: {recipe.Author}");
         if (!string.IsNullOrEmpty(recipe.PrepTime)) sb.AppendLine($">> prep_time: {recipe.PrepTime}");

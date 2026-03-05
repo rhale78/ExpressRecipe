@@ -33,6 +33,16 @@ public static class TextParserHelper
         finally { ArrayPool<char>.Shared.Return(chars); }
     }
 
+    private static readonly HashSet<string> KnownUnits = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "c","cup","cups","T","tbsp","tablespoon","tablespoons",
+        "t","tsp","teaspoon","teaspoons","lb","lbs","pound","pounds",
+        "oz","ounce","ounces","g","gram","grams","kg","ml","l","liter",
+        "liters","pt","pint","qt","quart","gal","gallon","pkg","package",
+        "sm","med","lg","small","medium","large","stick","sticks","bunch",
+        "head","can","slice","slices","pinch","dash","drop","clove","cloves"
+    };
+
     public static (string? quantity, string? unit, string name) ParseIngredientLine(string line)
     {
         line = line.Trim();
@@ -72,17 +82,7 @@ public static class TextParserHelper
 
         string potentialUnit = new string(span[uStart..uEnd]);
 
-        var knownUnits = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "c","cup","cups","T","tbsp","tablespoon","tablespoons",
-            "t","tsp","teaspoon","teaspoons","lb","lbs","pound","pounds",
-            "oz","ounce","ounces","g","gram","grams","kg","ml","l","liter",
-            "liters","pt","pint","qt","quart","gal","gallon","pkg","package",
-            "sm","med","lg","small","medium","large","stick","sticks","bunch",
-            "head","can","slice","slices","pinch","dash","drop","clove","cloves"
-        };
-
-        string? unit = knownUnits.Contains(potentialUnit) ? potentialUnit : null;
+        string? unit = KnownUnits.Contains(potentialUnit) ? potentialUnit : null;
 
         if (unit != null)
         {

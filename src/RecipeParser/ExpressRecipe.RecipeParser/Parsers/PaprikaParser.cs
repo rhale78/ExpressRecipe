@@ -18,10 +18,9 @@ public sealed class PaprikaParser : IRecipeParser
 
     public bool CanParse(string text, string? fileExtension = null)
     {
-        if (fileExtension?.EndsWith("paprika", StringComparison.OrdinalIgnoreCase) == true) return true;
-        if (fileExtension?.EndsWith("paprikarecipes", StringComparison.OrdinalIgnoreCase) == true) return true;
-        // Detect gzip magic bytes in base64-like or raw
-        return false; // Only detectable by extension or binary detection
+        if (fileExtension == null) return false;
+        var ext = fileExtension.TrimStart('.').ToLowerInvariant();
+        return ext == "paprika" || ext == "paprikarecipe" || ext == "paprikarecipes";
     }
 
     public ParseResult Parse(string text, RecipeParseOptions? options = null)

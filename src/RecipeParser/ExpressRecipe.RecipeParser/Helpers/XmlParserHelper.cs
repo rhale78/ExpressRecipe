@@ -6,8 +6,14 @@ public static class XmlParserHelper
 {
     public static XmlDocument LoadXml(string text)
     {
-        var doc = new XmlDocument();
-        doc.LoadXml(text);
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null
+        };
+        var doc = new XmlDocument { XmlResolver = null };
+        using var reader = XmlReader.Create(new StringReader(text), settings);
+        doc.Load(reader);
         return doc;
     }
 

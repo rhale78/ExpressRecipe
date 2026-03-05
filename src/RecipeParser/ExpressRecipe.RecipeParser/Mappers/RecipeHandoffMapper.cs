@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using ExpressRecipe.RecipeParser.Models;
 
@@ -123,7 +124,7 @@ public static class RecipeHandoffMapper
             return (decimal)num / den;
         }
 
-        if (decimal.TryParse(qty, out var d)) return d;
+        if (decimal.TryParse(qty, NumberStyles.Number, CultureInfo.InvariantCulture, out var d)) return d;
         return 0m;
     }
 
@@ -138,6 +139,6 @@ public static class RecipeHandoffMapper
     {
         if (string.IsNullOrWhiteSpace(val)) return null;
         var match = Regex.Match(val, @"\d+(\.\d+)?");
-        return match.Success ? decimal.Parse(match.Value) : null;
+        return match.Success ? decimal.Parse(match.Value, CultureInfo.InvariantCulture) : null;
     }
 }

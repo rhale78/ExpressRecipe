@@ -123,15 +123,15 @@ public sealed class MasterCookParser : IRecipeParser
         {
             var line = rawLine.TrimEnd('\r');
 
-            if (line.StartsWith("Recipe By:")) { recipe.Author = line["Recipe By:".Length..].Trim(); continue; }
-            if (line.StartsWith("Serving Size:"))
+            if (StartsWithFieldKey(line, "Recipe By", out var recipeByVal)) { recipe.Author = recipeByVal; continue; }
+            if (StartsWithFieldKey(line, "Serving Size", out var servingSizeVal))
             {
-                recipe.Yield = line["Serving Size:".Length..].Trim();
+                recipe.Yield = servingSizeVal.Split(' ')[0].Trim();
                 inIngredients = true;
                 continue;
             }
-            if (line.StartsWith("Preparation Time:")) { recipe.PrepTime = line["Preparation Time:".Length..].Trim(); continue; }
-            if (line.StartsWith("Categories:")) { recipe.Category = line["Categories:".Length..].Trim(); continue; }
+            if (StartsWithFieldKey(line, "Preparation Time", out var prepTimeVal)) { recipe.PrepTime = prepTimeVal; continue; }
+            if (StartsWithFieldKey(line, "Categories", out var categoriesVal)) { recipe.Category = categoriesVal; continue; }
 
             if (line.TrimStart() == "Amount  Measure       Ingredient -- Preparation Method")
             {
@@ -149,18 +149,10 @@ public sealed class MasterCookParser : IRecipeParser
 
             if (inIngredients)
             {
-                var cols = IngredientColumnHelper.SplitColumns(line);
-                int colNum = 1;
-                foreach (var col in cols)
-                {
-                    if (!string.IsNullOrWhiteSpace(col))
-                    {
-                        var ing = ParseMxpIngredientLine(col);
-                        if (!string.IsNullOrEmpty(ing.Name))
-                            recipe.Ingredients.Add(ing);
-                        colNum++;
-                    }
-                }
+                // MXP uses single-column fixed-width format: process the whole line
+                var ing = ParseMxpIngredientLine(line);
+                if (!string.IsNullOrEmpty(ing.Name))
+                    recipe.Ingredients.Add(ing);
             }
             else if (inInstructions && !string.IsNullOrWhiteSpace(line))
             {
@@ -237,5 +229,21 @@ public sealed class MasterCookParser : IRecipeParser
 
         result.Errors = errors;
         return result;
+    }
+
+    /// <summary>
+    /// Matches MXP header lines like "Recipe By     :" (padded spaces before colon).
+    /// Returns true and sets <paramref name="value"/> to the text after the colon.
+    /// </summary>
+    private static bool StartsWithFieldKey(string line, string key, out string value)
+    {
+        value = "";
+        if (!line.StartsWith(key, StringComparison.OrdinalIgnoreCase)) return false;
+        int colonIdx = line.IndexOf(':', key.Length);
+        if (colonIdx < 0) return false;
+        // Accept only if everything between key and ':' is whitespace
+        if (!string.IsNullOrWhiteSpace(line[key.Length..colonIdx])) return false;
+        value = line[(colonIdx + 1)..].Trim();
+        return true;
     }
 }

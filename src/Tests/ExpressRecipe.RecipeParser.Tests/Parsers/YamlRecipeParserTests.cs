@@ -87,7 +87,11 @@ public class YamlRecipeParserTests
     {
         var result = _parser.Parse("title: [\nthis is invalid yaml: :");
         result.Should().NotBeNull();
-        // Should not throw, may return errors
+        // Invalid YAML should either fail or produce errors — it should not silently succeed with recipes
+        if (result.Success)
+            result.Recipes.Should().BeEmpty();
+        else
+            result.Errors.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -95,5 +99,7 @@ public class YamlRecipeParserTests
     {
         var result = _parser.Parse("# empty yaml file");
         result.Should().NotBeNull();
+        result.Success.Should().BeTrue();
+        result.Recipes.Should().BeEmpty();
     }
 }

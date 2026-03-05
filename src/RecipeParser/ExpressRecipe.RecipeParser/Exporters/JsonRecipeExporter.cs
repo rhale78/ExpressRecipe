@@ -16,11 +16,30 @@ public sealed class JsonRecipeExporter : IRecipeExporter
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    private static readonly JsonSerializerOptions CompactOptions = new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     public string Export(ParsedRecipe recipe)
         => JsonSerializer.Serialize(ToDto(recipe), PrettyOptions);
 
+    public string Export(ParsedRecipe recipe, RecipeExportOptions? options)
+    {
+        var opts = options?.PrettyPrint == false ? CompactOptions : PrettyOptions;
+        return JsonSerializer.Serialize(ToDto(recipe), opts);
+    }
+
     public string ExportAll(IEnumerable<ParsedRecipe> recipes)
         => JsonSerializer.Serialize(recipes.Select(ToDto).ToArray(), PrettyOptions);
+
+    public string ExportAll(IEnumerable<ParsedRecipe> recipes, RecipeExportOptions? options)
+    {
+        var opts = options?.PrettyPrint == false ? CompactOptions : PrettyOptions;
+        return JsonSerializer.Serialize(recipes.Select(ToDto).ToArray(), opts);
+    }
 
     private static object ToDto(ParsedRecipe r) => new
     {

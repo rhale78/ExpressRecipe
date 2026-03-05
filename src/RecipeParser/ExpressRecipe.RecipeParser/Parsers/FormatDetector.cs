@@ -16,8 +16,12 @@ public static class FormatDetector
             case "rml": return "RecipeML";
             case "fdx": return "LivingCookbook";
             case "mgrx": return "MacGourmet";
-            case "paprika": case "paprikarecipes": return "Paprika";
-            case "yaml": case "yml": return "Yaml";
+            case "paprika": case "paprikarecipe": case "paprikarecipes": return "Paprika";
+            case "yaml": case "yml":
+                // Prefer ORF for files containing ORF-specific keys
+                if (text.Contains("steps:") || text.Contains("oven_temp:") || text.Contains("notes_from_file:"))
+                    return "OpenRecipeFormat";
+                return "Yaml";
             case "json": return "Json";
             case "html": case "htm": return "GoogleStructuredData";
         }

@@ -16,6 +16,12 @@ public sealed class JsonLdRecipeExporter : IRecipeExporter
         return JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
     }
 
+    public string Export(ParsedRecipe recipe, RecipeExportOptions? options)
+    {
+        var obj = BuildRecipeObject(recipe);
+        return JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = options?.PrettyPrint != false });
+    }
+
     public string ExportAll(IEnumerable<ParsedRecipe> recipes)
     {
         var graph = recipes.Select(r => BuildRecipeObject(r)).ToList();
@@ -25,6 +31,17 @@ public sealed class JsonLdRecipeExporter : IRecipeExporter
             ["@graph"] = graph
         };
         return JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    public string ExportAll(IEnumerable<ParsedRecipe> recipes, RecipeExportOptions? options)
+    {
+        var graph = recipes.Select(r => BuildRecipeObject(r)).ToList();
+        var root = new Dictionary<string, object>
+        {
+            ["@context"] = "https://schema.org",
+            ["@graph"] = graph
+        };
+        return JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = options?.PrettyPrint != false });
     }
 
     private static Dictionary<string, object?> BuildRecipeObject(ParsedRecipe recipe)

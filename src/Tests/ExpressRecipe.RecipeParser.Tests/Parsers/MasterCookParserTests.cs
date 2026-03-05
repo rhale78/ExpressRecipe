@@ -69,9 +69,14 @@ public class MasterCookParserTests
     {
         var result = _parser.Parse(MxpRecipe);
         result.Recipes[0].Ingredients.Should().NotBeEmpty();
-        // At least one ingredient should have a preparation note (e.g., "cut into cubes" or "peeled and diced")
-        result.Recipes[0].Ingredients.Should().Contain(i =>
-            i.Preparation != null && i.Preparation.Length > 0 || i.Name.Contains("--"));
+        // Ingredients like "Beef chuck -- cut into cubes" should have Preparation populated
+        // and the "--" delimiter should NOT remain in the Name
+        result.Recipes[0].Ingredients
+            .Should().Contain(i => i.Preparation != null && i.Preparation.Length > 0,
+                because: "ingredients with ' -- ' notation should have Preparation set");
+        result.Recipes[0].Ingredients
+            .Should().NotContain(i => i.Name.Contains("--"),
+                because: "the preparation delimiter should be split out of the ingredient name");
     }
 
     [Fact]

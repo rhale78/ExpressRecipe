@@ -44,13 +44,18 @@ public sealed class RecipeMLExporter : IRecipeExporter
     private static void WriteRecipe(XmlWriter w, ParsedRecipe r)
     {
         w.WriteStartElement("recipe");
+
+        // <head> block matches what RecipeMLParser reads from head/title, head/author, etc.
+        w.WriteStartElement("head");
         w.WriteElementString("title", r.Title);
         if (!string.IsNullOrEmpty(r.Description)) w.WriteElementString("description", r.Description);
-        if (!string.IsNullOrEmpty(r.Author)) w.WriteElementString("source", r.Author);
+        if (!string.IsNullOrEmpty(r.Author)) w.WriteElementString("author", r.Author);
+        if (!string.IsNullOrEmpty(r.Source)) w.WriteElementString("source", r.Source);
         if (!string.IsNullOrEmpty(r.Yield)) w.WriteElementString("yield", r.Yield);
         if (!string.IsNullOrEmpty(r.PrepTime)) w.WriteElementString("preptime", r.PrepTime);
         if (!string.IsNullOrEmpty(r.CookTime)) w.WriteElementString("cooktime", r.CookTime);
         if (!string.IsNullOrEmpty(r.Category)) w.WriteElementString("categories", r.Category);
+        w.WriteEndElement(); // </head>
 
         if (r.Ingredients.Count > 0)
         {

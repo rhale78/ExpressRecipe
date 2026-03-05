@@ -27,13 +27,13 @@ public static class RecipeExportEngine
     public static string Export(ParsedRecipe recipe, string format, RecipeExportOptions? options = null)
     {
         var exporter = GetExporter(format);
-        return exporter.Export(recipe);
+        return exporter.Export(recipe, options);
     }
 
     public static string ExportAll(IEnumerable<ParsedRecipe> recipes, string format, RecipeExportOptions? options = null)
     {
         var exporter = GetExporter(format);
-        return exporter.ExportAll(recipes);
+        return exporter.ExportAll(recipes, options);
     }
 
     // ── HTML helpers ─────────────────────────────────────────────────────────

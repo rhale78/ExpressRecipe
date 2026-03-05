@@ -14,6 +14,7 @@ public static class RecipeParserEngine
         new TandoorParser(),
         new GoogleStructuredDataParser(),
         new JsonRecipeParser(),
+        new OpenRecipeFormatParser(),
         new YamlRecipeParser(),
         new MasterCookParser(),
         new RecipeMLParser(),
@@ -29,7 +30,6 @@ public static class RecipeParserEngine
         new ChickenPingParser(),
         new BigOvenXmlParser(),
         new CooknParser(),
-        new OpenRecipeFormatParser(),
         new PaprikaParser(),
     ];
 
@@ -38,9 +38,13 @@ public static class RecipeParserEngine
         var errors = new List<ParseError>();
         try
         {
-            string text = File.ReadAllText(filePath);
-            string ext = Path.GetExtension(filePath).TrimStart('.');
-            return ParseText(text, ext, options);
+            string ext = GetFileExtension(filePath);
+            // Paprika files are binary (gzip or zip) — do not read as text
+            if (ext == "paprikarecipe")
+                return PaprikaParser.ParseGzip(File.ReadAllBytes(filePath), options);
+            if (ext == "paprikarecipes")
+                return PaprikaParser.ParseZip(File.ReadAllBytes(filePath), options);
+            return ParseText(File.ReadAllText(filePath), ext, options);
         }
         catch (Exception ex)
         {
@@ -54,9 +58,13 @@ public static class RecipeParserEngine
         var errors = new List<ParseError>();
         try
         {
-            string text = await File.ReadAllTextAsync(filePath, ct);
-            string ext = Path.GetExtension(filePath).TrimStart('.');
-            return ParseText(text, ext, options);
+            string ext = GetFileExtension(filePath);
+            // Paprika files are binary (gzip or zip) — do not read as text
+            if (ext == "paprikarecipe")
+                return PaprikaParser.ParseGzip(await File.ReadAllBytesAsync(filePath, ct), options);
+            if (ext == "paprikarecipes")
+                return PaprikaParser.ParseZip(await File.ReadAllBytesAsync(filePath, ct), options);
+            return ParseText(await File.ReadAllTextAsync(filePath, ct), ext, options);
         }
         catch (Exception ex)
         {
@@ -64,6 +72,9 @@ public static class RecipeParserEngine
             return new ParseResult { Success = false, Errors = errors };
         }
     }
+
+    private static string GetFileExtension(string filePath)
+        => Path.GetExtension(filePath).TrimStart('.').ToLowerInvariant();
 
     public static ParseResult ParseStream(Stream stream, string? hint = null, RecipeParseOptions? options = null)
     {
@@ -105,7 +116,7 @@ public static class RecipeParserEngine
         if (options?.ForceFormat != null)
         {
             var forced = Parsers.FirstOrDefault(p => p.FormatName.Equals(options.ForceFormat, StringComparison.OrdinalIgnoreCase));
-            if (forced != null) return forced.Parse(text, options);
+            if (forced != null) return ApplyOptions(forced.Parse(text, options), options);
         }
 
         string? detectedFormat = FormatDetector.Detect(text, hint);
@@ -116,7 +127,7 @@ public static class RecipeParserEngine
             if (parser != null)
             {
                 var r = parser.Parse(text, options);
-                if (r.Success && r.Recipes.Count > 0) return r;
+                if (r.Success && r.Recipes.Count > 0) return ApplyOptions(r, options);
             }
         }
 
@@ -127,7 +138,7 @@ public static class RecipeParserEngine
                 if (parser.CanParse(text, hint))
                 {
                     var r = parser.Parse(text, options);
-                    if (r.Success && r.Recipes.Count > 0) return r;
+                    if (r.Success && r.Recipes.Count > 0) return ApplyOptions(r, options);
                 }
             }
             catch { /* continue */ }
@@ -138,5 +149,22 @@ public static class RecipeParserEngine
             Success = false,
             Errors = [new ParseError { Level = "batch", Message = "No parser could handle the input" }]
         };
+    }
+
+    /// <summary>Applies MaxRecipes and StrictMode options to a parse result.</summary>
+    private static ParseResult ApplyOptions(ParseResult result, RecipeParseOptions? options)
+    {
+        if (options == null) return result;
+
+        // Enforce MaxRecipes limit
+        int max = options.MaxRecipes;
+        if (max > 0 && max < int.MaxValue && result.Recipes.Count > max)
+            result.Recipes.RemoveRange(max, result.Recipes.Count - max);
+
+        // StrictMode: treat any errors as a failure
+        if (options.StrictMode && result.Errors.Count > 0)
+            result.Success = false;
+
+        return result;
     }
 }
