@@ -117,6 +117,9 @@ builder.Services.AddScoped<USDAFoodDataImportService>();
 builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductDataImportWorker>();
 builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductProcessingWorker>();
 
+// Register AI verification service
+builder.Services.AddScoped<IProductAIVerificationService, ProductAIVerificationService>();
+
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
