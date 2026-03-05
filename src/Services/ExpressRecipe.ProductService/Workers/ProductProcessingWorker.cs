@@ -1,7 +1,10 @@
 using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.ProductService.Logging;
+using ExpressRecipe.ProductService.Messages;
+using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Client.Shared.Services;
+using System.Diagnostics;
 using System.Threading.Tasks.Dataflow;
 
 namespace ExpressRecipe.ProductService.Workers;
@@ -15,6 +18,7 @@ public class ProductProcessingWorker : BackgroundService
     private readonly ILogger<ProductProcessingWorker> _logger;
     private readonly IConfiguration _configuration;
     private readonly TimeSpan PROCESSING_INTERVAL = TimeSpan.FromSeconds(5);
+    private const string ProcessingSessionId = "product-processing";
 
     public ProductProcessingWorker(
         IServiceProvider serviceProvider,
@@ -77,6 +81,39 @@ public class ProductProcessingWorker : BackgroundService
                 {
                     _logger.LogInformation("Found {Count} pending products to process", pendingCount);
 
+                    // Run AI verification on pending products before batch processing
+                    var verificationService = scope.ServiceProvider.GetService<IProductAIVerificationService>();
+                    if (verificationService != null)
+                    {
+                        var verifyBatch = await stagingRepo.GetPendingProductsAsync(1000);
+                        if (verifyBatch.Count > 0)
+                        {
+                            var sw = Stopwatch.StartNew();
+                            int[] verifyCounts = { 0, 0 }; // [0] = valid, [1] = invalid
+
+                            var semaphore = new SemaphoreSlim(8);
+                            var verifyTasks = verifyBatch.Select(async product =>
+                            {
+                                await semaphore.WaitAsync(stoppingToken);
+                                try
+                                {
+                                    var (isValid, notes) = await verificationService.VerifyProductAsync(product, stoppingToken);
+                                    await stagingRepo.UpdateAIVerificationAsync(product.Id, isValid, notes);
+                                    product.AIVerificationPassed = isValid;
+                                    product.AIVerificationNotes = notes;
+                                    if (isValid)
+                                        Interlocked.Increment(ref verifyCounts[0]);
+                                    else
+                                        Interlocked.Increment(ref verifyCounts[1]);
+                                }
+                                finally { semaphore.Release(); }
+                            });
+                            await Task.WhenAll(verifyTasks);
+
+                            _logger.LogAIVerificationBatch(verifyBatch.Count, sw.ElapsedMilliseconds, verifyCounts[0], verifyCounts[1]);
+                        }
+                    }
+
                     var ingredientClient = scope.ServiceProvider.GetRequiredService<IIngredientServiceClient>();
 
                     // Create batch processor with optimal settings
@@ -104,6 +141,30 @@ public class ProductProcessingWorker : BackgroundService
                         "Batch processing complete: {Success} succeeded, {Failed} failed",
                         result.SuccessCount,
                         result.FailureCount);
+
+                    // Optionally publish progress update if message bus is available
+                    var messageBus = scope.ServiceProvider.GetService<IMessageBus>();
+                    if (messageBus != null)
+                    {
+                        try
+                        {
+                            await messageBus.PublishAsync(new ImportProgressUpdated(
+                                ImportSessionId: ProcessingSessionId,
+                                ServiceName: "ProductService",
+                                TotalRecords: pendingCount,
+                                ProcessedRecords: result.SuccessCount + result.FailureCount,
+                                SuccessCount: result.SuccessCount,
+                                FailureCount: result.FailureCount,
+                                RecordsPerSecond: 0,
+                                EstimatedTimeRemaining: null,
+                                Status: "Completed",
+                                UpdatedAt: DateTimeOffset.UtcNow), cancellationToken: stoppingToken);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to publish ImportProgressUpdated message");
+                        }
+                    }
                 }
 
                 // Wait before next check
