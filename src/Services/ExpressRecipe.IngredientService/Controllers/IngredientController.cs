@@ -1,5 +1,6 @@
 using ExpressRecipe.IngredientService.Data;
 using ExpressRecipe.IngredientService.Logging;
+using ExpressRecipe.IngredientService.Services;
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -13,15 +14,18 @@ public class IngredientController : ControllerBase
 {
     private readonly IIngredientRepository _repository;
     private readonly HybridCacheService _cache;
+    private readonly IIngredientEventPublisher _events;
     private readonly ILogger<IngredientController> _logger;
 
     public IngredientController(
         IIngredientRepository repository,
         HybridCacheService cache,
+        IIngredientEventPublisher events,
         ILogger<IngredientController> logger)
     {
         _repository = repository;
         _cache = cache;
+        _events = events;
         _logger = logger;
     }
 
@@ -69,6 +73,8 @@ public class IngredientController : ControllerBase
         
         // Invalidate name cache
         await _cache.RemoveAsync(string.Format(CacheKeys.IngredientByName, request.Name.ToLowerInvariant()));
+
+        await _events.PublishCreatedAsync(id, request.Name);
         
         return CreatedAtAction(nameof(GetIngredient), new { id }, id);
     }
@@ -92,12 +98,16 @@ public class IngredientController : ControllerBase
     [Authorize]
     public async Task<IActionResult> UpdateIngredient(Guid id, [FromBody] UpdateIngredientRequest request)
     {
+        // Fetch old name for the update event before modifying
+        var existing = await _repository.GetIngredientByIdAsync(id);
         var success = await _repository.UpdateIngredientAsync(id, request);
         if (!success) return NotFound();
 
         // Invalidate caches
         await _cache.RemoveAsync(string.Format(CacheKeys.IngredientById, id));
         await _cache.RemoveAsync(string.Format(CacheKeys.IngredientByName, request.Name.ToLowerInvariant()));
+
+        await _events.PublishUpdatedAsync(id, request.Name, existing?.Name);
 
         return NoContent();
     }
@@ -116,6 +126,8 @@ public class IngredientController : ControllerBase
         {
             await _cache.RemoveAsync(string.Format(CacheKeys.IngredientByName, ingredient.Name.ToLowerInvariant()));
         }
+
+        await _events.PublishDeletedAsync(id, ingredient?.Name);
 
         return NoContent();
     }

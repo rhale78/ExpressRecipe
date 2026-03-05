@@ -41,3 +41,35 @@ public record PriceObservationCompleted(
     Guid StoreId,
     decimal Price,
     DateTimeOffset CompletedAt) : IMessage;
+
+// ── Saga workflow pipeline messages ─────────────────────────────────────────
+
+// Command: request verification of a price observation (range check, duplicate detection)
+public record RequestPriceVerification(
+    string CorrelationId,
+    Guid PriceStagingId,
+    Guid? ProductId,
+    decimal? Price) : IMessage;
+
+// Result: price has been verified
+public record PriceVerified(
+    string CorrelationId,
+    Guid PriceStagingId,
+    bool IsValid,
+    string? ValidationNote,
+    DateTimeOffset VerifiedAt) : IMessage;
+
+// Command: request the price observation be written to the ProductPrice table
+public record RequestPricePublish(
+    string CorrelationId,
+    Guid PriceStagingId,
+    Guid? ProductId,
+    Guid? StoreId,
+    decimal? Price) : IMessage;
+
+// Result: price has been published (written to ProductPrice)
+public record PricePublished(
+    string CorrelationId,
+    Guid PriceStagingId,
+    Guid PriceObservationId,
+    DateTimeOffset PublishedAt) : IMessage;

@@ -140,13 +140,12 @@ public class ProductEventSubscriberTests
     }
 
     [Fact]
-    public async Task HandleBarcodeChangedAsync_CallsUpdateUpcAndRefreshesCache()
+    public async Task HandleBarcodeChangedAsync_CallsUpdateUpcAndPopulatesCache()
     {
         var productId = Guid.NewGuid();
         _repo.Setup(r => r.UpdateProductUpcOnPricesAsync(productId, "NEW", It.IsAny<CancellationToken>()))
              .ReturnsAsync(2);
-        _cache.Setup(c => c.GetProductByBarcodeAsync("NEW", It.IsAny<CancellationToken>()))
-              .ReturnsAsync((ProductDto?)null);
+        _cache.Setup(c => c.CacheProduct("NEW", It.IsAny<ProductDto>()));
 
         var handler = CaptureHandler<ProductBarcodeChangedEvent>();
         var evt = new ProductBarcodeChangedEvent(productId, "OLD", "NEW", null, DateTimeOffset.UtcNow);
@@ -154,21 +153,20 @@ public class ProductEventSubscriberTests
         await handler(evt, FakeCtx(), CancellationToken.None);
 
         _repo.Verify(r => r.UpdateProductUpcOnPricesAsync(productId, "NEW", It.IsAny<CancellationToken>()), Times.Once);
-        _cache.Verify(c => c.GetProductByBarcodeAsync("NEW", It.IsAny<CancellationToken>()), Times.Once);
+        _cache.Verify(c => c.CacheProduct("NEW", It.Is<ProductDto>(p => p.UPC == "NEW")), Times.Once);
     }
 
     [Fact]
-    public async Task HandleCreatedAsync_WithBarcode_RefreshesCache()
+    public async Task HandleCreatedAsync_WithBarcode_PopulatesCacheDirectly()
     {
-        _cache.Setup(c => c.GetProductByBarcodeAsync("123", It.IsAny<CancellationToken>()))
-              .ReturnsAsync((ProductDto?)null);
+        _cache.Setup(c => c.CacheProduct("123", It.IsAny<ProductDto>()));
 
         var handler = CaptureHandler<ProductCreatedEvent>();
         var evt = new ProductCreatedEvent(Guid.NewGuid(), "New Product", null, "123", null, "Pending", null, DateTimeOffset.UtcNow);
 
         await handler(evt, FakeCtx(), CancellationToken.None);
 
-        _cache.Verify(c => c.GetProductByBarcodeAsync("123", It.IsAny<CancellationToken>()), Times.Once);
+        _cache.Verify(c => c.CacheProduct("123", It.Is<ProductDto>(p => p.UPC == "123")), Times.Once);
     }
 
     [Fact]

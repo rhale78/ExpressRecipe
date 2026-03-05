@@ -1,7 +1,9 @@
 using System.Text;
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
+using ExpressRecipe.Messaging.Saga.Extensions;
 using ExpressRecipe.PriceService.Data;
+using ExpressRecipe.PriceService.Saga;
 using ExpressRecipe.PriceService.Services;
 using ExpressRecipe.PriceService.Workers;
 using ExpressRecipe.Shared.CQRS;
@@ -28,14 +30,15 @@ builder.AddRedisClient("redis");
 builder.AddHybridCache();
 
 // Register ProductServiceClient using Aspire service discovery
-// This is optional - price import will work even if ProductService is unavailable
-builder.Services.AddHttpClient<IProductServiceClient, ProductServiceClient>(client =>
+// This is the REST fallback – overridden by MessagingProductServiceClient when messaging is on.
+// Always register the named HTTP client (used by MessagingProductServiceClient fallback path).
+builder.Services.AddHttpClient<ProductServiceClient>(client =>
 {
     // Use Aspire service name - service discovery will resolve to actual endpoint
     client.BaseAddress = new Uri("http://productservice");
     client.Timeout = TimeSpan.FromSeconds(5); // Short timeout - don't block price imports
 })
-.AddServiceDiscovery(); // Use Aspire service discovery - NO AuthenticationDelegatingHandler
+.AddServiceDiscovery();
 
 builder.Services.AddSingleton<HybridCacheService>();
 builder.Services.AddSingleton<ExpressRecipe.Shared.Services.CacheService>();
@@ -138,8 +141,27 @@ if (messagingEnabled)
 {
     builder.AddRabbitMqMessaging("messaging");
 
+    // Use messaging-based product lookup (request/response) instead of REST when messaging is on
+    builder.Services.AddSingleton<IProductServiceClient>(sp =>
+        new MessagingProductServiceClient(
+            sp.GetRequiredService<ExpressRecipe.Messaging.Core.Abstractions.IMessageBus>(),
+            sp.GetRequiredService<ILogger<MessagingProductServiceClient>>(),
+            sp.GetRequiredService<IConfiguration>()));
+
     // Subscribe to ProductService lifecycle events so price data stays consistent
     builder.Services.AddHostedService<ProductEventSubscriber>();
+
+    // Register the price-processing saga workflow
+    builder.Services.AddSqlSagaRepository<PriceProcessingSagaState>(connectionString, "PriceProcessingSagaState");
+    builder.Services.AddSagaWorkflow(PriceProcessingWorkflow.Build());
+}
+else
+{
+    // Messaging disabled: fall back to REST HTTP calls to ProductService
+    builder.Services.AddScoped<IProductServiceClient>(sp =>
+        new ProductServiceClient(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ProductServiceClient)),
+            sp.GetRequiredService<ILogger<ProductServiceClient>>()));
 }
 
 // Add CORS

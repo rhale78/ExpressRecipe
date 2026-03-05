@@ -1,7 +1,9 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.CQRS.Commands;
 using ExpressRecipe.RecipeService.CQRS.Queries;
+using ExpressRecipe.RecipeService.Services;
 using ExpressRecipe.Shared.CQRS;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
@@ -110,6 +112,21 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 
 // Register event publisher
 builder.Services.AddSingleton<EventPublisher>();
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on configuration
+var messagingEnabled = builder.Configuration.GetValue<bool>("Messaging:Enabled", false)
+    || !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"))
+    || !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    builder.Services.AddSingleton<IRecipeEventPublisher, RecipeEventPublisher>();
+}
+else
+{
+    builder.Services.AddSingleton<IRecipeEventPublisher, NullRecipeEventPublisher>();
+}
 
 // Register CQRS infrastructure
 builder.Services.AddCqrsDispatcher();

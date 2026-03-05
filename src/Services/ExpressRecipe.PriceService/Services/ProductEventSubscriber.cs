@@ -61,17 +61,23 @@ public sealed class ProductEventSubscriber : IHostedService
     // Handlers
     // -----------------------------------------------------------------------
 
-    private async Task HandleCreatedAsync(
+    private Task HandleCreatedAsync(
         ProductCreatedEvent evt, MessageContext ctx, CancellationToken ct)
     {
         _logger.LogProductEventReceived(nameof(ProductCreatedEvent), evt.ProductId);
         try
         {
-            // Warm the lookup cache so newly-created products are immediately resolvable
-            // without waiting for the next HTTP polling cycle.
+            // Populate the cache directly with event data – no REST round-trip needed.
             if (!string.IsNullOrWhiteSpace(evt.Barcode))
             {
-                await _productCache.GetProductByBarcodeAsync(evt.Barcode, ct);
+                _productCache.CacheProduct(evt.Barcode, new ProductDto
+                {
+                    Id       = evt.ProductId,
+                    UPC      = evt.Barcode,
+                    Name     = evt.Name,
+                    Brand    = evt.Brand,
+                    Category = evt.Category
+                });
                 _logger.LogProductCacheRefreshed(evt.ProductId, evt.Barcode);
             }
         }
@@ -79,9 +85,10 @@ public sealed class ProductEventSubscriber : IHostedService
         {
             _logger.LogProductEventHandlerFailed(nameof(ProductCreatedEvent), evt.ProductId, ex.Message);
         }
+        return Task.CompletedTask;
     }
 
-    private async Task HandleUpdatedAsync(
+    private Task HandleUpdatedAsync(
         ProductUpdatedEvent evt, MessageContext ctx, CancellationToken ct)
     {
         _logger.LogProductEventReceived(nameof(ProductUpdatedEvent), evt.ProductId);
@@ -89,7 +96,14 @@ public sealed class ProductEventSubscriber : IHostedService
         {
             if (!string.IsNullOrWhiteSpace(evt.Barcode))
             {
-                await _productCache.GetProductByBarcodeAsync(evt.Barcode, ct);
+                _productCache.CacheProduct(evt.Barcode, new ProductDto
+                {
+                    Id       = evt.ProductId,
+                    UPC      = evt.Barcode,
+                    Name     = evt.Name,
+                    Brand    = evt.Brand,
+                    Category = evt.Category
+                });
                 _logger.LogProductCacheRefreshed(evt.ProductId, evt.Barcode);
             }
         }
@@ -97,6 +111,7 @@ public sealed class ProductEventSubscriber : IHostedService
         {
             _logger.LogProductEventHandlerFailed(nameof(ProductUpdatedEvent), evt.ProductId, ex.Message);
         }
+        return Task.CompletedTask;
     }
 
     private async Task HandleDeletedAsync(
@@ -116,16 +131,21 @@ public sealed class ProductEventSubscriber : IHostedService
         }
     }
 
-    private async Task HandleApprovedAsync(
+    private Task HandleApprovedAsync(
         ProductApprovedEvent evt, MessageContext ctx, CancellationToken ct)
     {
         _logger.LogProductEventReceived(nameof(ProductApprovedEvent), evt.ProductId);
         try
         {
-            // Refresh cache so price lookups use the approved product immediately
+            // Populate cache with approved product data so price lookups resolve immediately.
             if (!string.IsNullOrWhiteSpace(evt.Barcode))
             {
-                await _productCache.GetProductByBarcodeAsync(evt.Barcode, ct);
+                _productCache.CacheProduct(evt.Barcode, new ProductDto
+                {
+                    Id   = evt.ProductId,
+                    UPC  = evt.Barcode,
+                    Name = evt.Name
+                });
                 _logger.LogProductApprovedCacheReady(evt.ProductId, evt.Barcode);
             }
         }
@@ -133,6 +153,7 @@ public sealed class ProductEventSubscriber : IHostedService
         {
             _logger.LogProductEventHandlerFailed(nameof(ProductApprovedEvent), evt.ProductId, ex.Message);
         }
+        return Task.CompletedTask;
     }
 
     private Task HandleRejectedAsync(
@@ -171,10 +192,16 @@ public sealed class ProductEventSubscriber : IHostedService
             var count = await repo.UpdateProductUpcOnPricesAsync(evt.ProductId, evt.NewBarcode, ct);
             _logger.LogPriceProductUpcUpdated(evt.ProductId, count, evt.NewBarcode);
 
-            // Refresh cache for new barcode
+            // Pre-populate cache for the new barcode using the event data (no REST call).
+            // The old barcode entry stays in the cache until it naturally expires; price rows
+            // have already been updated to the new barcode above.
             if (!string.IsNullOrWhiteSpace(evt.NewBarcode))
             {
-                await _productCache.GetProductByBarcodeAsync(evt.NewBarcode, ct);
+                _productCache.CacheProduct(evt.NewBarcode, new ProductDto
+                {
+                    Id  = evt.ProductId,
+                    UPC = evt.NewBarcode
+                });
                 _logger.LogProductCacheRefreshed(evt.ProductId, evt.NewBarcode);
             }
         }

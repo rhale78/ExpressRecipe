@@ -32,6 +32,7 @@ public class RecipesControllerParallelTests
             _repo.Object,
             new ServingSizeService(),
             new ShoppingListIntegrationService(),
+            new NullRecipeEventPublisher(),
             _logger.Object);
 
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_userId);

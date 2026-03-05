@@ -11,6 +11,12 @@ public interface IBatchProductLookupService
 {
     Task<ProductDto?> GetProductByBarcodeAsync(string barcode, CancellationToken cancellationToken = default);
     Task<Dictionary<string, ProductDto>> GetProductsByBarcodesAsync(IEnumerable<string> barcodes, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Pre-populates the cache with a known product, avoiding a round-trip to ProductService.
+    /// Called by <see cref="ProductEventSubscriber"/> when product lifecycle events are received.
+    /// </summary>
+    void CacheProduct(string barcode, ProductDto product);
 }
 
 public class BatchProductLookupService : IBatchProductLookupService, IDisposable
@@ -78,6 +84,14 @@ public class BatchProductLookupService : IBatchProductLookupService, IDisposable
             _batchSize, _batchTimeout.TotalMilliseconds, _cacheExpiration.TotalMinutes);
     }
     
+    public void CacheProduct(string barcode, ProductDto product)
+    {
+        if (string.IsNullOrWhiteSpace(barcode))
+            return;
+
+        _productCache[barcode.Trim()] = product;
+    }
+
     public async Task<ProductDto?> GetProductByBarcodeAsync(string barcode, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(barcode))

@@ -27,6 +27,7 @@ public class PriceProcessingSagaState : ISagaState
     public decimal? Price { get; set; }
     public bool IsProductLinked { get; set; }
     public bool WasExactMatch { get; set; }
+    public bool IsVerified { get; set; }
     public string? ImportSessionId { get; set; }
     public string? LastError { get; set; }
 }

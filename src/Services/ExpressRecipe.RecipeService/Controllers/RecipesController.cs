@@ -19,17 +19,20 @@ public class RecipesController : ControllerBase
     private readonly IRecipeRepository _recipeRepository;
     private readonly ServingSizeService _servingSizeService;
     private readonly ShoppingListIntegrationService _shoppingListService;
+    private readonly IRecipeEventPublisher _events;
     private readonly ILogger<RecipesController> _logger;
 
     public RecipesController(
         IRecipeRepository recipeRepository,
         ServingSizeService servingSizeService,
         ShoppingListIntegrationService shoppingListService,
+        IRecipeEventPublisher events,
         ILogger<RecipesController> logger)
     {
         _recipeRepository = recipeRepository;
         _servingSizeService = servingSizeService;
         _shoppingListService = shoppingListService;
+        _events = events;
         _logger = logger;
     }
 
@@ -236,6 +239,9 @@ public class RecipesController : ControllerBase
 
             _logger.LogInformation("Recipe {RecipeId} created with all components by user {UserId}", recipeId, userId.Value);
 
+            await _events.PublishCreatedAsync(recipeId, request.Name ?? string.Empty,
+                request.Category, request.Cuisine, userId.Value);
+
             return CreatedAtAction(nameof(GetRecipe), new { id = recipeId }, new { id = recipeId });
         }
         catch (Exception ex)
@@ -323,6 +329,16 @@ public class RecipesController : ControllerBase
 
             _logger.LogInformation("Recipe {RecipeId} fully updated by user {UserId}", id, userId.Value);
 
+            var changedFields = new List<string> { nameof(request.Name) };
+            if (request.Category != null) changedFields.Add(nameof(request.Category));
+            if (request.Cuisine != null) changedFields.Add(nameof(request.Cuisine));
+            if (request.Ingredients != null) changedFields.Add("Ingredients");
+            if (request.Steps != null) changedFields.Add("Steps");
+            if (request.Tags != null) changedFields.Add("Tags");
+
+            await _events.PublishUpdatedAsync(id, request.Name, request.Category, request.Cuisine,
+                userId.Value, changedFields);
+
             return NoContent();
         }
         catch (Exception ex)
@@ -361,6 +377,8 @@ public class RecipesController : ControllerBase
             await _recipeRepository.DeleteRecipeAsync(id);
 
             _logger.LogInformation("Recipe {RecipeId} deleted by user {UserId}", id, userId.Value);
+
+            await _events.PublishDeletedAsync(id, userId.Value);
 
             return NoContent();
         }

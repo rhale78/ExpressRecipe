@@ -153,6 +153,10 @@ if (messagingEnabled)
 
     // Real publisher – uses the IMessageBus registered above
     builder.Services.AddSingleton<IProductEventPublisher, ProductEventPublisher>();
+
+    // Handle barcode query messages from PriceService and other consumers
+    builder.Services.AddScoped<ProductQueryHandler>();
+    builder.Services.AddHostedService<ProductQuerySubscriber>();
 }
 else
 {
