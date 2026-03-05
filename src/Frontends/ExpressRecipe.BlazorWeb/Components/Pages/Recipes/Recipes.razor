@@ -23,6 +23,9 @@
                     <button class="btn btn-outline" @onclick="NavigateToImport">
                         📥 Import Recipe
                     </button>
+                    <button class="btn btn-outline" @onclick="NavigateToStudio">
+                        🤖 AI Studio
+                    </button>
                     <button class="btn btn-primary" @onclick="NavigateToCreate">
                         ➕ Create Recipe
                     </button>
@@ -639,6 +642,11 @@
     private void NavigateToCreate()
     {
         Navigation.NavigateTo("/recipes/create");
+    }
+
+    private void NavigateToStudio()
+    {
+        Navigation.NavigateTo("/recipes/studio");
     }
 
     private void NavigateToManageExports()

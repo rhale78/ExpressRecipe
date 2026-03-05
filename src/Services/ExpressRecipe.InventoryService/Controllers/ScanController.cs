@@ -22,7 +22,11 @@ public class ScanController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Start a new scanning session (lock mode)
@@ -30,17 +34,24 @@ public class ScanController : ControllerBase
     [HttpPost("start")]
     public async Task<IActionResult> StartSession([FromBody] StartScanSessionRequest request)
     {
-        var userId = GetUserId();
-        _logger.LogInformation("Starting scan session type {SessionType} for user {UserId}", request.SessionType, userId);
-
-        var sessionId = await _repository.StartScanSessionAsync(
-            userId,
-            request.HouseholdId,
-            request.SessionType,
-            request.StorageLocationId);
-
-        var session = await _repository.GetScanSessionByIdAsync(sessionId);
-        return CreatedAtAction(nameof(GetSession), new { id = sessionId }, session);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Starting scan session type {SessionType} for user {UserId}", request.SessionType, userId);
+            var sessionId = await _repository.StartScanSessionAsync(
+                userId.Value,
+                request.HouseholdId,
+                request.SessionType,
+                request.StorageLocationId);
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            return CreatedAtAction(nameof(GetSession), new { id = sessionId }, session);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting scan session");
+            return StatusCode(500, new { message = "An error occurred while starting the scan session" });
+        }
     }
 
     /// <summary>
@@ -49,13 +60,20 @@ public class ScanController : ControllerBase
     [HttpGet("active")]
     public async Task<IActionResult> GetActiveSession()
     {
-        var userId = GetUserId();
-        var session = await _repository.GetActiveScanSessionAsync(userId);
-        
-        if (session == null)
-            return NotFound(new { message = "No active scan session" });
-
-        return Ok(session);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetActiveScanSessionAsync(userId.Value);
+            if (session == null)
+                return NotFound(new { message = "No active scan session" });
+            return Ok(session);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving active scan session");
+            return StatusCode(500, new { message = "An error occurred while retrieving the active scan session" });
+        }
     }
 
     /// <summary>
@@ -64,11 +82,21 @@ public class ScanController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetSession(Guid id)
     {
-        var session = await _repository.GetScanSessionByIdAsync(id);
-        if (session == null)
-            return NotFound();
-
-        return Ok(session);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(id);
+            if (session == null)
+                return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
+            return Ok(session);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving scan session {SessionId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving the scan session" });
+        }
     }
 
     /// <summary>
@@ -78,20 +106,28 @@ public class ScanController : ControllerBase
     public async Task<IActionResult> ScanAdd(Guid sessionId, [FromBody] ScanAddRequest request)
     {
         _logger.LogInformation("Scanning barcode {Barcode} to add in session {SessionId}", request.Barcode, sessionId);
-
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             var itemId = await _repository.ScanAddItemAsync(
                 sessionId,
                 request.Barcode,
                 request.Quantity,
                 request.StorageLocationId);
-
             return Ok(new { itemId, message = "Item added successfully" });
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error scanning barcode {Barcode} to add in session {SessionId}", request.Barcode, sessionId);
+            return StatusCode(500, new { message = "An error occurred while scanning the item" });
         }
     }
 
@@ -102,19 +138,27 @@ public class ScanController : ControllerBase
     public async Task<IActionResult> ScanUse(Guid sessionId, [FromBody] ScanUseRequest request)
     {
         _logger.LogInformation("Scanning barcode {Barcode} to use in session {SessionId}", request.Barcode, sessionId);
-
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             var itemId = await _repository.ScanUseItemAsync(
                 sessionId,
                 request.Barcode,
                 request.Quantity);
-
             return Ok(new { itemId, message = "Item usage recorded" });
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error scanning barcode {Barcode} to use in session {SessionId}", request.Barcode, sessionId);
+            return StatusCode(500, new { message = "An error occurred while scanning the item" });
         }
     }
 
@@ -125,24 +169,31 @@ public class ScanController : ControllerBase
     public async Task<IActionResult> ScanDispose(Guid sessionId, [FromBody] ScanDisposeRequest request)
     {
         _logger.LogInformation("Scanning barcode {Barcode} to dispose in session {SessionId}", request.Barcode, sessionId);
-
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
             var itemId = await _repository.ScanDisposeItemAsync(
                 sessionId,
                 request.Barcode,
                 request.DisposalReason,
                 request.AllergenDetected);
-
             var message = string.IsNullOrEmpty(request.AllergenDetected)
                 ? "Item disposed"
                 : $"Item disposed - allergen '{request.AllergenDetected}' recorded";
-
             return Ok(new { itemId, message });
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error scanning barcode {Barcode} to dispose in session {SessionId}", request.Barcode, sessionId);
+            return StatusCode(500, new { message = "An error occurred while scanning the item" });
         }
     }
 
@@ -152,10 +203,22 @@ public class ScanController : ControllerBase
     [HttpPost("{sessionId}/end")]
     public async Task<IActionResult> EndSession(Guid sessionId)
     {
-        _logger.LogInformation("Ending scan session {SessionId}", sessionId);
-
-        await _repository.EndScanSessionAsync(sessionId);
-        return Ok(new { message = "Scan session ended" });
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var session = await _repository.GetScanSessionByIdAsync(sessionId);
+            if (session == null) return NotFound();
+            if (session.UserId != userId.Value) return Forbid();
+            _logger.LogInformation("Ending scan session {SessionId}", sessionId);
+            await _repository.EndScanSessionAsync(sessionId);
+            return Ok(new { message = "Scan session ended" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error ending scan session {SessionId}", sessionId);
+            return StatusCode(500, new { message = "An error occurred while ending the scan session" });
+        }
     }
 
     /// <summary>
@@ -164,9 +227,18 @@ public class ScanController : ControllerBase
     [HttpGet("allergens")]
     public async Task<IActionResult> GetAllergenDiscoveries()
     {
-        var userId = GetUserId();
-        var discoveries = await _repository.GetAllergenDiscoveriesAsync(userId);
-        return Ok(discoveries);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var discoveries = await _repository.GetAllergenDiscoveriesAsync(userId.Value);
+            return Ok(discoveries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving allergen discoveries");
+            return StatusCode(500, new { message = "An error occurred while retrieving allergen discoveries" });
+        }
     }
 
     /// <summary>
@@ -175,8 +247,16 @@ public class ScanController : ControllerBase
     [HttpPost("allergens/{discoveryId}/add-to-profile")]
     public async Task<IActionResult> AddAllergenToProfile(Guid discoveryId)
     {
-        await _repository.MarkAllergenAddedToProfileAsync(discoveryId);
-        return Ok(new { message = "Allergen added to profile" });
+        try
+        {
+            await _repository.MarkAllergenAddedToProfileAsync(discoveryId);
+            return Ok(new { message = "Allergen added to profile" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marking allergen discovery {DiscoveryId} as added to profile", discoveryId);
+            return StatusCode(500, new { message = "An error occurred while updating the allergen profile" });
+        }
     }
 }
 

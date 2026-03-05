@@ -22,6 +22,7 @@ public class InventoryControllerTests
         _mockLogger = new Mock<ILogger<InventoryController>>();
         _controller = new InventoryController(_mockLogger.Object, _mockRepository.Object);
         _testUserId = Guid.NewGuid();
+        _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }
 
     #region GetInventory Tests
@@ -426,6 +427,9 @@ public class InventoryControllerTests
         };
 
         _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
+        _mockRepository
             .Setup(r => r.GetHouseholdInventoryAsync(householdId))
             .ReturnsAsync(items);
 
@@ -447,11 +451,19 @@ public class InventoryControllerTests
     {
         // Arrange
         var addressId = Guid.NewGuid();
+        var householdId = Guid.NewGuid();
         var items = new List<InventoryItemDto>
         {
             TestDataFactory.CreateInventoryItemDto(name: "Milk")
         };
+        var addressDto = TestDataFactory.CreateAddressDto(addressId, householdId);
 
+        _mockRepository
+            .Setup(r => r.GetAddressByIdAsync(addressId))
+            .ReturnsAsync(addressDto);
+        _mockRepository
+            .Setup(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId))
+            .ReturnsAsync(true);
         _mockRepository
             .Setup(r => r.GetInventoryByAddressAsync(addressId))
             .ReturnsAsync(items);
@@ -463,6 +475,9 @@ public class InventoryControllerTests
         result.Should().BeOfType<OkObjectResult>();
         var okResult = result as OkObjectResult;
         okResult!.Value.Should().BeEquivalentTo(items);
+
+        _mockRepository.Verify(r => r.GetAddressByIdAsync(addressId), Times.Once);
+        _mockRepository.Verify(r => r.IsUserMemberOfHouseholdAsync(householdId, _testUserId), Times.Once);
     }
 
     #endregion

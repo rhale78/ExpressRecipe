@@ -32,7 +32,7 @@ var connectionString = builder.Configuration.GetConnectionString("analyticsdb")
 
 // Register repositories
 builder.Services.AddScoped<IAnalyticsRepository>(sp =>
-    new AnalyticsRepository(connectionString, sp.GetRequiredService<ILogger<AnalyticsRepository>>()));
+    new AnalyticsRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();
@@ -45,15 +45,7 @@ builder.Services.AddControllers();
 // });
 
 // CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 var app = builder.Build();
 
@@ -79,7 +71,7 @@ if (app.Environment.IsDevelopment())
     // app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAll");
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

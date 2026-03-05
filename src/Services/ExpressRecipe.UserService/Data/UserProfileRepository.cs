@@ -11,6 +11,7 @@ public interface IUserProfileRepository
     Task<bool> UpdateAsync(Guid userId, UpdateUserProfileRequest request, Guid? updatedBy = null);
     Task<bool> DeleteAsync(Guid userId, Guid? deletedBy = null);
     Task<bool> UserProfileExistsAsync(Guid userId);
+    Task<bool> SetSuspendedAsync(Guid userId, bool suspended, Guid? adminId = null);
 }
 
 public class UserProfileRepository : SqlHelper, IUserProfileRepository
@@ -142,5 +143,25 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
             CreateParameter("@UserId", userId));
 
         return count > 0;
+    }
+
+    public async Task<bool> SetSuspendedAsync(Guid userId, bool suspended, Guid? adminId = null)
+    {
+        const string sql = @"
+            UPDATE UserProfile
+            SET IsSuspended = @Suspended,
+                SuspendedAt = CASE WHEN @Suspended = 1 THEN GETUTCDATE() ELSE NULL END,
+                SuspendedBy = CASE WHEN @Suspended = 1 THEN @AdminId ELSE NULL END,
+                UpdatedAt = GETUTCDATE(),
+                UpdatedBy = @AdminId
+            WHERE UserId = @UserId AND IsDeleted = 0";
+
+        var rowsAffected = await ExecuteNonQueryAsync(
+            sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Suspended", suspended),
+            CreateParameter("@AdminId", adminId));
+
+        return rowsAffected > 0;
     }
 }

@@ -159,6 +159,12 @@ public class RecipesController : ControllerBase
             recipe.AverageRating = avgRating;
             recipe.RatingCount = ratingCount;
 
+            _logger.LogInformation("[RecipeService] Recipe {RecipeId} '{Name}' loaded: {IngCount} ingredients, {TagCount} tags, {AllergenCount} allergen warnings",
+                id, recipe.Name,
+                recipe.Ingredients?.Count ?? 0,
+                recipe.Tags?.Count ?? 0,
+                recipe.AllergenWarnings?.Count ?? 0);
+
             return Ok(recipe);
         }
         catch (Exception ex)
@@ -183,6 +189,13 @@ public class RecipesController : ControllerBase
             }
 
             request.CreatedBy = userId.Value;
+
+            _logger.LogInformation("[RecipeService] Creating recipe '{Name}' for user {UserId}: {IngCount} ingredients, {StepCount} steps, {TagCount} tags",
+                request.Name, userId.Value,
+                request.Ingredients?.Count ?? 0,
+                request.Steps?.Count ?? 0,
+                request.Tags?.Count ?? 0);
+
             var recipeId = await _recipeRepository.CreateRecipeAsync(request, userId.Value);
 
             // Add ingredients if provided
@@ -251,6 +264,12 @@ public class RecipesController : ControllerBase
             {
                 return Forbid();
             }
+
+            _logger.LogInformation("[RecipeService] Updating recipe {RecipeId} '{Name}' for user {UserId}: {IngCount} ingredients, {StepCount} steps, {TagCount} tags",
+                id, existingRecipe.Name, userId.Value,
+                request.Ingredients?.Count ?? 0,
+                request.Steps?.Count ?? 0,
+                request.Tags?.Count ?? 0);
 
             await _recipeRepository.UpdateRecipeAsync(id, request, userId.Value);
 

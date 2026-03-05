@@ -171,6 +171,40 @@ public partial class ShoppingRepository : IShoppingRepository
         return (Guid)await command.ExecuteScalarAsync()!;
     }
 
+    public async Task<ShoppingListItemDto?> GetShoppingListItemAsync(Guid itemId)
+    {
+        const string sql = @"
+            SELECT Id, ShoppingListId, ProductId, CustomName, Quantity, Unit, Category, IsChecked, SortOrder, AddedAt
+            FROM ShoppingListItem
+            WHERE Id = @ItemId AND IsDeleted = 0";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@ItemId", itemId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return new ShoppingListItemDto
+            {
+                Id = reader.GetGuid(0),
+                ShoppingListId = reader.GetGuid(1),
+                ProductId = reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                CustomName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Quantity = reader.GetDecimal(4),
+                Unit = reader.IsDBNull(5) ? null : reader.GetString(5),
+                Category = reader.IsDBNull(6) ? null : reader.GetString(6),
+                IsChecked = reader.GetBoolean(7),
+                OrderIndex = reader.GetInt32(8),
+                AddedAt = reader.GetDateTime(9)
+            };
+        }
+
+        return null;
+    }
+
     public async Task<List<ShoppingListItemDto>> GetListItemsAsync(Guid listId, Guid userId)
     {
         const string sql = @"

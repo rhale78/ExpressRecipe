@@ -41,8 +41,11 @@ var communityDb = sqlServer.AddDatabase("communitydb", "ExpressRecipe.Community"
 var syncDb = sqlServer.AddDatabase("syncdb", "ExpressRecipe.Sync");
 var searchDb = sqlServer.AddDatabase("searchdb", "ExpressRecipe.Search");
 var analyticsDb = sqlServer.AddDatabase("analyticsdb", "ExpressRecipe.Analytics");
+var ingredientDb = sqlServer.AddDatabase("ingredientdb", "ExpressRecipe.Ingredients");
+var cookbookDb = sqlServer.AddDatabase("cookbookdb", "ExpressRecipe.Cookbooks");
+var groceryStoreDb = sqlServer.AddDatabase("grocerystoredb", "ExpressRecipe.GroceryStores");
 
-logger.LogInformation("15 databases configured");
+logger.LogInformation("18 databases configured");
 
 // Redis - Caching layer
 var redis = builder.AddRedis("redis")
@@ -184,7 +187,32 @@ var analyticsService = builder.AddProject<Projects.ExpressRecipe_AnalyticsServic
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
 
-logger.LogInformation("14 microservices configured");
+// Ingredient Service - Ingredient catalog, parsing, and gRPC service
+var ingredientService = builder.AddProject<Projects.ExpressRecipe_IngredientService>("ingredientservice", launchProfileName: null)
+    .WithReference(ingredientDb)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
+// Cookbook Service - User cookbook management
+var cookbookService = builder.AddProject<Projects.ExpressRecipe_CookbookService>("cookbookservice", launchProfileName: null)
+    .WithReference(cookbookDb)
+    .WithReference(redis)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
+// Grocery Store Location Service - Store location data
+var groceryStoreLocationService = builder.AddProject<Projects.ExpressRecipe_GroceryStoreLocationService>("grocerystorelocationservice", launchProfileName: null)
+    .WithReference(groceryStoreDb)
+    .WithReference(redis)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
+// AI Service - Ollama-backed AI recipe extraction and recommendations (no database)
+var aiService = builder.AddProject<Projects.ExpressRecipe_AIService>("aiservice", launchProfileName: null)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
+logger.LogInformation("18 microservices configured");
 
 // ========================================
 // Frontend Applications
@@ -209,6 +237,10 @@ var webApp = builder.AddProject<Projects.ExpressRecipe_BlazorWeb>("webapp", laun
     .WithReference(syncService)
     .WithReference(searchService)
     .WithReference(analyticsService)
+    .WithReference(ingredientService)
+    .WithReference(cookbookService)
+    .WithReference(groceryStoreLocationService)
+    .WithReference(aiService)
     .WithReference(redis)
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);

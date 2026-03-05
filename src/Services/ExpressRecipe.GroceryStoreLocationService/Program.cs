@@ -88,15 +88,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<StoreLocationImpor
 builder.Services.AddControllers();
 
 // CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 var app = builder.Build();
 
@@ -113,7 +105,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 app.MapDefaultEndpoints();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseCors("AllowAll");
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

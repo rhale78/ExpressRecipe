@@ -20,6 +20,10 @@ public interface IUserProfileApiClient
 
     // Allergens and restrictions
     Task<AllergensAndRestrictionsDto?> GetAllergensAndRestrictionsAsync();
+
+    // Admin
+    Task<bool> SuspendUserAsync(Guid userId);
+    Task<bool> ActivateUserAsync(Guid userId);
 }
 
 public class UserProfileApiClient : ApiClientBase, IUserProfileApiClient
@@ -71,6 +75,17 @@ public class UserProfileApiClient : ApiClientBase, IUserProfileApiClient
     public async Task<AllergensAndRestrictionsDto?> GetAllergensAndRestrictionsAsync()
     {
         return await GetAsync<AllergensAndRestrictionsDto>("/api/allergymgmt");
+    }
+
+    // Admin
+    public async Task<bool> SuspendUserAsync(Guid userId)
+    {
+        return await PostAsync($"/api/userprofile/admin/{userId}/suspend", new { });
+    }
+
+    public async Task<bool> ActivateUserAsync(Guid userId)
+    {
+        return await PostAsync($"/api/userprofile/admin/{userId}/activate", new { });
     }
 
     // Helper response classes

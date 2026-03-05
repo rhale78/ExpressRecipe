@@ -138,6 +138,11 @@ builder.Services.AddHttpClient<ISyncApiClient, SyncApiClient>(client =>
     client.BaseAddress = new Uri("http://syncservice");
 });
 
+builder.Services.AddHttpClient<ICookbookApiClient, CookbookApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://cookbookservice");
+});
+
 // Register local storage services
 builder.Services.AddScoped(typeof(LocalStorageRepository<>));
 builder.Services.AddScoped<SyncQueueService>();

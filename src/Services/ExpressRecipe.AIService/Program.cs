@@ -47,15 +47,7 @@ if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-
 builder.Services.AddAuthorization();
 
 // Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 // Configure HTTP Client for Ollama with proper settings
 var ollamaUrl = builder.Configuration["Ollama:BaseUrl"] ?? "http://localhost:11434";
@@ -92,7 +84,7 @@ if (app.Environment.IsDevelopment())
     // app.UseSwaggerUI();
 }
 
-app.UseCors("AllowAll");
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 

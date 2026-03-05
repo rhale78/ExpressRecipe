@@ -129,16 +129,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PriceDataImportWor
 builder.Services.AddControllers();
 
 // Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .WithExposedHeaders("X-RateLimit-Limit", "X-RateLimit-Remaining", "Retry-After");
-    });
-});
+builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 var app = builder.Build();
 
@@ -158,7 +149,7 @@ await app.RunMigrationsAsync(connectionString, migrations);
 app.MapDefaultEndpoints(); // Aspire health checks
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseCors("AllowAll");
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

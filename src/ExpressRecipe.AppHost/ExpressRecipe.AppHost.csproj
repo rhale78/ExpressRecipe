@@ -45,6 +45,10 @@
     <ProjectReference Include="..\Services\ExpressRecipe.SyncService\ExpressRecipe.SyncService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.SearchService\ExpressRecipe.SearchService.csproj" />
     <ProjectReference Include="..\Services\ExpressRecipe.AnalyticsService\ExpressRecipe.AnalyticsService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.IngredientService\ExpressRecipe.IngredientService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.CookbookService\ExpressRecipe.CookbookService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.GroceryStoreLocationService\ExpressRecipe.GroceryStoreLocationService.csproj" />
+    <ProjectReference Include="..\Services\ExpressRecipe.AIService\ExpressRecipe.AIService.csproj" />
     <ProjectReference Include="..\Frontends\ExpressRecipe.BlazorWeb\ExpressRecipe.BlazorWeb.csproj" />
   </ItemGroup>
 

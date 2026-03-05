@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using ExpressRecipe.Client.Shared.Models.Price;
 
 namespace ExpressRecipe.Client.Shared.Services;
@@ -77,7 +78,18 @@ public class PriceApiClient : IPriceApiClient
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<ProductPriceHistoryDto>($"/api/prices/products/{productId}/history");
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var prices = await _httpClient.GetFromJsonAsync<List<ProductPriceDto>>($"/api/prices/product/{productId}", options);
+            if (prices == null) return null;
+            return new ProductPriceHistoryDto
+            {
+                ProductId = productId,
+                CurrentPrice = prices.Count > 0 ? prices[0].Price : 0,
+                LowestPrice = prices.Count > 0 ? prices.Min(p => p.Price) : 0,
+                HighestPrice = prices.Count > 0 ? prices.Max(p => p.Price) : 0,
+                AveragePrice = prices.Count > 0 ? prices.Average(p => p.Price) : 0,
+                PriceHistory = prices
+            };
         }
         catch
         {
@@ -92,7 +104,7 @@ public class PriceApiClient : IPriceApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/prices/record", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/price/prices", request);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -319,7 +331,7 @@ public class PriceApiClient : IPriceApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/prices/compare", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/price/compare", request);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<PriceComparisonResult>();
         }
@@ -402,13 +414,31 @@ public class PriceApiClient : IPriceApiClient
         {
             var response = await _httpClient.PostAsJsonAsync("/api/prices/search", request);
             response.EnsureSuccessStatusCode();
-            var result = await response.Content.ReadFromJsonAsync<PriceSearchResponse>();
-            return result ?? new PriceSearchResponse();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            // Server returns { data, total, page, pageSize } — map into PriceSearchResponse
+            var raw = await response.Content.ReadFromJsonAsync<PriceSearchRawResponse>(options);
+            if (raw == null) return new PriceSearchResponse();
+            return new PriceSearchResponse
+            {
+                Prices = raw.Data ?? new List<ProductPriceItemDto>(),
+                TotalCount = raw.Total,
+                Page = raw.Page,
+                PageSize = raw.PageSize > 0 ? raw.PageSize : request.PageSize
+            };
         }
         catch
         {
             return new PriceSearchResponse();
         }
+    }
+
+    // Internal intermediary for deserializing unified search response shape
+    private sealed class PriceSearchRawResponse
+    {
+        public List<ProductPriceItemDto>? Data { get; set; }
+        public int Total { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
     }
 
     public async Task<List<ProductPriceItemDto>> GetPricesByUpcAsync(string upc)

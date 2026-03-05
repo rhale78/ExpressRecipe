@@ -19,69 +19,155 @@ public class NotificationController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetNotifications([FromQuery] bool unreadOnly = false, [FromQuery] int limit = 50)
     {
-        var userId = GetUserId();
-        var notifications = await _repository.GetUserNotificationsAsync(userId, unreadOnly, limit);
-        return Ok(notifications);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var notifications = await _repository.GetUserNotificationsAsync(userId.Value, unreadOnly, limit);
+            return Ok(notifications);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving notifications");
+            return StatusCode(500, new { message = "An error occurred while retrieving notifications" });
+        }
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetNotification(Guid id)
     {
-        var notification = await _repository.GetNotificationAsync(id);
-        if (notification == null) return NotFound();
-        return Ok(notification);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var notification = await _repository.GetNotificationAsync(id);
+            if (notification == null) return NotFound();
+            if (notification.UserId != userId.Value) return Forbid();
+            return Ok(notification);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving notification {NotificationId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving the notification" });
+        }
     }
 
     [HttpPut("{id}/read")]
     public async Task<IActionResult> MarkAsRead(Guid id)
     {
-        await _repository.MarkAsReadAsync(id);
-        return NoContent();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var notification = await _repository.GetNotificationAsync(id);
+            if (notification == null) return NotFound();
+            if (notification.UserId != userId.Value) return Forbid();
+            await _repository.MarkAsReadAsync(id);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marking notification {NotificationId} as read", id);
+            return StatusCode(500, new { message = "An error occurred while marking the notification as read" });
+        }
     }
 
     [HttpPut("read-all")]
     public async Task<IActionResult> MarkAllAsRead()
     {
-        var userId = GetUserId();
-        await _repository.MarkAllAsReadAsync(userId);
-        return NoContent();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            await _repository.MarkAllAsReadAsync(userId.Value);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marking all notifications as read");
+            return StatusCode(500, new { message = "An error occurred while marking notifications as read" });
+        }
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteNotification(Guid id)
     {
-        await _repository.DeleteNotificationAsync(id);
-        return NoContent();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var notification = await _repository.GetNotificationAsync(id);
+            if (notification == null) return NotFound();
+            if (notification.UserId != userId.Value) return Forbid();
+            await _repository.DeleteNotificationAsync(id);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting notification {NotificationId}", id);
+            return StatusCode(500, new { message = "An error occurred while deleting the notification" });
+        }
     }
 
     [HttpGet("unread/count")]
     public async Task<IActionResult> GetUnreadCount()
     {
-        var userId = GetUserId();
-        var count = await _repository.GetUnreadCountAsync(userId);
-        return Ok(new { count });
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var count = await _repository.GetUnreadCountAsync(userId.Value);
+            return Ok(new { count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving unread notification count");
+            return StatusCode(500, new { message = "An error occurred while retrieving the unread count" });
+        }
     }
 
     [HttpGet("preferences")]
     public async Task<IActionResult> GetPreferences()
     {
-        var userId = GetUserId();
-        var prefs = await _repository.GetUserPreferencesAsync(userId);
-        return Ok(prefs);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var prefs = await _repository.GetUserPreferencesAsync(userId.Value);
+            return Ok(prefs);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving notification preferences");
+            return StatusCode(500, new { message = "An error occurred while retrieving preferences" });
+        }
     }
 
     [HttpPost("preferences")]
     public async Task<IActionResult> SavePreference([FromBody] SavePreferenceRequest request)
     {
-        var userId = GetUserId();
-        var prefId = await _repository.SavePreferenceAsync(
-            userId, request.NotificationType, request.EmailEnabled, request.PushEnabled, request.SmsEnabled, request.InAppEnabled);
-        return Ok(new { id = prefId });
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var prefId = await _repository.SavePreferenceAsync(
+                userId.Value, request.NotificationType, request.EmailEnabled, request.PushEnabled, request.SmsEnabled, request.InAppEnabled);
+            return Ok(new { id = prefId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving notification preference");
+            return StatusCode(500, new { message = "An error occurred while saving the preference" });
+        }
     }
 }
 

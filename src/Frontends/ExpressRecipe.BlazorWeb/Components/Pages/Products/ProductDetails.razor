@@ -3,7 +3,13 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Product
+@using ExpressRecipe.Client.Shared.Models.Inventory
+@using ExpressRecipe.Client.Shared.Models.Shopping
 @inject IProductApiClient ProductApi
+@inject IInventoryApiClient InventoryApi
+@inject IShoppingListApiClient ShoppingApi
+@inject IToastService ToastService
+@inject ILogger<ProductDetails> Logger
 @inject NavigationManager Navigation
 
 <PageTitle>@(_product?.Name ?? "Product Details") - ExpressRecipe</PageTitle>
@@ -267,16 +273,75 @@
 
     private async Task AddToInventory()
     {
-        // TODO: Implement add to inventory
-        // For now, navigate to inventory page
-        Navigation.NavigateTo("/inventory");
+        if (_product == null) return;
+        try
+        {
+            var itemId = await InventoryApi.CreateInventoryItemAsync(new CreateInventoryItemRequest
+            {
+                ProductId = _product.Id,
+                Name = _product.Name,
+                Brand = _product.Brand,
+                Quantity = 1
+            });
+            if (itemId.HasValue)
+                ToastService.ShowSuccess("Added to inventory");
+            else
+                ToastService.ShowError("Failed to add to inventory");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to add to inventory: {ex.Message}");
+        }
     }
 
     private async Task AddToShoppingList()
     {
-        // TODO: Implement add to shopping list
-        // For now, navigate to shopping page
-        Navigation.NavigateTo("/shopping");
+        if (_product == null) return;
+        try
+        {
+            // Find or create the user's default active shopping list
+            var listId = await GetOrCreateDefaultShoppingListAsync();
+            if (listId == null)
+            {
+                ToastService.ShowError("Could not find or create a shopping list");
+                return;
+            }
+
+            var itemId = await ShoppingApi.AddItemAsync(new AddShoppingListItemRequest
+            {
+                ShoppingListId = listId.Value,
+                ProductId = _product.Id,
+                Name = _product.Name,
+                Brand = _product.Brand,
+                Quantity = 1,
+                Unit = "unit"
+            });
+            if (itemId.HasValue)
+                ToastService.ShowSuccess("Added to shopping list");
+            else
+                ToastService.ShowError("Failed to add to shopping list");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to add to shopping list: {ex.Message}");
+        }
+    }
+
+    private async Task<Guid?> GetOrCreateDefaultShoppingListAsync()
+    {
+        try
+        {
+            var result = await ShoppingApi.SearchShoppingListsAsync(new ShoppingListSearchRequest { Status = "Active", PageSize = 1 });
+            if (result?.Lists?.Count > 0)
+                return result.Lists[0].Id;
+
+            return await ShoppingApi.CreateShoppingListAsync(new CreateShoppingListRequest { Name = "My Shopping List" });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to get or create default shopping list");
+            return null;
+        }
     }
 
     private void ViewRecipes()

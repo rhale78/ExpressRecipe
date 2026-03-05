@@ -6,6 +6,7 @@ public interface IInventoryRepository
     Task<Guid> CreateHouseholdAsync(Guid userId, string name, string? description);
     Task<List<HouseholdDto>> GetUserHouseholdsAsync(Guid userId);
     Task<HouseholdDto?> GetHouseholdByIdAsync(Guid householdId);
+    Task<bool> IsUserMemberOfHouseholdAsync(Guid householdId, Guid userId);
     Task<Guid> AddHouseholdMemberAsync(Guid householdId, Guid userId, string role, Guid invitedBy);
     Task<List<HouseholdMemberDto>> GetHouseholdMembersAsync(Guid householdId);
     Task UpdateMemberPermissionsAsync(Guid memberId, bool canManageInventory, bool canManageShopping, bool canManageMembers);

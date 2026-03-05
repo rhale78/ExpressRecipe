@@ -15,6 +15,7 @@ public interface IShoppingRepository
     // Shopping List Items
     Task<Guid> AddItemToListAsync(Guid listId, Guid userId, Guid? productId, string? customName, decimal quantity, string? unit, string? category, 
         bool isFavorite = false, bool isGeneric = false, string? preferredBrand = null, Guid? storeId = null);
+    Task<ShoppingListItemDto?> GetShoppingListItemAsync(Guid itemId);
     Task<List<ShoppingListItemDto>> GetListItemsAsync(Guid listId, Guid userId);
     Task UpdateItemQuantityAsync(Guid itemId, decimal quantity);
     Task UpdateItemPriceAsync(Guid itemId, decimal? estimatedPrice, decimal? actualPrice);

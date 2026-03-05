@@ -93,46 +93,58 @@ public class UserProfileControllerTests
     #region GetByUserId Tests
 
     [Fact]
-    public async Task GetByUserId_WhenProfileExists_ReturnsOk()
+    public async Task GetByUserId_WhenRequestingOwnProfile_ReturnsOk()
     {
-        // Arrange
-        var targetUserId = Guid.NewGuid();
+        // Arrange - use the same userId as the authenticated user (self-access)
         var expectedProfile = new UserProfileDto
         {
             Id = Guid.NewGuid(),
-            UserId = targetUserId,
+            UserId = _testUserId,
             FirstName = "Bob",
             LastName = "Jones",
             Email = "bob@example.com"
         };
 
         _mockRepository
-            .Setup(r => r.GetByUserIdAsync(targetUserId))
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
             .ReturnsAsync(expectedProfile);
 
         // Act
-        var result = await _controller.GetByUserId(targetUserId);
+        var result = await _controller.GetByUserId(_testUserId);
 
         // Assert
         var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
         var profile = okResult.Value.Should().BeAssignableTo<UserProfileDto>().Subject;
-        profile.UserId.Should().Be(targetUserId);
+        profile.UserId.Should().Be(_testUserId);
     }
 
     [Fact]
-    public async Task GetByUserId_WhenNotFound_ReturnsNotFound()
+    public async Task GetByUserId_WhenRequestingOwnProfile_NotFound_ReturnsNotFound()
     {
-        // Arrange
-        var targetUserId = Guid.NewGuid();
+        // Arrange - use the same userId as the authenticated user (self-access, profile missing)
         _mockRepository
-            .Setup(r => r.GetByUserIdAsync(targetUserId))
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
             .ReturnsAsync((UserProfileDto?)null);
 
         // Act
-        var result = await _controller.GetByUserId(targetUserId);
+        var result = await _controller.GetByUserId(_testUserId);
 
         // Assert
         result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    [Fact]
+    public async Task GetByUserId_WhenRequestingAnotherUsersProfile_ReturnsForbid()
+    {
+        // Arrange - request a different user's profile (should be blocked)
+        var otherUserId = Guid.NewGuid();
+
+        // Act
+        var result = await _controller.GetByUserId(otherUserId);
+
+        // Assert
+        result.Result.Should().BeOfType<ForbidResult>();
+        _mockRepository.Verify(r => r.GetByUserIdAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     #endregion

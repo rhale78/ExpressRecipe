@@ -37,6 +37,16 @@ public class PricesController : ControllerBase
         return Ok(new { data = prices, total, page = request.Page, pageSize = request.PageSize });
     }
 
+    /// <summary>POST /api/prices/search — Search prices with filters (body-based)</summary>
+    [AllowAnonymous]
+    [HttpPost("search")]
+    public async Task<IActionResult> SearchPricesPost([FromBody] PriceSearchRequest request)
+    {
+        var prices = await _repository.SearchPricesAsync(request);
+        var total = await _repository.GetSearchCountAsync(request);
+        return Ok(new { data = prices, total, page = request.Page, pageSize = request.PageSize });
+    }
+
     /// <summary>GET /api/prices/product/{productId} — Get prices for a specific product</summary>
     [AllowAnonymous]
     [HttpGet("product/{productId:guid}")]
@@ -113,7 +123,7 @@ public class PricesController : ControllerBase
     }
 
     /// <summary>POST /api/prices/import/trigger — Trigger a manual import (admin only)</summary>
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     [HttpPost("import/trigger")]
     public async Task<IActionResult> TriggerImport([FromQuery] string source = "OpenPrices")
     {

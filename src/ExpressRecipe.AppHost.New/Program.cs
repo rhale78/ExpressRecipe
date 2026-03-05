@@ -14,6 +14,7 @@ var authDb = sqlServer.AddDatabase("authdb", "ExpressRecipe.Auth");
 var userDb = sqlServer.AddDatabase("userdb", "ExpressRecipe.Users");
 var productDb = sqlServer.AddDatabase("productdb", "ExpressRecipe.Products");
 var recipeDb = sqlServer.AddDatabase("recipedb", "ExpressRecipe.Recipes");
+var cookbookDb = sqlServer.AddDatabase("cookbookdb", "ExpressRecipe.Cookbooks");
 var inventoryDb = sqlServer.AddDatabase("inventorydb", "ExpressRecipe.Inventory");
 var scanDb = sqlServer.AddDatabase("scandb", "ExpressRecipe.Scans");
 var shoppingDb = sqlServer.AddDatabase("shoppingdb", "ExpressRecipe.Shopping");
@@ -78,6 +79,12 @@ var recipeService = builder.AddProject<Projects.ExpressRecipe_RecipeService>("re
     .WithReference(recipeDb)
     .WithReference(ingredientDb)
     .WithReference(ingredientService)
+    .WithReference(redis)
+    .WithReference(messaging);
+
+// Cookbook Service - User cookbook management
+var cookbookService = builder.AddProject<Projects.ExpressRecipe_CookbookService>("cookbookservice")
+    .WithReference(cookbookDb)
     .WithReference(redis)
     .WithReference(messaging);
 
@@ -165,6 +172,7 @@ var webApp = builder.AddProject<Projects.ExpressRecipe_BlazorWeb>("webapp")
     .WithReference(ingredientService)
     .WithReference(productService)
     .WithReference(recipeService)
+    .WithReference(cookbookService)
     .WithReference(inventoryService)
     .WithReference(scannerService)
     .WithReference(shoppingService)

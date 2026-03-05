@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
@@ -146,5 +148,51 @@ public static class Extensions
         builder.Services.AddDistributedMemoryCache(); // Fallback if Redis not available
 
         return builder;
+    }
+
+    /// <summary>
+    /// Adds CORS with AllowAnyOrigin in Development and a configurable policy in Production.
+    /// In Production, set AllowedOrigins in configuration or environment variables.
+    /// </summary>
+    public static IServiceCollection AddServiceCors(this IServiceCollection services, IWebHostEnvironment environment, IConfiguration configuration)
+    {
+        services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                if (environment.IsDevelopment())
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                }
+                else
+                {
+                    var allowedOrigins = configuration.GetSection("AllowedOrigins").Get<string[]>()
+                        ?? Array.Empty<string>();
+
+                    if (allowedOrigins.Length > 0)
+                    {
+                        policy.WithOrigins(allowedOrigins)
+                              .AllowAnyMethod()
+                              .AllowAnyHeader()
+                              .AllowCredentials();
+                    }
+                    else
+                    {
+                        // No origins configured in production — deny all cross-origin requests.
+                        // Set the 'AllowedOrigins' configuration section to allow specific origins.
+                        Log.Warning("No AllowedOrigins configured in production. " +
+                            "All cross-origin requests will be denied. " +
+                            "Set the 'AllowedOrigins' configuration section to enable CORS.");
+
+                        // Explicitly deny everything by allowing no origins (empty policy = deny all).
+                        policy.WithOrigins(Array.Empty<string>());
+                    }
+                }
+            });
+        });
+
+        return services;
     }
 }

@@ -22,7 +22,11 @@ public class HouseholdController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     #region Household Management
 
@@ -32,10 +36,19 @@ public class HouseholdController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateHousehold([FromBody] CreateHouseholdRequest request)
     {
-        var userId = GetUserId();
-        var householdId = await _repository.CreateHouseholdAsync(userId, request.Name, request.Description);
-        var household = await _repository.GetHouseholdByIdAsync(householdId);
-        return CreatedAtAction(nameof(GetHousehold), new { id = householdId }, household);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var householdId = await _repository.CreateHouseholdAsync(userId.Value, request.Name, request.Description);
+            var household = await _repository.GetHouseholdByIdAsync(householdId);
+            return CreatedAtAction(nameof(GetHousehold), new { id = householdId }, household);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating household");
+            return StatusCode(500, new { message = "An error occurred while creating the household" });
+        }
     }
 
     /// <summary>
@@ -44,9 +57,18 @@ public class HouseholdController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetHouseholds()
     {
-        var userId = GetUserId();
-        var households = await _repository.GetUserHouseholdsAsync(userId);
-        return Ok(households);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var households = await _repository.GetUserHouseholdsAsync(userId.Value);
+            return Ok(households);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving households");
+            return StatusCode(500, new { message = "An error occurred while retrieving households" });
+        }
     }
 
     /// <summary>
@@ -55,11 +77,22 @@ public class HouseholdController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetHousehold(Guid id)
     {
-        var household = await _repository.GetHouseholdByIdAsync(id);
-        if (household == null)
-            return NotFound();
-
-        return Ok(household);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(id, userId.Value))
+                return Forbid();
+            var household = await _repository.GetHouseholdByIdAsync(id);
+            if (household == null)
+                return NotFound();
+            return Ok(household);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving household {HouseholdId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving the household" });
+        }
     }
 
     /// <summary>
@@ -68,8 +101,20 @@ public class HouseholdController : ControllerBase
     [HttpGet("{id}/members")]
     public async Task<IActionResult> GetHouseholdMembers(Guid id)
     {
-        var members = await _repository.GetHouseholdMembersAsync(id);
-        return Ok(members);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(id, userId.Value))
+                return Forbid();
+            var members = await _repository.GetHouseholdMembersAsync(id);
+            return Ok(members);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving members for household {HouseholdId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving household members" });
+        }
     }
 
     /// <summary>
@@ -78,9 +123,20 @@ public class HouseholdController : ControllerBase
     [HttpPost("{id}/members")]
     public async Task<IActionResult> AddMember(Guid id, [FromBody] AddMemberRequest request)
     {
-        var userId = GetUserId();
-        var memberId = await _repository.AddHouseholdMemberAsync(id, request.UserId, request.Role, userId);
-        return Ok(new { id = memberId });
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(id, userId.Value))
+                return Forbid();
+            var memberId = await _repository.AddHouseholdMemberAsync(id, request.UserId, request.Role, userId.Value);
+            return Ok(new { id = memberId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding member to household {HouseholdId}", id);
+            return StatusCode(500, new { message = "An error occurred while adding the household member" });
+        }
     }
 
     /// <summary>
@@ -89,12 +145,20 @@ public class HouseholdController : ControllerBase
     [HttpPut("members/{memberId}")]
     public async Task<IActionResult> UpdateMemberPermissions(Guid memberId, [FromBody] UpdateMemberPermissionsRequest request)
     {
-        await _repository.UpdateMemberPermissionsAsync(
-            memberId,
-            request.CanManageInventory,
-            request.CanManageShopping,
-            request.CanManageMembers);
-        return NoContent();
+        try
+        {
+            await _repository.UpdateMemberPermissionsAsync(
+                memberId,
+                request.CanManageInventory,
+                request.CanManageShopping,
+                request.CanManageMembers);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating permissions for member {MemberId}", memberId);
+            return StatusCode(500, new { message = "An error occurred while updating member permissions" });
+        }
     }
 
     /// <summary>
@@ -103,8 +167,16 @@ public class HouseholdController : ControllerBase
     [HttpDelete("members/{memberId}")]
     public async Task<IActionResult> RemoveMember(Guid memberId)
     {
-        await _repository.RemoveHouseholdMemberAsync(memberId);
-        return NoContent();
+        try
+        {
+            await _repository.RemoveHouseholdMemberAsync(memberId);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing member {MemberId}", memberId);
+            return StatusCode(500, new { message = "An error occurred while removing the household member" });
+        }
     }
 
     #endregion
@@ -117,20 +189,31 @@ public class HouseholdController : ControllerBase
     [HttpPost("{householdId}/addresses")]
     public async Task<IActionResult> CreateAddress(Guid householdId, [FromBody] CreateAddressRequest request)
     {
-        var addressId = await _repository.CreateAddressAsync(
-            householdId,
-            request.Name,
-            request.Street,
-            request.City,
-            request.State,
-            request.ZipCode,
-            request.Country ?? "USA",
-            request.Latitude,
-            request.Longitude,
-            request.IsPrimary);
-
-        var address = await _repository.GetAddressByIdAsync(addressId);
-        return CreatedAtAction(nameof(GetAddress), new { id = addressId }, address);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
+            var addressId = await _repository.CreateAddressAsync(
+                householdId,
+                request.Name,
+                request.Street,
+                request.City,
+                request.State,
+                request.ZipCode,
+                request.Country ?? "USA",
+                request.Latitude,
+                request.Longitude,
+                request.IsPrimary);
+            var address = await _repository.GetAddressByIdAsync(addressId);
+            return CreatedAtAction(nameof(GetAddress), new { id = addressId }, address);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating address for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while creating the address" });
+        }
     }
 
     /// <summary>
@@ -139,8 +222,20 @@ public class HouseholdController : ControllerBase
     [HttpGet("{householdId}/addresses")]
     public async Task<IActionResult> GetAddresses(Guid householdId)
     {
-        var addresses = await _repository.GetHouseholdAddressesAsync(householdId);
-        return Ok(addresses);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
+            var addresses = await _repository.GetHouseholdAddressesAsync(householdId);
+            return Ok(addresses);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving addresses for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving addresses" });
+        }
     }
 
     /// <summary>
@@ -149,11 +244,22 @@ public class HouseholdController : ControllerBase
     [HttpGet("addresses/{id}")]
     public async Task<IActionResult> GetAddress(Guid id)
     {
-        var address = await _repository.GetAddressByIdAsync(id);
-        if (address == null)
-            return NotFound();
-
-        return Ok(address);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var address = await _repository.GetAddressByIdAsync(id);
+            if (address == null)
+                return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
+            return Ok(address);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving address {AddressId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving the address" });
+        }
     }
 
     /// <summary>
@@ -162,16 +268,26 @@ public class HouseholdController : ControllerBase
     [HttpPost("{householdId}/addresses/detect")]
     public async Task<IActionResult> DetectNearestAddress(Guid householdId, [FromBody] DetectAddressRequest request)
     {
-        var address = await _repository.DetectNearestAddressAsync(
-            householdId,
-            request.Latitude,
-            request.Longitude,
-            request.MaxDistanceKm ?? 1.0);
-
-        if (address == null)
-            return NotFound(new { message = "No nearby addresses found" });
-
-        return Ok(address);
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
+            var address = await _repository.DetectNearestAddressAsync(
+                householdId,
+                request.Latitude,
+                request.Longitude,
+                request.MaxDistanceKm ?? 1.0);
+            if (address == null)
+                return NotFound(new { message = "No nearby addresses found" });
+            return Ok(address);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error detecting nearest address for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while detecting the nearest address" });
+        }
     }
 
     /// <summary>
@@ -180,8 +296,22 @@ public class HouseholdController : ControllerBase
     [HttpPut("addresses/{id}/coordinates")]
     public async Task<IActionResult> UpdateCoordinates(Guid id, [FromBody] UpdateCoordinatesRequest request)
     {
-        await _repository.UpdateAddressCoordinatesAsync(id, request.Latitude, request.Longitude);
-        return NoContent();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var address = await _repository.GetAddressByIdAsync(id);
+            if (address == null) return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
+            await _repository.UpdateAddressCoordinatesAsync(id, request.Latitude, request.Longitude);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating coordinates for address {AddressId}", id);
+            return StatusCode(500, new { message = "An error occurred while updating address coordinates" });
+        }
     }
 
     /// <summary>
@@ -190,8 +320,20 @@ public class HouseholdController : ControllerBase
     [HttpPut("{householdId}/addresses/{addressId}/primary")]
     public async Task<IActionResult> SetPrimaryAddress(Guid householdId, Guid addressId)
     {
-        await _repository.SetPrimaryAddressAsync(householdId, addressId);
-        return NoContent();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+                return Forbid();
+            await _repository.SetPrimaryAddressAsync(householdId, addressId);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting primary address {AddressId} for household {HouseholdId}", addressId, householdId);
+            return StatusCode(500, new { message = "An error occurred while setting the primary address" });
+        }
     }
 
     /// <summary>
@@ -200,8 +342,22 @@ public class HouseholdController : ControllerBase
     [HttpDelete("addresses/{id}")]
     public async Task<IActionResult> DeleteAddress(Guid id)
     {
-        await _repository.DeleteAddressAsync(id);
-        return NoContent();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            var address = await _repository.GetAddressByIdAsync(id);
+            if (address == null) return NotFound();
+            if (!await _repository.IsUserMemberOfHouseholdAsync(address.HouseholdId, userId.Value))
+                return Forbid();
+            await _repository.DeleteAddressAsync(id);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting address {AddressId}", id);
+            return StatusCode(500, new { message = "An error occurred while deleting the address" });
+        }
     }
 
     #endregion
