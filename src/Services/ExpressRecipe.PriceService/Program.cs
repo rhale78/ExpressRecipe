@@ -148,6 +148,12 @@ if (messagingEnabled)
             sp.GetRequiredService<ILogger<MessagingProductServiceClient>>(),
             sp.GetRequiredService<IConfiguration>()));
 
+    // Real event publisher – publishes to RabbitMQ
+    builder.Services.AddSingleton<IPriceEventPublisher>(sp =>
+        new PriceEventPublisher(
+            sp.GetRequiredService<ExpressRecipe.Messaging.Core.Abstractions.IMessageBus>(),
+            sp.GetRequiredService<ILogger<PriceEventPublisher>>()));
+
     // Subscribe to ProductService lifecycle events so price data stays consistent
     builder.Services.AddHostedService<ProductEventSubscriber>();
 
@@ -162,7 +168,15 @@ else
         new ProductServiceClient(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ProductServiceClient)),
             sp.GetRequiredService<ILogger<ProductServiceClient>>()));
+
+    // Null publisher – logs events at Debug level so they remain observable; no bus needed
+    builder.Services.AddSingleton<IPriceEventPublisher>(sp =>
+        new NullPriceEventPublisher(sp.GetRequiredService<ILogger<NullPriceEventPublisher>>()));
 }
+
+// Register price ingestion channel (async batch path) – always available regardless of messaging
+builder.Services.AddSingleton<IPriceIngestionChannel, PriceIngestionChannel>();
+builder.Services.AddHostedService<PriceIngestionChannelWorker>();
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);

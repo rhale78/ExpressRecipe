@@ -1,6 +1,7 @@
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.Saga.Builder;
 using ExpressRecipe.PriceService.Messages;
+using ExpressRecipe.Shared.Messages;
 
 namespace ExpressRecipe.PriceService.Saga;
 
@@ -10,6 +11,8 @@ namespace ExpressRecipe.PriceService.Saga;
 ///   Step 2 (bit 2): Verify     – validate pricing data (range checks, duplicate detection)
 ///   Step 3 (bit 4): Publish    – write the verified price observation to the ProductPrice table
 /// A price observation is complete when mask == 0b111 == 7.
+/// On completion a <see cref="SagaCompletedNotification"/> is also published so that the
+/// NotificationService can alert users (subscribe when the NotificationService is ready).
 /// </summary>
 public static class PriceProcessingWorkflow
 {
@@ -67,12 +70,23 @@ public static class PriceProcessingWorkflow
             {
                 if (state.PriceObservationId.HasValue && state.ProductId.HasValue && state.StoreId.HasValue)
                 {
+                    // Primary domain event: price observation is fully processed
                     await bus.PublishAsync(new PriceObservationCompleted(
                         state.CorrelationId,
                         state.PriceObservationId.Value,
                         state.ProductId.Value,
                         state.StoreId.Value,
                         state.Price ?? 0m,
+                        DateTimeOffset.UtcNow), cancellationToken: ct);
+
+                    // Notification event: informs NotificationService (subscribe when ready)
+                    var summary = $"Price observation for product {state.ProductId} at store {state.StoreId} = ${state.Price:F2} processed successfully.";
+                    await bus.PublishAsync(new SagaCompletedNotification(
+                        WorkflowName,
+                        state.CorrelationId,
+                        Succeeded: true,
+                        summary,
+                        AffectedEntityId: state.PriceObservationId,
                         DateTimeOffset.UtcNow), cancellationToken: ct);
                 }
             })
@@ -83,7 +97,17 @@ public static class PriceProcessingWorkflow
                     state.PriceStagingId ?? Guid.Empty,
                     ex.Message,
                     DateTimeOffset.UtcNow), cancellationToken: ct);
+
+                // Notification event for failure
+                await bus.PublishAsync(new SagaCompletedNotification(
+                    WorkflowName,
+                    state.CorrelationId,
+                    Succeeded: false,
+                    Summary: $"Price processing failed: {ex.Message}",
+                    AffectedEntityId: state.PriceStagingId,
+                    DateTimeOffset.UtcNow), cancellationToken: ct);
             })
             .Build();
     }
 }
+

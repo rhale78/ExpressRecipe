@@ -40,7 +40,8 @@ public class ProductsControllerTests
             _allergenMock.Object,
             _cache,
             new Mock<ILogger<ProductsController>>().Object,
-            _eventsMock.Object);
+            _eventsMock.Object,
+            new Mock<IProductBatchChannel>().Object);
 
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_userId);
     }

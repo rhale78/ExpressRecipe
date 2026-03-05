@@ -128,6 +128,10 @@ else
     builder.Services.AddSingleton<IRecipeEventPublisher, NullRecipeEventPublisher>();
 }
 
+// Register recipe batch channel (async path) – always available regardless of messaging
+builder.Services.AddSingleton<IRecipeBatchChannel, RecipeBatchChannel>();
+builder.Services.AddHostedService<RecipeBatchChannelWorker>();
+
 // Register CQRS infrastructure
 builder.Services.AddCqrsDispatcher();
 

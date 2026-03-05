@@ -164,6 +164,10 @@ else
     builder.Services.AddSingleton<IProductEventPublisher, NullProductEventPublisher>();
 }
 
+// Register product batch channel (async path) – always available regardless of messaging
+builder.Services.AddSingleton<IProductBatchChannel, ProductBatchChannel>();
+builder.Services.AddHostedService<ProductBatchChannelWorker>();
+
 // Add controllers
 builder.Services.AddControllers();
 

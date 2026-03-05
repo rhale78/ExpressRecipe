@@ -20,6 +20,7 @@ public class RecipesController : ControllerBase
     private readonly ServingSizeService _servingSizeService;
     private readonly ShoppingListIntegrationService _shoppingListService;
     private readonly IRecipeEventPublisher _events;
+    private readonly IRecipeBatchChannel _batchChannel;
     private readonly ILogger<RecipesController> _logger;
 
     public RecipesController(
@@ -27,13 +28,15 @@ public class RecipesController : ControllerBase
         ServingSizeService servingSizeService,
         ShoppingListIntegrationService shoppingListService,
         IRecipeEventPublisher events,
+        IRecipeBatchChannel batchChannel,
         ILogger<RecipesController> logger)
     {
-        _recipeRepository = recipeRepository;
-        _servingSizeService = servingSizeService;
+        _recipeRepository    = recipeRepository;
+        _servingSizeService  = servingSizeService;
         _shoppingListService = shoppingListService;
-        _events = events;
-        _logger = logger;
+        _events              = events;
+        _batchChannel        = batchChannel;
+        _logger              = logger;
     }
 
     private Guid? GetCurrentUserId()
@@ -643,6 +646,67 @@ public class RecipesController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while preparing the shopping list" });
         }
     }
+
+    /// <summary>
+    /// Submit multiple recipes in one call – asynchronous channel path.
+    /// Items are written to the <see cref="IRecipeBatchChannel"/> and processed by
+    /// <see cref="RecipeBatchChannelWorker"/> in the background, which also fires
+    /// <see cref="IRecipeEventPublisher.PublishCreatedAsync"/> for each created recipe.
+    /// For creating a single recipe use POST /api/recipes (sync REST path).
+    /// </summary>
+    [HttpPost("batch-import")]
+    public async Task<IActionResult> BatchImport([FromBody] BatchImportRecipesRequest request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue) return Unauthorized(new { message = "User not authenticated" });
+
+            if (request.Recipes == null || request.Recipes.Count == 0)
+                return BadRequest(new { message = "recipes list cannot be empty" });
+
+            const int maxBatch = 200;
+            if (request.Recipes.Count > maxBatch)
+                return BadRequest(new { message = $"Batch exceeds maximum of {maxBatch} recipes" });
+
+            var sessionId = Guid.NewGuid().ToString("N");
+            var accepted  = 0;
+
+            foreach (var recipeRequest in request.Recipes)
+            {
+                var item = new RecipeBatchItem
+                {
+                    Request     = recipeRequest,
+                    SubmittedBy = userId.Value,
+                    SessionId   = sessionId
+                };
+
+                if (_batchChannel.TryWrite(item))
+                    accepted++;
+                else
+                {
+                    await _batchChannel.WriteAsync(item, HttpContext.RequestAborted);
+                    accepted++;
+                }
+            }
+
+            _logger.LogInformation(
+                "[RecipesController] Batch import submitted: session={SessionId} count={Count} by user {UserId}",
+                sessionId, accepted, userId.Value);
+
+            return Accepted(new
+            {
+                sessionId,
+                accepted,
+                message = "Recipe batch queued for async processing"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error submitting recipe batch import");
+            return StatusCode(500, new { message = "An error occurred while submitting the recipe batch" });
+        }
+    }
 }
 
 public class RecipeSearchResult
@@ -651,4 +715,12 @@ public class RecipeSearchResult
     public int TotalCount { get; set; }
     public int Page { get; set; }
     public int PageSize { get; set; }
+}
+
+/// <summary>
+/// Request body for <c>POST /api/recipes/batch-import</c> (async channel path).
+/// </summary>
+public class BatchImportRecipesRequest
+{
+    public List<CreateRecipeRequest> Recipes { get; set; } = new();
 }

@@ -1,5 +1,6 @@
 using ExpressRecipe.PriceService.Controllers;
 using ExpressRecipe.PriceService.Data;
+using ExpressRecipe.PriceService.Services;
 using ExpressRecipe.PriceService.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
@@ -13,15 +14,23 @@ public class PriceControllerTests
 {
     private readonly Mock<IPriceRepository> _repositoryMock;
     private readonly Mock<ILogger<PriceController>> _loggerMock;
+    private readonly Mock<IPriceEventPublisher> _eventsMock;
+    private readonly Mock<IPriceIngestionChannel> _channelMock;
     private readonly PriceController _controller;
     private readonly Guid _userId = Guid.NewGuid();
 
     public PriceControllerTests()
     {
         _repositoryMock = new Mock<IPriceRepository>();
-        _loggerMock = new Mock<ILogger<PriceController>>();
+        _loggerMock     = new Mock<ILogger<PriceController>>();
+        _eventsMock     = new Mock<IPriceEventPublisher>();
+        _channelMock    = new Mock<IPriceIngestionChannel>();
 
-        _controller = new PriceController(_loggerMock.Object, _repositoryMock.Object);
+        _controller = new PriceController(
+            _loggerMock.Object,
+            _repositoryMock.Object,
+            _eventsMock.Object,
+            _channelMock.Object);
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_userId);
     }
 
@@ -286,5 +295,151 @@ public class PriceControllerTests
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    // --- Event publishing (sync path) ---
+
+    [Fact]
+    public async Task RecordPrice_AfterPersist_FiresPriceRecordedEvent()
+    {
+        // Arrange
+        var priceId   = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var storeId   = Guid.NewGuid();
+        _repositoryMock.Setup(r => r.RecordPriceAsync(productId, storeId, 2.99m, _userId, null))
+            .ReturnsAsync(priceId);
+
+        var request = new RecordPriceRequest { ProductId = productId, StoreId = storeId, Price = 2.99m };
+
+        // Act
+        await _controller.RecordPrice(request);
+
+        // Assert – event fired with the persisted observation ID
+        _eventsMock.Verify(e => e.PublishPriceRecordedAsync(
+            priceId, productId, storeId, 2.99m, _userId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task AddStore_AfterPersist_FiresStoreAddedEvent()
+    {
+        // Arrange
+        var storeId = Guid.NewGuid();
+        _repositoryMock.Setup(r => r.AddStoreAsync("Kroger", null, "Raleigh", "NC", null, "Kroger"))
+            .ReturnsAsync(storeId);
+
+        var request = new AddStoreRequest { Name = "Kroger", City = "Raleigh", State = "NC", Chain = "Kroger" };
+
+        // Act
+        await _controller.AddStore(request);
+
+        // Assert
+        _eventsMock.Verify(e => e.PublishStoreAddedAsync(
+            storeId, "Kroger", "Raleigh", "NC", "Kroger", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task CreateDeal_AfterPersist_FiresDealCreatedEvent()
+    {
+        // Arrange
+        var dealId    = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var storeId   = Guid.NewGuid();
+        var start     = DateTime.UtcNow;
+        var end       = DateTime.UtcNow.AddDays(7);
+        _repositoryMock.Setup(r => r.CreateDealAsync(
+                productId, storeId, "BOGO", 6.00m, 3.00m, start, end))
+            .ReturnsAsync(dealId);
+
+        var request = new CreateDealRequest
+        {
+            ProductId = productId, StoreId = storeId, DealType = "BOGO",
+            OriginalPrice = 6.00m, SalePrice = 3.00m, StartDate = start, EndDate = end
+        };
+
+        // Act
+        await _controller.CreateDeal(request);
+
+        // Assert
+        _eventsMock.Verify(e => e.PublishDealCreatedAsync(
+            dealId, productId, storeId, "BOGO", 6.00m, 3.00m, start, end,
+            It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    // --- Batch price endpoint (async channel path) ---
+
+    [Fact]
+    public async Task RecordPricesBatch_ValidRequest_ReturnsAccepted()
+    {
+        // Arrange – channel accepts writes
+        _channelMock.Setup(c => c.TryWrite(It.IsAny<PriceIngestionRequest>())).Returns(true);
+
+        var request = new BatchRecordPriceRequest
+        {
+            Prices = new List<BatchRecordPriceItem>
+            {
+                new() { ProductId = Guid.NewGuid(), StoreId = Guid.NewGuid(), Price = 1.49m },
+                new() { ProductId = Guid.NewGuid(), StoreId = Guid.NewGuid(), Price = 2.99m }
+            }
+        };
+
+        // Act
+        var result = await _controller.RecordPricesBatch(request);
+
+        // Assert
+        result.Should().BeOfType<AcceptedResult>();
+        _channelMock.Verify(c => c.TryWrite(It.IsAny<PriceIngestionRequest>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task RecordPricesBatch_AfterChannelWrite_FiresBatchSubmittedEvent()
+    {
+        // Arrange
+        _channelMock.Setup(c => c.TryWrite(It.IsAny<PriceIngestionRequest>())).Returns(true);
+
+        var request = new BatchRecordPriceRequest
+        {
+            Prices = new List<BatchRecordPriceItem>
+            {
+                new() { ProductId = Guid.NewGuid(), StoreId = Guid.NewGuid(), Price = 3.49m },
+                new() { ProductId = Guid.NewGuid(), StoreId = Guid.NewGuid(), Price = 0.99m }
+            }
+        };
+
+        // Act
+        await _controller.RecordPricesBatch(request);
+
+        // Assert – a single batch-submitted event with accepted=2
+        _eventsMock.Verify(e => e.PublishPriceBatchSubmittedAsync(
+            It.IsAny<string>(), 2, _userId, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordPricesBatch_EmptyList_ReturnsBadRequest()
+    {
+        var request = new BatchRecordPriceRequest { Prices = new List<BatchRecordPriceItem>() };
+
+        var result = await _controller.RecordPricesBatch(request);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _channelMock.Verify(c => c.TryWrite(It.IsAny<PriceIngestionRequest>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RecordPricesBatch_OverLimit_ReturnsBadRequest()
+    {
+        var prices = Enumerable.Range(0, 1001).Select(_ => new BatchRecordPriceItem
+        {
+            ProductId = Guid.NewGuid(), StoreId = Guid.NewGuid(), Price = 1.00m
+        }).ToList();
+
+        var request = new BatchRecordPriceRequest { Prices = prices };
+
+        var result = await _controller.RecordPricesBatch(request);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
     }
 }

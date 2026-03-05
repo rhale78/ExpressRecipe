@@ -1,6 +1,7 @@
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.Saga.Builder;
 using ExpressRecipe.ProductService.Messages;
+using ExpressRecipe.Shared.Messages;
 
 namespace ExpressRecipe.ProductService.Saga;
 
@@ -10,6 +11,8 @@ namespace ExpressRecipe.ProductService.Saga;
 ///   Step 2 (bit 2): Enrichment    – ingredient linking, allergen resolution
 ///   Step 3 (bit 4): Published     – written to Product table
 /// A product is complete when mask == 0b111 == 7.
+/// On completion a <see cref="SagaCompletedNotification"/> is also published so that the
+/// NotificationService can alert users (subscribe when the NotificationService is ready).
 /// </summary>
 public static class ProductProcessingWorkflow
 {
@@ -53,11 +56,22 @@ public static class ProductProcessingWorkflow
             {
                 if (state.ProductId.HasValue)
                 {
+                    // Primary domain event
                     await bus.PublishAsync(new ProductPublished(
                         state.CorrelationId,
                         state.ProductId.Value,
                         state.ExternalId ?? string.Empty,
                         state.Barcode,
+                        DateTimeOffset.UtcNow), cancellationToken: ct);
+
+                    // Notification event: informs NotificationService (subscribe when ready)
+                    var summary = $"Product '{state.ProductName ?? state.ProductId.ToString()}' processed successfully and is now available.";
+                    await bus.PublishAsync(new SagaCompletedNotification(
+                        WorkflowName,
+                        state.CorrelationId,
+                        Succeeded: true,
+                        summary,
+                        AffectedEntityId: state.ProductId,
                         DateTimeOffset.UtcNow), cancellationToken: ct);
                 }
             })
@@ -69,7 +83,17 @@ public static class ProductProcessingWorkflow
                     "WorkflowFailed",
                     ex.Message,
                     DateTimeOffset.UtcNow), cancellationToken: ct);
+
+                // Notification event for failure
+                await bus.PublishAsync(new SagaCompletedNotification(
+                    WorkflowName,
+                    state.CorrelationId,
+                    Succeeded: false,
+                    Summary: $"Product processing failed: {ex.Message}",
+                    AffectedEntityId: state.ProductId,
+                    DateTimeOffset.UtcNow), cancellationToken: ct);
             })
             .Build();
     }
 }
+

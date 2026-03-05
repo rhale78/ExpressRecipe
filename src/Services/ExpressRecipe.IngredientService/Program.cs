@@ -89,6 +89,10 @@ else
     builder.Services.AddSingleton<IIngredientEventPublisher, NullIngredientEventPublisher>();
 }
 
+// Register ingredient batch channel (async path) – always available regardless of messaging
+builder.Services.AddSingleton<IIngredientBatchChannel, IngredientBatchChannel>();
+builder.Services.AddHostedService<IngredientBatchChannelWorker>();
+
 var app = builder.Build();
 
 // Map default endpoints

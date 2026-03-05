@@ -21,6 +21,7 @@ public class ProductsController : ControllerBase
     private readonly HybridCacheService _cache;
     private readonly ILogger<ProductsController> _logger;
     private readonly IProductEventPublisher _events;
+    private readonly IProductBatchChannel _batchChannel;
 
     public ProductsController(
         IProductRepository productRepository,
@@ -28,7 +29,8 @@ public class ProductsController : ControllerBase
         IAllergenRepository allergenRepository,
         HybridCacheService cache,
         ILogger<ProductsController> logger,
-        IProductEventPublisher events)
+        IProductEventPublisher events,
+        IProductBatchChannel batchChannel)
     {
         _productRepository = productRepository;
         _ingredientRepository = ingredientRepository;
@@ -36,6 +38,7 @@ public class ProductsController : ControllerBase
         _cache = cache;
         _logger = logger;
         _events = events;
+        _batchChannel = batchChannel;
     }
 
     private Guid? GetCurrentUserId()
@@ -571,9 +574,80 @@ public class ProductsController : ControllerBase
             return StatusCode(500, new { message = "An error occurred" });
         }
     }
+
+    /// <summary>
+    /// Submit multiple products in one call – asynchronous channel path.
+    /// Each item is written to the <see cref="IProductBatchChannel"/> and processed by
+    /// <see cref="ProductBatchChannelWorker"/> in the background, which also fires
+    /// <see cref="IProductEventPublisher.PublishCreatedAsync"/> for each created product.
+    /// For creating a single product use POST /api/products (sync REST path).
+    /// </summary>
+    [HttpPost("batch")]
+    [Authorize]
+    public async Task<IActionResult> BatchSubmit([FromBody] BatchSubmitProductsRequest request)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (userId == null) return Unauthorized();
+
+            if (request.Products == null || request.Products.Count == 0)
+                return BadRequest(new { message = "products list cannot be empty" });
+
+            const int maxBatch = 500;
+            if (request.Products.Count > maxBatch)
+                return BadRequest(new { message = $"Batch exceeds maximum of {maxBatch} items" });
+
+            var sessionId = Guid.NewGuid().ToString("N");
+            var accepted  = 0;
+
+            foreach (var productRequest in request.Products)
+            {
+                var item = new ProductBatchItem
+                {
+                    Request     = productRequest,
+                    SubmittedBy = userId.Value,
+                    SessionId   = sessionId
+                };
+
+                if (_batchChannel.TryWrite(item))
+                    accepted++;
+                else
+                {
+                    // Channel full – wait for space
+                    await _batchChannel.WriteAsync(item, HttpContext.RequestAborted);
+                    accepted++;
+                }
+            }
+
+            _logger.LogInformation(
+                "[ProductsController] Batch submitted: session={SessionId} count={Count} by user {UserId}",
+                sessionId, accepted, userId.Value);
+
+            return Accepted(new
+            {
+                sessionId,
+                accepted,
+                message = "Product batch queued for async processing"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error submitting product batch");
+            return StatusCode(500, new { message = "An error occurred" });
+        }
+    }
 }
 
 public class BulkBarcodeRequest
 {
     public List<string> Barcodes { get; set; } = new();
+}
+
+/// <summary>
+/// Request body for <c>POST /api/products/batch</c> (async channel path).
+/// </summary>
+public class BatchSubmitProductsRequest
+{
+    public List<CreateProductRequest> Products { get; set; } = new();
 }
