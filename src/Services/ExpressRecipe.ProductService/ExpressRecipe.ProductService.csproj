@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Client.Shared\ExpressRecipe.Client.Shared.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Data.Common\ExpressRecipe.Data.Common.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Core\ExpressRecipe.Messaging.Core.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Saga\ExpressRecipe.Messaging.Saga.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />

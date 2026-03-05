@@ -4,6 +4,7 @@ using System.Data.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ExpressRecipe.Data.Common;
@@ -17,6 +18,10 @@ public abstract class SqlHelper
     protected string ConnectionString { get; }
     private const int MaxRetryAttempts = 3;
     private const int BaseDelayMilliseconds = 100;
+
+    // Matches SQL Server temp-table names: #name or ##name, letters/digits/underscore only.
+    private static readonly Regex TempTableNamePattern =
+        new(@"^##?[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
 
     protected SqlHelper(string connectionString)
     {
@@ -425,6 +430,134 @@ public abstract class SqlHelper
     }
 
     protected static decimal? GetDecimalNullable(IDataRecord reader, string columnName) => GetNullableDecimal(reader, columnName);
+
+    /// <summary>
+    /// Bulk-inserts a list of items using a temporary staging table and SqlBulkCopy.
+    /// Callers supply: a column-definition snippet for CREATE TABLE, a delegate that
+    /// populates a <see cref="DataTable"/>, and the final SQL to move rows from the
+    /// temp table into the target (INSERT … SELECT or MERGE).
+    /// </summary>
+    /// <typeparam name="T">Domain entity type.</typeparam>
+    /// <param name="items">Rows to insert.</param>
+    /// <param name="tempTableColumnsSql">Column definitions for the temp table, e.g.
+    /// <c>Id UNIQUEIDENTIFIER NOT NULL, Name NVARCHAR(200) NOT NULL</c>.</param>
+    /// <param name="dataTableBuilder">Factory that maps <paramref name="items"/> to a
+    /// <see cref="DataTable"/> whose schema matches <paramref name="tempTableColumnsSql"/>.</param>
+    /// <param name="tempTableName">Name of the temp table (e.g. <c>#StagingProduct</c>).</param>
+    /// <param name="finalSql">SQL executed after the bulk-copy (INSERT … SELECT or MERGE).</param>
+    /// <returns>Number of rows affected by <paramref name="finalSql"/>.</returns>
+    protected async Task<int> BulkInsertViaTvpAsync<T>(
+        IReadOnlyList<T> items,
+        string tempTableColumnsSql,
+        Func<IReadOnlyList<T>, DataTable> dataTableBuilder,
+        string tempTableName,
+        string finalSql)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tempTableColumnsSql);
+        ArgumentNullException.ThrowIfNull(dataTableBuilder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tempTableName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(finalSql);
+
+        if (!TempTableNamePattern.IsMatch(tempTableName))
+        {
+            throw new ArgumentException(
+                "tempTableName must be a valid SQL Server temp-table identifier starting with '#' or '##'.",
+                nameof(tempTableName));
+        }
+
+        if (items.Count == 0)
+        {
+            return 0;
+        }
+
+        return await ExecuteWithDeadlockRetryAsync(async () =>
+        {
+            await using var connection = new SqlConnection(ConnectionString);
+            await connection.OpenAsync();
+
+            await using var createCmd = new SqlCommand(
+                $"CREATE TABLE {tempTableName} ({tempTableColumnsSql});",
+                connection);
+            await createCmd.ExecuteNonQueryAsync();
+
+            var dataTable = dataTableBuilder(items);
+            dataTable.TableName = tempTableName;
+
+            using var bulkCopy = new SqlBulkCopy(connection)
+            {
+                DestinationTableName = tempTableName,
+                BulkCopyTimeout = 120
+            };
+            await bulkCopy.WriteToServerAsync(dataTable);
+
+            await using var finalCmd = new SqlCommand(finalSql, connection);
+            finalCmd.CommandTimeout = 120;
+            return await finalCmd.ExecuteNonQueryAsync();
+        });
+    }
+
+    /// <summary>
+    /// Bulk-upserts rows using a temp table + SQL MERGE statement.
+    /// Creates the temp table with <paramref name="createTempTableSql"/>, loads
+    /// <paramref name="data"/> via SqlBulkCopy, then executes <paramref name="mergeSql"/>.
+    /// The full operation is wrapped in deadlock-retry logic.
+    /// </summary>
+    /// <param name="createTempTableSql">DDL to create the temp table, e.g.
+    /// <c>CREATE TABLE #Tmp (Id UNIQUEIDENTIFIER NOT NULL, …)</c>.</param>
+    /// <param name="data">Populated <see cref="DataTable"/> whose
+    /// <see cref="DataTable.TableName"/> must match the temp table name used in
+    /// <paramref name="createTempTableSql"/>.</param>
+    /// <param name="mergeSql">MERGE statement that reads from the temp table.</param>
+    /// <returns>Number of rows affected by the MERGE.</returns>
+    protected async Task<int> BulkMergeAsync(
+        string createTempTableSql,
+        DataTable data,
+        string mergeSql)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(createTempTableSql);
+        ArgumentNullException.ThrowIfNull(data);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mergeSql);
+
+        if (!createTempTableSql.TrimStart().StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "createTempTableSql must begin with 'CREATE TABLE'.",
+                nameof(createTempTableSql));
+        }
+
+        if (!TempTableNamePattern.IsMatch(data.TableName))
+        {
+            throw new ArgumentException(
+                "data.TableName must be a valid SQL Server temp-table identifier starting with '#' or '##'.",
+                nameof(data));
+        }
+
+        if (data.Rows.Count == 0)
+        {
+            return 0;
+        }
+
+        return await ExecuteWithDeadlockRetryAsync(async () =>
+        {
+            await using var connection = new SqlConnection(ConnectionString);
+            await connection.OpenAsync();
+
+            await using var createCmd = new SqlCommand(createTempTableSql, connection);
+            await createCmd.ExecuteNonQueryAsync();
+
+            using var bulkCopy = new SqlBulkCopy(connection)
+            {
+                DestinationTableName = data.TableName,
+                BulkCopyTimeout = 120
+            };
+            await bulkCopy.WriteToServerAsync(data);
+
+            await using var mergeCmd = new SqlCommand(mergeSql, connection);
+            mergeCmd.CommandTimeout = 120;
+            return await mergeCmd.ExecuteNonQueryAsync();
+        });
+    }
 
     /// <summary>
     /// Clones a SQL parameter to prevent reuse issues across retry attempts.
