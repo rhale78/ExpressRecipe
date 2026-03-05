@@ -325,9 +325,9 @@ public class ProductsController : ControllerBase
                     _logger.LogProductRenamed(id, before.Name, request.Name);
                     await _events.PublishRenamedAsync(id, before.Name, request.Name, userId, ct);
                 }
-                // Barcode change: either value might be null; treat null→value, value→null,
-                // and value→different-value all as a change.
-                if (request.Barcode != null && request.Barcode != (before.Barcode ?? string.Empty))
+                // Barcode change: compare with null-safe equality so all three cases fire the event:
+                //   null → value (setting a barcode), value → null (clearing), value → different value.
+                if (!string.Equals(before.Barcode ?? string.Empty, request.Barcode ?? string.Empty, StringComparison.Ordinal))
                 {
                     changedFields.Add(nameof(product.Barcode));
                     _logger.LogProductBarcodeChanged(id, before.Barcode, request.Barcode);

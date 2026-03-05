@@ -546,7 +546,7 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
                 AND ProcessingAttempts < 3
             ORDER BY CreatedAt ASC";
 
-        return await ExecuteReaderAsync(sql, MapStagedProductWithAI, timeoutSeconds: 120, new SqlParameter("@Limit", limit));
+        return await ExecuteReaderAsync(sql, MapStagedProductWithAI, timeoutSeconds: 120, parameters: new SqlParameter("@Limit", limit));
     }
 
     public async Task UpdateAIVerificationAsync(Guid id, bool passed, string? notes = null)

@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
 @inject ILogger<ImportDashboard> Logger
+@inject IWebHostEnvironment Env
 @implements IDisposable
 
 <PageTitle>Import Dashboard - ExpressRecipe Admin</PageTitle>
@@ -13,6 +14,20 @@
                 <h1>Import Status Dashboard</h1>
                 <p class="subtitle">Live status for all dataset imports — refreshes every 5 seconds</p>
             </div>
+
+            @if (Env.IsDevelopment())
+            {
+                <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert">
+                    <span>⚠️</span>
+                    <span><strong>Development preview:</strong> This page is currently showing simulated data. A real import-status API endpoint has not been implemented yet.</span>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info mb-3" role="alert">
+                    Import status tracking is not yet available. Check back after the import backend has been deployed.
+                </div>
+            }
 
             <div class="d-flex align-items-center gap-3 mb-4">
                 <button class="btn btn-outline-primary" @onclick="RefreshNow" disabled="@_isLoading">
@@ -151,20 +166,31 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadStatusAsync();
-        _refreshTimer = new Timer(async _ =>
+        _refreshTimer = new Timer(_ =>
         {
-            // Guard against overlapping timer callbacks using atomic compare-exchange
-            if (Interlocked.CompareExchange(ref _isRefreshing, 1, 0) != 0) return;
-            try
-            {
-                await LoadStatusAsync();
-                await InvokeAsync(StateHasChanged);
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _isRefreshing, 0);
-            }
+            // Dispatch async work without using an async void timer callback.
+            // Unobserved exceptions are caught inside HandleRefreshTimerTickAsync.
+            _ = HandleRefreshTimerTickAsync();
         }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task HandleRefreshTimerTickAsync()
+    {
+        // Guard against overlapping timer callbacks using atomic compare-exchange
+        if (Interlocked.CompareExchange(ref _isRefreshing, 1, 0) != 0) return;
+        try
+        {
+            await LoadStatusAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error occurred during import dashboard refresh timer callback.");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isRefreshing, 0);
+        }
     }
 
     private async Task RefreshNow()
@@ -178,11 +204,19 @@
 
         try
         {
-            // TODO: Replace with actual API call to ProductService / import status endpoint
-            // e.g. _sessions = await AdminApi.GetImportSessionsAsync();
-            await Task.Delay(200); // simulate network latency
-            _sessions = GetMockSessions();
-            _lastRefreshed = DateTimeOffset.Now;
+            if (Env.IsDevelopment())
+            {
+                // TODO: Replace with actual API call to ProductService / import status endpoint
+                // e.g. _sessions = await AdminApi.GetImportSessionsAsync();
+                await Task.Delay(200); // simulate network latency
+                _sessions = GetMockSessions();
+                _lastRefreshed = DateTimeOffset.Now;
+            }
+            else
+            {
+                // Backend endpoint not yet implemented – show empty state in production
+                _sessions = new List<ImportSessionView>();
+            }
         }
         catch (Exception ex)
         {

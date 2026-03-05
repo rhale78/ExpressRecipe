@@ -1,5 +1,6 @@
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.Core.Messages;
+using ExpressRecipe.Messaging.Core.Options;
 using ExpressRecipe.PriceService.Data;
 using ExpressRecipe.PriceService.Logging;
 using ExpressRecipe.Shared.Messages;
@@ -37,16 +38,19 @@ public sealed class ProductEventSubscriber : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        // Subscribe to each lifecycle event type. Each call registers an independent
-        // consumer queue so events are handled even if multiple PriceService instances run.
-        await _bus.SubscribeAsync<ProductCreatedEvent>(HandleCreatedAsync, cancellationToken: cancellationToken);
-        await _bus.SubscribeAsync<ProductUpdatedEvent>(HandleUpdatedAsync, cancellationToken: cancellationToken);
-        await _bus.SubscribeAsync<ProductDeletedEvent>(HandleDeletedAsync, cancellationToken: cancellationToken);
-        await _bus.SubscribeAsync<ProductApprovedEvent>(HandleApprovedAsync, cancellationToken: cancellationToken);
-        await _bus.SubscribeAsync<ProductRejectedEvent>(HandleRejectedAsync, cancellationToken: cancellationToken);
-        await _bus.SubscribeAsync<ProductRenamedEvent>(HandleRenamedAsync, cancellationToken: cancellationToken);
-        await _bus.SubscribeAsync<ProductBarcodeChangedEvent>(HandleBarcodeChangedAsync, cancellationToken: cancellationToken);
-        await _bus.SubscribeAsync<ProductIngredientsChangedEvent>(HandleIngredientsChangedAsync, cancellationToken: cancellationToken);
+        // ProductService publishes lifecycle events with RoutingMode.Broadcast (the default
+        // for PublishOptions). Subscriptions must also use Broadcast so they bind to the
+        // fanout exchange rather than the work queue exchange.
+        var broadcastOpts = new SubscribeOptions { RoutingMode = RoutingMode.Broadcast };
+
+        await _bus.SubscribeAsync<ProductCreatedEvent>(HandleCreatedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<ProductUpdatedEvent>(HandleUpdatedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<ProductDeletedEvent>(HandleDeletedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<ProductApprovedEvent>(HandleApprovedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<ProductRejectedEvent>(HandleRejectedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<ProductRenamedEvent>(HandleRenamedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<ProductBarcodeChangedEvent>(HandleBarcodeChangedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<ProductIngredientsChangedEvent>(HandleIngredientsChangedAsync, broadcastOpts, cancellationToken);
 
         _logger.LogSubscriberStarted(ProductEventKeys.All);
     }

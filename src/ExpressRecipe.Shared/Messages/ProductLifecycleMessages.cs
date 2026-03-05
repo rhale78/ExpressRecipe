@@ -4,9 +4,9 @@ namespace ExpressRecipe.Shared.Messages;
 
 /// <summary>
 /// Routing key constants for product lifecycle events.
-/// Use these in <see cref="ExpressRecipe.Messaging.Core.Options.SubscribeOptions.RoutingKey"/>
-/// when subscribing, and in <see cref="ExpressRecipe.Messaging.Core.Options.PublishOptions.RoutingKey"/>
-/// when publishing.
+/// Use these when configuring routing via
+/// <see cref="ExpressRecipe.Messaging.Core.Options.SubscribeOptions"/> when subscribing
+/// and <see cref="ExpressRecipe.Messaging.Core.Options.PublishOptions"/> when publishing.
 /// </summary>
 public static class ProductEventKeys
 {

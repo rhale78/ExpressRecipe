@@ -464,8 +464,6 @@ public class PriceRepository : SqlHelper, IPriceRepository
     }
 
     // ── Product lifecycle reactions ──────────────────────────────────────────
-
-    // ── Product lifecycle reactions ──────────────────────────────────────────
     // Note: SqlHelper.ExecuteNonQueryAsync has no CancellationToken overload, so ct
     // is accepted for interface compliance but cannot be forwarded to the base class.
 
