@@ -64,7 +64,6 @@ public static class IngredientColumnHelper
         var (qty, unit, name2) = TextParserHelper.ParseIngredientLine(col);
         ingredient.Quantity = qty;
         ingredient.Unit = unit;
-        ingredient.Name = name2;
         string prep2 = TextParserHelper.ExtractPreparation(ref name2);
         ingredient.Name = name2;
         if (!string.IsNullOrEmpty(prep2)) ingredient.Preparation = prep2;

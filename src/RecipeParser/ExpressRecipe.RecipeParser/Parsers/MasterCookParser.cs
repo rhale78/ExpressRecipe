@@ -80,7 +80,8 @@ public sealed class MasterCookParser : IRecipeParser
         return ing;
     }
 
-    private static ParseResult ParseMxpText(string text, RecipeParseOptions? options)    {
+    private static ParseResult ParseMxpText(string text, RecipeParseOptions? options)
+    {
         var result = new ParseResult { Format = "MasterCook" };
         var errors = new List<ParseError>();
 
