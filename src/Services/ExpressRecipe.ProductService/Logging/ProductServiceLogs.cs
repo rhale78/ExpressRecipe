@@ -115,4 +115,50 @@ public static partial class ProductServiceLogs
         Level = LogLevel.Information,
         Message = "[ImportSession] Session {SessionId} progress: {Processed}/{Total} ({PercentComplete:F1}%) at {RecordsPerSec:F1} rec/sec, ETA: {Eta}")]
     public static partial void LogImportProgress(this ILogger logger, string sessionId, int processed, int total, double percentComplete, double recordsPerSec, string eta);
+
+    // ------------------------------------------------------------------
+    // Product lifecycle event publishing (2019–2025)
+    // ------------------------------------------------------------------
+
+    [LoggerMessage(
+        EventId = 2019,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent] Published {EventType} for routing key '{RoutingKey}'")]
+    public static partial void LogProductEventPublished(this ILogger logger, string routingKey, string eventType);
+
+    [LoggerMessage(
+        EventId = 2020,
+        Level = LogLevel.Warning,
+        Message = "[ProductEvent] Failed to publish {EventType} on '{RoutingKey}': {ErrorMessage}")]
+    public static partial void LogProductEventPublishFailed(this ILogger logger, string routingKey, string eventType, string errorMessage);
+
+    [LoggerMessage(
+        EventId = 2021,
+        Level = LogLevel.Debug,
+        Message = "[ProductEvent] Skipped publishing {EventType} – messaging not enabled")]
+    public static partial void LogProductEventSkipped(this ILogger logger, string eventType);
+
+    [LoggerMessage(
+        EventId = 2022,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent] Product {ProductId} renamed from '{OldName}' to '{NewName}'")]
+    public static partial void LogProductRenamed(this ILogger logger, Guid productId, string oldName, string newName);
+
+    [LoggerMessage(
+        EventId = 2023,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent] Product {ProductId} barcode changed from '{OldBarcode}' to '{NewBarcode}'")]
+    public static partial void LogProductBarcodeChanged(this ILogger logger, Guid productId, string? oldBarcode, string? newBarcode);
+
+    [LoggerMessage(
+        EventId = 2024,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent] Product {ProductId} ingredients changed (+{AddedCount} / -{RemovedCount})")]
+    public static partial void LogProductIngredientsChanged(this ILogger logger, Guid productId, int addedCount, int removedCount);
+
+    [LoggerMessage(
+        EventId = 2025,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent] Product {ProductId} approval status set to '{Status}'")]
+    public static partial void LogProductApprovalChanged(this ILogger logger, Guid productId, string status);
 }

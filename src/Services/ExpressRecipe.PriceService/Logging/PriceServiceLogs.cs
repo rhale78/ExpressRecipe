@@ -43,4 +43,62 @@ public static partial class PriceServiceLogs
         Level = LogLevel.Warning,
         Message = "[PriceSaga] Saga failed for {CorrelationId}: {ErrorMessage}")]
     public static partial void LogSagaFailed(this ILogger logger, string correlationId, string errorMessage);
+
+    // ------------------------------------------------------------------
+    // Product lifecycle event subscriber (4007–4015)
+    // ------------------------------------------------------------------
+
+    [LoggerMessage(
+        EventId = 4007,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent→Price] Received {EventType} for product {ProductId}")]
+    public static partial void LogProductEventReceived(this ILogger logger, string eventType, Guid productId);
+
+    [LoggerMessage(
+        EventId = 4008,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent→Price] Product {ProductId} deleted – deactivated {Count} price rows")]
+    public static partial void LogPricesDeactivated(this ILogger logger, Guid productId, int count);
+
+    [LoggerMessage(
+        EventId = 4009,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent→Price] Product {ProductId} renamed – updated {Count} price rows with new name '{NewName}'")]
+    public static partial void LogPriceProductNameUpdated(this ILogger logger, Guid productId, int count, string newName);
+
+    [LoggerMessage(
+        EventId = 4010,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent→Price] Product {ProductId} barcode changed – updated {Count} price rows with new UPC '{NewUpc}'")]
+    public static partial void LogPriceProductUpcUpdated(this ILogger logger, Guid productId, int count, string? newUpc);
+
+    [LoggerMessage(
+        EventId = 4011,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent→Price] Product {ProductId} created/updated – refreshed lookup cache for barcode '{Barcode}'")]
+    public static partial void LogProductCacheRefreshed(this ILogger logger, Guid productId, string? barcode);
+
+    [LoggerMessage(
+        EventId = 4012,
+        Level = LogLevel.Warning,
+        Message = "[ProductEvent→Price] Failed to handle {EventType} for product {ProductId}: {ErrorMessage}")]
+    public static partial void LogProductEventHandlerFailed(this ILogger logger, string eventType, Guid productId, string errorMessage);
+
+    [LoggerMessage(
+        EventId = 4013,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent→Price] Subscriber started – listening on routing key '{RoutingKey}'")]
+    public static partial void LogSubscriberStarted(this ILogger logger, string routingKey);
+
+    [LoggerMessage(
+        EventId = 4014,
+        Level = LogLevel.Warning,
+        Message = "[ProductEvent→Price] Subscriber stopped unexpectedly: {ErrorMessage}")]
+    public static partial void LogSubscriberStopped(this ILogger logger, string errorMessage);
+
+    [LoggerMessage(
+        EventId = 4015,
+        Level = LogLevel.Information,
+        Message = "[ProductEvent→Price] Product {ProductId} approved – price lookups now active for barcode '{Barcode}'")]
+    public static partial void LogProductApprovedCacheReady(this ILogger logger, Guid productId, string? barcode);
 }

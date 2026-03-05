@@ -463,6 +463,50 @@ public class PriceRepository : SqlHelper, IPriceRepository
         return await ExecuteScalarAsync<int>(sql);
     }
 
+    // ── Product lifecycle reactions ──────────────────────────────────────────
+
+    // ── Product lifecycle reactions ──────────────────────────────────────────
+    // Note: SqlHelper.ExecuteNonQueryAsync has no CancellationToken overload, so ct
+    // is accepted for interface compliance but cannot be forwarded to the base class.
+
+    public async Task<int> DeactivatePricesByProductIdAsync(Guid productId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE ProductPrice
+            SET    IsActive = 0, UpdatedAt = GETUTCDATE()
+            WHERE  ProductId = @ProductId AND IsActive = 1";
+
+        return await ExecuteNonQueryAsync(sql, CreateParameter("@ProductId", productId));
+    }
+
+    public async Task<int> UpdateProductNameOnPricesAsync(Guid productId, string newName, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+
+        const string sql = @"
+            UPDATE ProductPrice
+            SET    ProductName = @NewName, UpdatedAt = GETUTCDATE()
+            WHERE  ProductId = @ProductId";
+
+        return await ExecuteNonQueryAsync(
+            sql,
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@NewName", newName));
+    }
+
+    public async Task<int> UpdateProductUpcOnPricesAsync(Guid productId, string? newUpc, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE ProductPrice
+            SET    Upc = @NewUpc, UpdatedAt = GETUTCDATE()
+            WHERE  ProductId = @ProductId";
+
+        return await ExecuteNonQueryAsync(
+            sql,
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@NewUpc", (object?)newUpc ?? DBNull.Value));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static StoreDto MapStore(IDataRecord r) => new StoreDto

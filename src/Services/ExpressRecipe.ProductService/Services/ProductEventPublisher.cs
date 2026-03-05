@@ -1,7 +1,6 @@
 using ExpressRecipe.Messaging.Core.Abstractions;
-using ExpressRecipe.Messaging.Core.Options;
 using ExpressRecipe.ProductService.Logging;
-using ExpressRecipe.ProductService.Messages;
+using ExpressRecipe.Shared.Messages;
 
 namespace ExpressRecipe.ProductService.Services;
 
@@ -46,10 +45,6 @@ public sealed class ProductEventPublisher : IProductEventPublisher
 {
     private readonly IMessageBus _bus;
     private readonly ILogger<ProductEventPublisher> _logger;
-
-    // Shared publish options that set the routing key per-call
-    private static PublishOptions Opts(string routingKey) =>
-        new() { RoutingKey = routingKey };
 
     public ProductEventPublisher(IMessageBus bus, ILogger<ProductEventPublisher> logger)
     {
@@ -118,18 +113,19 @@ public sealed class ProductEventPublisher : IProductEventPublisher
     // Helpers
     // -----------------------------------------------------------------------
 
-    private async Task SafePublishAsync<TMsg>(TMsg msg, string routingKey,
+    private async Task SafePublishAsync<TMsg>(TMsg msg, string eventKey,
         CancellationToken ct) where TMsg : IMessage
     {
         try
         {
-            await _bus.PublishAsync(msg, Opts(routingKey), ct).ConfigureAwait(false);
-            _logger.LogProductEventPublished(routingKey, typeof(TMsg).Name);
+            // Each lifecycle event type has its own fanout exchange; no custom routing key needed.
+            await _bus.PublishAsync(msg, cancellationToken: ct).ConfigureAwait(false);
+            _logger.LogProductEventPublished(eventKey, typeof(TMsg).Name);
         }
         catch (Exception ex)
         {
             // Non-fatal: log and continue so the HTTP request is not disrupted
-            _logger.LogProductEventPublishFailed(routingKey, typeof(TMsg).Name, ex.Message);
+            _logger.LogProductEventPublishFailed(eventKey, typeof(TMsg).Name, ex.Message);
         }
     }
 }

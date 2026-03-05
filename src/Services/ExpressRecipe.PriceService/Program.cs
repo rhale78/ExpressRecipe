@@ -137,6 +137,9 @@ var messagingEnabled = builder.Configuration.GetValue<bool>("Messaging:Enabled",
 if (messagingEnabled)
 {
     builder.AddRabbitMqMessaging("messaging");
+
+    // Subscribe to ProductService lifecycle events so price data stays consistent
+    builder.Services.AddHostedService<ProductEventSubscriber>();
 }
 
 // Add CORS

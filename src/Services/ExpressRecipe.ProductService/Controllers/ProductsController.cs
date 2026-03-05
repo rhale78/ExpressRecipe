@@ -1,5 +1,8 @@
 using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.ProductService.Logging;
+using ExpressRecipe.ProductService.Services;
+using ExpressRecipe.Shared.Messages;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,19 +20,22 @@ public class ProductsController : ControllerBase
     private readonly IAllergenRepository _allergenRepository;
     private readonly HybridCacheService _cache;
     private readonly ILogger<ProductsController> _logger;
+    private readonly IProductEventPublisher _events;
 
     public ProductsController(
         IProductRepository productRepository,
         IIngredientRepository ingredientRepository,
         IAllergenRepository allergenRepository,
         HybridCacheService cache,
-        ILogger<ProductsController> logger)
+        ILogger<ProductsController> logger,
+        IProductEventPublisher events)
     {
         _productRepository = productRepository;
         _ingredientRepository = ingredientRepository;
         _allergenRepository = allergenRepository;
         _cache = cache;
         _logger = logger;
+        _events = events;
     }
 
     private Guid? GetCurrentUserId()
@@ -222,6 +228,17 @@ public class ProductsController : ControllerBase
 
             _logger.LogInformation("Product {ProductId} created by user {UserId}", productId, userId);
 
+            // Publish lifecycle event (non-blocking, best-effort)
+            await _events.PublishCreatedAsync(
+                productId,
+                product?.Name ?? request.Name ?? string.Empty,
+                product?.Brand ?? request.Brand,
+                product?.Barcode ?? request.Barcode,
+                product?.Category ?? request.Category,
+                product?.ApprovalStatus ?? "Pending",
+                userId,
+                HttpContext.RequestAborted);
+
             return CreatedAtAction(nameof(GetById), new { id = productId }, product);
         }
         catch (Exception ex)
@@ -244,6 +261,13 @@ public class ProductsController : ControllerBase
             if (userId == null)
             {
                 return Unauthorized();
+            }
+
+            // Snapshot the product BEFORE updating so we can detect renames / barcode changes
+            var before = await _productRepository.GetByIdAsync(id);
+            if (before == null)
+            {
+                return NotFound(new { message = "Product not found" });
             }
 
             var success = await _productRepository.UpdateAsync(id, request, userId.Value);
@@ -271,6 +295,36 @@ public class ProductsController : ControllerBase
             }
 
             _logger.LogInformation("Product {ProductId} updated by user {UserId}", id, userId);
+
+            // Detect and publish fine-grained lifecycle events
+            var ct = HttpContext.RequestAborted;
+            var changedFields = new List<string>();
+            if (product != null)
+            {
+                // Name change: request.Name must be non-empty and different from the stored name
+                if (!string.IsNullOrEmpty(request.Name) && request.Name != before.Name)
+                {
+                    changedFields.Add(nameof(product.Name));
+                    _logger.LogProductRenamed(id, before.Name, request.Name);
+                    await _events.PublishRenamedAsync(id, before.Name, request.Name, userId, ct);
+                }
+                // Barcode change: either value might be null; treat null→value, value→null,
+                // and value→different-value all as a change.
+                if (request.Barcode != null && request.Barcode != (before.Barcode ?? string.Empty))
+                {
+                    changedFields.Add(nameof(product.Barcode));
+                    _logger.LogProductBarcodeChanged(id, before.Barcode, request.Barcode);
+                    await _events.PublishBarcodeChangedAsync(id, before.Barcode, request.Barcode, userId, ct);
+                }
+                if (request.Brand    != null && request.Brand    != before.Brand)    changedFields.Add(nameof(product.Brand));
+                if (request.Category != null && request.Category != before.Category) changedFields.Add(nameof(product.Category));
+
+                await _events.PublishUpdatedAsync(
+                    id,
+                    product.Name, product.Brand, product.Barcode,
+                    product.Category, product.ApprovalStatus, userId,
+                    changedFields, ct);
+            }
 
             return Ok(product);
         }
@@ -319,6 +373,9 @@ public class ProductsController : ControllerBase
 
             _logger.LogInformation("Product {ProductId} deleted by user {UserId}", id, userId);
 
+            // Notify other services that this product is gone
+            await _events.PublishDeletedAsync(id, product?.Barcode, userId, HttpContext.RequestAborted);
+
             return NoContent();
         }
         catch (Exception ex)
@@ -360,6 +417,15 @@ public class ProductsController : ControllerBase
                 request.Approve ? "approved" : "rejected",
                 userId);
 
+            // Fetch name for the event payload (best-effort)
+            var approvedProduct = await _productRepository.GetByIdAsync(id);
+            var ct = HttpContext.RequestAborted;
+            _logger.LogProductApprovalChanged(id, request.Approve ? "Approved" : "Rejected");
+            if (request.Approve)
+                await _events.PublishApprovedAsync(id, approvedProduct?.Name ?? string.Empty, approvedProduct?.Barcode, userId.Value, ct);
+            else
+                await _events.PublishRejectedAsync(id, approvedProduct?.Name ?? string.Empty, userId.Value, request.RejectionReason, ct);
+
             return NoContent();
         }
         catch (Exception ex)
@@ -393,6 +459,13 @@ public class ProductsController : ControllerBase
             var ingredientId = await _ingredientRepository.AddProductIngredientAsync(id, request, userId.Value);
 
             _logger.LogInformation("Ingredient added to product {ProductId}", id);
+            _logger.LogProductIngredientsChanged(id, addedCount: 1, removedCount: 0);
+            await _events.PublishIngredientsChangedAsync(
+                id, productName: null,
+                added: new[] { request.IngredientId },
+                removed: Array.Empty<Guid>(),
+                changedBy: userId,
+                ct: HttpContext.RequestAborted);
 
             return CreatedAtAction(nameof(GetById), new { id }, new { ingredientId });
         }
@@ -426,6 +499,13 @@ public class ProductsController : ControllerBase
             }
 
             _logger.LogInformation("Ingredient {IngredientId} removed from product {ProductId}", ingredientId, id);
+            _logger.LogProductIngredientsChanged(id, addedCount: 0, removedCount: 1);
+            await _events.PublishIngredientsChangedAsync(
+                id, productName: null,
+                added: Array.Empty<Guid>(),
+                removed: new[] { ingredientId },
+                changedBy: userId,
+                ct: HttpContext.RequestAborted);
 
             return NoContent();
         }

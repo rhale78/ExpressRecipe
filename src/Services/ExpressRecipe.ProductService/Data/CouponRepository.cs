@@ -5,6 +5,15 @@ using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.ProductService.Data;
 
+/// <summary>
+/// Repository for the <c>Coupon</c> master table, which is owned by ProductService.
+/// <para>
+/// <b>Ownership note:</b> The <c>UserCoupon</c> (clipped/saved coupon relationship) is
+/// owned by <b>UserService</b> (migration 016).  Methods that touch <c>UserCoupon</c>
+/// (GetUserCouponsAsync, ClipCouponAsync, UseCouponAsync) should be migrated to a
+/// UserService client or removed from this repository in a future refactor.
+/// </para>
+/// </summary>
 public interface ICouponRepository
 {
     Task<CouponDto?> GetByIdAsync(Guid id);

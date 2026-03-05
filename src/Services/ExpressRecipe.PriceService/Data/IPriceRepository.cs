@@ -36,6 +36,23 @@ public interface IPriceRepository
 
     // Price Comparisons
     Task<List<StorePriceComparisonDto>> ComparePricesAsync(List<Guid> productIds, List<Guid> storeIds);
+
+    // Product lifecycle reactions (called by ProductEventSubscriber)
+
+    /// <summary>
+    /// Mark all price rows for the given product as inactive when the product is deleted.
+    /// </summary>
+    Task<int> DeactivatePricesByProductIdAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Update the denormalised ProductName on ProductPrice rows when a product is renamed.
+    /// </summary>
+    Task<int> UpdateProductNameOnPricesAsync(Guid productId, string newName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Update the denormalised Upc on ProductPrice rows when a product's barcode changes.
+    /// </summary>
+    Task<int> UpdateProductUpcOnPricesAsync(Guid productId, string? newUpc, CancellationToken ct = default);
 }
 
 public class StoreDto

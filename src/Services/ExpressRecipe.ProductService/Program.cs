@@ -150,6 +150,14 @@ if (messagingEnabled)
     builder.Services.AddSqlSagaRepository<ProductProcessingSagaState>(connectionString, "ProductProcessingSagaState");
     builder.Services.AddSqlSagaRepository<ImportSessionSagaState>(connectionString, "ImportSessionSagaState");
     builder.Services.AddSagaWorkflow(ProductProcessingWorkflow.Build());
+
+    // Real publisher – uses the IMessageBus registered above
+    builder.Services.AddSingleton<IProductEventPublisher, ProductEventPublisher>();
+}
+else
+{
+    // No-op publisher so the controller DI never fails
+    builder.Services.AddSingleton<IProductEventPublisher, NullProductEventPublisher>();
 }
 
 // Add controllers
