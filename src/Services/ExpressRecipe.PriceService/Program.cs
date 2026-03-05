@@ -1,5 +1,6 @@
 using System.Text;
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.PriceService.Data;
 using ExpressRecipe.PriceService.Services;
 using ExpressRecipe.PriceService.Workers;
@@ -127,6 +128,16 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PriceDataImportWor
 
 // Add controllers
 builder.Services.AddControllers();
+
+// Register RabbitMQ messaging (IMessageBus) - conditional based on configuration
+var messagingEnabled = builder.Configuration.GetValue<bool>("Messaging:Enabled", false)
+    || !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"))
+    || !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+}
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);

@@ -1,5 +1,8 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
+using ExpressRecipe.Messaging.Saga.Extensions;
 using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.ProductService.Saga;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
@@ -134,6 +137,20 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 
 // Register event publisher
 builder.Services.AddSingleton<EventPublisher>();
+
+// Register RabbitMQ messaging (IMessageBus) - conditional based on configuration
+var messagingEnabled = builder.Configuration.GetValue<bool>("Messaging:Enabled", false)
+    || !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"))
+    || !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+
+    builder.Services.AddSqlSagaRepository<ProductProcessingSagaState>(connectionString, "ProductProcessingSagaState");
+    builder.Services.AddSqlSagaRepository<ImportSessionSagaState>(connectionString, "ImportSessionSagaState");
+    builder.Services.AddSagaWorkflow(ProductProcessingWorkflow.Build());
+}
 
 // Add controllers
 builder.Services.AddControllers();

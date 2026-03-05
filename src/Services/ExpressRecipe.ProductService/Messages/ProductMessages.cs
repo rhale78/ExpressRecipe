@@ -67,3 +67,8 @@ public record RequestProductAIVerification(
 public record RequestProductEnrichment(
     string CorrelationId,
     Guid StagingId) : IMessage;
+
+// Command: request product publish (write enriched product to Product table)
+public record RequestProductPublish(
+    string CorrelationId,
+    Guid StagingId) : IMessage;
