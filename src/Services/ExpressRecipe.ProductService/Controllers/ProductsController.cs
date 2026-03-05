@@ -131,21 +131,26 @@ public class ProductsController : ControllerBase
                 return NotFound(new { message = "Product not found" });
             }
 
-            // Load ingredients and allergens (cache these too)
+            // Load ingredients and allergens in parallel (both are independently cached)
             var ingredientsCacheKey = CacheKeys.FormatKey("product:ingredients:{0}", id);
             var allergensCacheKey = CacheKeys.FormatKey("product:allergens:{0}", id);
 
-            product.Ingredients = await _cache.GetOrSetAsync(
+            var ingredientsTask = _cache.GetOrSetAsync(
                 ingredientsCacheKey,
                 ct => new ValueTask<List<ProductIngredientDto>>(_ingredientRepository.GetProductIngredientsAsync(id)),
                 expiration: TimeSpan.FromHours(1)
             );
 
-            product.Allergens = await _cache.GetOrSetAsync(
+            var allergensTask = _cache.GetOrSetAsync(
                 allergensCacheKey,
                 ct => new ValueTask<List<string>>(_allergenRepository.GetProductAllergensAsync(id)),
                 expiration: TimeSpan.FromHours(1)
             );
+
+            await Task.WhenAll(ingredientsTask, allergensTask);
+
+            product.Ingredients = await ingredientsTask;
+            product.Allergens   = await allergensTask;
 
             return Ok(product);
         }
@@ -223,7 +228,12 @@ public class ProductsController : ControllerBase
             var product = await _productRepository.GetByIdAsync(productId);
             if (product != null)
             {
-                product.Ingredients = await _ingredientRepository.GetProductIngredientsAsync(productId);
+                // Load ingredients and allergens in parallel for the response
+                var ingredientsTask = _ingredientRepository.GetProductIngredientsAsync(productId);
+                var allergensTask   = _allergenRepository.GetProductAllergensAsync(productId);
+                await Task.WhenAll(ingredientsTask, allergensTask);
+                product.Ingredients = await ingredientsTask;
+                product.Allergens   = await allergensTask;
             }
 
             _logger.LogInformation("Product {ProductId} created by user {UserId}", productId, userId);
@@ -277,10 +287,12 @@ public class ProductsController : ControllerBase
                 return NotFound(new { message = "Product not found" });
             }
 
-            // Invalidate all caches for this product
-            await _cache.RemoveAsync(CacheKeys.FormatKey(CacheKeys.ProductById, id));
-            await _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", id));
-            await _cache.RemoveAsync(CacheKeys.FormatKey("product:allergens:{0}", id));
+            // Invalidate all caches for this product in parallel
+            await Task.WhenAll(
+                _cache.RemoveAsync(CacheKeys.FormatKey(CacheKeys.ProductById, id)),
+                _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", id)),
+                _cache.RemoveAsync(CacheKeys.FormatKey("product:allergens:{0}", id))
+            );
 
             // Also invalidate barcode cache if barcode exists
             var product = await _productRepository.GetByIdAsync(id);
@@ -291,7 +303,12 @@ public class ProductsController : ControllerBase
 
             if (product != null)
             {
-                product.Ingredients = await _ingredientRepository.GetProductIngredientsAsync(id);
+                // Load ingredients and allergens in parallel for the response
+                var ingredientsTask = _ingredientRepository.GetProductIngredientsAsync(id);
+                var allergensTask   = _allergenRepository.GetProductAllergensAsync(id);
+                await Task.WhenAll(ingredientsTask, allergensTask);
+                product.Ingredients = await ingredientsTask;
+                product.Allergens   = await allergensTask;
             }
 
             _logger.LogInformation("Product {ProductId} updated by user {UserId}", id, userId);
@@ -360,16 +377,17 @@ public class ProductsController : ControllerBase
                 return NotFound(new { message = "Product not found" });
             }
 
-            // Invalidate all caches for this product
-            await _cache.RemoveAsync(CacheKeys.FormatKey(CacheKeys.ProductById, id));
-            await _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", id));
-            await _cache.RemoveAsync(CacheKeys.FormatKey("product:allergens:{0}", id));
-
-            // Invalidate barcode cache
-            if (product?.Barcode != null)
+            // Invalidate all caches for this product in parallel
+            var cacheInvalidations = new List<Task>
             {
-                await _cache.RemoveAsync(CacheKeys.FormatKey("product:barcode:{0}", product.Barcode));
-            }
+                _cache.RemoveAsync(CacheKeys.FormatKey(CacheKeys.ProductById, id)),
+                _cache.RemoveAsync(CacheKeys.FormatKey("product:ingredients:{0}", id)),
+                _cache.RemoveAsync(CacheKeys.FormatKey("product:allergens:{0}", id))
+            };
+            if (product?.Barcode != null)
+                cacheInvalidations.Add(_cache.RemoveAsync(CacheKeys.FormatKey("product:barcode:{0}", product.Barcode)));
+
+            await Task.WhenAll(cacheInvalidations);
 
             _logger.LogInformation("Product {ProductId} deleted by user {UserId}", id, userId);
 

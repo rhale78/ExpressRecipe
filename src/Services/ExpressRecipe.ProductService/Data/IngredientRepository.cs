@@ -145,18 +145,34 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
             },
             CreateParameter("@ProductId", productId));
 
-        // Now we need to enrich with Ingredient names from the Microservice
-        var ingredientIds = productIngredients.Select(pi => pi.IngredientId).Distinct().ToList();
-        var enrichedResults = new List<ProductIngredientDto>();
+        // Enrich all ingredients in parallel by batching calls to the Ingredient microservice
+        var ingredientIds = productIngredients
+            .Select(pi => pi.IngredientId)
+            .Distinct()
+            .ToList();
 
+        // Fetch all unique ingredient details in parallel
+        var ingredientTasks = ingredientIds
+            .Select(ingredientId => _ingredientClient.GetIngredientAsync(ingredientId))
+            .ToArray();
+
+        var ingredientResults = await Task.WhenAll(ingredientTasks);
+
+        // Build lookup dictionary from results
+        var ingredientMap = ingredientIds
+            .Zip(ingredientResults, (id, dto) => (id, dto))
+            .Where(x => x.dto != null)
+            .ToDictionary(x => x.id, x => x.dto!.Name);
+
+        // Apply names from the lookup
         foreach (var pi in productIngredients)
         {
-            var ingredient = await _ingredientClient.GetIngredientAsync(pi.IngredientId);
-            pi.IngredientName = ingredient?.Name ?? "Unknown Ingredient";
-            enrichedResults.Add(pi);
+            pi.IngredientName = ingredientMap.TryGetValue(pi.IngredientId, out var name)
+                ? name
+                : "Unknown Ingredient";
         }
 
-        return enrichedResults;
+        return productIngredients;
     }
 
     public async Task<Guid> AddProductIngredientAsync(Guid productId, AddProductIngredientRequest request, Guid? createdBy = null)
