@@ -46,9 +46,16 @@ public class ProductAIVerificationService : IProductAIVerificationService
             // Check for obviously broken encodings
             if (text.Contains("ï¿½") || text.Contains("â€"))
                 issues.Add("Ingredients text contains encoding artifacts");
-            // Check if it's just a list of numbers (corrupted)
-            if (text.Length > 10 && text.All(c => char.IsDigit(c) || c == ' ' || c == ','))
-                issues.Add("Ingredients text appears to be numeric only (corrupted)");
+            // Check if the text has a suspiciously low proportion of alphabetic characters
+            // (less than 20% alpha chars for texts longer than 20 chars suggests corruption)
+            // Note: E-numbers like "E100, E200" do have digits but will have letters too ("E")
+            if (text.Length > 20)
+            {
+                var alphaCount = text.Count(char.IsLetter);
+                var alphaRatio = (double)alphaCount / text.Length;
+                if (alphaRatio < 0.20)
+                    issues.Add("Ingredients text has very few alphabetic characters (possibly corrupted)");
+            }
         }
 
         // Check ExternalId is present

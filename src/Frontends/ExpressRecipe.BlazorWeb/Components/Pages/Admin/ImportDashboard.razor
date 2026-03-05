@@ -144,7 +144,7 @@
 
     private List<ImportSessionView> _sessions = new();
     private bool _isLoading;
-    private bool _isRefreshing;
+    private int _isRefreshing; // 0 = idle, 1 = refreshing (atomic via Interlocked)
     private DateTimeOffset? _lastRefreshed;
     private Timer? _refreshTimer;
 
@@ -153,9 +153,8 @@
         await LoadStatusAsync();
         _refreshTimer = new Timer(async _ =>
         {
-            // Guard against overlapping timer callbacks
-            if (_isRefreshing) return;
-            _isRefreshing = true;
+            // Guard against overlapping timer callbacks using atomic compare-exchange
+            if (Interlocked.CompareExchange(ref _isRefreshing, 1, 0) != 0) return;
             try
             {
                 await LoadStatusAsync();
@@ -163,7 +162,7 @@
             }
             finally
             {
-                _isRefreshing = false;
+                Interlocked.Exchange(ref _isRefreshing, 0);
             }
         }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }

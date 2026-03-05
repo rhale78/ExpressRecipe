@@ -573,7 +573,7 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
         // Use BulkInsertViaTvpAsync for efficient single-statement bulk update
         const string tempColumns = "Id UNIQUEIDENTIFIER NOT NULL, MaskToAdd BIGINT NOT NULL";
 
-        static DataTable BuildDataTable(IReadOnlyList<(Guid Id, long MaskToAdd)> items)
+        static DataTable BuildSagaMaskDataTable(IReadOnlyList<(Guid Id, long MaskToAdd)> items)
         {
             var dt = new DataTable();
             dt.Columns.Add("Id", typeof(Guid));
@@ -594,7 +594,7 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
         await BulkInsertViaTvpAsync(
             updateList,
             tempColumns,
-            BuildDataTable,
+            BuildSagaMaskDataTable,
             "#TmpSagaMasks",
             updateSql);
     }

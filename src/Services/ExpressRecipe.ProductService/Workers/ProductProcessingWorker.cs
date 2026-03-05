@@ -80,6 +80,7 @@ public class ProductProcessingWorker : BackgroundService
                 if (pendingCount > 0)
                 {
                     _logger.LogInformation("Found {Count} pending products to process", pendingCount);
+                    var batchStopwatch = Stopwatch.StartNew();
 
                     // Run AI verification on pending products before batch processing
                     var verificationService = scope.ServiceProvider.GetService<IProductAIVerificationService>();
@@ -137,6 +138,10 @@ public class ProductProcessingWorker : BackgroundService
                         productImageRepo,
                         stoppingToken);
 
+                    var totalProcessed = result.SuccessCount + result.FailureCount;
+                    var elapsedSeconds = batchStopwatch.Elapsed.TotalSeconds;
+                    var recordsPerSec = elapsedSeconds > 0 ? totalProcessed / elapsedSeconds : 0.0;
+
                     _logger.LogInformation(
                         "Batch processing complete: {Success} succeeded, {Failed} failed",
                         result.SuccessCount,
@@ -148,15 +153,19 @@ public class ProductProcessingWorker : BackgroundService
                     {
                         try
                         {
+                            var remaining = recordsPerSec > 0
+                                ? TimeSpan.FromSeconds((pendingCount - totalProcessed) / recordsPerSec)
+                                : (TimeSpan?)null;
+
                             await messageBus.PublishAsync(new ImportProgressUpdated(
                                 ImportSessionId: ProcessingSessionId,
                                 ServiceName: "ProductService",
                                 TotalRecords: pendingCount,
-                                ProcessedRecords: result.SuccessCount + result.FailureCount,
+                                ProcessedRecords: totalProcessed,
                                 SuccessCount: result.SuccessCount,
                                 FailureCount: result.FailureCount,
-                                RecordsPerSecond: 0,
-                                EstimatedTimeRemaining: null,
+                                RecordsPerSecond: recordsPerSec,
+                                EstimatedTimeRemaining: remaining,
                                 Status: "Completed",
                                 UpdatedAt: DateTimeOffset.UtcNow), cancellationToken: stoppingToken);
                         }

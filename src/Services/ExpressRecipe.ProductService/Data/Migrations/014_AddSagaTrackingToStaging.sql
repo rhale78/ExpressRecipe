@@ -4,8 +4,10 @@
 
 ALTER TABLE ProductStaging
     ADD SagaCorrelationId NVARCHAR(100) NULL,
+        -- Stores the string name of SagaStatus enum: 'Pending', 'Running', 'Completed', 'Failed', 'Compensated'
+        -- This is a denormalized display column; full saga state is in ProductProcessingSagaState table
         SagaStatus NVARCHAR(50) NULL DEFAULT 'Pending',
-        SagaCurrentMask BIGINT NULL DEFAULT 0,
+        SagaCurrentMask BIGINT NOT NULL DEFAULT 0,
         SagaStartedAt DATETIME2 NULL,
         SagaCompletedAt DATETIME2 NULL,
         AIVerificationPassed BIT NULL,

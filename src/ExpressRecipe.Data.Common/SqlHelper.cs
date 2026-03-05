@@ -476,6 +476,8 @@ public abstract class SqlHelper
             await using var connection = new SqlConnection(ConnectionString);
             await connection.OpenAsync();
 
+            // tempTableName is safe to interpolate: TempTableNamePattern validation above
+            // restricts it to ^##?[A-Za-z_][A-Za-z0-9_]*$ — no injection chars possible.
             await using var createCmd = new SqlCommand(
                 $"CREATE TABLE {tempTableName} ({tempTableColumnsSql});",
                 connection);
