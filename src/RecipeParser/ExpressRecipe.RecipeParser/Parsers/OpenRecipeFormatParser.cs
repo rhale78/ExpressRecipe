@@ -4,10 +4,6 @@ using YamlDotNet.RepresentationModel;
 
 namespace ExpressRecipe.RecipeParser.Parsers;
 
-/// <summary>
-/// Parses OpenRecipeFormat YAML files - a community standard for recipe exchange.
-/// See: https://openrecipeformat.readthedocs.io
-/// </summary>
 public sealed class OpenRecipeFormatParser : IRecipeParser
 {
     public string FormatName => "OpenRecipeFormat";
@@ -59,45 +55,85 @@ public sealed class OpenRecipeFormatParser : IRecipeParser
         var recipe = new ParsedRecipe { Format = "OpenRecipeFormat" };
 
         recipe.Title = GetScalar(mapping, "name", "title") ?? "";
-        recipe.Description = GetScalar(mapping, "description", "notes");
+        recipe.Description = GetScalar(mapping, "description");
         recipe.Source = GetScalar(mapping, "source_url", "source");
         recipe.Author = GetScalar(mapping, "author");
         recipe.Url = GetScalar(mapping, "source_url", "url");
-        recipe.Yield = GetScalar(mapping, "servings", "yield");
         recipe.PrepTime = GetScalar(mapping, "prep_time");
         recipe.CookTime = GetScalar(mapping, "cook_time");
         recipe.TotalTime = GetScalar(mapping, "total_time");
-        recipe.Category = GetScalar(mapping, "categories", "category");
         recipe.Cuisine = GetScalar(mapping, "cuisine");
 
-        if (mapping.Children.TryGetValue(new YamlScalarNode("tags"), out var tagsNode) && tagsNode is YamlSequenceNode tagSeq)
-            recipe.Tags = tagSeq.OfType<YamlScalarNode>().Select(n => n.Value ?? "").Where(v => v != "").ToList();
+        // notes_from_file + notes
+        var notesFromFile = GetScalar(mapping, "notes_from_file");
+        var notes = GetScalar(mapping, "notes");
+        if (notesFromFile != null && notes != null)
+            recipe.Description = (recipe.Description != null ? recipe.Description + "\n" : "") + notes + "\n" + notesFromFile;
+        else if (notesFromFile != null)
+            recipe.Description = (recipe.Description != null ? recipe.Description + "\n" : "") + notesFromFile;
+        else if (notes != null && recipe.Description == null)
+            recipe.Description = notes;
 
-        // Ingredients: list of strings or maps with {name, amount, unit}
-        YamlNode? ingsNode = null;
-        mapping.Children.TryGetValue(new YamlScalarNode("ingredients"), out ingsNode);
-        if (ingsNode is YamlSequenceNode ingsSeq)
+        // yields: scalar or list [{amount, unit}]
+        if (mapping.Children.TryGetValue(new YamlScalarNode("yields"), out var yieldsNode))
         {
-            foreach (var ingNode in ingsSeq)
+            if (yieldsNode is YamlScalarNode ys)
+                recipe.Yield = ys.Value;
+            else if (yieldsNode is YamlSequenceNode ySeq)
             {
-                if (ingNode is YamlScalarNode scalar)
+                var parts = new List<string>();
+                foreach (var y in ySeq)
                 {
-                    var line = scalar.Value ?? "";
-                    var (qty, unit, name) = TextParserHelper.ParseIngredientLine(line);
-                    string n = name; string p = TextParserHelper.ExtractPreparation(ref n);
-                    recipe.Ingredients.Add(new ParsedIngredient { Quantity = qty, Unit = unit, Name = n, Preparation = string.IsNullOrEmpty(p) ? null : p });
-                }
-                else if (ingNode is YamlMappingNode ingMap)
-                {
-                    recipe.Ingredients.Add(new ParsedIngredient
+                    if (y is YamlMappingNode ym)
                     {
-                        Quantity = GetScalar(ingMap, "amount", "quantity", "qty"),
-                        Unit = GetScalar(ingMap, "unit", "units"),
-                        Name = GetScalar(ingMap, "name", "ingredient") ?? "",
-                        Preparation = GetScalar(ingMap, "preparation", "notes")
-                    });
+                        var amount = GetScalar(ym, "amount");
+                        var unit = GetScalar(ym, "unit");
+                        if (amount != null) parts.Add(unit != null ? $"{amount} {unit}" : amount);
+                    }
+                    else if (y is YamlScalarNode ys2) parts.Add(ys2.Value ?? "");
                 }
+                recipe.Yield = string.Join(", ", parts.Where(p => p != ""));
             }
+        }
+
+        if (recipe.Yield == null)
+            recipe.Yield = GetScalar(mapping, "servings", "yield");
+
+        // oven_temp: scalar or {amount, unit}
+        if (mapping.Children.TryGetValue(new YamlScalarNode("oven_temp"), out var ovenNode))
+        {
+            string? ovenStr = null;
+            if (ovenNode is YamlScalarNode os) ovenStr = os.Value;
+            else if (ovenNode is YamlMappingNode om)
+            {
+                var amount = GetScalar(om, "amount");
+                var unit = GetScalar(om, "unit");
+                ovenStr = amount != null ? (unit != null ? $"{amount} {unit}" : amount) : null;
+            }
+            if (ovenStr != null)
+            {
+                recipe.Tags.Add($"oven_temp:{ovenStr}");
+            }
+        }
+
+        // categories: scalar or list
+        if (mapping.Children.TryGetValue(new YamlScalarNode("categories"), out var catsNode))
+        {
+            if (catsNode is YamlScalarNode cs) recipe.Category = cs.Value;
+            else if (catsNode is YamlSequenceNode cSeq)
+                recipe.Category = string.Join(", ", cSeq.OfType<YamlScalarNode>().Select(n => n.Value ?? "").Where(v => v != ""));
+        }
+        else
+            recipe.Category = GetScalar(mapping, "category");
+
+        // tags
+        if (mapping.Children.TryGetValue(new YamlScalarNode("tags"), out var tagsNode) && tagsNode is YamlSequenceNode tagSeq)
+            recipe.Tags.AddRange(tagSeq.OfType<YamlScalarNode>().Select(n => n.Value ?? "").Where(v => v != ""));
+
+        // Ingredients: list of strings, maps, OR sections [{name, ingredients}]
+        if (mapping.Children.TryGetValue(new YamlScalarNode("ingredients"), out var ingsNode))
+        {
+            ParseIngredients(ingsNode, recipe);
         }
 
         // Steps/Instructions
@@ -118,6 +154,73 @@ public sealed class OpenRecipeFormatParser : IRecipeParser
         }
 
         return recipe;
+    }
+
+    private static void ParseIngredients(YamlNode ingsNode, ParsedRecipe recipe)
+    {
+        if (ingsNode is not YamlSequenceNode ingsSeq) return;
+
+        foreach (var ingNode in ingsSeq)
+        {
+            if (ingNode is YamlScalarNode scalar)
+            {
+                var line = scalar.Value ?? "";
+                var (qty, unit, name) = TextParserHelper.ParseIngredientLine(line);
+                string n = name;
+                string p = TextParserHelper.ExtractPreparation(ref n);
+                recipe.Ingredients.Add(new ParsedIngredient { Quantity = qty, Unit = unit, Name = n, Preparation = string.IsNullOrEmpty(p) ? null : p });
+            }
+            else if (ingNode is YamlMappingNode ingMap)
+            {
+                // Check if this is a section: {name, ingredients}
+                if (ingMap.Children.ContainsKey(new YamlScalarNode("ingredients")))
+                {
+                    var sectionName = GetScalar(ingMap, "name") ?? "";
+                    if (ingMap.Children.TryGetValue(new YamlScalarNode("ingredients"), out var sectionIngs))
+                        ParseIngredientsWithGroup(sectionIngs, recipe, sectionName);
+                }
+                else
+                {
+                    recipe.Ingredients.Add(new ParsedIngredient
+                    {
+                        Quantity = GetScalar(ingMap, "amount", "quantity", "qty"),
+                        Unit = GetScalar(ingMap, "unit", "units"),
+                        Name = GetScalar(ingMap, "name", "ingredient") ?? "",
+                        Preparation = GetScalar(ingMap, "preparation", "notes")
+                    });
+                }
+            }
+        }
+    }
+
+    private static void ParseIngredientsWithGroup(YamlNode node, ParsedRecipe recipe, string groupName)
+    {
+        if (node is not YamlSequenceNode seq) return;
+        foreach (var ingNode in seq)
+        {
+            ParsedIngredient ing;
+            if (ingNode is YamlScalarNode scalar)
+            {
+                var line = scalar.Value ?? "";
+                var (qty, unit, name) = TextParserHelper.ParseIngredientLine(line);
+                string n = name;
+                string p = TextParserHelper.ExtractPreparation(ref n);
+                ing = new ParsedIngredient { Quantity = qty, Unit = unit, Name = n, Preparation = string.IsNullOrEmpty(p) ? null : p };
+            }
+            else if (ingNode is YamlMappingNode ingMap)
+            {
+                ing = new ParsedIngredient
+                {
+                    Quantity = GetScalar(ingMap, "amount", "quantity", "qty"),
+                    Unit = GetScalar(ingMap, "unit", "units"),
+                    Name = GetScalar(ingMap, "name", "ingredient") ?? "",
+                    Preparation = GetScalar(ingMap, "preparation", "notes")
+                };
+            }
+            else continue;
+            ing.GroupHeading = groupName;
+            recipe.Ingredients.Add(ing);
+        }
     }
 
     private static string? GetScalar(YamlMappingNode mapping, params string[] keys)

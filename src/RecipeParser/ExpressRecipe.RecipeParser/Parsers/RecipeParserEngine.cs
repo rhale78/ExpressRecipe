@@ -12,6 +12,7 @@ public static class RecipeParserEngine
         new CookLangParser(),
         new NextcloudCookbookParser(),
         new TandoorParser(),
+        new GoogleStructuredDataParser(),
         new JsonRecipeParser(),
         new YamlRecipeParser(),
         new MasterCookParser(),

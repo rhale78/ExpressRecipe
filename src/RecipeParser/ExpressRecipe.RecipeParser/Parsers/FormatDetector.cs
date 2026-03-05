@@ -19,12 +19,18 @@ public static class FormatDetector
             case "paprika": case "paprikarecipes": return "Paprika";
             case "yaml": case "yml": return "Yaml";
             case "json": return "Json";
+            case "html": case "htm": return "GoogleStructuredData";
         }
 
         var trimmed = text.TrimStart();
 
         if (trimmed.StartsWith("MMMMM", StringComparison.Ordinal)) return "MealMaster";
         if (trimmed.StartsWith("-----", StringComparison.Ordinal) && text.Contains("MMMMM")) return "MealMaster";
+
+        if (trimmed.Contains("\"@type\"") && (trimmed.Contains("\"Recipe\"") || trimmed.Contains("schema.org/Recipe")))
+            return "GoogleStructuredData";
+        if (trimmed.Contains("<script type=\"application/ld+json\">") || trimmed.Contains("<script type='application/ld+json'>"))
+            return "GoogleStructuredData";
 
         if (trimmed.StartsWith("{") || trimmed.StartsWith("["))
             return "Json";
