@@ -218,6 +218,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.ShoppingServi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.UserService.Tests", "src\Tests\ExpressRecipe.UserService.Tests\ExpressRecipe.UserService.Tests.csproj", "{26814460-00DF-471A-B074-9D362A07133D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.ProductService.Tests", "src\Tests\ExpressRecipe.ProductService.Tests\ExpressRecipe.ProductService.Tests.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.RecipeParser", "src\RecipeParser\ExpressRecipe.RecipeParser\ExpressRecipe.RecipeParser.csproj", "{17609E3B-094D-4756-86B7-7B9592297AE5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.RecipeParser.Tests", "src\Tests\ExpressRecipe.RecipeParser.Tests\ExpressRecipe.RecipeParser.Tests.csproj", "{5CED4A25-5B5C-440F-A17B-92A5A0E36C7F}"

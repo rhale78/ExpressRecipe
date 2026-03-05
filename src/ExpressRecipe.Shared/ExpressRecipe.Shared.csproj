@@ -19,4 +19,9 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Needed for IMessage in shared domain event records -->
+    <ProjectReference Include="..\Messaging\ExpressRecipe.Messaging.Core\ExpressRecipe.Messaging.Core.csproj" />
+  </ItemGroup>
+
 </Project>

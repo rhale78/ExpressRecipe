@@ -147,17 +147,23 @@ public class RecipesController : ControllerBase
                 return NotFound(new { message = "Recipe not found" });
             }
 
-            // Load related data
-            recipe.Ingredients = await _recipeRepository.GetRecipeIngredientsAsync(id);
-            recipe.Nutrition = await _recipeRepository.GetRecipeNutritionAsync(id);
-            var tagNames = await _recipeRepository.GetRecipeTagsAsync(id);
-            recipe.Tags = tagNames.Select(name => new RecipeTagDto { Name = name }).ToList();
-            recipe.AllergenWarnings = await _recipeRepository.GetRecipeAllergensAsync(id);
+            // Load all related data in parallel – each is an independent DB query
+            var ingredientsTask  = _recipeRepository.GetRecipeIngredientsAsync(id);
+            var nutritionTask    = _recipeRepository.GetRecipeNutritionAsync(id);
+            var tagsTask         = _recipeRepository.GetRecipeTagsAsync(id);
+            var allergensTask    = _recipeRepository.GetRecipeAllergensAsync(id);
+            var ratingTask       = _recipeRepository.GetAverageRatingAsync(id);
 
-            // Get average rating
-            var (avgRating, ratingCount) = await _recipeRepository.GetAverageRatingAsync(id);
+            await Task.WhenAll(ingredientsTask, nutritionTask, tagsTask, allergensTask, ratingTask);
+
+            recipe.Ingredients      = await ingredientsTask;
+            recipe.Nutrition        = await nutritionTask;
+            recipe.Tags             = (await tagsTask).Select(name => new RecipeTagDto { Name = name }).ToList();
+            recipe.AllergenWarnings = await allergensTask;
+
+            var (avgRating, ratingCount) = await ratingTask;
             recipe.AverageRating = avgRating;
-            recipe.RatingCount = ratingCount;
+            recipe.RatingCount   = ratingCount;
 
             _logger.LogInformation("[RecipeService] Recipe {RecipeId} '{Name}' loaded: {IngCount} ingredients, {TagCount} tags, {AllergenCount} allergen warnings",
                 id, recipe.Name,

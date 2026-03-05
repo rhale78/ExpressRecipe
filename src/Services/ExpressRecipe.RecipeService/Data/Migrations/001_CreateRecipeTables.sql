@@ -45,8 +45,8 @@ GO
 CREATE TABLE RecipeIngredient (
     Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
     RecipeId UNIQUEIDENTIFIER NOT NULL,
-    IngredientId UNIQUEIDENTIFIER NULL, -- References ProductService.Ingredient.Id (can be null if using raw ingredient string)
-    BaseIngredientId UNIQUEIDENTIFIER NULL, -- References ProductService.BaseIngredient.Id
+    IngredientId UNIQUEIDENTIFIER NULL, -- References IngredientService.Ingredient.Id (external key, no FK constraint; can be null if using raw ingredient string)
+    BaseIngredientId UNIQUEIDENTIFIER NULL, -- DEPRECATED – was References ProductService.BaseIngredient.Id; removed by migration 015 (column dropped)
     IngredientName NVARCHAR(200) NULL, -- Free-form ingredient name if not in database
     Quantity DECIMAL(10, 2) NULL,
     Unit NVARCHAR(50) NULL, -- cup, tbsp, tsp, oz, g, kg, lb, etc.

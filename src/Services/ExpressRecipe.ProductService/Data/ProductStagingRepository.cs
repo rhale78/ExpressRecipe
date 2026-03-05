@@ -15,6 +15,12 @@ public interface IProductStagingRepository
     Task UpdateProcessingStatusAsync(Guid id, string status, string? error = null);
     Task BulkUpdateStatusAsync(IEnumerable<Guid> ids, string status, string? error = null);
     Task<int> GetPendingCountAsync();
+
+    // Saga tracking
+    Task UpdateSagaStateAsync(Guid id, string correlationId, string sagaStatus, long sagaMask, DateTimeOffset? completedAt = null);
+    Task<List<StagedProduct>> GetPendingWithSagaInfoAsync(int limit = 100);
+    Task UpdateAIVerificationAsync(Guid id, bool passed, string? notes = null);
+    Task BatchUpdateSagaMasksAsync(IEnumerable<(Guid Id, long MaskToAdd)> updates);
 }
 
 public class ProductStagingRepository : SqlHelper, IProductStagingRepository
@@ -372,7 +378,8 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
                 ImageUrl, ImageSmallUrl, Lang, Countries,
                 NutriScore, NovaGroup, EcoScore, RawJson,
                 ProcessingStatus, ProcessedAt, ProcessingError, ProcessingAttempts,
-                CreatedAt, UpdatedAt
+                CreatedAt, UpdatedAt,
+                SagaCorrelationId, SagaStatus, SagaCurrentMask, ImportSessionId
             FROM ProductStaging WITH (UPDLOCK, READPAST)
             WHERE ProcessingStatus = 'Pending'
                 AND IsDeleted = 0
@@ -490,8 +497,114 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
             ProcessingError = reader.IsDBNull("ProcessingError") ? null : reader.GetString("ProcessingError"),
             ProcessingAttempts = reader.GetInt32("ProcessingAttempts"),
             CreatedAt = reader.GetDateTime("CreatedAt"),
-            UpdatedAt = reader.IsDBNull("UpdatedAt") ? null : reader.GetDateTime("UpdatedAt")
+            UpdatedAt = reader.IsDBNull("UpdatedAt") ? null : reader.GetDateTime("UpdatedAt"),
+            SagaCorrelationId = reader.IsDBNull("SagaCorrelationId") ? null : reader.GetString("SagaCorrelationId"),
+            SagaStatus = reader.IsDBNull("SagaStatus") ? null : reader.GetString("SagaStatus"),
+            SagaCurrentMask = reader.IsDBNull("SagaCurrentMask") ? null : reader.GetInt64("SagaCurrentMask"),
+            ImportSessionId = reader.IsDBNull("ImportSessionId") ? null : reader.GetString("ImportSessionId")
         };
+    }
+
+    public async Task UpdateSagaStateAsync(Guid id, string correlationId, string sagaStatus, long sagaMask, DateTimeOffset? completedAt = null)
+    {
+        const string sql = @"
+            UPDATE ProductStaging
+            SET SagaCorrelationId = @CorrelationId,
+                SagaStatus = @SagaStatus,
+                SagaCurrentMask = @SagaMask,
+                -- Idempotent: only set SagaStartedAt on first call; subsequent updates preserve it
+                SagaStartedAt = CASE WHEN SagaStartedAt IS NULL THEN GETUTCDATE() ELSE SagaStartedAt END,
+                SagaCompletedAt = @CompletedAt,
+                UpdatedAt = GETUTCDATE()
+            WHERE Id = @Id";
+
+        await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@Id", id),
+            new SqlParameter("@CorrelationId", correlationId),
+            new SqlParameter("@SagaStatus", sagaStatus),
+            new SqlParameter("@SagaMask", sagaMask),
+            new SqlParameter("@CompletedAt", completedAt.HasValue ? (object)completedAt.Value.UtcDateTime : DBNull.Value)
+        );
+    }
+
+    public async Task<List<StagedProduct>> GetPendingWithSagaInfoAsync(int limit = 100)
+    {
+        const string sql = @"
+            SELECT TOP (@Limit)
+                Id, ExternalId, Barcode, ProductName, GenericName, Brands,
+                IngredientsText, IngredientsTextEn, Allergens, AllergensHierarchy,
+                Categories, CategoriesHierarchy, NutritionData,
+                ImageUrl, ImageSmallUrl, Lang, Countries,
+                NutriScore, NovaGroup, EcoScore, RawJson,
+                ProcessingStatus, ProcessedAt, ProcessingError, ProcessingAttempts,
+                CreatedAt, UpdatedAt,
+                SagaCorrelationId, SagaStatus, SagaCurrentMask, ImportSessionId,
+                AIVerificationPassed, AIVerificationNotes
+            FROM ProductStaging WITH (UPDLOCK, READPAST)
+            WHERE ProcessingStatus = 'Pending'
+                AND IsDeleted = 0
+                AND ProcessingAttempts < 3
+            ORDER BY CreatedAt ASC";
+
+        return await ExecuteReaderAsync(sql, MapStagedProductWithAI, timeoutSeconds: 120, parameters: new SqlParameter("@Limit", limit));
+    }
+
+    public async Task UpdateAIVerificationAsync(Guid id, bool passed, string? notes = null)
+    {
+        const string sql = @"
+            UPDATE ProductStaging
+            SET AIVerificationPassed = @Passed,
+                AIVerificationNotes = @Notes,
+                UpdatedAt = GETUTCDATE()
+            WHERE Id = @Id";
+
+        await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@Id", id),
+            new SqlParameter("@Passed", passed),
+            new SqlParameter("@Notes", (object?)notes ?? DBNull.Value)
+        );
+    }
+
+    public async Task BatchUpdateSagaMasksAsync(IEnumerable<(Guid Id, long MaskToAdd)> updates)
+    {
+        var updateList = updates.ToList();
+        if (updateList.Count == 0) return;
+
+        // Use BulkInsertViaTvpAsync for efficient single-statement bulk update
+        const string tempColumns = "Id UNIQUEIDENTIFIER NOT NULL, MaskToAdd BIGINT NOT NULL";
+
+        static DataTable BuildSagaMaskDataTable(IReadOnlyList<(Guid Id, long MaskToAdd)> items)
+        {
+            var dt = new DataTable();
+            dt.Columns.Add("Id", typeof(Guid));
+            dt.Columns.Add("MaskToAdd", typeof(long));
+            foreach (var (id, maskToAdd) in items)
+                dt.Rows.Add(id, maskToAdd);
+            return dt;
+        }
+
+        // Single UPDATE via JOIN on temp table — far faster than row-by-row
+        const string updateSql = @"
+            UPDATE ps
+            SET ps.SagaCurrentMask = ISNULL(ps.SagaCurrentMask, 0) | t.MaskToAdd,
+                ps.UpdatedAt = GETUTCDATE()
+            FROM ProductStaging ps
+            INNER JOIN #TmpSagaMasks t ON ps.Id = t.Id";
+
+        await BulkInsertViaTvpAsync(
+            updateList,
+            tempColumns,
+            BuildSagaMaskDataTable,
+            "#TmpSagaMasks",
+            updateSql);
+    }
+
+    private static StagedProduct MapStagedProductWithAI(SqlDataReader reader)
+    {
+        var product = MapStagedProduct(reader);
+        product.AIVerificationPassed = reader.IsDBNull("AIVerificationPassed") ? null : reader.GetBoolean("AIVerificationPassed");
+        product.AIVerificationNotes = reader.IsDBNull("AIVerificationNotes") ? null : reader.GetString("AIVerificationNotes");
+        return product;
     }
 }
 
@@ -524,4 +637,10 @@ public class StagedProduct
     public int ProcessingAttempts { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? SagaCorrelationId { get; set; }
+    public string? SagaStatus { get; set; }
+    public long? SagaCurrentMask { get; set; }
+    public bool? AIVerificationPassed { get; set; }
+    public string? AIVerificationNotes { get; set; }
+    public string? ImportSessionId { get; set; }
 }

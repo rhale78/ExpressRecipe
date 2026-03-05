@@ -1,0 +1,333 @@
+@page "/admin/import-dashboard"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ILogger<ImportDashboard> Logger
+@inject IWebHostEnvironment Env
+@implements IDisposable
+
+<PageTitle>Import Dashboard - ExpressRecipe Admin</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="admin-container">
+            <div class="admin-header">
+                <h1>Import Status Dashboard</h1>
+                <p class="subtitle">Live status for all dataset imports — refreshes every 5 seconds</p>
+            </div>
+
+            @if (Env.IsDevelopment())
+            {
+                <div class="alert alert-warning d-flex align-items-center gap-2 mb-3" role="alert">
+                    <span>⚠️</span>
+                    <span><strong>Development preview:</strong> This page is currently showing simulated data. A real import-status API endpoint has not been implemented yet.</span>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info mb-3" role="alert">
+                    Import status tracking is not yet available. Check back after the import backend has been deployed.
+                </div>
+            }
+
+            <div class="d-flex align-items-center gap-3 mb-4">
+                <button class="btn btn-outline-primary" @onclick="RefreshNow" disabled="@_isLoading">
+                    @if (_isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        <span>Refreshing...</span>
+                    }
+                    else
+                    {
+                        <span>🔄 Refresh Now</span>
+                    }
+                </button>
+                @if (_lastRefreshed.HasValue)
+                {
+                    <small class="text-muted">Last refreshed: @_lastRefreshed.Value.ToString("HH:mm:ss")</small>
+                }
+            </div>
+
+            @if (_isLoading && _sessions.Count == 0)
+            {
+                <div class="d-flex justify-content-center align-items-center py-5">
+                    <div class="spinner-border text-primary me-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span class="text-muted">Loading import status...</span>
+                </div>
+            }
+            else if (_sessions.Count == 0)
+            {
+                <div class="text-center py-5">
+                    <div style="font-size: 3rem;">📭</div>
+                    <h4 class="mt-3 text-muted">No active imports</h4>
+                    <p class="text-muted">Start an import from the <a href="/admin/import">Data Import</a> page.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Dataset</th>
+                                <th>Status</th>
+                                <th class="text-end">Total</th>
+                                <th class="text-end">Processed</th>
+                                <th class="text-end">Success</th>
+                                <th class="text-end">Failed</th>
+                                <th class="text-end">Speed</th>
+                                <th class="text-end">ETA</th>
+                                <th style="min-width: 180px;">Progress</th>
+                                <th>Last Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in _sessions)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-semibold">@session.DataSourceName</div>
+                                        <small class="text-muted">@session.ServiceName</small>
+                                    </td>
+                                    <td>@StatusBadge(session.Status)</td>
+                                    <td class="text-end">
+                                        @(session.TotalRecords > 0 ? session.TotalRecords.ToString("N0") : "-")
+                                    </td>
+                                    <td class="text-end">
+                                        @(session.ProcessedRecords > 0 ? session.ProcessedRecords.ToString("N0") : "-")
+                                    </td>
+                                    <td class="text-end text-success fw-semibold">
+                                        @(session.SuccessCount > 0 ? session.SuccessCount.ToString("N0") : "-")
+                                    </td>
+                                    <td class="text-end @(session.FailureCount > 0 ? "text-danger fw-semibold" : "")">
+                                        @(session.FailureCount > 0 ? session.FailureCount.ToString("N0") : "-")
+                                    </td>
+                                    <td class="text-end">
+                                        @(session.RecordsPerSecond > 0 ? $"{session.RecordsPerSecond:F0} r/s" : "-")
+                                    </td>
+                                    <td class="text-end">@session.Eta</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="progress flex-grow-1" style="height: 10px;" role="progressbar"
+                                                 aria-valuenow="@session.ProgressPercent" aria-valuemin="0" aria-valuemax="100">
+                                                <div class="progress-bar @ProgressBarClass(session.Status)"
+                                                     style="width: @(session.ProgressPercent)%">
+                                                </div>
+                                            </div>
+                                            <small class="text-muted" style="min-width: 36px;">@(session.ProgressPercent)%</small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            @(session.LastUpdated.HasValue
+                                                ? session.LastUpdated.Value.LocalDateTime.ToString("HH:mm:ss")
+                                                : "-")
+                                        </small>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="unauthorized-container">
+            <h2>Authentication Required</h2>
+            <p>Please <a href="/login">log in</a> as an administrator to access this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private record ImportSessionView(
+        string SessionId,
+        string DataSourceName,
+        string ServiceName,
+        string Status,
+        int TotalRecords,
+        int ProcessedRecords,
+        int SuccessCount,
+        int FailureCount,
+        double RecordsPerSecond,
+        string Eta,
+        int ProgressPercent,
+        DateTimeOffset? LastUpdated
+    );
+
+    private List<ImportSessionView> _sessions = new();
+    private bool _isLoading;
+    private int _isRefreshing; // 0 = idle, 1 = refreshing (atomic via Interlocked)
+    private DateTimeOffset? _lastRefreshed;
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatusAsync();
+        _refreshTimer = new Timer(_ =>
+        {
+            // Dispatch async work without using an async void timer callback.
+            // Unobserved exceptions are caught inside HandleRefreshTimerTickAsync.
+            _ = HandleRefreshTimerTickAsync();
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task HandleRefreshTimerTickAsync()
+    {
+        // Guard against overlapping timer callbacks using atomic compare-exchange
+        if (Interlocked.CompareExchange(ref _isRefreshing, 1, 0) != 0) return;
+        try
+        {
+            await LoadStatusAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error occurred during import dashboard refresh timer callback.");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isRefreshing, 0);
+        }
+    }
+
+    private async Task RefreshNow()
+    {
+        await LoadStatusAsync();
+    }
+
+    private async Task LoadStatusAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            if (Env.IsDevelopment())
+            {
+                // TODO: Replace with actual API call to ProductService / import status endpoint
+                // e.g. _sessions = await AdminApi.GetImportSessionsAsync();
+                await Task.Delay(200); // simulate network latency
+                _sessions = GetMockSessions();
+                _lastRefreshed = DateTimeOffset.Now;
+            }
+            else
+            {
+                // Backend endpoint not yet implemented – show empty state in production
+                _sessions = new List<ImportSessionView>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load import status");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    // Mock data simulating realistic in-progress and completed imports
+    private static List<ImportSessionView> GetMockSessions()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new List<ImportSessionView>
+        {
+            new(
+                SessionId: "off-2025-001",
+                DataSourceName: "OpenFoodFacts",
+                ServiceName: "ProductService",
+                Status: "Running",
+                TotalRecords: 2_800_000,
+                ProcessedRecords: 1_243_500,
+                SuccessCount: 1_230_100,
+                FailureCount: 13_400,
+                RecordsPerSecond: 412.5,
+                Eta: "42m 18s",
+                ProgressPercent: 44,
+                LastUpdated: now
+            ),
+            new(
+                SessionId: "usda-2025-001",
+                DataSourceName: "USDA FoodData Central",
+                ServiceName: "ProductService",
+                Status: "Completed",
+                TotalRecords: 900_000,
+                ProcessedRecords: 900_000,
+                SuccessCount: 893_200,
+                FailureCount: 6_800,
+                RecordsPerSecond: 0,
+                Eta: "Done",
+                ProgressPercent: 100,
+                LastUpdated: now.AddMinutes(-15)
+            ),
+            new(
+                SessionId: "fda-2025-001",
+                DataSourceName: "FDA Recalls",
+                ServiceName: "RecallService",
+                Status: "Completed",
+                TotalRecords: 5_400,
+                ProcessedRecords: 5_400,
+                SuccessCount: 5_398,
+                FailureCount: 2,
+                RecordsPerSecond: 0,
+                Eta: "Done",
+                ProgressPercent: 100,
+                LastUpdated: now.AddHours(-2)
+            ),
+            new(
+                SessionId: "prices-2025-001",
+                DataSourceName: "OpenPrices",
+                ServiceName: "PriceService",
+                Status: "Pending",
+                TotalRecords: 0,
+                ProcessedRecords: 0,
+                SuccessCount: 0,
+                FailureCount: 0,
+                RecordsPerSecond: 0,
+                Eta: "-",
+                ProgressPercent: 0,
+                LastUpdated: null
+            ),
+            new(
+                SessionId: "recipes-2025-001",
+                DataSourceName: "Recipes",
+                ServiceName: "RecipeService",
+                Status: "Failed",
+                TotalRecords: 150_000,
+                ProcessedRecords: 23_400,
+                SuccessCount: 22_980,
+                FailureCount: 420,
+                RecordsPerSecond: 0,
+                Eta: "-",
+                ProgressPercent: 16,
+                LastUpdated: now.AddMinutes(-5)
+            )
+        };
+    }
+
+    private RenderFragment StatusBadge(string status) => status switch
+    {
+        "Running" => @<span class="badge bg-primary d-inline-flex align-items-center gap-1">
+                         <span class="spinner-border spinner-border-sm" style="width:.65em;height:.65em;" role="status" aria-hidden="true"></span>
+                         Running
+                     </span>,
+        "Completed" => @<span class="badge bg-success">Completed</span>,
+        "Failed"    => @<span class="badge bg-danger">Failed</span>,
+        _           => @<span class="badge bg-secondary">Pending</span>
+    };
+
+    private static string ProgressBarClass(string status) => status switch
+    {
+        "Running"   => "progress-bar-striped progress-bar-animated",
+        "Failed"    => "bg-danger",
+        "Completed" => "bg-success",
+        _           => "bg-secondary"
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

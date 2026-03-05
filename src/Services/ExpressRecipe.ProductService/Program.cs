@@ -1,5 +1,8 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
+using ExpressRecipe.Messaging.Saga.Extensions;
 using ExpressRecipe.ProductService.Data;
+using ExpressRecipe.ProductService.Saga;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
@@ -117,6 +120,9 @@ builder.Services.AddScoped<USDAFoodDataImportService>();
 builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductDataImportWorker>();
 builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductProcessingWorker>();
 
+// Register AI verification service
+builder.Services.AddScoped<IProductAIVerificationService, ProductAIVerificationService>();
+
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
@@ -131,6 +137,28 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 
 // Register event publisher
 builder.Services.AddSingleton<EventPublisher>();
+
+// Register RabbitMQ messaging (IMessageBus) - conditional based on configuration
+var messagingEnabled = builder.Configuration.GetValue<bool>("Messaging:Enabled", false)
+    || !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"))
+    || !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+
+    builder.Services.AddSqlSagaRepository<ProductProcessingSagaState>(connectionString, "ProductProcessingSagaState");
+    builder.Services.AddSqlSagaRepository<ImportSessionSagaState>(connectionString, "ImportSessionSagaState");
+    builder.Services.AddSagaWorkflow(ProductProcessingWorkflow.Build());
+
+    // Real publisher – uses the IMessageBus registered above
+    builder.Services.AddSingleton<IProductEventPublisher, ProductEventPublisher>();
+}
+else
+{
+    // No-op publisher so the controller DI never fails
+    builder.Services.AddSingleton<IProductEventPublisher, NullProductEventPublisher>();
+}
 
 // Add controllers
 builder.Services.AddControllers();
