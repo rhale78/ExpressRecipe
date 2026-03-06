@@ -21,6 +21,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Core\ExpressRecipe.Messaging.Core.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Saga\ExpressRecipe.Messaging.Saga.csproj" />
     <ProjectReference Include="..\..\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj" />
   </ItemGroup>
 </Project>
