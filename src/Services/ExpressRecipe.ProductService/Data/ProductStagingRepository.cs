@@ -92,7 +92,7 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
             const string createTempSql = @"
                 CREATE TABLE #TempProductStaging (
                     ExternalId NVARCHAR(100), Barcode NVARCHAR(50), ProductName NVARCHAR(500), 
-                    GenericName NVARCHAR(MAX), Brands NVARCHAR(500), IngredientsText NVARCHAR(MAX), 
+                    GenericName NVARCHAR(MAX), Brands NVARCHAR(MAX), IngredientsText NVARCHAR(MAX), 
                     IngredientsTextEn NVARCHAR(MAX), Allergens NVARCHAR(MAX), AllergensHierarchy NVARCHAR(MAX),
                     Categories NVARCHAR(MAX), CategoriesHierarchy NVARCHAR(MAX), NutritionData NVARCHAR(MAX),
                     ImageUrl NVARCHAR(500), ImageSmallUrl NVARCHAR(500), Lang NVARCHAR(10), 
@@ -255,7 +255,7 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
                                                 const string createTempSql = @"
                                                     CREATE TABLE #TempAugment (
                                                         Barcode NVARCHAR(50), ProductName NVARCHAR(500), GenericName NVARCHAR(MAX), 
-                                                        Brands NVARCHAR(500), IngredientsText NVARCHAR(MAX), IngredientsTextEn NVARCHAR(MAX), 
+                                                        Brands NVARCHAR(MAX), IngredientsText NVARCHAR(MAX),
                                                         Allergens NVARCHAR(MAX), AllergensHierarchy NVARCHAR(MAX), Categories NVARCHAR(MAX), 
                                                         CategoriesHierarchy NVARCHAR(MAX), NutritionData NVARCHAR(MAX), ImageUrl NVARCHAR(500), 
                                                         ImageSmallUrl NVARCHAR(500), Countries NVARCHAR(200), NutriScore NVARCHAR(20), 
@@ -384,6 +384,10 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
             WHERE ProcessingStatus = 'Pending'
                 AND IsDeleted = 0
                 AND ProcessingAttempts < 3
+                AND (
+                    Countries LIKE '%United States%'
+                    OR Countries LIKE '%en:united-states%'
+                )
             ORDER BY CreatedAt ASC";
 
         // Use 120 second timeout during high-volume processing
@@ -544,6 +548,10 @@ public class ProductStagingRepository : SqlHelper, IProductStagingRepository
             WHERE ProcessingStatus = 'Pending'
                 AND IsDeleted = 0
                 AND ProcessingAttempts < 3
+                AND (
+                    Countries LIKE '%United States%'
+                    OR Countries LIKE '%en:united-states%'
+                )
             ORDER BY CreatedAt ASC";
 
         return await ExecuteReaderAsync(sql, MapStagedProductWithAI, timeoutSeconds: 120, parameters: new SqlParameter("@Limit", limit));

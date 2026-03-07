@@ -151,54 +151,70 @@ public class BatchProductLookupService : IBatchProductLookupService, IDisposable
     private async Task ProcessBatchAsync(ProductLookupRequest[] batch)
     {
         if (batch.Length == 0) return;
-        
+
         _logger.LogInformation("Processing product lookup batch: {Count} barcodes", batch.Length);
-        
+
         try
         {
-            // For now, we'll call ProductService individually for each item in the batch
-            // TODO: Add bulk lookup endpoint to ProductService for better efficiency
-            var lookupTasks = batch.Select(async request =>
+            var barcodes = batch
+                .Select(r => r.Barcode)
+                .Where(b => !string.IsNullOrWhiteSpace(b))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var productsByBarcode = await _productServiceClient
+                .GetProductsByBarcodesAsync(barcodes, CancellationToken.None)
+                .ConfigureAwait(false);
+
+            var successCount = 0;
+
+            foreach (var request in batch)
             {
-                try
+                productsByBarcode.TryGetValue(request.Barcode, out var product);
+
+                _productCache[request.Barcode] = product;
+                _pendingRequests.TryRemove(request.Barcode, out _);
+                request.CompletionSource.TrySetResult(product);
+
+                if (product is not null)
                 {
-                    var product = await _productServiceClient.GetProductByBarcodeAsync(request.Barcode, CancellationToken.None);
-                    
-                    // Cache the result
-                    _productCache.TryAdd(request.Barcode, product);
-                    
-                    // Complete the request
-                    _pendingRequests.TryRemove(request.Barcode, out _);
-                    request.CompletionSource.TrySetResult(product);
-                    
-                    return true;
+                    successCount++;
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to lookup product for barcode {Barcode}", request.Barcode);
-                    
-                    _pendingRequests.TryRemove(request.Barcode, out _);
-                    request.CompletionSource.TrySetResult(null);
-                    
-                    return false;
-                }
-            });
-            
-            var results = await Task.WhenAll(lookupTasks);
-            var successCount = results.Count(r => r);
-            
+            }
+
             _logger.LogInformation("Batch complete: {Success}/{Total} successful lookups", successCount, batch.Length);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to process product lookup batch");
-            
-            // Fail all pending requests in this batch
-            foreach (var request in batch)
+            _logger.LogWarning(ex, "Bulk product lookup failed. Falling back to per-item lookups for {Count} barcodes.", batch.Length);
+
+            var lookupTasks = batch.Select(async request =>
             {
-                _pendingRequests.TryRemove(request.Barcode, out _);
-                request.CompletionSource.TrySetResult(null);
-            }
+                try
+                {
+                    var product = await _productServiceClient.GetProductByBarcodeAsync(request.Barcode, CancellationToken.None).ConfigureAwait(false);
+
+                    _productCache[request.Barcode] = product;
+                    _pendingRequests.TryRemove(request.Barcode, out _);
+                    request.CompletionSource.TrySetResult(product);
+
+                    return product is not null;
+                }
+                catch (Exception itemEx)
+                {
+                    _logger.LogWarning(itemEx, "Failed to lookup product for barcode {Barcode}", request.Barcode);
+
+                    _pendingRequests.TryRemove(request.Barcode, out _);
+                    request.CompletionSource.TrySetResult(null);
+
+                    return false;
+                }
+            });
+
+            var results = await Task.WhenAll(lookupTasks).ConfigureAwait(false);
+            var successCount = results.Count(r => r);
+
+            _logger.LogInformation("Fallback batch complete: {Success}/{Total} successful lookups", successCount, batch.Length);
         }
     }
     

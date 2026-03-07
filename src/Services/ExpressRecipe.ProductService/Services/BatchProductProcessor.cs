@@ -98,7 +98,7 @@ public class BatchProductProcessor
         // 3. CONSUMER: Bulk insert into DB in batches
         var consumerTask = Task.Run(() => SaveProductsAsync(productRepo, stagingRepo, mappedChannel.Reader, result, stopwatch, cancellationToken), cancellationToken);
 
-        await producerTask;
+        int skippedByProducer = await producerTask;
         stagingChannel.Writer.Complete();
 
         await Task.WhenAll(mappingTasks);
@@ -107,8 +107,14 @@ public class BatchProductProcessor
         await consumerTask;
 
         stopwatch.Stop();
-        _logger.LogInformation("Processing complete. Success: {Success}, Failed: {Failed}, Total: {Total}. Rate: {Rate:F2} products/sec", 
-            result.SuccessCount, result.FailureCount, result.SuccessCount + result.FailureCount, (result.SuccessCount + result.FailureCount) / stopwatch.Elapsed.TotalSeconds);
+        var total = result.SuccessCount + result.FailureCount;
+        if (total == 0 && skippedByProducer > 0)
+            _logger.LogInformation("Processing complete: {Skipped} staged items were already in the product database and marked Completed. No new products inserted.",
+                skippedByProducer);
+        else
+            _logger.LogInformation("Processing complete. Inserted: {Success}, Failed: {Failed}, Pre-existing (skipped): {Skipped}. Rate: {Rate:F2} products/sec",
+                result.SuccessCount, result.FailureCount, skippedByProducer,
+                total > 0 ? total / stopwatch.Elapsed.TotalSeconds : 0.0);
 
         return result;
     }
@@ -131,12 +137,17 @@ public class BatchProductProcessor
             sw.ElapsedMilliseconds, _barcodeCache.Count, _ingredientCache.Count);
     }
 
-    private async Task FetchStagedProductsAsync(IProductStagingRepository stagingRepo, ChannelWriter<StagedProduct> writer, CancellationToken ct)
+    private async Task<int> FetchStagedProductsAsync(IProductStagingRepository stagingRepo, ChannelWriter<StagedProduct> writer, CancellationToken ct)
     {
+        int totalFetched = 0;
+        int totalSkipped = 0;
+        var pendingSkippedIds = new List<Guid>(2000);
+
+        const int skipFlushSize = 2000;
+        const int progressLogInterval = 10_000;
+
         try
         {
-            int totalFetched = 0;
-            int totalSkipped = 0;
             while (!ct.IsCancellationRequested)
             {
                 var batch = await stagingRepo.GetPendingProductsAsync(_batchSize * 2);
@@ -146,24 +157,46 @@ public class BatchProductProcessor
                 {
                     if (!string.IsNullOrEmpty(staged.Barcode) && _barcodeCache!.ContainsKey(staged.Barcode))
                     {
+                        pendingSkippedIds.Add(staged.Id);
                         totalSkipped++;
+
+                        // Flush skipped IDs to staging so they aren't re-fetched on next iteration
+                        if (pendingSkippedIds.Count >= skipFlushSize)
+                        {
+                            await stagingRepo.BulkUpdateStatusAsync(pendingSkippedIds, "Completed");
+                            _logger.LogInformation("Producer: marked {Count} already-existing products as Completed (total skipped so far: {Total})", pendingSkippedIds.Count, totalSkipped);
+                            pendingSkippedIds.Clear();
+                        }
                         continue;
                     }
 
                     if (!await writer.WaitToWriteAsync(ct)) break;
                     await writer.WriteAsync(staged, ct);
                     totalFetched++;
+
+                    if (totalFetched % progressLogInterval == 0)
+                        _logger.LogInformation("Producer: {Fetched} products queued for processing, {Skipped} skipped (already exist)", totalFetched, totalSkipped);
                 }
 
                 if (batch.Count < _batchSize) break;
             }
-            _logger.LogInformation("Producer finished. Total fetched: {Count}, Total skipped (already exists): {Skipped}", totalFetched, totalSkipped);
+
+            // Flush any remaining skipped IDs
+            if (pendingSkippedIds.Any())
+            {
+                await stagingRepo.BulkUpdateStatusAsync(pendingSkippedIds, "Completed");
+                _logger.LogInformation("Producer: marked final {Count} already-existing products as Completed", pendingSkippedIds.Count);
+                pendingSkippedIds.Clear();
+            }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Producer error");
         }
+
+        _logger.LogInformation("Producer finished. Queued for processing: {Fetched}, Skipped (already exist): {Skipped}", totalFetched, totalSkipped);
+        return totalSkipped;
     }
 
     private async Task MapProductsParallelAsync(ChannelReader<StagedProduct> reader, ChannelWriter<(StagedProduct Staged, FullProductImportDto? Dto, bool Skipped)> writer, CancellationToken ct)

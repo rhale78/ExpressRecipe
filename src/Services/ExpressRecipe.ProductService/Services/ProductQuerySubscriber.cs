@@ -22,8 +22,13 @@ public sealed class ProductQuerySubscriber : IHostedService
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        // Competing-consumer queue so multiple ProductService instances share the load
-        var queueOpts = new SubscribeOptions { RoutingMode = RoutingMode.CompetingConsumer };
+        // Higher prefetch + concurrency: product lookups are fast DB reads, safe to parallelize
+        var queueOpts = new SubscribeOptions
+        {
+            RoutingMode = RoutingMode.CompetingConsumer,
+            PrefetchCount = 50,
+            ConsumerConcurrency = 8
+        };
 
         await _bus.SubscribeRequestAsync<
             RequestProductByBarcodeQuery,

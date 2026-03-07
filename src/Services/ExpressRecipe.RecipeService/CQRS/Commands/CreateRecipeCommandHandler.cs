@@ -1,6 +1,6 @@
 using ExpressRecipe.RecipeService.Data;
+using ExpressRecipe.RecipeService.Services;
 using ExpressRecipe.Shared.CQRS;
-using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.RecipeService.CQRS.Commands;
 
@@ -10,12 +10,12 @@ namespace ExpressRecipe.RecipeService.CQRS.Commands;
 public class CreateRecipeCommandHandler : ICommandHandler<CreateRecipeCommand, Guid>
 {
     private readonly IRecipeRepository _repository;
-    private readonly EventPublisher _eventPublisher;
+    private readonly IRecipeEventPublisher _eventPublisher;
     private readonly ILogger<CreateRecipeCommandHandler> _logger;
 
     public CreateRecipeCommandHandler(
         IRecipeRepository repository,
-        EventPublisher eventPublisher,
+        IRecipeEventPublisher eventPublisher,
         ILogger<CreateRecipeCommandHandler> logger)
     {
         _repository = repository;
@@ -107,12 +107,7 @@ public class CreateRecipeCommandHandler : ICommandHandler<CreateRecipeCommand, G
         }
 
         // Publish event
-        await _eventPublisher.PublishAsync("recipe.created", new
-        {
-            RecipeId = recipeId,
-            UserId = command.UserId,
-            Name = command.Name
-        });
+        await _eventPublisher.PublishCreatedAsync(recipeId, command.Name, command.Categories.FirstOrDefault(), null, command.UserId, cancellationToken);
 
         _logger.LogInformation("Recipe '{RecipeName}' created with ID {RecipeId}", command.Name, recipeId);
 

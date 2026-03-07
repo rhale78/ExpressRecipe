@@ -1,0 +1,1203 @@
+{
+  "$schema": "https://json.schemastore.org/aspire-8.0.json",
+  "resources": {
+    "sqlserver": {
+      "type": "container.v0",
+      "connectionString": "Server={sqlserver.bindings.tcp.host},{sqlserver.bindings.tcp.port};User ID=sa;Password={sqlserver-password.value};TrustServerCertificate=true",
+      "image": "mcr.microsoft.com/mssql/server:2022-latest",
+      "volumes": [
+        {
+          "name": "expressrecipe.apphost.new-5a74496945-sqlserver-data",
+          "target": "/var/opt/mssql",
+          "readOnly": false
+        }
+      ],
+      "env": {
+        "ACCEPT_EULA": "Y",
+        "MSSQL_SA_PASSWORD": "{sqlserver-password.value}"
+      },
+      "bindings": {
+        "tcp": {
+          "scheme": "tcp",
+          "protocol": "tcp",
+          "transport": "tcp",
+          "port": 1436,
+          "targetPort": 1433
+        }
+      }
+    },
+    "authdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Auth"
+    },
+    "userdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Users"
+    },
+    "productdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Products"
+    },
+    "recipedb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Recipes"
+    },
+    "cookbookdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Cookbooks"
+    },
+    "inventorydb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Inventory"
+    },
+    "scandb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Scans"
+    },
+    "shoppingdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Shopping"
+    },
+    "mealplandb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.MealPlanning"
+    },
+    "pricedb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Pricing"
+    },
+    "recalldb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Recalls"
+    },
+    "notificationdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Notifications"
+    },
+    "communitydb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Community"
+    },
+    "syncdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Sync"
+    },
+    "searchdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Search"
+    },
+    "analyticsdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Analytics"
+    },
+    "ingredientdb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.Ingredients"
+    },
+    "grocerystoredb": {
+      "type": "value.v0",
+      "connectionString": "{sqlserver.connectionString};Initial Catalog=ExpressRecipe.GroceryStores"
+    },
+    "redis": {
+      "type": "container.v0",
+      "connectionString": "{redis.bindings.tcp.host}:{redis.bindings.tcp.port},password={redis-password.value}",
+      "image": "docker.io/library/redis:8.2",
+      "entrypoint": "/bin/sh",
+      "args": [
+        "-c",
+        "redis-server --requirepass $REDIS_PASSWORD --save 60 1"
+      ],
+      "volumes": [
+        {
+          "name": "expressrecipe.apphost.new-5a74496945-redis-data",
+          "target": "/data",
+          "readOnly": false
+        }
+      ],
+      "env": {
+        "REDIS_PASSWORD": "{redis-password.value}"
+      },
+      "bindings": {
+        "tcp": {
+          "scheme": "tcp",
+          "protocol": "tcp",
+          "transport": "tcp",
+          "targetPort": 6379
+        }
+      }
+    },
+    "messaging": {
+      "type": "container.v0",
+      "connectionString": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}",
+      "image": "docker.io/library/rabbitmq:4.2-management",
+      "volumes": [
+        {
+          "name": "expressrecipe.apphost.new-5a74496945-messaging-data",
+          "target": "/var/lib/rabbitmq",
+          "readOnly": false
+        }
+      ],
+      "env": {
+        "RABBITMQ_DEFAULT_USER": "guest",
+        "RABBITMQ_DEFAULT_PASS": "{messaging-password.value}"
+      },
+      "bindings": {
+        "tcp": {
+          "scheme": "tcp",
+          "protocol": "tcp",
+          "transport": "tcp",
+          "targetPort": 5672
+        },
+        "management": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http",
+          "targetPort": 15672
+        }
+      }
+    },
+    "messaging-throughput-receiver": {
+      "type": "project.v0",
+      "path": "../Tests/ExpressRecipe.Messaging.Throughput.Receiver/ExpressRecipe.Messaging.Throughput.Receiver.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      }
+    },
+    "messaging-throughput-sender": {
+      "type": "project.v0",
+      "path": "../Tests/ExpressRecipe.Messaging.Throughput.Sender/ExpressRecipe.Messaging.Throughput.Sender.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      }
+    },
+    "messaging-throughput-noack-receiver": {
+      "type": "project.v0",
+      "path": "../Tests/ExpressRecipe.Messaging.Throughput.NoAck.Receiver/ExpressRecipe.Messaging.Throughput.NoAck.Receiver.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      }
+    },
+    "messaging-throughput-noack-sender": {
+      "type": "project.v0",
+      "path": "../Tests/ExpressRecipe.Messaging.Throughput.NoAck.Sender/ExpressRecipe.Messaging.Throughput.NoAck.Sender.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      }
+    },
+    "authservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.AuthService/ExpressRecipe.AuthService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{authservice.bindings.http.targetPort}",
+        "ConnectionStrings__authdb": "{authdb.connectionString}",
+        "AUTHDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "AUTHDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "AUTHDB_USERNAME": "sa",
+        "AUTHDB_PASSWORD": "{sqlserver-password.value}",
+        "AUTHDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Auth",
+        "AUTHDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Auth",
+        "AUTHDB_DATABASENAME": "ExpressRecipe.Auth",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "ingredientservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.IngredientService/ExpressRecipe.IngredientService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{ingredientservice.bindings.http.targetPort}",
+        "ConnectionStrings__ingredientdb": "{ingredientdb.connectionString}",
+        "INGREDIENTDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "INGREDIENTDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "INGREDIENTDB_USERNAME": "sa",
+        "INGREDIENTDB_PASSWORD": "{sqlserver-password.value}",
+        "INGREDIENTDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Ingredients",
+        "INGREDIENTDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Ingredients",
+        "INGREDIENTDB_DATABASENAME": "ExpressRecipe.Ingredients",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "grocerystoreservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.GroceryStoreLocationService/ExpressRecipe.GroceryStoreLocationService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{grocerystoreservice.bindings.http.targetPort}",
+        "ConnectionStrings__grocerystoredb": "{grocerystoredb.connectionString}",
+        "GROCERYSTOREDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "GROCERYSTOREDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "GROCERYSTOREDB_USERNAME": "sa",
+        "GROCERYSTOREDB_PASSWORD": "{sqlserver-password.value}",
+        "GROCERYSTOREDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.GroceryStores",
+        "GROCERYSTOREDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.GroceryStores",
+        "GROCERYSTOREDB_DATABASENAME": "ExpressRecipe.GroceryStores",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "userservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.UserService/ExpressRecipe.UserService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{userservice.bindings.http.targetPort}",
+        "ConnectionStrings__userdb": "{userdb.connectionString}",
+        "USERDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "USERDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "USERDB_USERNAME": "sa",
+        "USERDB_PASSWORD": "{sqlserver-password.value}",
+        "USERDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Users",
+        "USERDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Users",
+        "USERDB_DATABASENAME": "ExpressRecipe.Users",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "productservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.ProductService/ExpressRecipe.ProductService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{productservice.bindings.http.targetPort}",
+        "ConnectionStrings__productdb": "{productdb.connectionString}",
+        "PRODUCTDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "PRODUCTDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "PRODUCTDB_USERNAME": "sa",
+        "PRODUCTDB_PASSWORD": "{sqlserver-password.value}",
+        "PRODUCTDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Products",
+        "PRODUCTDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Products",
+        "PRODUCTDB_DATABASENAME": "ExpressRecipe.Products",
+        "ConnectionStrings__ingredientdb": "{ingredientdb.connectionString}",
+        "INGREDIENTDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "INGREDIENTDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "INGREDIENTDB_USERNAME": "sa",
+        "INGREDIENTDB_PASSWORD": "{sqlserver-password.value}",
+        "INGREDIENTDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Ingredients",
+        "INGREDIENTDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Ingredients",
+        "INGREDIENTDB_DATABASENAME": "ExpressRecipe.Ingredients",
+        "INGREDIENTSERVICE_HTTP": "{ingredientservice.bindings.http.url}",
+        "services__ingredientservice__http__0": "{ingredientservice.bindings.http.url}",
+        "INGREDIENTSERVICE_HTTPS": "{ingredientservice.bindings.https.url}",
+        "services__ingredientservice__https__0": "{ingredientservice.bindings.https.url}",
+        "GROCERYSTORESERVICE_HTTP": "{grocerystoreservice.bindings.http.url}",
+        "services__grocerystoreservice__http__0": "{grocerystoreservice.bindings.http.url}",
+        "GROCERYSTORESERVICE_HTTPS": "{grocerystoreservice.bindings.https.url}",
+        "services__grocerystoreservice__https__0": "{grocerystoreservice.bindings.https.url}",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "recipeservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.RecipeService/ExpressRecipe.RecipeService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{recipeservice.bindings.http.targetPort}",
+        "ConnectionStrings__recipedb": "{recipedb.connectionString}",
+        "RECIPEDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "RECIPEDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "RECIPEDB_USERNAME": "sa",
+        "RECIPEDB_PASSWORD": "{sqlserver-password.value}",
+        "RECIPEDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Recipes",
+        "RECIPEDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Recipes",
+        "RECIPEDB_DATABASENAME": "ExpressRecipe.Recipes",
+        "ConnectionStrings__ingredientdb": "{ingredientdb.connectionString}",
+        "INGREDIENTDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "INGREDIENTDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "INGREDIENTDB_USERNAME": "sa",
+        "INGREDIENTDB_PASSWORD": "{sqlserver-password.value}",
+        "INGREDIENTDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Ingredients",
+        "INGREDIENTDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Ingredients",
+        "INGREDIENTDB_DATABASENAME": "ExpressRecipe.Ingredients",
+        "INGREDIENTSERVICE_HTTP": "{ingredientservice.bindings.http.url}",
+        "services__ingredientservice__http__0": "{ingredientservice.bindings.http.url}",
+        "INGREDIENTSERVICE_HTTPS": "{ingredientservice.bindings.https.url}",
+        "services__ingredientservice__https__0": "{ingredientservice.bindings.https.url}",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "cookbookservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.CookbookService/ExpressRecipe.CookbookService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{cookbookservice.bindings.http.targetPort}",
+        "ConnectionStrings__cookbookdb": "{cookbookdb.connectionString}",
+        "COOKBOOKDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "COOKBOOKDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "COOKBOOKDB_USERNAME": "sa",
+        "COOKBOOKDB_PASSWORD": "{sqlserver-password.value}",
+        "COOKBOOKDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Cookbooks",
+        "COOKBOOKDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Cookbooks",
+        "COOKBOOKDB_DATABASENAME": "ExpressRecipe.Cookbooks",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "inventoryservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.InventoryService/ExpressRecipe.InventoryService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{inventoryservice.bindings.http.targetPort}",
+        "ConnectionStrings__inventorydb": "{inventorydb.connectionString}",
+        "INVENTORYDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "INVENTORYDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "INVENTORYDB_USERNAME": "sa",
+        "INVENTORYDB_PASSWORD": "{sqlserver-password.value}",
+        "INVENTORYDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Inventory",
+        "INVENTORYDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Inventory",
+        "INVENTORYDB_DATABASENAME": "ExpressRecipe.Inventory",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "scannerservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.ScannerService/ExpressRecipe.ScannerService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{scannerservice.bindings.http.targetPort}",
+        "ConnectionStrings__scandb": "{scandb.connectionString}",
+        "SCANDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "SCANDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "SCANDB_USERNAME": "sa",
+        "SCANDB_PASSWORD": "{sqlserver-password.value}",
+        "SCANDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Scans",
+        "SCANDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Scans",
+        "SCANDB_DATABASENAME": "ExpressRecipe.Scans",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "shoppingservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.ShoppingService/ExpressRecipe.ShoppingService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{shoppingservice.bindings.http.targetPort}",
+        "ConnectionStrings__shoppingdb": "{shoppingdb.connectionString}",
+        "SHOPPINGDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "SHOPPINGDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "SHOPPINGDB_USERNAME": "sa",
+        "SHOPPINGDB_PASSWORD": "{sqlserver-password.value}",
+        "SHOPPINGDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Shopping",
+        "SHOPPINGDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Shopping",
+        "SHOPPINGDB_DATABASENAME": "ExpressRecipe.Shopping",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "mealplanningservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.MealPlanningService/ExpressRecipe.MealPlanningService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{mealplanningservice.bindings.http.targetPort}",
+        "ConnectionStrings__mealplandb": "{mealplandb.connectionString}",
+        "MEALPLANDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "MEALPLANDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "MEALPLANDB_USERNAME": "sa",
+        "MEALPLANDB_PASSWORD": "{sqlserver-password.value}",
+        "MEALPLANDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.MealPlanning",
+        "MEALPLANDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.MealPlanning",
+        "MEALPLANDB_DATABASENAME": "ExpressRecipe.MealPlanning",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "priceservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.PriceService/ExpressRecipe.PriceService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{priceservice.bindings.http.targetPort}",
+        "ConnectionStrings__pricedb": "{pricedb.connectionString}",
+        "PRICEDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "PRICEDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "PRICEDB_USERNAME": "sa",
+        "PRICEDB_PASSWORD": "{sqlserver-password.value}",
+        "PRICEDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Pricing",
+        "PRICEDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Pricing",
+        "PRICEDB_DATABASENAME": "ExpressRecipe.Pricing",
+        "PRODUCTSERVICE_HTTP": "{productservice.bindings.http.url}",
+        "services__productservice__http__0": "{productservice.bindings.http.url}",
+        "PRODUCTSERVICE_HTTPS": "{productservice.bindings.https.url}",
+        "services__productservice__https__0": "{productservice.bindings.https.url}",
+        "GROCERYSTORESERVICE_HTTP": "{grocerystoreservice.bindings.http.url}",
+        "services__grocerystoreservice__http__0": "{grocerystoreservice.bindings.http.url}",
+        "GROCERYSTORESERVICE_HTTPS": "{grocerystoreservice.bindings.https.url}",
+        "services__grocerystoreservice__https__0": "{grocerystoreservice.bindings.https.url}",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "recallservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.RecallService/ExpressRecipe.RecallService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{recallservice.bindings.http.targetPort}",
+        "ConnectionStrings__recalldb": "{recalldb.connectionString}",
+        "RECALLDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "RECALLDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "RECALLDB_USERNAME": "sa",
+        "RECALLDB_PASSWORD": "{sqlserver-password.value}",
+        "RECALLDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Recalls",
+        "RECALLDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Recalls",
+        "RECALLDB_DATABASENAME": "ExpressRecipe.Recalls",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "notificationservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.NotificationService/ExpressRecipe.NotificationService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{notificationservice.bindings.http.targetPort}",
+        "ConnectionStrings__notificationdb": "{notificationdb.connectionString}",
+        "NOTIFICATIONDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "NOTIFICATIONDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "NOTIFICATIONDB_USERNAME": "sa",
+        "NOTIFICATIONDB_PASSWORD": "{sqlserver-password.value}",
+        "NOTIFICATIONDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Notifications",
+        "NOTIFICATIONDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Notifications",
+        "NOTIFICATIONDB_DATABASENAME": "ExpressRecipe.Notifications",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "communityservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.CommunityService/ExpressRecipe.CommunityService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{communityservice.bindings.http.targetPort}",
+        "ConnectionStrings__communitydb": "{communitydb.connectionString}",
+        "COMMUNITYDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "COMMUNITYDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "COMMUNITYDB_USERNAME": "sa",
+        "COMMUNITYDB_PASSWORD": "{sqlserver-password.value}",
+        "COMMUNITYDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Community",
+        "COMMUNITYDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Community",
+        "COMMUNITYDB_DATABASENAME": "ExpressRecipe.Community",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "syncservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.SyncService/ExpressRecipe.SyncService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{syncservice.bindings.http.targetPort}",
+        "ConnectionStrings__syncdb": "{syncdb.connectionString}",
+        "SYNCDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "SYNCDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "SYNCDB_USERNAME": "sa",
+        "SYNCDB_PASSWORD": "{sqlserver-password.value}",
+        "SYNCDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Sync",
+        "SYNCDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Sync",
+        "SYNCDB_DATABASENAME": "ExpressRecipe.Sync",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "searchservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.SearchService/ExpressRecipe.SearchService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{searchservice.bindings.http.targetPort}",
+        "ConnectionStrings__searchdb": "{searchdb.connectionString}",
+        "SEARCHDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "SEARCHDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "SEARCHDB_USERNAME": "sa",
+        "SEARCHDB_PASSWORD": "{sqlserver-password.value}",
+        "SEARCHDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Search",
+        "SEARCHDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Search",
+        "SEARCHDB_DATABASENAME": "ExpressRecipe.Search",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "analyticsservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.AnalyticsService/ExpressRecipe.AnalyticsService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{analyticsservice.bindings.http.targetPort}",
+        "ConnectionStrings__analyticsdb": "{analyticsdb.connectionString}",
+        "ANALYTICSDB_HOST": "{sqlserver.bindings.tcp.host}",
+        "ANALYTICSDB_PORT": "{sqlserver.bindings.tcp.port}",
+        "ANALYTICSDB_USERNAME": "sa",
+        "ANALYTICSDB_PASSWORD": "{sqlserver-password.value}",
+        "ANALYTICSDB_URI": "mssql://sa:{sqlserver-password.value}@{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port}/ExpressRecipe.Analytics",
+        "ANALYTICSDB_JDBCCONNECTIONSTRING": "jdbc:sqlserver://{sqlserver.bindings.tcp.host}:{sqlserver.bindings.tcp.port};trustServerCertificate=true;databaseName=ExpressRecipe.Analytics",
+        "ANALYTICSDB_DATABASENAME": "ExpressRecipe.Analytics",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "aiservice": {
+      "type": "project.v0",
+      "path": "../Services/ExpressRecipe.AIService/ExpressRecipe.AIService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{aiservice.bindings.http.targetPort}",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "webapp": {
+      "type": "project.v0",
+      "path": "../Frontends/ExpressRecipe.BlazorWeb/ExpressRecipe.BlazorWeb.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{webapp.bindings.http.targetPort}",
+        "AUTHSERVICE_HTTP": "{authservice.bindings.http.url}",
+        "services__authservice__http__0": "{authservice.bindings.http.url}",
+        "AUTHSERVICE_HTTPS": "{authservice.bindings.https.url}",
+        "services__authservice__https__0": "{authservice.bindings.https.url}",
+        "USERSERVICE_HTTP": "{userservice.bindings.http.url}",
+        "services__userservice__http__0": "{userservice.bindings.http.url}",
+        "USERSERVICE_HTTPS": "{userservice.bindings.https.url}",
+        "services__userservice__https__0": "{userservice.bindings.https.url}",
+        "INGREDIENTSERVICE_HTTP": "{ingredientservice.bindings.http.url}",
+        "services__ingredientservice__http__0": "{ingredientservice.bindings.http.url}",
+        "INGREDIENTSERVICE_HTTPS": "{ingredientservice.bindings.https.url}",
+        "services__ingredientservice__https__0": "{ingredientservice.bindings.https.url}",
+        "PRODUCTSERVICE_HTTP": "{productservice.bindings.http.url}",
+        "services__productservice__http__0": "{productservice.bindings.http.url}",
+        "PRODUCTSERVICE_HTTPS": "{productservice.bindings.https.url}",
+        "services__productservice__https__0": "{productservice.bindings.https.url}",
+        "RECIPESERVICE_HTTP": "{recipeservice.bindings.http.url}",
+        "services__recipeservice__http__0": "{recipeservice.bindings.http.url}",
+        "RECIPESERVICE_HTTPS": "{recipeservice.bindings.https.url}",
+        "services__recipeservice__https__0": "{recipeservice.bindings.https.url}",
+        "COOKBOOKSERVICE_HTTP": "{cookbookservice.bindings.http.url}",
+        "services__cookbookservice__http__0": "{cookbookservice.bindings.http.url}",
+        "COOKBOOKSERVICE_HTTPS": "{cookbookservice.bindings.https.url}",
+        "services__cookbookservice__https__0": "{cookbookservice.bindings.https.url}",
+        "INVENTORYSERVICE_HTTP": "{inventoryservice.bindings.http.url}",
+        "services__inventoryservice__http__0": "{inventoryservice.bindings.http.url}",
+        "INVENTORYSERVICE_HTTPS": "{inventoryservice.bindings.https.url}",
+        "services__inventoryservice__https__0": "{inventoryservice.bindings.https.url}",
+        "SCANNERSERVICE_HTTP": "{scannerservice.bindings.http.url}",
+        "services__scannerservice__http__0": "{scannerservice.bindings.http.url}",
+        "SCANNERSERVICE_HTTPS": "{scannerservice.bindings.https.url}",
+        "services__scannerservice__https__0": "{scannerservice.bindings.https.url}",
+        "SHOPPINGSERVICE_HTTP": "{shoppingservice.bindings.http.url}",
+        "services__shoppingservice__http__0": "{shoppingservice.bindings.http.url}",
+        "SHOPPINGSERVICE_HTTPS": "{shoppingservice.bindings.https.url}",
+        "services__shoppingservice__https__0": "{shoppingservice.bindings.https.url}",
+        "MEALPLANNINGSERVICE_HTTP": "{mealplanningservice.bindings.http.url}",
+        "services__mealplanningservice__http__0": "{mealplanningservice.bindings.http.url}",
+        "MEALPLANNINGSERVICE_HTTPS": "{mealplanningservice.bindings.https.url}",
+        "services__mealplanningservice__https__0": "{mealplanningservice.bindings.https.url}",
+        "PRICESERVICE_HTTP": "{priceservice.bindings.http.url}",
+        "services__priceservice__http__0": "{priceservice.bindings.http.url}",
+        "PRICESERVICE_HTTPS": "{priceservice.bindings.https.url}",
+        "services__priceservice__https__0": "{priceservice.bindings.https.url}",
+        "GROCERYSTORESERVICE_HTTP": "{grocerystoreservice.bindings.http.url}",
+        "services__grocerystoreservice__http__0": "{grocerystoreservice.bindings.http.url}",
+        "GROCERYSTORESERVICE_HTTPS": "{grocerystoreservice.bindings.https.url}",
+        "services__grocerystoreservice__https__0": "{grocerystoreservice.bindings.https.url}",
+        "RECALLSERVICE_HTTP": "{recallservice.bindings.http.url}",
+        "services__recallservice__http__0": "{recallservice.bindings.http.url}",
+        "RECALLSERVICE_HTTPS": "{recallservice.bindings.https.url}",
+        "services__recallservice__https__0": "{recallservice.bindings.https.url}",
+        "NOTIFICATIONSERVICE_HTTP": "{notificationservice.bindings.http.url}",
+        "services__notificationservice__http__0": "{notificationservice.bindings.http.url}",
+        "NOTIFICATIONSERVICE_HTTPS": "{notificationservice.bindings.https.url}",
+        "services__notificationservice__https__0": "{notificationservice.bindings.https.url}",
+        "COMMUNITYSERVICE_HTTP": "{communityservice.bindings.http.url}",
+        "services__communityservice__http__0": "{communityservice.bindings.http.url}",
+        "COMMUNITYSERVICE_HTTPS": "{communityservice.bindings.https.url}",
+        "services__communityservice__https__0": "{communityservice.bindings.https.url}",
+        "SYNCSERVICE_HTTP": "{syncservice.bindings.http.url}",
+        "services__syncservice__http__0": "{syncservice.bindings.http.url}",
+        "SYNCSERVICE_HTTPS": "{syncservice.bindings.https.url}",
+        "services__syncservice__https__0": "{syncservice.bindings.https.url}",
+        "SEARCHSERVICE_HTTP": "{searchservice.bindings.http.url}",
+        "services__searchservice__http__0": "{searchservice.bindings.http.url}",
+        "SEARCHSERVICE_HTTPS": "{searchservice.bindings.https.url}",
+        "services__searchservice__https__0": "{searchservice.bindings.https.url}",
+        "ANALYTICSSERVICE_HTTP": "{analyticsservice.bindings.http.url}",
+        "services__analyticsservice__http__0": "{analyticsservice.bindings.http.url}",
+        "ANALYTICSSERVICE_HTTPS": "{analyticsservice.bindings.https.url}",
+        "services__analyticsservice__https__0": "{analyticsservice.bindings.https.url}",
+        "AISERVICE_HTTP": "{aiservice.bindings.http.url}",
+        "services__aiservice__http__0": "{aiservice.bindings.http.url}",
+        "AISERVICE_HTTPS": "{aiservice.bindings.https.url}",
+        "services__aiservice__https__0": "{aiservice.bindings.https.url}",
+        "ConnectionStrings__redis": "{redis.connectionString}",
+        "REDIS_HOST": "{redis.bindings.tcp.host}",
+        "REDIS_PORT": "{redis.bindings.tcp.port}",
+        "REDIS_PASSWORD": "{redis-password.value}",
+        "REDIS_URI": "redis://:{redis-password-uri-encoded.value}@{redis.bindings.tcp.host}:{redis.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "sqlserver-password": {
+      "type": "parameter.v0",
+      "value": "{sqlserver-password.inputs.value}",
+      "inputs": {
+        "value": {
+          "type": "string",
+          "secret": true,
+          "default": {
+            "generate": {
+              "minLength": 22,
+              "minLower": 1,
+              "minUpper": 1,
+              "minNumeric": 1
+            }
+          }
+        }
+      }
+    },
+    "sqlserver-password-uri-encoded": {
+      "type": "annotated.string",
+      "value": "{sqlserver-password.value}",
+      "filter": "uri"
+    },
+    "redis-password": {
+      "type": "parameter.v0",
+      "value": "{redis-password.inputs.value}",
+      "inputs": {
+        "value": {
+          "type": "string",
+          "secret": true,
+          "default": {
+            "generate": {
+              "minLength": 22,
+              "special": false
+            }
+          }
+        }
+      }
+    },
+    "redis-password-uri-encoded": {
+      "type": "annotated.string",
+      "value": "{redis-password.value}",
+      "filter": "uri"
+    },
+    "messaging-password": {
+      "type": "parameter.v0",
+      "value": "{messaging-password.inputs.value}",
+      "inputs": {
+        "value": {
+          "type": "string",
+          "secret": true,
+          "default": {
+            "generate": {
+              "minLength": 22,
+              "special": false
+            }
+          }
+        }
+      }
+    },
+    "messaging-password-uri-encoded": {
+      "type": "annotated.string",
+      "value": "{messaging-password.value}",
+      "filter": "uri"
+    }
+  }
+}

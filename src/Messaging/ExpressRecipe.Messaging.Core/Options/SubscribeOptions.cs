@@ -23,8 +23,8 @@ public sealed class SubscribeOptions
     /// <summary>Gets or sets whether the queue is exclusive to this connection. Defaults to <c>false</c>.</summary>
     public bool Exclusive { get; set; } = false;
 
-    /// <summary>Gets or sets the maximum number of unacknowledged messages per consumer (backpressure). Defaults to 10.</summary>
-    public int PrefetchCount { get; set; } = 10;
+    /// <summary>Gets or sets the maximum number of unacknowledged messages per consumer (backpressure). Defaults to 20.</summary>
+    public int PrefetchCount { get; set; } = 20;
 
     /// <summary>Gets or sets the routing mode for this subscription. Defaults to <see cref="RoutingMode.CompetingConsumer"/>.</summary>
     public RoutingMode RoutingMode { get; set; } = RoutingMode.CompetingConsumer;
@@ -34,6 +34,13 @@ public sealed class SubscribeOptions
 
     /// <summary>Gets or sets whether the queue is automatically deleted when the last consumer disconnects. Defaults to <c>false</c>.</summary>
     public bool AutoDelete { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the consumer dispatch concurrency for this subscription's channel.
+    /// A value greater than one enables concurrent message dispatch; handlers must be thread-safe.
+    /// When <c>null</c> the global <c>RabbitMqMessagingOptions.ConsumerConcurrency</c> value is used.
+    /// </summary>
+    public int? ConsumerConcurrency { get; set; }
 
     /// <summary>Gets or sets whether dead-lettering is enabled for this queue. Defaults to <c>true</c>.</summary>
     public bool DeadLetterEnabled { get; set; } = true;

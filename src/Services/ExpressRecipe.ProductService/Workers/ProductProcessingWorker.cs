@@ -61,7 +61,9 @@ public class ProductProcessingWorker : BackgroundService
 
     private async Task ProcessStagedProductsAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Starting staged product processing with TPL Dataflow");
+        _logger.LogInformation("Starting staged product processing pipeline");
+
+        var lastIdleLogAt = DateTimeOffset.MinValue;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -173,6 +175,15 @@ public class ProductProcessingWorker : BackgroundService
                         {
                             _logger.LogWarning(ex, "Failed to publish ImportProgressUpdated message");
                         }
+                    }
+                }
+
+                else
+                {
+                    if (DateTimeOffset.UtcNow - lastIdleLogAt >= TimeSpan.FromSeconds(60))
+                    {
+                        _logger.LogInformation("No pending products in staging table. Polling every {Interval}s...", PROCESSING_INTERVAL.TotalSeconds);
+                        lastIdleLogAt = DateTimeOffset.UtcNow;
                     }
                 }
 

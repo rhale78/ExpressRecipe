@@ -35,7 +35,15 @@ public sealed class RabbitMqMessagingOptions
     /// <summary>
     /// Gets or sets the number of channel objects to keep in the
     /// publish pool. Higher values improve publish throughput under heavy concurrency.
-    /// Defaults to 10.
+    /// Defaults to 64.
     /// </summary>
-    public int ChannelPoolSize { get; set; } = 10;
+    public int ChannelPoolSize { get; set; } = 64;
+
+    /// <summary>
+    /// Gets or sets the default consumer dispatch concurrency for all consumer channels.
+    /// A value greater than one enables concurrent message processing per consumer;
+    /// handlers must be thread-safe when this is set above 1.
+    /// Defaults to 1 (serial dispatch). Override per-subscription via <see cref="ExpressRecipe.Messaging.Core.Options.SubscribeOptions.ConsumerConcurrency"/>.
+    /// </summary>
+    public int ConsumerConcurrency { get; set; } = 1;
 }

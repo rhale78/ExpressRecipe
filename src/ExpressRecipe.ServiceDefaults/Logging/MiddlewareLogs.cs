@@ -25,6 +25,12 @@ public static partial class ExceptionMiddlewareLogs
         Level = LogLevel.Information,
         Message = "[Middleware] Exception handled: {ExceptionType} -> {StatusCode}")]
     public static partial void LogExceptionHandled(this ILogger logger, string exceptionType, int statusCode);
+
+    [LoggerMessage(
+        EventId = 403,
+        Level = LogLevel.Warning,
+        Message = "[Middleware] Security token validation failed: {ExceptionType} -> {StatusCode}")]
+    public static partial void LogSecurityTokenFailure(this ILogger logger, string exceptionType, int statusCode, Exception exception);
 }
 
 /// <summary>

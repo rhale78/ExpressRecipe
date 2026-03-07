@@ -52,7 +52,8 @@ var authService = builder.AddProject<Projects.ExpressRecipe_AuthService>("authse
 // Ingredient Service - Centralized ingredient and allergen data
 var ingredientService = builder.AddProject<Projects.ExpressRecipe_IngredientService>("ingredientservice")
     .WithReference(ingredientDb)
-    .WithReference(redis);
+    .WithReference(redis)
+    .WithReference(messaging);
 
 // Grocery Store Location Service - Store locator and location data
 var groceryStoreService = builder.AddProject<Projects.ExpressRecipe_GroceryStoreLocationService>("grocerystoreservice")

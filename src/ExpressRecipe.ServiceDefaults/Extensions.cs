@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -38,7 +39,15 @@ public static class Extensions
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
             // Turn on resilience by default
-            http.AddStandardResilienceHandler();
+            // AttemptTimeout: per-attempt limit (bulk/AI ops can take >10s)
+            // TotalRequestTimeout: must exceed AttemptTimeout × max attempts + backoff
+            http.AddStandardResilienceHandler().Configure(options =>
+            {
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(300);
+                // SamplingDuration must be >= 2x AttemptTimeout to be effective
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(120);
+            });
 
             // Turn on service discovery by default
             // Let Aspire handle HTTP version negotiation automatically

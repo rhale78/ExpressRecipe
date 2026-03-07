@@ -12,7 +12,13 @@
       "Bash(Select-String -Pattern \"error CS\" -Context 0,1)",
       "Bash(ls:*)",
       "WebFetch(domain:openfoodfacts.github.io)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npm install:*)",
+      "Bash(claude mcp list)",
+      "Read(//c/Users/rhale78/.claude/**)",
+      "Read(//c/Users/rhale78/AppData/Roaming/Claude/**)",
+      "Bash(python -m json.tool)",
+      "Bash(playwright:*)"
     ],
     "deny": [],
     "ask": []

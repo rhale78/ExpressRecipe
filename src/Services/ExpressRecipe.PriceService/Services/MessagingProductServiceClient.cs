@@ -12,18 +12,21 @@ namespace ExpressRecipe.PriceService.Services;
 public sealed class MessagingProductServiceClient : IProductServiceClient
 {
     private readonly IMessageBus _bus;
+    private readonly ProductServiceClient _restFallbackClient;
     private readonly ILogger<MessagingProductServiceClient> _logger;
     private readonly TimeSpan _requestTimeout;
 
     public MessagingProductServiceClient(
         IMessageBus bus,
+        ProductServiceClient restFallbackClient,
         ILogger<MessagingProductServiceClient> logger,
         IConfiguration configuration)
     {
-        _bus            = bus;
-        _logger         = logger;
+        _bus = bus;
+        _restFallbackClient = restFallbackClient;
+        _logger = logger;
         _requestTimeout = TimeSpan.FromSeconds(
-            configuration.GetValue("PriceService:ProductLookup:MessagingTimeoutSeconds", 5));
+            configuration.GetValue("PriceService:ProductLookup:MessagingTimeoutSeconds", 60));
     }
 
     public async Task<ProductDto?> GetProductByBarcodeAsync(string barcode, CancellationToken cancellationToken = default)
@@ -58,13 +61,13 @@ public sealed class MessagingProductServiceClient : IProductServiceClient
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("[MessagingProductClient] Timeout looking up barcode {Barcode}", barcode);
-            return null;
+            _logger.LogWarning("[MessagingProductClient] Timeout looking up barcode {Barcode}. Falling back to REST.", barcode);
+            return await _restFallbackClient.GetProductByBarcodeAsync(barcode, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[MessagingProductClient] Error looking up barcode {Barcode}", barcode);
-            return null;
+            _logger.LogWarning(ex, "[MessagingProductClient] Error looking up barcode {Barcode}. Falling back to REST.", barcode);
+            return await _restFallbackClient.GetProductByBarcodeAsync(barcode, cancellationToken);
         }
     }
 
@@ -115,13 +118,13 @@ public sealed class MessagingProductServiceClient : IProductServiceClient
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("[MessagingProductClient] Timeout on bulk barcode lookup: {Count} barcodes", barcodeList.Count);
-            return new Dictionary<string, ProductDto>(StringComparer.OrdinalIgnoreCase);
+            _logger.LogWarning("[MessagingProductClient] Timeout on bulk barcode lookup: {Count} barcodes. Falling back to REST.", barcodeList.Count);
+            return await _restFallbackClient.GetProductsByBarcodesAsync(barcodeList, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[MessagingProductClient] Error on bulk barcode lookup: {Count} barcodes", barcodeList.Count);
-            return new Dictionary<string, ProductDto>(StringComparer.OrdinalIgnoreCase);
+            _logger.LogWarning(ex, "[MessagingProductClient] Error on bulk barcode lookup: {Count} barcodes. Falling back to REST.", barcodeList.Count);
+            return await _restFallbackClient.GetProductsByBarcodesAsync(barcodeList, cancellationToken);
         }
     }
 }

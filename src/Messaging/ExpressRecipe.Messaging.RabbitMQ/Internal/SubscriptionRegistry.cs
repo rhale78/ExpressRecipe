@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.Core.Messages;
 using ExpressRecipe.Messaging.Core.Options;
@@ -45,18 +46,18 @@ internal sealed class TypedSubscriptionRegistration<TMessage, THandler> : Subscr
     where TMessage : IMessage
     where THandler : IMessageHandler<TMessage>
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly Func<IServiceProvider> _getServiceProvider;
 
-    public TypedSubscriptionRegistration(IServiceProvider serviceProvider, SubscribeOptions options)
+    public TypedSubscriptionRegistration(Func<IServiceProvider> serviceProviderFactory, SubscribeOptions options)
     {
-        _serviceProvider = serviceProvider;
+        _getServiceProvider = serviceProviderFactory;
         MessageType = typeof(TMessage);
         Options = options;
     }
 
     public override async Task InvokeAsync(object message, MessageContext context, CancellationToken cancellationToken)
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _getServiceProvider().CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService<THandler>();
         await handler.HandleAsync((TMessage)message, context, cancellationToken).ConfigureAwait(false);
     }
@@ -97,11 +98,11 @@ internal sealed class TypedRequestSubscriptionRegistration<TRequest, TResponse, 
     where TResponse : IMessage
     where THandler : IRequestHandler<TRequest, TResponse>
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly Func<IServiceProvider> _getServiceProvider;
 
-    public TypedRequestSubscriptionRegistration(IServiceProvider serviceProvider, SubscribeOptions options)
+    public TypedRequestSubscriptionRegistration(Func<IServiceProvider> serviceProviderFactory, SubscribeOptions options)
     {
-        _serviceProvider = serviceProvider;
+        _getServiceProvider = serviceProviderFactory;
         MessageType = typeof(TRequest);
         ResponseType = typeof(TResponse);
         Options = options;
@@ -110,14 +111,14 @@ internal sealed class TypedRequestSubscriptionRegistration<TRequest, TResponse, 
 
     public override async Task InvokeAsync(object message, MessageContext context, CancellationToken cancellationToken)
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _getServiceProvider().CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService<THandler>();
         await handler.HandleAsync((TRequest)message, context, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<TResponse> InvokeTypedAsync(TRequest message, MessageContext context, CancellationToken cancellationToken)
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
+        await using var scope = _getServiceProvider().CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService<THandler>();
         return await handler.HandleAsync((TRequest)message, context, cancellationToken).ConfigureAwait(false);
     }
@@ -125,16 +126,29 @@ internal sealed class TypedRequestSubscriptionRegistration<TRequest, TResponse, 
 
 /// <summary>
 /// Thread-safe registry of all active subscriptions.
+/// Exposes a <see cref="System.Threading.Channels.ChannelReader{T}"/> so the consumer
+/// hosted service can pick up registrations that arrive after it has started,
+/// solving the IHostedService startup-ordering timing race.
 /// </summary>
 public sealed class SubscriptionRegistry
 {
     private readonly List<SubscriptionRegistration> _registrations = new();
     private readonly Lock _lock = new();
 
+    // Unbounded so Add() never blocks; the consumer service drains this continuously.
+    private readonly Channel<SubscriptionRegistration> _pending =
+        Channel.CreateUnbounded<SubscriptionRegistration>(
+            new UnboundedChannelOptions { SingleWriter = false, SingleReader = true });
+
+    /// <summary>Reader the consumer hosted service awaits to receive new registrations.</summary>
+    internal ChannelReader<SubscriptionRegistration> Pending => _pending.Reader;
+
     internal void Add(SubscriptionRegistration registration)
     {
         lock (_lock)
             _registrations.Add(registration);
+
+        _pending.Writer.TryWrite(registration);
     }
 
     internal IReadOnlyList<SubscriptionRegistration> GetAll()
@@ -142,4 +156,10 @@ public sealed class SubscriptionRegistry
         lock (_lock)
             return _registrations.ToList();
     }
+
+    /// <summary>
+    /// Signals the pending channel that no more subscriptions will be added
+    /// (called when the host stops).
+    /// </summary>
+    internal void Complete() => _pending.Writer.TryComplete();
 }

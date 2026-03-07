@@ -51,7 +51,7 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
         {
             foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                var cacheKey = string.Format(CacheKeys.IngredientByName, name.ToLowerInvariant());
+                var cacheKey = CacheKeyHelper.IngredientByName(name);
                 // We use GetAsync here because we don't want to trigger the factory for EACH individual name
                 // in a bulk lookup, as that would be inefficient.
                 var cachedId = await _cache.GetAsync<Guid?>(cacheKey);
@@ -112,7 +112,7 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
         {
             foreach (var kvp in serviceResults)
             {
-                var cacheKey = string.Format(CacheKeys.IngredientByName, kvp.Key.ToLowerInvariant());
+                var cacheKey = CacheKeyHelper.IngredientByName(kvp.Key);
                 await _cache.SetAsync(cacheKey, (Guid?)kvp.Value, expiration: TimeSpan.FromHours(24));
                 result[kvp.Key] = kvp.Value;
             }
@@ -147,7 +147,7 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
 
-        var cacheKey = string.Format(CacheKeys.IngredientByName, name.ToLowerInvariant());
+        var cacheKey = CacheKeyHelper.IngredientByName(name);
 
         if (_cache != null)
         {
@@ -217,7 +217,7 @@ public class IngredientServiceClient : ApiClientBase, IIngredientServiceClient
         // Invalidate name cache if successfully created
         if (id != Guid.Empty && _cache != null)
         {
-            var cacheKey = string.Format(CacheKeys.IngredientByName, request.Name.ToLowerInvariant());
+            var cacheKey = CacheKeyHelper.IngredientByName(request.Name);
             await _cache.RemoveAsync(cacheKey);
         }
 

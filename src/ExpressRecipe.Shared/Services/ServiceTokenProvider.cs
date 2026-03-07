@@ -1,10 +1,10 @@
-namespace ExpressRecipe.Shared.Services;
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+
+namespace ExpressRecipe.Shared.Services;
 
 /// <summary>
 /// Token provider for service-to-service authentication.
@@ -24,8 +24,7 @@ public class ServiceTokenProvider : ITokenProvider
     public ServiceTokenProvider(string serviceName, IConfiguration configuration)
     {
         _serviceName = serviceName;
-        _secretKey = configuration["Jwt:Key"] ?? 
-                     configuration["JwtSettings:SecretKey"] ??
+        _secretKey = configuration["JwtSettings:SecretKey"] ??
                      Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
                      "development-secret-key-change-in-production-min-32-chars-required!";
         _issuer = configuration["JwtSettings:Issuer"] ?? "ExpressRecipe.AuthService";
@@ -62,7 +61,10 @@ public class ServiceTokenProvider : ITokenProvider
 
     private string GenerateServiceToken()
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey))
+        {
+            KeyId = ExpressRecipe.Shared.Security.JwtConstants.SigningKeyId
+        };
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new List<Claim>

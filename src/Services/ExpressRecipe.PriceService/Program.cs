@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Text;
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
@@ -42,28 +43,9 @@ builder.Services.AddHttpClient<ProductServiceClient>(client =>
 
 builder.Services.AddSingleton<HybridCacheService>();
 builder.Services.AddSingleton<ExpressRecipe.Shared.Services.CacheService>();
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
-if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
-    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService",
-            ValidAudience = jwtSettings["Audience"] ?? "ExpressRecipe.API",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-            ClockSkew = TimeSpan.Zero
-        };
-    });
-
-builder.Services.AddAuthorization();
+// Configure JWT Authentication
+builder.AddExpressRecipeAuthentication();
 
 // Register token provider (service-to-service authentication)
 builder.Services.AddScoped<ITokenProvider>(sp =>
@@ -132,10 +114,10 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PriceDataImportWor
 // Add controllers
 builder.Services.AddControllers();
 
-// Register RabbitMQ messaging (IMessageBus) - conditional based on configuration
-var messagingEnabled = builder.Configuration.GetValue<bool>("Messaging:Enabled", false)
-    || !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"))
-    || !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]);
+// Register RabbitMQ messaging (IMessageBus) - conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
 
 if (messagingEnabled)
 {
@@ -145,6 +127,7 @@ if (messagingEnabled)
     builder.Services.AddSingleton<IProductServiceClient>(sp =>
         new MessagingProductServiceClient(
             sp.GetRequiredService<ExpressRecipe.Messaging.Core.Abstractions.IMessageBus>(),
+            sp.GetRequiredService<ProductServiceClient>(),
             sp.GetRequiredService<ILogger<MessagingProductServiceClient>>(),
             sp.GetRequiredService<IConfiguration>()));
 
@@ -163,7 +146,7 @@ if (messagingEnabled)
 }
 else
 {
-    // Messaging disabled: fall back to REST HTTP calls to ProductService
+    // Messaging disabled/unavailable: fall back to REST HTTP calls to ProductService
     builder.Services.AddScoped<IProductServiceClient>(sp =>
         new ProductServiceClient(
             sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ProductServiceClient)),
