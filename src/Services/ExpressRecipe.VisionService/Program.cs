@@ -38,16 +38,20 @@ builder.Services.AddSingleton(ollamaOptions);
 builder.Services.AddSingleton(azureOptions);
 builder.Services.AddSingleton(serviceOptions);
 
+// Named client keys for providers
+const string OllamaClientName = "OllamaVisionProvider";
+const string AzureClientName = "AzureVisionProvider";
+
 // Register HTTP client for Ollama
 string ollamaEndpoint = ollamaOptions.Endpoint;
-builder.Services.AddHttpClient<OllamaVisionProvider>(client =>
+builder.Services.AddHttpClient(OllamaClientName, client =>
 {
     client.BaseAddress = new Uri(ollamaEndpoint);
     client.Timeout = TimeSpan.FromSeconds(15);
 });
 
 // Register HTTP client for Azure
-builder.Services.AddHttpClient<AzureVisionProvider>(client =>
+builder.Services.AddHttpClient(AzureClientName, client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
@@ -69,7 +73,7 @@ builder.Services.AddSingleton<PaddleOcrProvider>(sp =>
 builder.Services.AddSingleton<OllamaVisionProvider>(sp =>
 {
     IHttpClientFactory factory = sp.GetRequiredService<IHttpClientFactory>();
-    HttpClient client = factory.CreateClient(typeof(OllamaVisionProvider).FullName!);
+    HttpClient client = factory.CreateClient(OllamaClientName);
     return new OllamaVisionProvider(
         sp.GetRequiredService<OllamaVisionOptions>(),
         client,
@@ -78,7 +82,7 @@ builder.Services.AddSingleton<OllamaVisionProvider>(sp =>
 builder.Services.AddSingleton<AzureVisionProvider>(sp =>
 {
     IHttpClientFactory factory = sp.GetRequiredService<IHttpClientFactory>();
-    HttpClient client = factory.CreateClient(typeof(AzureVisionProvider).FullName!);
+    HttpClient client = factory.CreateClient(AzureClientName);
     return new AzureVisionProvider(
         sp.GetRequiredService<AzureVisionOptions>(),
         client,

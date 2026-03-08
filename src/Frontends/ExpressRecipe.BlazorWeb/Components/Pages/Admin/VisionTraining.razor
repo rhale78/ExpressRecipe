@@ -6,6 +6,7 @@
 @inject IToastService ToastService
 @inject ILogger<VisionTraining> Logger
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Vision Training Queue - ExpressRecipe Admin</PageTitle>
 
@@ -26,8 +27,17 @@
                     <button class="btn @(_statusFilter == "Approved" ? "btn-success" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Approved")'>Approved</button>
                     <button class="btn @(_statusFilter == "Rejected" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Rejected")'>Rejected</button>
                 </div>
-                <button class="btn btn-outline-primary btn-sm ms-auto" @onclick="DownloadTrainingExportAsync">
-                    <i class="bi bi-download me-1"></i>Export Training CSV
+                <button class="btn btn-outline-primary btn-sm ms-auto" @onclick="DownloadTrainingExportAsync"
+                        disabled="@_isExporting">
+                    @if (_isExporting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-download me-1"></i>
+                    }
+                    Export Training CSV
                 </button>
             </div>
 
@@ -41,6 +51,7 @@
             }
             else
             {
+                <p class="text-muted small">Showing @_reports.Count report(s)</p>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
                         <thead class="table-light">
@@ -101,6 +112,7 @@
     }
 
     private bool _isLoading = true;
+    private bool _isExporting = false;
     private string? _statusFilter = "Pending";
     private List<CorrectionReportRow> _reports = new();
 
@@ -117,7 +129,16 @@
 
         try
         {
-            _reports = await FetchReportsAsync(status);
+            List<CorrectionReportItem> items = await ScannerClient.GetAdminCorrectionReportsAsync(status, 200);
+            _reports = items.Select(i => new CorrectionReportRow
+            {
+                Id = i.Id,
+                AiGuess = i.AiGuess,
+                UserCorrection = i.UserCorrection,
+                UserNote = i.UserNote,
+                Status = i.Status,
+                CreatedAt = i.CreatedAt
+            }).ToList();
         }
         catch (Exception ex)
         {
@@ -129,14 +150,6 @@
         {
             _isLoading = false;
         }
-    }
-
-    private async Task<List<CorrectionReportRow>> FetchReportsAsync(string? status)
-    {
-        // Use the scanner admin endpoint via raw HttpClient through ScannerClient
-        // For now, return empty list — admin API client extension is wired in ScannerApiClient
-        await Task.CompletedTask;
-        return new List<CorrectionReportRow>();
     }
 
     private async Task ApproveAsync(Guid reportId)
@@ -153,10 +166,17 @@
     {
         try
         {
-            // TODO: wire to ScannerAdminApiClient.UpdateCorrectionStatusAsync when available
-            await Task.CompletedTask;
-            ToastService.ShowSuccess($"Report {status.ToLower()}.", status);
-            await LoadReportsAsync(_statusFilter);
+            bool success = await ScannerClient.UpdateAdminCorrectionStatusAsync(reportId, status);
+
+            if (success)
+            {
+                ToastService.ShowSuccess($"Report {status.ToLower()}.", status);
+                await LoadReportsAsync(_statusFilter);
+            }
+            else
+            {
+                ToastService.ShowError("Server rejected the update.", "Error");
+            }
         }
         catch (Exception ex)
         {
@@ -167,17 +187,63 @@
 
     private async Task DownloadTrainingExportAsync()
     {
+        _isExporting = true;
+        StateHasChanged();
+
         try
         {
-            // TODO: wire to admin training export endpoint
-            ToastService.ShowInfo("Training export will download shortly.", "Export");
-            await Task.CompletedTask;
+            List<TrainingExportItem> rows = await ScannerClient.GetTrainingExportAsync();
+
+            if (rows.Count == 0)
+            {
+                ToastService.ShowInfo("No approved training data available yet.", "Export");
+                return;
+            }
+
+            string csv = BuildCsv(rows);
+            string fileName = $"vision-training-{DateTime.UtcNow:yyyyMMdd}.csv";
+            await JS.InvokeVoidAsync("downloadCsvBlob", fileName, csv);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to export training data");
             ToastService.ShowError("Failed to export training data.", "Error");
         }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private static string BuildCsv(List<TrainingExportItem> rows)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        sb.AppendLine("CaptureId,DetectedBarcode,DetectedProductName,DetectedBrand,ProviderUsed,Confidence,CorrectedProductName,CapturedAt");
+
+        foreach (TrainingExportItem row in rows)
+        {
+            sb.AppendLine(string.Join(",",
+                row.CaptureId,
+                Escape(row.DetectedBarcode),
+                Escape(row.DetectedProductName),
+                Escape(row.DetectedBrand),
+                Escape(row.ProviderUsed),
+                row.Confidence?.ToString("F4") ?? string.Empty,
+                Escape(row.CorrectedProductName),
+                row.CapturedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string Escape(string? value)
+    {
+        if (value == null) { return string.Empty; }
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+        return value;
     }
 
     private static string GetStatusBadgeClass(string status)

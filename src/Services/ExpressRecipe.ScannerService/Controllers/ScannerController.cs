@@ -142,7 +142,8 @@ public class ScannerController : ControllerBase
             DetectedProductName = request.DetectedProductName,
             DetectedBrand = request.DetectedBrand,
             ProviderUsed = request.ProviderUsed,
-            Confidence = request.Confidence
+            Confidence = request.Confidence,
+            IsTrainingData = request.IsTrainingData
         };
 
         Guid captureId = await _repository.SaveVisionCaptureAsync(capture, ct);
@@ -206,6 +207,7 @@ public class SaveVisionCaptureRequest
     public string? ProviderUsed { get; set; }
     public decimal? Confidence { get; set; }
     public Guid? ScanHistoryId { get; set; }
+    public bool IsTrainingData { get; set; }
 }
 
 public class CreateCorrectionReportRequest

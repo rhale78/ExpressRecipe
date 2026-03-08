@@ -372,6 +372,8 @@
     private bool _cameraAvailable = true;
     private bool _isCameraActive = false;
     private bool _isProcessing = false;
+    private bool _saveForTraining = true;
+    private string _cameraFacingMode = "environment";
     private string? _cameraUnavailableMessage;
     private string? _statusMessage;
 
@@ -404,7 +406,32 @@
             {
                 _inputMode = InputMode.Manual;
             }
+
+            // Load saved preferences now that JS interop is available
+            await LoadPreferencesAsync();
             StateHasChanged();
+        }
+    }
+
+    private async Task LoadPreferencesAsync()
+    {
+        try
+        {
+            string? autoSearch = await JS.InvokeAsync<string?>("scannerInterop.loadPreference", "autoSearch");
+            string? sessionMode = await JS.InvokeAsync<string?>("scannerInterop.loadPreference", "defaultSessionMode");
+            string? training = await JS.InvokeAsync<string?>("scannerInterop.loadPreference", "saveForTraining");
+            string? facing = await JS.InvokeAsync<string?>("scannerInterop.loadPreference", "cameraFacingMode");
+            string? detMode = await JS.InvokeAsync<string?>("scannerInterop.loadPreference", "detectionMode");
+
+            if (bool.TryParse(autoSearch, out bool autoSearchVal)) { _autoSearch = autoSearchVal; }
+            if (!string.IsNullOrWhiteSpace(sessionMode) && Enum.TryParse<SessionMode>(sessionMode, ignoreCase: true, out SessionMode sm)) { _sessionMode = sm; }
+            if (bool.TryParse(training, out bool trainingVal)) { _saveForTraining = trainingVal; }
+            if (!string.IsNullOrWhiteSpace(facing)) { _cameraFacingMode = facing; }
+            if (!string.IsNullOrWhiteSpace(detMode) && Enum.TryParse<DetectionMode>(detMode, ignoreCase: true, out DetectionMode dm)) { _detectionMode = dm; }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not load scanner preferences");
         }
     }
 
@@ -421,25 +448,13 @@
         }
     }
 
-    private async Task LoadPreferencesAsync()
-    {
-        try
-        {
-            // Preferences loaded via JS interop after first render
-        }
-        catch (Exception ex)
-        {
-            Logger.LogDebug(ex, "Could not load scanner preferences");
-        }
-    }
-
     private async Task StartCameraAsync()
     {
         _dotNetRef?.Dispose();
         _dotNetRef = DotNetObjectReference.Create(this);
         try
         {
-            await JS.InvokeVoidAsync("scannerInterop.startCamera", _dotNetRef, "scanner-video", "scanner-canvas", "environment");
+            await JS.InvokeVoidAsync("scannerInterop.startCamera", _dotNetRef, "scanner-video", "scanner-canvas", _cameraFacingMode);
             _isCameraActive = true;
         }
         catch (Exception ex)
@@ -546,7 +561,7 @@
             return;
         }
 
-        Guid? captureId = await TrySaveCaptureAsync(base64, result.DetectedText.FirstOrDefault(), result.ProductName);
+        Guid? captureId = await TrySaveCaptureAsync(base64, detectedBarcode: null, result.ProductName);
 
         DetectedItem item = new DetectedItem
         {
@@ -651,7 +666,8 @@
             {
                 CaptureBase64 = base64,
                 DetectedBarcode = detectedBarcode,
-                DetectedProductName = detectedProductName
+                DetectedProductName = detectedProductName,
+                IsTrainingData = _saveForTraining
             };
 
             return await ScannerClient.SaveVisionCaptureAsync(request);
@@ -743,12 +759,44 @@
 
     private async Task ProcessBatchQueueAsync()
     {
-        foreach (DetectedItem item in _batchQueue.Where(i => i.ProductId.HasValue))
+        // Navigate to the first confirmed item only; navigating away clears the rest of the queue
+        DetectedItem? first = _batchQueue.FirstOrDefault(i => i.ProductId.HasValue);
+
+        if (first == null)
         {
-            DispatchToEntryPoint(item.ProductId!.Value);
-            await Task.Delay(100);
+            _batchQueue.Clear();
+            return;
         }
+
+        List<DetectedItem> remaining = _batchQueue.Where(i => i != first && i.ProductId.HasValue).ToList();
         _batchQueue.Clear();
+
+        await StopCameraAsync();
+
+        // If there are more items, pass them as a serialised query param so the destination page can show a queue
+        if (remaining.Count > 0)
+        {
+            string moreIds = string.Join(",", remaining.Select(i => i.ProductId!.Value));
+            Navigation.NavigateTo($"{BuildDispatchUrl(first.ProductId!.Value)}&batchIds={Uri.EscapeDataString(moreIds)}");
+        }
+        else
+        {
+            DispatchToEntryPoint(first.ProductId!.Value);
+        }
+    }
+
+    private string BuildDispatchUrl(Guid productId)
+    {
+        return _entryPoint switch
+        {
+            ScannerEntryPoint.AddInventory => $"/inventory/add?productId={productId}",
+            ScannerEntryPoint.RemoveInventory => $"/inventory/remove?productId={productId}",
+            ScannerEntryPoint.AddPrice => $"/prices/add?productId={productId}",
+            ScannerEntryPoint.AllergenCheck => $"/allergens/check?productId={productId}",
+            ScannerEntryPoint.AddProduct => $"/products/add?productId={productId}",
+            ScannerEntryPoint.AddAllergy => $"/allergens/add?productId={productId}",
+            _ => $"/products/{productId}"
+        };
     }
 
     private async Task SearchByNameAsync()
@@ -852,6 +900,16 @@
 
     public void Dispose()
     {
+        if (_isCameraActive)
+        {
+            // Best-effort stop: fire-and-forget release of media tracks
+            _ = JS.InvokeVoidAsync("scannerInterop.stopCamera").AsTask().ContinueWith(t =>
+            {
+                if (t.IsFaulted || t.IsCanceled) { /* ignore — page is navigating away */ }
+            }, TaskScheduler.Default);
+            _isCameraActive = false;
+        }
+
         _dotNetRef?.Dispose();
         _dotNetRef = null;
     }

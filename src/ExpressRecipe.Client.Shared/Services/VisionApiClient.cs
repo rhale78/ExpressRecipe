@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.Client.Shared.Services;
 
@@ -39,13 +40,11 @@ public interface IVisionApiClient
     Task<VisionHealthResponse?> GetHealthAsync(CancellationToken ct = default);
 }
 
-public class VisionApiClient : IVisionApiClient
+public class VisionApiClient : ApiClientBase, IVisionApiClient
 {
-    private readonly HttpClient _httpClient;
-
-    public VisionApiClient(HttpClient httpClient)
+    public VisionApiClient(HttpClient httpClient, ITokenProvider tokenProvider)
+        : base(httpClient, tokenProvider)
     {
-        _httpClient = httpClient;
     }
 
     public async Task<VisionAnalyzeResponse?> AnalyzeAsync(string base64Image, VisionOptionsRequest? options = null, CancellationToken ct = default)
@@ -56,38 +55,17 @@ public class VisionApiClient : IVisionApiClient
             options
         };
 
-        HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/vision/analyze", requestBody, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        return await response.Content.ReadFromJsonAsync<VisionAnalyzeResponse>(cancellationToken: ct);
+        return await PostAsync<object, VisionAnalyzeResponse>("/api/vision/analyze", requestBody);
     }
 
     public async Task<VisionAnalyzeResponse?> ExtractTextAsync(string base64Image, CancellationToken ct = default)
     {
         object requestBody = new { base64Image };
-        HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/vision/ocr", requestBody, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        return await response.Content.ReadFromJsonAsync<VisionAnalyzeResponse>(cancellationToken: ct);
+        return await PostAsync<object, VisionAnalyzeResponse>("/api/vision/ocr", requestBody);
     }
 
     public async Task<VisionHealthResponse?> GetHealthAsync(CancellationToken ct = default)
     {
-        HttpResponseMessage response = await _httpClient.GetAsync("/api/vision/health", ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        return await response.Content.ReadFromJsonAsync<VisionHealthResponse>(cancellationToken: ct);
+        return await GetAsync<VisionHealthResponse>("/api/vision/health");
     }
 }

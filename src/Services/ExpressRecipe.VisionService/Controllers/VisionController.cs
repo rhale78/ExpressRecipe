@@ -25,14 +25,14 @@ public class VisionController : ControllerBase
     [HttpPost("analyze")]
     public async Task<IActionResult> Analyze(CancellationToken ct)
     {
-        byte[]? imageBytes = await TryReadImageBytesAsync(ct);
+        (byte[]? imageBytes, VisionOptions? bodyOptions) = await TryReadImageAndOptionsAsync(ct);
 
         if (imageBytes == null || imageBytes.Length == 0)
         {
             return BadRequest(new { error = "No image data provided. Send multipart/form-data with field 'image' or JSON { base64Image }." });
         }
 
-        VisionOptions options = TryReadOptionsFromQuery() ?? new VisionOptions();
+        VisionOptions options = bodyOptions ?? new VisionOptions();
 
         _logger.LogInformation("Vision analyze request: {Size} bytes", imageBytes.Length);
 
@@ -69,7 +69,7 @@ public class VisionController : ControllerBase
         return Ok(status);
     }
 
-    private async Task<byte[]?> TryReadImageBytesAsync(CancellationToken ct)
+    private async Task<(byte[]? imageBytes, VisionOptions? options)> TryReadImageAndOptionsAsync(CancellationToken ct)
     {
         // Try multipart/form-data first
         if (Request.HasFormContentType)
@@ -79,7 +79,7 @@ public class VisionController : ControllerBase
             {
                 using System.IO.MemoryStream ms = new System.IO.MemoryStream();
                 await file.CopyToAsync(ms, ct);
-                return ms.ToArray();
+                return (ms.ToArray(), null);
             }
         }
 
@@ -89,15 +89,35 @@ public class VisionController : ControllerBase
             VisionAnalyzeRequest? body = await Request.ReadFromJsonAsync<VisionAnalyzeRequest>(cancellationToken: ct);
             if (!string.IsNullOrWhiteSpace(body?.Base64Image))
             {
-                return Convert.FromBase64String(body.Base64Image);
+                byte[] buffer = new byte[((body.Base64Image.Length + 3) / 4) * 3];
+                if (!Convert.TryFromBase64String(body.Base64Image, buffer, out int bytesWritten))
+                {
+                    _logger.LogWarning("Invalid Base64 image data received in vision request");
+                    return (null, null);
+                }
+
+                byte[] imageBytes = new byte[bytesWritten];
+                Array.Copy(buffer, imageBytes, bytesWritten);
+
+                VisionOptions? options = body.Options == null ? null : new VisionOptions
+                {
+                    AllowOnnx = body.Options.AllowOnnx,
+                    AllowPaddleOcr = body.Options.AllowPaddleOcr,
+                    AllowOllamaVision = body.Options.AllowOllamaVision,
+                    AllowAzureVision = body.Options.AllowAzureVision,
+                    MinConfidence = body.Options.MinConfidence
+                };
+
+                return (imageBytes, options);
             }
         }
 
-        return null;
+        return (null, null);
     }
 
-    private VisionOptions? TryReadOptionsFromQuery()
+    private async Task<byte[]?> TryReadImageBytesAsync(CancellationToken ct)
     {
-        return null; // Query params not implemented; use defaults
+        (byte[]? imageBytes, VisionOptions? _) = await TryReadImageAndOptionsAsync(ct);
+        return imageBytes;
     }
 }
