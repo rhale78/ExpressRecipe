@@ -3,7 +3,7 @@ using ExpressRecipe.Shared.DTOs.Product;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace ExpressRecipe.ProductService.Data;
+namespace ExpressRecipe.RestaurantService.Data;
 
 public interface IRestaurantRepository
 {
@@ -30,12 +30,12 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
     public async Task<List<RestaurantDto>> SearchAsync(RestaurantSearchRequest request)
     {
-        var whereClauses = new List<string> { "IsDeleted = 0" };
+        var whereClauses = new List<string> { "IsActive = 1" };
         var parameters = new List<SqlParameter>();
 
         if (request.OnlyApproved == true)
         {
-            whereClauses.Add("IsApproved = 1");
+            whereClauses.Add("ApprovalStatus = 'Approved'");
         }
 
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
@@ -56,11 +56,18 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             parameters.Add((SqlParameter)CreateParameter("@City", request.City));
         }
 
+        if (!string.IsNullOrWhiteSpace(request.State))
+        {
+            whereClauses.Add("State = @State");
+            parameters.Add((SqlParameter)CreateParameter("@State", request.State));
+        }
+
         var sql = $@"
-            SELECT Id, Name, Brand, CuisineType, Address, City, State, ZipCode,
-                   Country, Latitude, Longitude, Phone, Website,
-                   IsApproved, ApprovedBy, ApprovedAt, RejectionReason,
-                   SubmittedBy, CreatedAt, UpdatedAt
+            SELECT Id, Name, Brand, Description, CuisineType, RestaurantType,
+                   Address, City, State, ZipCode, Country, Latitude, Longitude,
+                   PhoneNumber, Website, ImageUrl, PriceRange, IsChain,
+                   ApprovalStatus, ApprovedBy, ApprovedAt, SubmittedBy,
+                   AverageRating, RatingCount, IsActive, CreatedAt, UpdatedAt
             FROM Restaurant
             WHERE {string.Join(" AND ", whereClauses)}
             ORDER BY Name
@@ -76,12 +83,13 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     public async Task<RestaurantDto?> GetByIdAsync(Guid id)
     {
         const string sql = @"
-            SELECT Id, Name, Brand, CuisineType, Address, City, State, ZipCode,
-                   Country, Latitude, Longitude, Phone, Website,
-                   IsApproved, ApprovedBy, ApprovedAt, RejectionReason,
-                   SubmittedBy, CreatedAt, UpdatedAt
+            SELECT Id, Name, Brand, Description, CuisineType, RestaurantType,
+                   Address, City, State, ZipCode, Country, Latitude, Longitude,
+                   PhoneNumber, Website, ImageUrl, PriceRange, IsChain,
+                   ApprovalStatus, ApprovedBy, ApprovedAt, SubmittedBy,
+                   AverageRating, RatingCount, IsActive, CreatedAt, UpdatedAt
             FROM Restaurant
-            WHERE Id = @Id AND IsDeleted = 0";
+            WHERE Id = @Id AND IsActive = 1";
 
         var results = await ExecuteReaderAsync(
             sql,
@@ -95,13 +103,17 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     {
         const string sql = @"
             INSERT INTO Restaurant (
-                Id, Name, Brand, CuisineType, Address, City, State, ZipCode,
-                Country, Latitude, Longitude, Phone, Website,
+                Id, Name, Brand, Description, CuisineType,
+                Address, City, State, ZipCode, Country,
+                Latitude, Longitude, PhoneNumber, Website, ImageUrl,
+                PriceRange, IsChain, ApprovalStatus,
                 SubmittedBy, CreatedBy, CreatedAt
             )
             VALUES (
-                @Id, @Name, @Brand, @CuisineType, @Address, @City, @State, @ZipCode,
-                @Country, @Latitude, @Longitude, @Phone, @Website,
+                @Id, @Name, @Brand, @Description, @CuisineType,
+                @Address, @City, @State, @ZipCode, @Country,
+                @Latitude, @Longitude, @PhoneNumber, @Website, @ImageUrl,
+                @PriceRange, @IsChain, 'Pending',
                 @SubmittedBy, @CreatedBy, GETUTCDATE()
             )";
 
@@ -112,16 +124,20 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             CreateParameter("@Id", id),
             CreateParameter("@Name", request.Name),
             CreateParameter("@Brand", request.Brand),
+            CreateParameter("@Description", request.Description),
             CreateParameter("@CuisineType", request.CuisineType),
             CreateParameter("@Address", request.Address),
             CreateParameter("@City", request.City),
             CreateParameter("@State", request.State),
             CreateParameter("@ZipCode", request.ZipCode),
-            CreateParameter("@Country", request.Country),
+            CreateParameter("@Country", request.Country ?? "US"),
             CreateParameter("@Latitude", request.Latitude),
             CreateParameter("@Longitude", request.Longitude),
-            CreateParameter("@Phone", request.Phone),
+            CreateParameter("@PhoneNumber", request.PhoneNumber),
             CreateParameter("@Website", request.Website),
+            CreateParameter("@ImageUrl", request.ImageUrl),
+            CreateParameter("@PriceRange", request.PriceRange),
+            CreateParameter("@IsChain", request.IsChain),
             CreateParameter("@SubmittedBy", createdBy),
             CreateParameter("@CreatedBy", createdBy));
 
@@ -134,6 +150,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             UPDATE Restaurant
             SET Name = @Name,
                 Brand = @Brand,
+                Description = @Description,
                 CuisineType = @CuisineType,
                 Address = @Address,
                 City = @City,
@@ -142,27 +159,34 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                 Country = @Country,
                 Latitude = @Latitude,
                 Longitude = @Longitude,
-                Phone = @Phone,
+                PhoneNumber = @PhoneNumber,
                 Website = @Website,
+                ImageUrl = @ImageUrl,
+                PriceRange = @PriceRange,
+                IsChain = @IsChain,
                 UpdatedBy = @UpdatedBy,
                 UpdatedAt = GETUTCDATE()
-            WHERE Id = @Id AND IsDeleted = 0";
+            WHERE Id = @Id AND IsActive = 1";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
             CreateParameter("@Id", id),
             CreateParameter("@Name", request.Name),
             CreateParameter("@Brand", request.Brand),
+            CreateParameter("@Description", request.Description),
             CreateParameter("@CuisineType", request.CuisineType),
             CreateParameter("@Address", request.Address),
             CreateParameter("@City", request.City),
             CreateParameter("@State", request.State),
             CreateParameter("@ZipCode", request.ZipCode),
-            CreateParameter("@Country", request.Country),
+            CreateParameter("@Country", request.Country ?? "US"),
             CreateParameter("@Latitude", request.Latitude),
             CreateParameter("@Longitude", request.Longitude),
-            CreateParameter("@Phone", request.Phone),
+            CreateParameter("@PhoneNumber", request.PhoneNumber),
             CreateParameter("@Website", request.Website),
+            CreateParameter("@ImageUrl", request.ImageUrl),
+            CreateParameter("@PriceRange", request.PriceRange),
+            CreateParameter("@IsChain", request.IsChain),
             CreateParameter("@UpdatedBy", updatedBy));
 
         return rowsAffected > 0;
@@ -172,11 +196,10 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     {
         const string sql = @"
             UPDATE Restaurant
-            SET IsDeleted = 1,
-                DeletedAt = GETUTCDATE(),
+            SET IsActive = 0,
                 UpdatedBy = @DeletedBy,
                 UpdatedAt = GETUTCDATE()
-            WHERE Id = @Id AND IsDeleted = 0";
+            WHERE Id = @Id AND IsActive = 1";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
@@ -190,27 +213,25 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     {
         const string sql = @"
             UPDATE Restaurant
-            SET IsApproved = @IsApproved,
+            SET ApprovalStatus = @ApprovalStatus,
                 ApprovedBy = @ApprovedBy,
                 ApprovedAt = GETUTCDATE(),
-                RejectionReason = @RejectionReason,
                 UpdatedBy = @ApprovedBy,
                 UpdatedAt = GETUTCDATE()
-            WHERE Id = @Id AND IsDeleted = 0";
+            WHERE Id = @Id AND IsActive = 1";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
             CreateParameter("@Id", id),
-            CreateParameter("@IsApproved", approve),
-            CreateParameter("@ApprovedBy", approvedBy),
-            CreateParameter("@RejectionReason", approve ? null : rejectionReason));
+            CreateParameter("@ApprovalStatus", approve ? "Approved" : "Rejected"),
+            CreateParameter("@ApprovedBy", approvedBy));
 
         return rowsAffected > 0;
     }
 
     public async Task<bool> RestaurantExistsAsync(Guid id)
     {
-        const string sql = "SELECT COUNT(*) FROM Restaurant WHERE Id = @Id AND IsDeleted = 0";
+        const string sql = "SELECT COUNT(*) FROM Restaurant WHERE Id = @Id AND IsActive = 1";
 
         var count = await ExecuteScalarAsync<int>(
             sql,
@@ -238,7 +259,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
                 CreatedAt = GetDateTime(reader, "CreatedAt"),
-                UpdatedAt = GetDateTime(reader, "UpdatedAt")
+                UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@RestaurantId", restaurantId));
     }
@@ -259,7 +280,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                 Rating = GetInt(reader, "Rating") ?? 0,
                 Review = GetString(reader, "Review"),
                 CreatedAt = GetDateTime(reader, "CreatedAt"),
-                UpdatedAt = GetDateTime(reader, "UpdatedAt")
+                UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
             CreateParameter("@RestaurantId", restaurantId),
             CreateParameter("@UserId", userId));
@@ -269,7 +290,6 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
     public async Task<Guid> AddOrUpdateRatingAsync(Guid restaurantId, Guid userId, RateRestaurantRequest request)
     {
-        // Try to update existing rating first
         const string updateSql = @"
             UPDATE UserRestaurantRating
             SET Rating = @Rating,
@@ -286,11 +306,12 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
         if (rowsAffected > 0)
         {
-            // Updated existing rating
-            return Guid.Empty; // Return value not used for updates
+            // Rating aggregates are updated by the insert branch only on new entries;
+            // for updates we recalculate inline.
+            await RecalculateAverageRatingAsync(restaurantId);
+            return Guid.Empty;
         }
 
-        // Insert new rating
         const string insertSql = @"
             INSERT INTO UserRestaurantRating (Id, UserId, RestaurantId, Rating, Review, CreatedAt)
             VALUES (@Id, @UserId, @RestaurantId, @Rating, @Review, GETUTCDATE())";
@@ -304,6 +325,8 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             CreateParameter("@RestaurantId", restaurantId),
             CreateParameter("@Rating", request.Rating),
             CreateParameter("@Review", request.Review));
+
+        await RecalculateAverageRatingAsync(restaurantId);
 
         return id;
     }
@@ -319,35 +342,67 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             CreateParameter("@RestaurantId", restaurantId),
             CreateParameter("@UserId", userId));
 
+        if (rowsAffected > 0)
+        {
+            await RecalculateAverageRatingAsync(restaurantId);
+        }
+
         return rowsAffected > 0;
+    }
+
+    private async Task RecalculateAverageRatingAsync(Guid restaurantId)
+    {
+        const string sql = @"
+            UPDATE Restaurant
+            SET AverageRating = (
+                    SELECT AVG(CAST(Rating AS DECIMAL(3,2)))
+                    FROM UserRestaurantRating
+                    WHERE RestaurantId = @RestaurantId
+                ),
+                RatingCount = (
+                    SELECT COUNT(*)
+                    FROM UserRestaurantRating
+                    WHERE RestaurantId = @RestaurantId
+                ),
+                UpdatedAt = GETUTCDATE()
+            WHERE Id = @RestaurantId";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@RestaurantId", restaurantId));
     }
 
     #endregion
 
     private RestaurantDto MapRestaurantDto(IDataRecord reader)
     {
+        var approvalStatus = GetString(reader, "ApprovalStatus") ?? "Pending";
         return new RestaurantDto
         {
             Id = GetGuid(reader, "Id"),
             Name = GetString(reader, "Name") ?? string.Empty,
             Brand = GetString(reader, "Brand"),
+            Description = GetString(reader, "Description"),
             CuisineType = GetString(reader, "CuisineType"),
             Address = GetString(reader, "Address"),
             City = GetString(reader, "City"),
             State = GetString(reader, "State"),
             ZipCode = GetString(reader, "ZipCode"),
             Country = GetString(reader, "Country"),
-            Latitude = GetDecimal(reader, "Latitude"),
-            Longitude = GetDecimal(reader, "Longitude"),
-            Phone = GetString(reader, "Phone"),
+            Latitude = GetDecimalNullable(reader, "Latitude"),
+            Longitude = GetDecimalNullable(reader, "Longitude"),
+            PhoneNumber = GetString(reader, "PhoneNumber"),
             Website = GetString(reader, "Website"),
-            IsApproved = GetBool(reader, "IsApproved") ?? false,
-            ApprovedBy = GetGuid(reader, "ApprovedBy"),
-            ApprovedAt = GetDateTime(reader, "ApprovedAt"),
-            RejectionReason = GetString(reader, "RejectionReason"),
-            SubmittedBy = GetGuid(reader, "SubmittedBy"),
+            ImageUrl = GetString(reader, "ImageUrl"),
+            PriceRange = GetString(reader, "PriceRange"),
+            IsChain = GetBool(reader, "IsChain") ?? false,
+            ApprovalStatus = approvalStatus,
+            IsApproved = approvalStatus == "Approved",
+            ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
+            ApprovedAt = GetNullableDateTime(reader, "ApprovedAt"),
+            SubmittedBy = GetGuidNullable(reader, "SubmittedBy"),
+            AverageRating = GetDecimalNullable(reader, "AverageRating"),
+            RatingCount = GetInt(reader, "RatingCount") ?? 0,
             CreatedAt = GetDateTime(reader, "CreatedAt"),
-            UpdatedAt = GetDateTime(reader, "UpdatedAt")
+            UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
         };
     }
 }

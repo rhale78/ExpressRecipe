@@ -28,6 +28,8 @@ var searchDb = sqlServer.AddDatabase("searchdb", "ExpressRecipe.Search");
 var analyticsDb = sqlServer.AddDatabase("analyticsdb", "ExpressRecipe.Analytics");
 var ingredientDb = sqlServer.AddDatabase("ingredientdb", "ExpressRecipe.Ingredients");
 var groceryStoreDb = sqlServer.AddDatabase("grocerystoredb", "ExpressRecipe.GroceryStores");
+var restaurantDb = sqlServer.AddDatabase("restaurantdb", "ExpressRecipe.Restaurants");
+var menuItemDb = sqlServer.AddDatabase("menuitemdb", "ExpressRecipe.MenuItems");
 
 // Redis - Caching layer
 var redis = builder.AddRedis("redis")
@@ -58,6 +60,16 @@ var ingredientService = builder.AddProject<Projects.ExpressRecipe_IngredientServ
 // Grocery Store Location Service - Store locator and location data
 var groceryStoreService = builder.AddProject<Projects.ExpressRecipe_GroceryStoreLocationService>("grocerystoreservice")
     .WithReference(groceryStoreDb)
+    .WithReference(redis);
+
+// Restaurant Service - Restaurant catalog and ratings
+var restaurantService = builder.AddProject<Projects.ExpressRecipe_RestaurantService>("restaurantservice")
+    .WithReference(restaurantDb)
+    .WithReference(redis);
+
+// Menu Item Service - Menu item catalog, nutrition, and ratings
+var menuItemService = builder.AddProject<Projects.ExpressRecipe_MenuItemService>("menuitemservice")
+    .WithReference(menuItemDb)
     .WithReference(redis);
 
 // User Service - User profiles and dietary restrictions
@@ -180,6 +192,8 @@ var webApp = builder.AddProject<Projects.ExpressRecipe_BlazorWeb>("webapp")
     .WithReference(mealPlanningService)
     .WithReference(priceService)
     .WithReference(groceryStoreService)
+    .WithReference(restaurantService)
+    .WithReference(menuItemService)
     .WithReference(recallService)
     .WithReference(notificationService)
     .WithReference(communityService)
