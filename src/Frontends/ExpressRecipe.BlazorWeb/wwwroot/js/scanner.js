@@ -156,12 +156,24 @@ window.scannerInterop = (function () {
         }
     }
 
+    function canGoBack() {
+        return window.history.length > 1;
+    }
+
+    function goBack() {
+        if (window.history.length > 1) {
+            window.history.back();
+        }
+    }
+
     return {
         startCamera: startCamera,
         stopCamera: stopCamera,
         captureFrame: captureFrame,
         checkCameraAvailable: checkCameraAvailable,
         savePreference: savePreference,
-        loadPreference: loadPreference
+        loadPreference: loadPreference,
+        canGoBack: canGoBack,
+        goBack: goBack
     };
 })();

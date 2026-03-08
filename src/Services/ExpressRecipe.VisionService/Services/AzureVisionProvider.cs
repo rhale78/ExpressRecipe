@@ -8,6 +8,8 @@ public class AzureVisionOptions
     public bool Enabled { get; set; } = false;
     public string Endpoint { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
+    /// <summary>Default confidence score returned for successful Azure Vision responses.</summary>
+    public double DefaultConfidence { get; set; } = 0.9;
 }
 
 /// <summary>
@@ -142,7 +144,7 @@ public class AzureVisionProvider : IVisionProvider
                 ProductName = productName,
                 Labels = labels.ToArray(),
                 DetectedText = detectedText.ToArray(),
-                Confidence = 0.9,
+                Confidence = _options.DefaultConfidence,
                 ProviderUsed = ProviderName
             };
         }

@@ -111,7 +111,7 @@ public class OllamaVisionProvider : IVisionProvider
                 return new VisionResult { Success = false, ProviderUsed = ProviderName, ErrorMessage = "No JSON in response" };
             }
 
-            string json = rawResponse.Substring(startIndex, endIndex - startIndex + 1);
+            string json = rawResponse[startIndex..(endIndex + 1)];
             OllamaVisionJson? parsed = JsonSerializer.Deserialize<OllamaVisionJson>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (parsed == null)

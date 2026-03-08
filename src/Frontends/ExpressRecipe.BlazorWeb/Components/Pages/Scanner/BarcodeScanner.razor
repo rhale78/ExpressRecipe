@@ -801,6 +801,10 @@
                 {
                     Logger.LogWarning(t.Exception, "Camera stop encountered an error during mode switch");
                 }
+                else if (t.IsCanceled)
+                {
+                    Logger.LogDebug("Camera stop was cancelled during mode switch");
+                }
             }, TaskScheduler.Default);
         }
         _inputMode = mode;
@@ -819,11 +823,11 @@
 
     private async Task GoBackAsync()
     {
-        // Use browser history if available; fall back to products page if navigated directly
-        bool hasHistory = await JS.InvokeAsync<bool>("eval", "window.history.length > 1");
+        // Use scannerInterop.goBack() which safely checks history length in JS
+        bool hasHistory = await JS.InvokeAsync<bool>("scannerInterop.canGoBack");
         if (hasHistory)
         {
-            await JS.InvokeVoidAsync("history.back");
+            await JS.InvokeVoidAsync("scannerInterop.goBack");
         }
         else
         {

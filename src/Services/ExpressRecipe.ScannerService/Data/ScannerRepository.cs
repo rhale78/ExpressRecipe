@@ -334,7 +334,7 @@ public class ScannerRepository : IScannerRepository
         command.Parameters.AddWithValue("@ResolvedProductId", capture.ResolvedProductId.HasValue ? capture.ResolvedProductId.Value : DBNull.Value);
         command.Parameters.AddWithValue("@IsTrainingData", capture.IsTrainingData);
 
-        return (Guid)((await command.ExecuteScalarAsync(ct)) ?? throw new InvalidOperationException("Failed to insert VisionCapture record."));
+        return await ExecuteScalarGuidAsync(command, "VisionCapture", ct);
     }
 
     public async Task UpdateVisionCaptureProductAsync(Guid captureId, Guid productId, bool found, CancellationToken ct = default)
@@ -416,7 +416,7 @@ public class ScannerRepository : IScannerRepository
         command.Parameters.AddWithValue("@UserCorrection", report.UserCorrection ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@UserNote", report.UserNote ?? (object)DBNull.Value);
 
-        return (Guid)((await command.ExecuteScalarAsync(ct)) ?? throw new InvalidOperationException("Failed to insert CorrectionReport record."));
+        return await ExecuteScalarGuidAsync(command, "CorrectionReport", ct);
     }
 
     public async Task<List<CorrectionReportRecord>> GetCorrectionReportsAsync(string? status, int limit, CancellationToken ct = default)
@@ -517,5 +517,16 @@ public class ScannerRepository : IScannerRepository
         }
 
         return rows;
+    }
+
+    private static async Task<Guid> ExecuteScalarGuidAsync(SqlCommand command, string entityName, CancellationToken ct)
+    {
+        object? result = await command.ExecuteScalarAsync(ct);
+        if (result == null || result == DBNull.Value)
+        {
+            throw new InvalidOperationException($"Failed to insert {entityName} record — no ID returned.");
+        }
+
+        return (Guid)result;
     }
 }
