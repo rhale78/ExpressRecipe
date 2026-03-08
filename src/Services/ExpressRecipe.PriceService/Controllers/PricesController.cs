@@ -98,12 +98,92 @@ public class PricesController : ControllerBase
         return Ok(prices);
     }
 
+    /// <summary>GET /api/prices/{productId}/history — Append-only price history for a product</summary>
+    [AllowAnonymous]
+    [HttpGet("{productId:guid}/history")]
+    public async Task<IActionResult> GetPriceHistory(Guid productId, [FromQuery] Guid? storeId, [FromQuery] int daysBack = 90)
+    {
+        var history = await _repository.GetPriceHistoryAsync(productId, storeId, daysBack);
+        return Ok(history);
+    }
+
+    /// <summary>GET /api/prices/{productId}/stats — Price statistics for a product</summary>
+    [AllowAnonymous]
+    [HttpGet("{productId:guid}/stats")]
+    public async Task<IActionResult> GetPriceStats(Guid productId, [FromQuery] Guid? storeId, [FromQuery] int daysBack = 90)
+    {
+        var stats = await _repository.GetPriceStatsAsync(productId, storeId, daysBack);
+        return Ok(stats);
+    }
+
+    /// <summary>GET /api/prices/{productId}/unit-compare — Compare price per unit across stores/products</summary>
+    [AllowAnonymous]
+    [HttpGet("{productId:guid}/unit-compare")]
+    public async Task<IActionResult> CompareByUnit(Guid productId, [FromQuery] string unit = "oz")
+    {
+        if (string.IsNullOrWhiteSpace(unit)) { return BadRequest("unit is required"); }
+        var results = await _repository.CompareByUnitAsync(new[] { productId }, unit);
+        return Ok(results);
+    }
+
+    /// <summary>GET /api/prices/store/{storeId}/products — Products linked to a store (paged)</summary>
+    [AllowAnonymous]
+    [HttpGet("store/{storeId:guid}/products")]
+    public async Task<IActionResult> GetProductsForStore(Guid storeId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    {
+        if (page < 1) { page = 1; }
+        if (pageSize is < 1 or > 200) { pageSize = 50; }
+        var products = await _repository.GetProductsForStoreAsync(storeId, page, pageSize);
+        return Ok(products);
+    }
+
+    /// <summary>GET /api/prices/product/{productId}/stores — Stores that carry a product</summary>
+    [AllowAnonymous]
+    [HttpGet("product/{productId:guid}/stores")]
+    public async Task<IActionResult> GetStoresForProduct(Guid productId)
+    {
+        var stores = await _repository.GetStoresForProductAsync(productId);
+        return Ok(stores);
+    }
+
+    /// <summary>POST /api/prices/user-entry — Manual user price entry (writes to PriceHistory)</summary>
+    [Authorize]
+    [HttpPost("user-entry")]
+    public async Task<IActionResult> RecordUserPriceEntry([FromBody] UserPriceEntryRequest request)
+    {
+        if (request.ProductId == Guid.Empty) { return BadRequest("productId is required"); }
+        if (request.FinalPrice <= 0) { return BadRequest("finalPrice must be greater than zero"); }
+
+        var record = new PriceHistoryRecord
+        {
+            ProductId = request.ProductId,
+            Upc = request.Upc,
+            ProductName = request.ProductName ?? string.Empty,
+            StoreId = request.StoreId,
+            StoreName = request.StoreName,
+            IsOnline = request.IsOnline,
+            BasePrice = request.BasePrice > 0 ? request.BasePrice : request.FinalPrice,
+            FinalPrice = request.FinalPrice,
+            Currency = request.Currency ?? "USD",
+            Unit = request.Unit,
+            Quantity = request.Quantity,
+            DataSource = "Manual",
+            ObservedAt = request.ObservedAt.HasValue
+                ? new DateTimeOffset(request.ObservedAt.Value, TimeSpan.Zero)
+                : DateTimeOffset.UtcNow
+        };
+
+        await _repository.RecordPriceHistoryAsync(record);
+        _logger.LogInformation("Manual price entry recorded for product {ProductId}", request.ProductId);
+        return Ok(new { message = "Price entry recorded" });
+    }
+
     /// <summary>GET /api/prices/import/status — Get import status for each data source</summary>
     [AllowAnonymous]
     [HttpGet("import/status")]
     public async Task<IActionResult> GetImportStatus()
     {
-        var sources = new[] { "OpenPrices", "GroceryDB", "USDA", "Manual" };
+        var sources = new[] { "OpenPrices", "GroceryDB", "USDA", "Manual", "USDA_FMAP", "BLS_CPI", "KAGGLE_WALMART", "KAGGLE_COSTCO" };
         var statuses = new List<object>();
 
         foreach (var source in sources)
@@ -143,4 +223,20 @@ public class PricesController : ControllerBase
 public class BatchPriceRequest
 {
     public List<Guid> ProductIds { get; set; } = new();
+}
+
+public class UserPriceEntryRequest
+{
+    public Guid ProductId { get; set; }
+    public string? Upc { get; set; }
+    public string? ProductName { get; set; }
+    public Guid? StoreId { get; set; }
+    public string? StoreName { get; set; }
+    public bool IsOnline { get; set; }
+    public decimal BasePrice { get; set; }
+    public decimal FinalPrice { get; set; }
+    public string? Currency { get; set; }
+    public string? Unit { get; set; }
+    public decimal? Quantity { get; set; }
+    public DateTime? ObservedAt { get; set; }
 }

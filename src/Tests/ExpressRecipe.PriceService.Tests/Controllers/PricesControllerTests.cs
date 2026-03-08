@@ -301,7 +301,7 @@ public class PricesControllerTests
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
-        _repositoryMock.Verify(r => r.GetLastImportAsync(It.IsAny<string>()), Times.Exactly(4));
+        _repositoryMock.Verify(r => r.GetLastImportAsync(It.IsAny<string>()), Times.Exactly(8));
         _repositoryMock.Verify(r => r.GetProductPriceCountAsync(), Times.Once);
     }
 

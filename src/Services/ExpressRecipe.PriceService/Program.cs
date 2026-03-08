@@ -105,11 +105,34 @@ builder.Services.AddScoped<GroceryDbImportService>(sp =>
 builder.Services.AddHttpClient<PriceScraperService>();
 builder.Services.AddHttpClient<GoogleShoppingApiClient>();
 
+// Register new external price API clients (all disabled by default via config)
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<KrogerApiClient>();
+builder.Services.AddHttpClient<FlippApiClient>();
+builder.Services.AddHttpClient<FoodLionApiClient>();
+builder.Services.AddScoped<IExternalPriceApiClient, GoogleShoppingApiClient>();
+
+// Register unit normalizer and effective price calculator
+builder.Services.AddSingleton<IPriceUnitNormalizer, PriceUnitNormalizer>();
+builder.Services.AddSingleton<IEffectivePriceCalculator, EffectivePriceCalculator>();
+
+// Register new CSV import services
+builder.Services.AddScoped<UsdaFmapImportService>();
+builder.Services.AddScoped<BlsPriceImportService>();
+builder.Services.AddScoped<WalmartKaggleImportService>();
+builder.Services.AddScoped<CostcoKaggleImportService>();
+
 // Register background workers
 builder.Services.AddHostedService<PriceAnalysisWorker>();
 // Register PriceDataImportWorker as singleton so it can be injected into controllers
 builder.Services.AddSingleton<PriceDataImportWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PriceDataImportWorker>());
+
+// Register new CSV import workers (each reads Enabled flag from config)
+builder.Services.AddHostedService<UsdaFmapImportWorker>();
+builder.Services.AddHostedService<BlsPriceImportWorker>();
+builder.Services.AddHostedService<WalmartKaggleImportWorker>();
+builder.Services.AddHostedService<CostcoKaggleImportWorker>();
 
 // Add controllers
 builder.Services.AddControllers();

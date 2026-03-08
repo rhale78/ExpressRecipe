@@ -337,3 +337,21 @@ public class PriceImportStatusDto
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
 }
+
+public class PriceHistoryStatsClientDto
+{
+    public Guid ProductId { get; set; }
+    public Guid? StoreId { get; set; }
+    public decimal CurrentPrice { get; set; }
+    public decimal AveragePrice { get; set; }
+    public decimal MinPrice { get; set; }
+    public decimal MaxPrice { get; set; }
+    public decimal PriceChange30Days { get; set; }
+    public decimal? PriceChange30DaysPct { get; set; }
+    public string Trend { get; set; } = "Stable";
+    public int ObservationCount { get; set; }
+    public DateTime? OldestObservation { get; set; }
+    public DateTime? NewestObservation { get; set; }
+    public decimal? AvgPricePerOz { get; set; }
+    public decimal? AvgPricePerHundredG { get; set; }
+}

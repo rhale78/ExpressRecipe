@@ -8,6 +8,7 @@
 @inject IProductApiClient ProductApi
 @inject IInventoryApiClient InventoryApi
 @inject IShoppingListApiClient ShoppingApi
+@inject IPriceApiClient PriceApi
 @inject IToastService ToastService
 @inject ILogger<ProductDetails> Logger
 @inject NavigationManager Navigation
@@ -135,6 +136,9 @@
                 </div>
             </div>
         </div>
+
+        <!-- Price History Chart -->
+        <PriceHistoryChart ProductId="ProductId" DaysBack="90" ShowAllStores="true" ShowUnitPrice="false" />
 
         <!-- Related Products Section -->
         <div class="related-products-section">

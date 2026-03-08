@@ -4,15 +4,20 @@ using System.Text.Json.Serialization;
 namespace ExpressRecipe.PriceService.Services;
 
 /// <summary>
-/// Client for Google Shopping (Google Content API for Shopping)
+/// Client for Google Shopping (Google Custom Search API).
+/// Disabled by default — set ExternalApis:GoogleShopping:Enabled=true and provide ApiKey + SearchEngineId.
 /// API Documentation: https://developers.google.com/shopping-content/guides/quickstart
-/// Note: Requires Google API Key and Merchant Center account
 /// </summary>
-public class GoogleShoppingApiClient
+public class GoogleShoppingApiClient : IExternalPriceApiClient
 {
+    public const string DataSourceCode = "GOOGLE_SHOPPING";
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<GoogleShoppingApiClient> _logger;
     private readonly string? _apiKey;
+    private readonly string? _searchEngineId;
+
+    public bool IsEnabled { get; }
 
     public GoogleShoppingApiClient(
         HttpClient httpClient,
@@ -21,27 +26,67 @@ public class GoogleShoppingApiClient
     {
         _httpClient = httpClient;
         _logger = logger;
-        _apiKey = configuration["GoogleShopping:ApiKey"];
+        IsEnabled = configuration.GetValue<bool>("ExternalApis:GoogleShopping:Enabled", false);
+        _apiKey = configuration["ExternalApis:GoogleShopping:ApiKey"]
+                  ?? configuration["GoogleShopping:ApiKey"];
+        _searchEngineId = configuration["ExternalApis:GoogleShopping:SearchEngineId"]
+                          ?? configuration["GoogleShopping:SearchEngineId"];
 
         _httpClient.BaseAddress = new Uri("https://www.googleapis.com/");
     }
 
+    // IExternalPriceApiClient implementation
+    public Task<List<ExternalPriceResult>> GetPricesAsync(string upc, CancellationToken ct)
+    {
+        if (!IsEnabled) { return Task.FromResult(new List<ExternalPriceResult>()); }
+        return SearchByNameAsync(upc, null, ct);
+    }
+
+    public async Task<List<ExternalPriceResult>> SearchByNameAsync(string name, string? zipCode, CancellationToken ct)
+    {
+        if (!IsEnabled) { return new List<ExternalPriceResult>(); }
+
+        try
+        {
+            var products = await SearchProductsAsync(name);
+            return products.Select(p =>
+            {
+                var offer = p.PageMap?.Offers?.FirstOrDefault();
+                decimal.TryParse(offer?.Price?.Replace("$", ""), System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var price);
+                return new ExternalPriceResult
+                {
+                    ProductName = p.Title ?? string.Empty,
+                    Price = price,
+                    DataSource = DataSourceCode,
+                    ExternalId = p.Link,
+                    ObservedAt = DateTimeOffset.UtcNow
+                };
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GoogleShopping search failed for '{Name}'", name);
+            return new List<ExternalPriceResult>();
+        }
+    }
+
     /// <summary>
-    /// Search products via Google Shopping
+    /// Search products via Google Custom Search (Shopping results).
     /// </summary>
     public async Task<List<GoogleShoppingProduct>> SearchProductsAsync(string query, int maxResults = 10)
     {
         try
         {
-            if (string.IsNullOrEmpty(_apiKey))
+            if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_searchEngineId))
             {
-                _logger.LogWarning("Google Shopping API key not configured");
+                _logger.LogWarning("Google Shopping API key or Search Engine ID not configured");
                 return new List<GoogleShoppingProduct>();
             }
 
             _logger.LogInformation("Searching Google Shopping for: {Query}", query);
 
-            var url = $"customsearch/v1?key={_apiKey}&cx=YOUR_SEARCH_ENGINE_ID&q={Uri.EscapeDataString(query)}&num={maxResults}";
+            var url = $"customsearch/v1?key={_apiKey}&cx={_searchEngineId}&q={Uri.EscapeDataString(query)}&num={maxResults}";
             var response = await _httpClient.GetAsync(url);
 
             if (!response.IsSuccessStatusCode)
