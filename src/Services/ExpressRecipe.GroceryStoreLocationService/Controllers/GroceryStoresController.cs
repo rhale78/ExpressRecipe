@@ -125,7 +125,7 @@ public class GroceryStoresController : ControllerBase
 
     /// <summary>PUT /api/grocerystores/{id}/hours - Update store hours (admin only)</summary>
     [HttpPut("{id:guid}/hours")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> UpsertStoreHours(Guid id, [FromBody] List<StoreHoursRequest> hours)
     {
         var store = await _repository.GetByIdAsync(id);
@@ -143,7 +143,7 @@ public class GroceryStoresController : ControllerBase
 
     /// <summary>POST /api/grocerystores/import/trigger - Trigger import (admin only)</summary>
     [HttpPost("import/trigger")]
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     public IActionResult TriggerImport([FromQuery] string source = "all")
     {
         _logger.LogInformation("Manual import triggered by {User} for source: {Source}",

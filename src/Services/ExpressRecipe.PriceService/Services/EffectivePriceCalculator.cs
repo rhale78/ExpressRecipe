@@ -88,7 +88,8 @@ public sealed class EffectivePriceCalculator : IEffectivePriceCalculator
                 // FlyerSale / DigitalCoupon / Clearance / GetPercentOff
                 if (deal.GetPercentOff.HasValue && deal.GetPercentOff.Value > 0m)
                 {
-                    effectivePerUnit = basePrice * (1m - deal.GetPercentOff.Value / 100m);
+                    var clampedPct = Math.Clamp(deal.GetPercentOff.Value, 0m, 100m);
+                    effectivePerUnit = Math.Max(0m, basePrice * (1m - clampedPct / 100m));
                 }
                 else if (deal.RebateAmount.HasValue && deal.RebateAmount.Value > 0m)
                 {

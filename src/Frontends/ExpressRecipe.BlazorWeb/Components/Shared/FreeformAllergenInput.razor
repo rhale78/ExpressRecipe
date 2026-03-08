@@ -7,20 +7,15 @@
         <input type="text"
                class="form-control"
                @bind="_freeformText"
-               placeholder="e.g. palm oil, Kraft Mac and Cheese" />
+               placeholder="e.g. palm oil, Kraft Mac and Cheese"
+               disabled="true" />
         <input type="text"
                class="form-control"
                @bind="_brand"
-               placeholder="Brand (optional)" />
-        <button class="btn btn-primary" @onclick="AddEntryAsync" disabled="@_isAdding">
-            @if (_isAdding)
-            {
-                <span class="spinner-small"></span>
-            }
-            else
-            {
-                <span>Add</span>
-            }
+               placeholder="Brand (optional)"
+               disabled="true" />
+        <button class="btn btn-secondary" disabled="true" title="Coming soon — freeform allergen saving is not yet available">
+            Coming soon
         </button>
     </div>
 

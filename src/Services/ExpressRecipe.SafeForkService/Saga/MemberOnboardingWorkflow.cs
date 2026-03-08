@@ -25,26 +25,32 @@ public static class MemberOnboardingWorkflow
             .And()
             .AddStep("InitAllergenProfile")
                 .DependsOn("CreateMemberRecord")
-                .Sends(s => new RequestInitAllergenProfile(
-                    s.CorrelationId,
-                    s.MemberId ?? Guid.Empty))
+                .Sends(s => s.MemberId == null
+                    ? throw new InvalidOperationException("MemberId was not set by CreateMemberRecord step.")
+                    : new RequestInitAllergenProfile(
+                        s.CorrelationId,
+                        s.MemberId.Value))
                 .SendsTo(MemberOnboardingKeys.InitAllergenProfile)
                 .OnResult<AllergenProfileInitialized>()
             .And()
             .AddStep("InitCookProfile")
                 .DependsOn("CreateMemberRecord")
-                .Sends(s => new RequestInitCookProfile(
-                    s.CorrelationId,
-                    s.MemberId ?? Guid.Empty))
+                .Sends(s => s.MemberId == null
+                    ? throw new InvalidOperationException("MemberId was not set by CreateMemberRecord step.")
+                    : new RequestInitCookProfile(
+                        s.CorrelationId,
+                        s.MemberId.Value))
                 .SendsTo(MemberOnboardingKeys.InitCookProfile)
                 .OnResult<CookProfileInitialized>()
             .And()
             .AddStep("SendWelcomeNotification")
                 .DependsOn("InitAllergenProfile")
                 .DependsOn("InitCookProfile")
-                .Sends(s => new RequestSendWelcome(
-                    s.CorrelationId,
-                    s.MemberId ?? Guid.Empty))
+                .Sends(s => s.MemberId == null
+                    ? throw new InvalidOperationException("MemberId was not set by CreateMemberRecord step.")
+                    : new RequestSendWelcome(
+                        s.CorrelationId,
+                        s.MemberId.Value))
                 .SendsTo(MemberOnboardingKeys.SendWelcome)
                 .OnResult<WelcomeNotificationSent>()
             .And()

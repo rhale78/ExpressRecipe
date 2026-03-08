@@ -4,9 +4,10 @@ using System.Text.Json.Serialization;
 namespace ExpressRecipe.PriceService.Services;
 
 /// <summary>
-/// Client for Google Shopping (Google Custom Search API).
+/// Client for Google Shopping (Google Custom Search API with Shopping results).
 /// Disabled by default — set ExternalApis:GoogleShopping:Enabled=true and provide ApiKey + SearchEngineId.
-/// API Documentation: https://developers.google.com/shopping-content/guides/quickstart
+/// Requires a Programmable Search Engine (cx) scoped to shopping sites.
+/// API Documentation: https://developers.google.com/custom-search/v1/overview
 /// </summary>
 public class GoogleShoppingApiClient : IExternalPriceApiClient
 {
