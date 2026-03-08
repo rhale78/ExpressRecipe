@@ -1,211 +1,320 @@
 @page "/scanner"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Product
 @inject IScannerApiClient ScannerClient
+@inject IVisionApiClient VisionClient
+@inject IProductApiClient ProductApi
 @inject IInventoryApiClient InventoryClient
 @inject IShoppingListApiClient ShoppingClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
 @inject IToastService ToastService
 @inject ILogger<BarcodeScanner> Logger
-@rendermode InteractiveServer
+@implements IDisposable
 
-<PageTitle>Barcode Scanner - ExpressRecipe</PageTitle>
+<PageTitle>Scanner - ExpressRecipe</PageTitle>
 
-<div class="container py-4">
-    <div class="row">
-        <div class="col-lg-8 mx-auto">
-            <h1 class="display-5 fw-bold mb-4">
-                <i class="bi bi-upc-scan me-2"></i>Barcode Scanner
-            </h1>
-            <p class="lead text-muted mb-4">
-                Scan product barcodes to check for allergens and get detailed product information
-            </p>
-
-            <!-- Barcode Input -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-9">
-                            <label for="barcodeInput" class="form-label">Enter Barcode</label>
-                            <input
-                                type="text"
-                                class="form-control form-control-lg"
-                                id="barcodeInput"
-                                @bind="barcodeInput"
-                                @onkeypress="HandleKeyPress"
-                                placeholder="Type or scan barcode (UPC-A, EAN-13)"
-                                disabled="@isScanning">
-                        </div>
-                        <div class="col-md-3 d-flex align-items-end">
-                            <button
-                                class="btn btn-primary btn-lg w-100"
-                                @onclick="ScanBarcode"
-                                disabled="@(isScanning || string.IsNullOrWhiteSpace(barcodeInput))">
-                                @if (isScanning)
-                                {
-                                    <span class="spinner-border spinner-border-sm me-2"></span>
-                                }
-                                else
-                                {
-                                    <i class="bi bi-search me-2"></i>
-                                }
-                                Scan
-                            </button>
-                        </div>
+<AuthorizeView>
+    <Authorized>
+        <div class="container-fluid py-3">
+            <!-- Header -->
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="GoBackAsync">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </button>
+                    <h4 class="mb-0"><i class="bi bi-upc-scan me-2"></i>Scanner</h4>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary">@GetEntryPointLabel()</span>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown">
+                            Mode
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            @foreach (ScannerEntryPoint ep in Enum.GetValues<ScannerEntryPoint>())
+                            {
+                                <li>
+                                    <button class="dropdown-item @(_entryPoint == ep ? "active" : "")" @onclick="@(() => SetEntryPoint(ep))">
+                                        @GetEntryPointLabel(ep)
+                                    </button>
+                                </li>
+                            }
+                        </ul>
                     </div>
                 </div>
             </div>
 
-            <!-- Scan Result -->
-            @if (scanResult != null)
-            {
-                <div class="card mb-4">
-                    <div class="card-body">
-                        @if (scanResult.Found)
-                        {
-                            <!-- Product Found -->
-                            <div class="d-flex align-items-start mb-3">
-                                @if (!string.IsNullOrEmpty(scanResult.Product?.ImageUrl))
+            <!-- Input Mode Tabs -->
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <button class="nav-link @(_inputMode == InputMode.Camera ? "active" : "")" @onclick="@(() => SetInputMode(InputMode.Camera))">
+                        📷 Camera
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(_inputMode == InputMode.File ? "active" : "")" @onclick="@(() => SetInputMode(InputMode.File))">
+                        📁 File
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(_inputMode == InputMode.Manual ? "active" : "")" @onclick="@(() => SetInputMode(InputMode.Manual))">
+                        ⌨ Manual
+                    </button>
+                </li>
+            </ul>
+
+            <div class="row g-3">
+                <!-- Main Input Area -->
+                <div class="col-lg-8">
+                    @if (_inputMode == InputMode.Camera)
+                    {
+                        <div class="card">
+                            <div class="card-body p-2">
+                                @if (!_cameraAvailable)
                                 {
-                                    <img src="@scanResult.Product.ImageUrl" alt="@scanResult.Product.Name" class="rounded me-3" style="width: 80px; height: 80px; object-fit: cover;">
+                                    <div class="text-center py-5">
+                                        <i class="bi bi-camera-video-off text-muted" style="font-size:3rem"></i>
+                                        <p class="mt-3 text-muted">@_cameraUnavailableMessage</p>
+                                        <button class="btn btn-outline-secondary" @onclick="@(() => SetInputMode(InputMode.Manual))">
+                                            Switch to Manual Entry
+                                        </button>
+                                    </div>
                                 }
-                                <div>
-                                    <h4 class="mb-1">@scanResult.Product?.Name</h4>
-                                    <p class="text-muted mb-0">@scanResult.Product?.Brand</p>
-                                    <small class="text-muted">Barcode: @scanResult.Barcode (@scanResult.Format)</small>
-                                </div>
-                            </div>
-
-                            <!-- Allergen Alerts -->
-                            @if (scanResult.AllergenAlerts.Any())
-                            {
-                                <div class="alert alert-warning mb-3">
-                                    <h5 class="alert-heading">
-                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>Allergen Alerts
-                                    </h5>
-                                    @foreach (var alert in scanResult.AllergenAlerts)
-                                    {
-                                        <div class="mb-2">
-                                            <strong>@alert.Allergen:</strong> @alert.Message
-                                            @if (alert.ContainsTrace)
-                                            {
-                                                <span class="badge bg-warning text-dark ms-2">May contain traces</span>
-                                            }
+                                else if (!_isCameraActive)
+                                {
+                                    <div class="text-center py-5">
+                                        <button class="btn btn-primary btn-lg" @onclick="StartCameraAsync">
+                                            <i class="bi bi-camera-video me-2"></i>Start Camera
+                                        </button>
+                                        <p class="text-muted mt-2 small">Your browser will request camera permission</p>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="position-relative">
+                                        <video id="scanner-video" autoplay playsinline muted class="w-100 rounded"></video>
+                                        <canvas id="scanner-canvas" class="d-none"></canvas>
+                                        <!-- Scan overlay corners -->
+                                        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="pointer-events:none">
+                                            <div class="border border-2 border-success rounded" style="width:60%;height:40%;opacity:0.7"></div>
                                         </div>
-                                    }
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="alert alert-success mb-3">
-                                    <i class="bi bi-check-circle-fill me-2"></i>
-                                    No allergen alerts based on your profile
-                                </div>
-                            }
-
-                            <!-- Ingredients -->
-                            @if (scanResult.Product?.Ingredients.Any() == true)
-                            {
-                                <div class="mb-3">
-                                    <h6 class="fw-bold">Ingredients</h6>
-                                    <p class="text-muted small">@string.Join(", ", scanResult.Product.Ingredients)</p>
-                                </div>
-                            }
-
-                            <!-- Allergens -->
-                            @if (scanResult.Product?.Allergens.Any() == true)
-                            {
-                                <div class="mb-3">
-                                    <h6 class="fw-bold">Contains Allergens</h6>
-                                    <div>
-                                        @foreach (var allergen in scanResult.Product.Allergens)
+                                        @if (_isProcessing)
                                         {
-                                            <span class="badge bg-secondary me-2">@allergen</span>
+                                            <div class="position-absolute bottom-0 start-0 w-100 text-center pb-2">
+                                                <span class="badge bg-info">
+                                                    <span class="spinner-border spinner-border-sm me-1"></span>Detecting…
+                                                </span>
+                                            </div>
                                         }
                                     </div>
+                                    <div class="d-flex gap-2 mt-2 flex-wrap">
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="StopCameraAsync">
+                                            <i class="bi bi-stop-circle me-1"></i>Stop
+                                        </button>
+                                        @if (_detectionMode == DetectionMode.Image)
+                                        {
+                                            <button class="btn btn-primary btn-sm" @onclick="CaptureAndIdentifyAsync">
+                                                <i class="bi bi-search me-1"></i>Identify Image
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (_inputMode == InputMode.File)
+                    {
+                        <div class="card">
+                            <div class="card-body">
+                                <h6>Upload product image(s)</h6>
+                                <InputFile OnChange="HandleFileUploadAsync" multiple accept="image/*" class="form-control mb-2" />
+                                @if (_fileQueue.Count > 0)
+                                {
+                                    <ul class="list-group mt-2">
+                                        @foreach (string fname in _fileQueue)
+                                        {
+                                            <li class="list-group-item list-group-item-sm">@fname</li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Manual Entry -->
+                        <div class="card">
+                            <div class="card-body">
+                                <label class="form-label fw-semibold">Enter UPC / Barcode</label>
+                                <div class="input-group">
+                                    <input type="text"
+                                           class="form-control"
+                                           placeholder="Enter barcode (12-14 digits)"
+                                           @bind="_manualUpc"
+                                           @bind:event="oninput"
+                                           @onkeypress="HandleManualKeyPressAsync"
+                                           maxlength="14"
+                                           inputmode="numeric" />
+                                    <button class="btn btn-primary" @onclick="SearchByManualUpcAsync"
+                                            disabled="@(string.IsNullOrWhiteSpace(_manualUpc) || _isProcessing)">
+                                        @if (_isProcessing)
+                                        {
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-search"></i>
+                                        }
+                                    </button>
                                 </div>
-                            }
+                            </div>
+                        </div>
+                    }
 
-                            <!-- Nutrition -->
-                            @if (scanResult.Product?.Nutrition != null)
+                    <!-- Detection Mode + Session Mode controls -->
+                    <div class="d-flex flex-wrap gap-2 mt-3 align-items-center">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn @(_detectionMode == DetectionMode.Upc ? "btn-primary" : "btn-outline-secondary")"
+                                    @onclick="@(() => SetDetectionMode(DetectionMode.Upc))">
+                                🔁 UPC Mode
+                            </button>
+                            <button class="btn @(_detectionMode == DetectionMode.Image ? "btn-primary" : "btn-outline-secondary")"
+                                    @onclick="@(() => SetDetectionMode(DetectionMode.Image))">
+                                🖼 Image Mode
+                            </button>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="autoSearchToggle" @bind="_autoSearch" />
+                            <label class="form-check-label" for="autoSearchToggle">Auto-Search</label>
+                        </div>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn @(_sessionMode == SessionMode.Single ? "btn-secondary" : "btn-outline-secondary")"
+                                    @onclick="@(() => _sessionMode = SessionMode.Single)">
+                                Single
+                            </button>
+                            <button class="btn @(_sessionMode == SessionMode.Batch ? "btn-secondary" : "btn-outline-secondary")"
+                                    @onclick="@(() => _sessionMode = SessionMode.Batch)">
+                                Batch
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Error/Status message -->
+                    @if (!string.IsNullOrEmpty(_statusMessage))
+                    {
+                        <div class="alert alert-warning alert-dismissible mt-3 py-2" role="alert">
+                            @_statusMessage
+                            <button type="button" class="btn-close" @onclick="@(() => _statusMessage = null)"></button>
+                        </div>
+                    }
+                </div>
+
+                <!-- Batch Queue Panel (right side) -->
+                @if (_sessionMode == SessionMode.Batch && _batchQueue.Count > 0)
+                {
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span class="fw-semibold">Queue (@_batchQueue.Count)</span>
+                                <button class="btn btn-primary btn-sm" @onclick="ProcessBatchQueueAsync">
+                                    Process All
+                                </button>
+                            </div>
+                            <ul class="list-group list-group-flush" style="max-height:300px;overflow-y:auto">
+                                @foreach (DetectedItem item in _batchQueue)
+                                {
+                                    <li class="list-group-item list-group-item-sm d-flex justify-content-between align-items-center">
+                                        <span>@(item.ProductName ?? item.Upc)</span>
+                                        <button class="btn btn-outline-danger btn-sm py-0" @onclick="@(() => _batchQueue.Remove(item))">×</button>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Result Card -->
+            @if (_currentResult != null)
+            {
+                <div class="card mt-3">
+                    <div class="card-body">
+                        @if (_currentResult.ProductFound)
+                        {
+                            <div class="d-flex align-items-start gap-3">
+                                @if (!string.IsNullOrEmpty(_currentResult.ImageUrl))
+                                {
+                                    <img src="@_currentResult.ImageUrl" alt="product" class="rounded" style="width:80px;height:80px;object-fit:cover" />
+                                }
+                                else
+                                {
+                                    <div class="rounded bg-light d-flex align-items-center justify-content-center" style="width:80px;height:80px;font-size:2rem">📦</div>
+                                }
+                                <div class="flex-grow-1">
+                                    <h5 class="mb-1">@_currentResult.ProductName</h5>
+                                    <p class="text-muted mb-1">@_currentResult.Brand</p>
+                                    @if (!string.IsNullOrEmpty(_currentResult.Upc))
+                                    {
+                                        <small class="text-muted">UPC: @_currentResult.Upc</small>
+                                    }
+                                    @if (_currentResult.DetectionProvider != null)
+                                    {
+                                        <span class="badge bg-light text-dark ms-2 small">via @_currentResult.DetectionProvider</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2 mt-3 flex-wrap">
+                                @if (_sessionMode == SessionMode.Single && _currentResult.ProductId.HasValue)
+                                {
+                                    <button class="btn btn-success" @onclick="ConfirmAndDispatchAsync">
+                                        <i class="bi bi-check-lg me-1"></i>Confirm
+                                    </button>
+                                }
+                                <button class="btn btn-outline-warning" @onclick="ShowWrongItemAsync">
+                                    ❌ Wrong item?
+                                </button>
+                                @if (_sessionMode == SessionMode.Batch)
+                                {
+                                    <button class="btn btn-primary" @onclick="AddToBatchQueue">
+                                        <i class="bi bi-plus me-1"></i>Add to Queue
+                                    </button>
+                                }
+                            </div>
+                            <!-- Wrong item correction overlay -->
+                            @if (_showCorrectionForm)
                             {
-                                <div class="mb-3">
-                                    <h6 class="fw-bold">Nutrition Information</h6>
-                                    <div class="row g-2">
-                                        <div class="col-6 col-md-4">
-                                            <small class="text-muted">Calories</small>
-                                            <div class="fw-bold">@scanResult.Product.Nutrition.Calories</div>
-                                        </div>
-                                        <div class="col-6 col-md-4">
-                                            <small class="text-muted">Protein</small>
-                                            <div class="fw-bold">@scanResult.Product.Nutrition.Protein g</div>
-                                        </div>
-                                        <div class="col-6 col-md-4">
-                                            <small class="text-muted">Carbs</small>
-                                            <div class="fw-bold">@scanResult.Product.Nutrition.Carbohydrates g</div>
-                                        </div>
-                                        <div class="col-6 col-md-4">
-                                            <small class="text-muted">Fat</small>
-                                            <div class="fw-bold">@scanResult.Product.Nutrition.Fat g</div>
-                                        </div>
-                                        <div class="col-6 col-md-4">
-                                            <small class="text-muted">Fiber</small>
-                                            <div class="fw-bold">@scanResult.Product.Nutrition.Fiber g</div>
-                                        </div>
-                                        <div class="col-6 col-md-4">
-                                            <small class="text-muted">Sugar</small>
-                                            <div class="fw-bold">@scanResult.Product.Nutrition.Sugar g</div>
-                                        </div>
+                                <div class="mt-3 p-3 border rounded bg-light">
+                                    <h6>Report incorrect match</h6>
+                                    <input type="text" class="form-control mb-2" placeholder="What is the correct product name?" @bind="_correctionText" />
+                                    <textarea class="form-control mb-2" rows="2" placeholder="Additional notes (optional)" @bind="_correctionNote"></textarea>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-primary btn-sm" @onclick="SubmitCorrectionAsync">Submit</button>
+                                        <button class="btn btn-outline-secondary btn-sm" @onclick="@(() => _showCorrectionForm = false)">Cancel</button>
                                     </div>
                                 </div>
                             }
-
-                            <div class="d-flex gap-2">
-                                <button class="btn btn-success" @onclick="AddToInventory">
-                                    <i class="bi bi-plus-circle me-2"></i>Add to Inventory
-                                </button>
-                                <button class="btn btn-outline-primary" @onclick="AddToShoppingList">
-                                    <i class="bi bi-cart-plus me-2"></i>Add to Shopping List
-                                </button>
-                            </div>
                         }
                         else
                         {
                             <!-- Product Not Found -->
-                            <div class="text-center py-4">
-                                <i class="bi bi-question-circle text-muted" style="font-size: 3rem;"></i>
-                                <h5 class="mt-3">Product Not Found</h5>
-                                <p class="text-muted">Barcode @scanResult.Barcode is not in our database</p>
-                                <button class="btn btn-primary" @onclick="HandleShowReportMissing">
-                                    <i class="bi bi-flag me-2"></i>Report Missing Product
-                                </button>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-
-            <!-- Scan History -->
-            @if (scanHistory.Any())
-            {
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">Recent Scans</h5>
-                    </div>
-                    <div class="list-group list-group-flush">
-                        @foreach (var item in scanHistory.Take(5))
-                        {
-                            <div class="list-group-item list-group-item-action" @onclick="HandleQuickScan" style="cursor: pointer;">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>@item.ProductName</strong>
-                                        <br>
-                                        <small class="text-muted">@item.Barcode • @item.ScannedAt.ToShortDateString()</small>
+                            <div class="text-center py-3">
+                                <i class="bi bi-question-circle text-muted" style="font-size:2.5rem"></i>
+                                <h6 class="mt-2">Not in Database</h6>
+                                <p class="text-muted small mb-3">UPC: @_currentResult.Upc</p>
+                                <div class="d-flex gap-2 justify-content-center flex-wrap">
+                                    <div class="input-group input-group-sm" style="max-width:300px">
+                                        <input type="text" class="form-control" placeholder="Search by name…" @bind="_productSearchText" />
+                                        <button class="btn btn-outline-primary" @onclick="SearchByNameAsync">Search</button>
                                     </div>
-                                    @if (item.HadAllergenAlert)
-                                    {
-                                        <span class="badge bg-warning text-dark">
-                                            <i class="bi bi-exclamation-triangle-fill"></i>
-                                        </span>
-                                    }
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateToAddProductAsync">
+                                        <i class="bi bi-plus me-1"></i>Add Product
+                                    </button>
+                                    <button class="btn btn-outline-warning btn-sm" @onclick="ReportUnknownProductAsync">
+                                        <i class="bi bi-flag me-1"></i>Flag for Review
+                                    </button>
                                 </div>
                             </div>
                         }
@@ -213,221 +322,540 @@
                 </div>
             }
         </div>
-    </div>
-</div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="container py-5 text-center">
+            <h4>Authentication Required</h4>
+            <p>Please <a href="/login">sign in</a> to use the scanner.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
-    private string barcodeInput = "";
-    private bool isScanning = false;
-    private BarcodeScanResult? scanResult = null;
-    private List<ScanHistoryItem> scanHistory = new();
+    private enum InputMode { Camera, File, Manual }
+    private enum DetectionMode { Upc, Image }
+    private enum SessionMode { Single, Batch }
+
+    private enum ScannerEntryPoint
+    {
+        Default,
+        AddInventory,
+        RemoveInventory,
+        AddPrice,
+        AllergenCheck,
+        AddProduct,
+        AddAllergy
+    }
+
+    private class DetectedItem
+    {
+        public string Upc { get; set; } = string.Empty;
+        public string? ProductName { get; set; }
+        public string? Brand { get; set; }
+        public string? ImageUrl { get; set; }
+        public Guid? ProductId { get; set; }
+        public bool ProductFound { get; set; }
+        public string? CaptureBase64 { get; set; }
+        public Guid? CaptureId { get; set; }
+        public string? DetectionProvider { get; set; }
+    }
+
+    [SupplyParameterFromQuery]
+    private string? Mode { get; set; }
+
+    private InputMode _inputMode = InputMode.Camera;
+    private DetectionMode _detectionMode = DetectionMode.Upc;
+    private SessionMode _sessionMode = SessionMode.Single;
+    private ScannerEntryPoint _entryPoint = ScannerEntryPoint.Default;
+
+    private bool _autoSearch = true;
+    private bool _cameraAvailable = true;
+    private bool _isCameraActive = false;
+    private bool _isProcessing = false;
+    private string? _cameraUnavailableMessage;
+    private string? _statusMessage;
+
+    private string _manualUpc = string.Empty;
+    private string _productSearchText = string.Empty;
+    private string _correctionText = string.Empty;
+    private string _correctionNote = string.Empty;
+
+    private DetectedItem? _currentResult;
+    private List<DetectedItem> _batchQueue = new();
+    private List<string> _fileQueue = new();
+
+    private bool _showCorrectionForm = false;
+
+    private DotNetObjectReference<BarcodeScanner>? _dotNetRef;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadScanHistory();
+        ParseMode();
+        await LoadPreferencesAsync();
     }
 
-    private async Task LoadScanHistory()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            bool available = await JS.InvokeAsync<bool>("scannerInterop.checkCameraAvailable");
+            _cameraAvailable = available;
+            if (!available)
+            {
+                _inputMode = InputMode.Manual;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void ParseMode()
+    {
+        if (string.IsNullOrWhiteSpace(Mode))
+        {
+            return;
+        }
+
+        if (Enum.TryParse<ScannerEntryPoint>(Mode, ignoreCase: true, out ScannerEntryPoint ep))
+        {
+            _entryPoint = ep;
+        }
+    }
+
+    private async Task LoadPreferencesAsync()
     {
         try
         {
-            scanHistory = await ScannerClient.GetScanHistoryAsync(10);
+            // Preferences loaded via JS interop after first render
         }
         catch (Exception ex)
         {
-            // Silently fail - history is optional
-            Console.WriteLine($"Failed to load scan history: {ex.Message}");
+            Logger.LogDebug(ex, "Could not load scanner preferences");
         }
     }
 
-    private async Task ScanBarcode()
+    private async Task StartCameraAsync()
     {
-        if (string.IsNullOrWhiteSpace(barcodeInput))
-            return;
-
-        isScanning = true;
-        scanResult = null;
-
+        _dotNetRef?.Dispose();
+        _dotNetRef = DotNetObjectReference.Create(this);
         try
         {
-            scanResult = await ScannerClient.ScanBarcodeAsync(barcodeInput.Trim());
-
-            if (scanResult != null)
-            {
-                if (scanResult.Found)
-                {
-                    if (scanResult.AllergenAlerts.Any())
-                    {
-                        ToastService.ShowWarning("Allergen Alert!", $"This product contains allergens you're sensitive to");
-                    }
-                    else
-                    {
-                        ToastService.ShowSuccess("Product Found", scanResult.Product?.Name ?? "Unknown");
-                    }
-
-                    await LoadScanHistory();
-                }
-                else
-                {
-                    ToastService.ShowWarning("Not Found", "Product not in database");
-                }
-            }
-            else
-            {
-                ToastService.ShowError("Scan Failed", "Unable to scan barcode");
-            }
+            await JS.InvokeVoidAsync("scannerInterop.startCamera", _dotNetRef, "scanner-video", "scanner-canvas", "environment");
+            _isCameraActive = true;
         }
         catch (Exception ex)
         {
-            ToastService.ShowError("Error", $"Failed to scan: {ex.Message}");
-        }
-        finally
-        {
-            isScanning = false;
+            _statusMessage = $"Camera error: {ex.Message}";
+            _cameraAvailable = false;
         }
     }
 
-    private async Task QuickScan(string barcode)
+    private async Task StopCameraAsync()
     {
-        barcodeInput = barcode;
-        await ScanBarcode();
+        await JS.InvokeVoidAsync("scannerInterop.stopCamera");
+        _isCameraActive = false;
     }
 
-    private async Task HandleKeyPress(KeyboardEventArgs e)
+    [JSInvokable]
+    public async Task OnBarcodeDetected(BarcodeDetectPayload payload)
     {
-        if (e.Key == "Enter")
+        _isProcessing = true;
+        await InvokeAsync(StateHasChanged);
+
+        Guid? captureId = null;
+        if (!string.IsNullOrWhiteSpace(payload.CaptureBase64))
         {
-            await ScanBarcode();
+            captureId = await TrySaveCaptureAsync(payload.CaptureBase64, payload.Upc, null);
         }
-    }
 
-    private void ShowReportMissing(string barcode)
-    {
-        // TODO: Implement report missing product dialog
-        ToastService.ShowInfo("Coming Soon", "Report missing product feature");
-    }
-
-    // Event handlers
-    private async Task HandleQuickScan()
-    {
-        if (scanHistory.Any())
+        if (_autoSearch)
         {
-            var lastScan = scanHistory.First();
-            await QuickScan(lastScan.Barcode);
+            await SearchByUpcAsync(payload.Upc, payload.CaptureBase64, captureId);
         }
-    }
-
-    private void HandleShowReportMissing()
-    {
-        if (scanResult != null)
+        else
         {
-            ShowReportMissing(scanResult.Barcode);
-        }
-    }
-
-    private async Task AddToInventory()
-    {
-        if (scanResult?.Product == null)
-            return;
-
-        try
-        {
-            var request = new ExpressRecipe.Client.Shared.Models.Inventory.CreateInventoryItemRequest
+            DetectedItem item = new DetectedItem
             {
-                Name = scanResult.Product.Name,
-                Brand = scanResult.Product.Brand,
-                Quantity = 1,
-                Unit = "unit",
-                Category = scanResult.Product.Category,
-                Location = "Pantry"
+                Upc = payload.Upc,
+                CaptureBase64 = payload.CaptureBase64,
+                CaptureId = captureId
             };
 
-            // Add to inventory via API
-            var itemId = await InventoryClient.CreateInventoryItemAsync(request);
-
-            if (itemId.HasValue)
+            if (_sessionMode == SessionMode.Batch)
             {
-                ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to inventory");
+                _batchQueue.Add(item);
             }
             else
             {
-                ToastService.ShowError("Error", "Failed to add item to inventory");
+                _currentResult = item;
             }
         }
-        catch (Exception ex)
-        {
-            ToastService.ShowError("Error", $"Failed to add to inventory: {ex.Message}");
-        }
+
+        _isProcessing = false;
+        await InvokeAsync(StateHasChanged);
     }
 
-    private async Task AddToShoppingList()
+    [JSInvokable]
+    public void OnCameraUnavailable(string errorName)
     {
-        if (scanResult?.Product == null)
+        _cameraAvailable = false;
+        _isCameraActive = false;
+        _inputMode = InputMode.Manual;
+        _cameraUnavailableMessage = errorName == "NotAllowedError"
+            ? "Camera permission denied. Please allow camera access or use manual entry."
+            : "Camera not available. Please use manual entry or file upload.";
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnFrameCaptured(string base64)
+    {
+        if (_detectionMode != DetectionMode.Image)
+        {
             return;
-
-        try
-        {
-            // Get or create the user's default active shopping list
-            var listId = await GetOrCreateDefaultShoppingListAsync();
-            if (listId == null)
-            {
-                ToastService.ShowError("Error", "Could not find or create a shopping list");
-                return;
-            }
-
-            var request = new ExpressRecipe.Client.Shared.Models.Shopping.AddShoppingListItemRequest
-            {
-                ShoppingListId = listId.Value,
-                Name = scanResult.Product.Name,
-                Brand = scanResult.Product.Brand,
-                Quantity = 1,
-                Unit = "unit"
-            };
-
-            // Add to shopping list via API
-            var itemId = await ShoppingClient.AddItemAsync(request);
-
-            if (itemId.HasValue)
-            {
-                ToastService.ShowSuccess("Added", $"{scanResult.Product.Name} added to shopping list");
-            }
-            else
-            {
-                ToastService.ShowError("Error", "Failed to add item to shopping list");
-            }
         }
-        catch (Exception ex)
+
+        _isProcessing = true;
+        await InvokeAsync(StateHasChanged);
+
+        await AnalyzeImageAsync(base64);
+
+        _isProcessing = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CaptureAndIdentifyAsync()
+    {
+        string? base64 = await JS.InvokeAsync<string?>("scannerInterop.captureFrame", "scanner-canvas");
+        if (string.IsNullOrWhiteSpace(base64))
         {
-            ToastService.ShowError("Error", $"Failed to add to shopping list: {ex.Message}");
+            _statusMessage = "No frame available. Make sure camera is active.";
+            return;
+        }
+
+        await AnalyzeImageAsync(base64);
+    }
+
+    private async Task AnalyzeImageAsync(string base64)
+    {
+        VisionAnalyzeResponse? result = await VisionClient.AnalyzeAsync(base64);
+
+        if (result == null || !result.Success)
+        {
+            _currentResult = new DetectedItem { ProductFound = false };
+            _statusMessage = "Could not identify product from image.";
+            return;
+        }
+
+        Guid? captureId = await TrySaveCaptureAsync(base64, result.DetectedText.FirstOrDefault(), result.ProductName);
+
+        DetectedItem item = new DetectedItem
+        {
+            Upc = string.Empty,
+            ProductName = result.ProductName,
+            Brand = result.Brand,
+            ProductFound = !string.IsNullOrWhiteSpace(result.ProductName),
+            CaptureBase64 = base64,
+            CaptureId = captureId,
+            DetectionProvider = result.ProviderUsed
+        };
+
+        if (_sessionMode == SessionMode.Batch)
+        {
+            _batchQueue.Add(item);
+        }
+        else
+        {
+            _currentResult = item;
         }
     }
 
-    private async Task<Guid?> GetOrCreateDefaultShoppingListAsync()
+    private async Task SearchByUpcAsync(string upc, string? captureBase64 = null, Guid? captureId = null)
     {
-        try
-        {
-            // Try to find an existing active list
-            var searchResult = await ShoppingClient.SearchShoppingListsAsync(
-                new ExpressRecipe.Client.Shared.Models.Shopping.ShoppingListSearchRequest
-                {
-                    Status = "Active",
-                    PageSize = 1
-                });
-            if (searchResult?.Lists?.Count > 0)
-                return searchResult.Lists[0].Id;
+        ProductDto? product = await ProductApi.GetProductByUpcAsync(upc);
 
-            // No active list found — create a default one
-            var newListId = await ShoppingClient.CreateShoppingListAsync(
-                new ExpressRecipe.Client.Shared.Models.Shopping.CreateShoppingListRequest
-                {
-                    Name = "My Shopping List"
-                });
-            return newListId;
-        }
-        catch (Exception ex)
+        DetectedItem item = new DetectedItem
         {
-            Logger.LogError(ex, "Failed to get or create default shopping list");
+            Upc = upc,
+            ProductFound = product != null,
+            ProductId = product?.Id,
+            ProductName = product?.Name,
+            Brand = product?.Brand,
+            ImageUrl = product?.ImageUrl,
+            CaptureBase64 = captureBase64,
+            CaptureId = captureId,
+            DetectionProvider = "ZXing"
+        };
+
+        if (_sessionMode == SessionMode.Batch)
+        {
+            _batchQueue.Add(item);
+        }
+        else
+        {
+            _currentResult = item;
+        }
+    }
+
+    private async Task SearchByManualUpcAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_manualUpc))
+        {
+            return;
+        }
+
+        _isProcessing = true;
+        await SearchByUpcAsync(_manualUpc.Trim());
+        _isProcessing = false;
+    }
+
+    private async Task HandleManualKeyPressAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_manualUpc))
+        {
+            await SearchByManualUpcAsync();
+        }
+    }
+
+    private async Task HandleFileUploadAsync(InputFileChangeEventArgs e)
+    {
+        _fileQueue.Clear();
+        foreach (IBrowserFile file in e.GetMultipleFiles(10))
+        {
+            _fileQueue.Add(file.Name);
+            try
+            {
+                using Stream stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                using MemoryStream ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                string base64 = Convert.ToBase64String(ms.ToArray());
+                await AnalyzeImageAsync(base64);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to process file {FileName}", file.Name);
+                ToastService.ShowError($"Could not process {file.Name}", "File Error");
+            }
+        }
+    }
+
+    private async Task<Guid?> TrySaveCaptureAsync(string? base64, string? detectedBarcode, string? detectedProductName)
+    {
+        if (string.IsNullOrWhiteSpace(base64))
+        {
             return null;
         }
+
+        try
+        {
+            VisionCaptureRequest request = new VisionCaptureRequest
+            {
+                CaptureBase64 = base64,
+                DetectedBarcode = detectedBarcode,
+                DetectedProductName = detectedProductName
+            };
+
+            return await ScannerClient.SaveVisionCaptureAsync(request);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Fire-and-forget vision capture save failed");
+            return null;
+        }
+    }
+
+    private async Task ConfirmAndDispatchAsync()
+    {
+        if (_currentResult?.ProductId == null)
+        {
+            return;
+        }
+
+        await StopCameraAsync();
+        DispatchToEntryPoint(_currentResult.ProductId.Value);
+    }
+
+    private void DispatchToEntryPoint(Guid productId)
+    {
+        string destination = _entryPoint switch
+        {
+            ScannerEntryPoint.AddInventory => $"/inventory/add?productId={productId}",
+            ScannerEntryPoint.RemoveInventory => $"/inventory/remove?productId={productId}",
+            ScannerEntryPoint.AddPrice => $"/prices/add?productId={productId}",
+            ScannerEntryPoint.AllergenCheck => $"/allergens/check?productId={productId}",
+            ScannerEntryPoint.AddProduct => $"/products/add?productId={productId}",
+            ScannerEntryPoint.AddAllergy => $"/allergens/add?productId={productId}",
+            _ => $"/products/{productId}"
+        };
+
+        Navigation.NavigateTo(destination);
+    }
+
+    private async Task ShowWrongItemAsync()
+    {
+        _showCorrectionForm = true;
+        await Task.CompletedTask;
+    }
+
+    private async Task SubmitCorrectionAsync()
+    {
+        if (_currentResult?.CaptureId == null)
+        {
+            _showCorrectionForm = false;
+            return;
+        }
+
+        try
+        {
+            CorrectionReportRequest report = new CorrectionReportRequest
+            {
+                VisionCaptureId = _currentResult.CaptureId.Value,
+                AiGuess = _currentResult.ProductName,
+                UserCorrection = _correctionText,
+                UserNote = _correctionNote
+            };
+
+            bool success = await ScannerClient.CreateCorrectionReportAsync(report);
+
+            if (success)
+            {
+                ToastService.ShowSuccess("Thanks for the correction! It will be reviewed.", "Flagged");
+            }
+
+            _showCorrectionForm = false;
+            _correctionText = string.Empty;
+            _correctionNote = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to submit correction report");
+            ToastService.ShowError("Could not submit correction.", "Error");
+        }
+    }
+
+    private void AddToBatchQueue()
+    {
+        if (_currentResult != null)
+        {
+            _batchQueue.Add(_currentResult);
+            _currentResult = null;
+        }
+    }
+
+    private async Task ProcessBatchQueueAsync()
+    {
+        foreach (DetectedItem item in _batchQueue.Where(i => i.ProductId.HasValue))
+        {
+            DispatchToEntryPoint(item.ProductId!.Value);
+            await Task.Delay(100);
+        }
+        _batchQueue.Clear();
+    }
+
+    private async Task SearchByNameAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_productSearchText))
+        {
+            return;
+        }
+
+        Navigation.NavigateTo($"/products/search?q={Uri.EscapeDataString(_productSearchText)}");
+        await Task.CompletedTask;
+    }
+
+    private async Task NavigateToAddProductAsync()
+    {
+        string upc = _currentResult?.Upc ?? string.Empty;
+        Navigation.NavigateTo($"/products/add?upc={Uri.EscapeDataString(upc)}");
+        await Task.CompletedTask;
+    }
+
+    private async Task ReportUnknownProductAsync()
+    {
+        if (_currentResult == null)
+        {
+            return;
+        }
+
+        try
+        {
+            bool reported = await ScannerClient.ReportMissingProductAsync(_currentResult.Upc, _currentResult.ProductName ?? string.Empty);
+            if (reported)
+            {
+                ToastService.ShowSuccess("Product flagged for admin review.", "Reported");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to report unknown product");
+        }
+    }
+
+    private void SetInputMode(InputMode mode)
+    {
+        if (_isCameraActive && mode != InputMode.Camera)
+        {
+            // Fire-and-forget: camera stop is best-effort when switching modes
+            _ = StopCameraAsync().ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    Logger.LogWarning(t.Exception, "Camera stop encountered an error during mode switch");
+                }
+            }, TaskScheduler.Default);
+        }
+        _inputMode = mode;
+        _currentResult = null;
+    }
+
+    private void SetDetectionMode(DetectionMode mode)
+    {
+        _detectionMode = mode;
+    }
+
+    private void SetEntryPoint(ScannerEntryPoint ep)
+    {
+        _entryPoint = ep;
+    }
+
+    private async Task GoBackAsync()
+    {
+        // Use browser history if available; fall back to products page if navigated directly
+        bool hasHistory = await JS.InvokeAsync<bool>("eval", "window.history.length > 1");
+        if (hasHistory)
+        {
+            await JS.InvokeVoidAsync("history.back");
+        }
+        else
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private string GetEntryPointLabel(ScannerEntryPoint? ep = null)
+    {
+        ScannerEntryPoint target = ep ?? _entryPoint;
+        return target switch
+        {
+            ScannerEntryPoint.AddInventory => "Add Inventory",
+            ScannerEntryPoint.RemoveInventory => "Remove Inventory",
+            ScannerEntryPoint.AddPrice => "Add Price",
+            ScannerEntryPoint.AllergenCheck => "Allergen Check",
+            ScannerEntryPoint.AddProduct => "Add Product",
+            ScannerEntryPoint.AddAllergy => "Add Allergy",
+            _ => "General Scan"
+        };
+    }
+
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+        _dotNetRef = null;
+    }
+
+    // Payload class for JS interop
+    public class BarcodeDetectPayload
+    {
+        public string Upc { get; set; } = string.Empty;
+        public string? CaptureBase64 { get; set; }
     }
 }

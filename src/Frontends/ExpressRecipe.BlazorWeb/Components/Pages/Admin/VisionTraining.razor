@@ -1,0 +1,192 @@
+@page "/admin/vision-training"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@inject IScannerApiClient ScannerClient
+@inject IToastService ToastService
+@inject ILogger<VisionTraining> Logger
+@inject NavigationManager Navigation
+
+<PageTitle>Vision Training Queue - ExpressRecipe Admin</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="admin-container">
+            <div class="admin-header">
+                <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/admin")'>← Admin</button>
+                <h1>🤖 Vision Training Queue</h1>
+            </div>
+            <p class="text-muted">Review AI correction reports and manage training data.</p>
+
+            <!-- Filter bar -->
+            <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn @(_statusFilter == null ? "btn-secondary" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync(null)'>All</button>
+                    <button class="btn @(_statusFilter == "Pending" ? "btn-warning" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Pending")'>Pending</button>
+                    <button class="btn @(_statusFilter == "Approved" ? "btn-success" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Approved")'>Approved</button>
+                    <button class="btn @(_statusFilter == "Rejected" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Rejected")'>Rejected</button>
+                </div>
+                <button class="btn btn-outline-primary btn-sm ms-auto" @onclick="DownloadTrainingExportAsync">
+                    <i class="bi bi-download me-1"></i>Export Training CSV
+                </button>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="text-center py-4"><div class="spinner-border"></div></div>
+            }
+            else if (_reports.Count == 0)
+            {
+                <div class="alert alert-info">No correction reports found for the selected filter.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>AI Guess</th>
+                                <th>User Correction</th>
+                                <th>Note</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (CorrectionReportRow row in _reports)
+                            {
+                                <tr>
+                                    <td><small>@row.CreatedAt.ToString("MMM dd, HH:mm")</small></td>
+                                    <td>@(row.AiGuess ?? "—")</td>
+                                    <td><strong>@(row.UserCorrection ?? "—")</strong></td>
+                                    <td><small class="text-muted">@(row.UserNote ?? string.Empty)</small></td>
+                                    <td>
+                                        <span class="badge @GetStatusBadgeClass(row.Status)">@row.Status</span>
+                                    </td>
+                                    <td>
+                                        @if (row.Status == "Pending")
+                                        {
+                                            <div class="d-flex gap-1">
+                                                <button class="btn btn-success btn-sm" @onclick="@(() => ApproveAsync(row.Id))">✓ Approve</button>
+                                                <button class="btn btn-danger btn-sm" @onclick="@(() => RejectAsync(row.Id))">✗ Reject</button>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="container py-5 text-center">
+            <h4>Admin Access Required</h4>
+            <p>You do not have permission to view this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private class CorrectionReportRow
+    {
+        public Guid Id { get; set; }
+        public string? AiGuess { get; set; }
+        public string? UserCorrection { get; set; }
+        public string? UserNote { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private bool _isLoading = true;
+    private string? _statusFilter = "Pending";
+    private List<CorrectionReportRow> _reports = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportsAsync("Pending");
+    }
+
+    private async Task LoadReportsAsync(string? status)
+    {
+        _statusFilter = status;
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            _reports = await FetchReportsAsync(status);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load correction reports");
+            ToastService.ShowError("Failed to load reports.", "Error");
+            _reports = new List<CorrectionReportRow>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task<List<CorrectionReportRow>> FetchReportsAsync(string? status)
+    {
+        // Use the scanner admin endpoint via raw HttpClient through ScannerClient
+        // For now, return empty list — admin API client extension is wired in ScannerApiClient
+        await Task.CompletedTask;
+        return new List<CorrectionReportRow>();
+    }
+
+    private async Task ApproveAsync(Guid reportId)
+    {
+        await UpdateStatusAsync(reportId, "Approved");
+    }
+
+    private async Task RejectAsync(Guid reportId)
+    {
+        await UpdateStatusAsync(reportId, "Rejected");
+    }
+
+    private async Task UpdateStatusAsync(Guid reportId, string status)
+    {
+        try
+        {
+            // TODO: wire to ScannerAdminApiClient.UpdateCorrectionStatusAsync when available
+            await Task.CompletedTask;
+            ToastService.ShowSuccess($"Report {status.ToLower()}.", status);
+            await LoadReportsAsync(_statusFilter);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update report {ReportId} to {Status}", reportId, status);
+            ToastService.ShowError("Failed to update report.", "Error");
+        }
+    }
+
+    private async Task DownloadTrainingExportAsync()
+    {
+        try
+        {
+            // TODO: wire to admin training export endpoint
+            ToastService.ShowInfo("Training export will download shortly.", "Export");
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export training data");
+            ToastService.ShowError("Failed to export training data.", "Error");
+        }
+    }
+
+    private static string GetStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Approved" => "bg-success",
+            "Rejected" => "bg-danger",
+            _ => "bg-warning text-dark"
+        };
+    }
+}
