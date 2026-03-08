@@ -41,7 +41,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(1);
 
         // Act
-        var result = await _controller.Search(null, null, null, null, null, null, null);
+        var result = await _controller.Search(null, null, null, null, null, null, null, null, null);
 
         // Assert
         var ok = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -56,7 +56,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
 
         // Act
-        var result = await _controller.Search(null, null, null, null, null, null, null);
+        var result = await _controller.Search(null, null, null, null, null, null, null, null, null);
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
@@ -71,7 +71,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
 
         // Act
-        await _controller.Search(name: "Whole Foods", null, null, null, null, null, null);
+        await _controller.Search(name: "Whole Foods", null, null, null, null, null, null, null, null);
 
         // Assert
         _repositoryMock.Verify(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.Name == "Whole Foods")), Times.Once);
@@ -86,7 +86,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
 
         // Act
-        await _controller.Search(null, chain: "Kroger", null, null, null, null, null);
+        await _controller.Search(null, chain: "Kroger", null, null, null, null, null, null, null);
 
         // Assert
         _repositoryMock.Verify(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.Chain == "Kroger")), Times.Once);
@@ -102,7 +102,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
 
         // Act
-        await _controller.Search(null, null, city: "Charlotte", state: "NC", null, null, null);
+        await _controller.Search(null, null, city: "Charlotte", state: "NC", null, null, null, null, null);
 
         // Assert
         _repositoryMock.Verify(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(
@@ -118,7 +118,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
 
         // Act
-        await _controller.Search(null, null, null, null, null, null, acceptsSnap: true);
+        await _controller.Search(null, null, null, null, null, null, acceptsSnap: true, null, null);
 
         // Assert
         _repositoryMock.Verify(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.AcceptsSnap == true)), Times.Once);
@@ -133,7 +133,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
 
         // Act
-        await _controller.Search(null, null, null, null, null, null, null, page: 1, pageSize: 500);
+        await _controller.Search(null, null, null, null, null, null, null, null, null, page: 1, pageSize: 500);
 
         // Assert
         _repositoryMock.Verify(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.PageSize == 200)), Times.Once);
@@ -147,7 +147,7 @@ public class GroceryStoresControllerTests
         _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
 
         // Act
-        await _controller.Search(null, null, null, null, null, null, null);
+        await _controller.Search(null, null, null, null, null, null, null, null, null);
 
         // Assert
         _repositoryMock.Verify(r => r.SearchAsync(It.IsAny<GroceryStoreSearchRequest>()), Times.Once);
@@ -307,5 +307,153 @@ public class GroceryStoresControllerTests
         // Assert - worker is null, so service unavailable
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(503);
+    }
+
+    // --- GetByChain ---
+
+    [Fact]
+    public async Task GetByChain_ReturnsOkWithStores()
+    {
+        // Arrange
+        var stores = new List<GroceryStoreDto>
+        {
+            new GroceryStoreDto { Id = Guid.NewGuid(), Name = "Kroger", NormalizedChain = "Kroger", City = "Raleigh", State = "NC" }
+        };
+        _repositoryMock.Setup(r => r.GetByChainAsync("Kroger", 100)).ReturnsAsync(stores);
+
+        // Act
+        var result = await _controller.GetByChain("Kroger");
+
+        // Assert
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.StatusCode.Should().Be(200);
+        ok.Value.Should().BeEquivalentTo(stores);
+    }
+
+    [Fact]
+    public async Task GetByChain_EmptyResult_ReturnsOkWithEmptyList()
+    {
+        // Arrange
+        _repositoryMock.Setup(r => r.GetByChainAsync("UnknownChain", It.IsAny<int>()))
+            .ReturnsAsync(new List<GroceryStoreDto>());
+
+        // Act
+        var result = await _controller.GetByChain("UnknownChain");
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    // --- GetChains ---
+
+    [Fact]
+    public async Task GetChains_ReturnsOkWithChainList()
+    {
+        // Arrange
+        var chains = new List<StoreChainDto>
+        {
+            new StoreChainDto { Id = Guid.NewGuid(), CanonicalName = "Walmart", IsNational = true },
+            new StoreChainDto { Id = Guid.NewGuid(), CanonicalName = "Kroger", IsNational = true }
+        };
+        _repositoryMock.Setup(r => r.GetAllChainsAsync()).ReturnsAsync(chains);
+
+        // Act
+        var result = await _controller.GetChains();
+
+        // Assert
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.StatusCode.Should().Be(200);
+        ok.Value.Should().BeEquivalentTo(chains);
+    }
+
+    // --- GetStoreHours ---
+
+    [Fact]
+    public async Task GetStoreHours_ExistingStore_ReturnsOkWithHours()
+    {
+        // Arrange
+        var storeId = Guid.NewGuid();
+        var store = new GroceryStoreDto { Id = storeId, Name = "Target" };
+        var hours = new List<StoreHoursDto>
+        {
+            new StoreHoursDto { Id = Guid.NewGuid(), StoreId = storeId, DayOfWeek = 1, OpenTime = TimeSpan.FromHours(8), CloseTime = TimeSpan.FromHours(22) }
+        };
+        _repositoryMock.Setup(r => r.GetByIdAsync(storeId)).ReturnsAsync(store);
+        _repositoryMock.Setup(r => r.GetStoreHoursAsync(storeId)).ReturnsAsync(hours);
+
+        // Act
+        var result = await _controller.GetStoreHours(storeId);
+
+        // Assert
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.StatusCode.Should().Be(200);
+        ok.Value.Should().BeEquivalentTo(hours);
+    }
+
+    [Fact]
+    public async Task GetStoreHours_NonExistentStore_ReturnsNotFound()
+    {
+        // Arrange
+        var storeId = Guid.NewGuid();
+        _repositoryMock.Setup(r => r.GetByIdAsync(storeId)).ReturnsAsync((GroceryStoreDto?)null);
+
+        // Act
+        var result = await _controller.GetStoreHours(storeId);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    // --- Search with new filters ---
+
+    [Fact]
+    public async Task Search_WithIsVerifiedFilter_PassesIsVerifiedToRepository()
+    {
+        // Arrange
+        _repositoryMock.Setup(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.IsVerified == true)))
+            .ReturnsAsync(new List<GroceryStoreDto>());
+        _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
+
+        // Act
+        await _controller.Search(null, null, null, null, null, null, null, isVerified: true, null);
+
+        // Assert
+        _repositoryMock.Verify(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.IsVerified == true)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Search_WithNormalizedChainFilter_PassesNormalizedChainToRepository()
+    {
+        // Arrange
+        _repositoryMock.Setup(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.NormalizedChain == "Walmart")))
+            .ReturnsAsync(new List<GroceryStoreDto>());
+        _repositoryMock.Setup(r => r.GetSearchCountAsync(It.IsAny<GroceryStoreSearchRequest>())).ReturnsAsync(0);
+
+        // Act
+        await _controller.Search(null, null, null, null, null, null, null, null, normalizedChain: "Walmart");
+
+        // Assert
+        _repositoryMock.Verify(r => r.SearchAsync(It.Is<GroceryStoreSearchRequest>(req => req.NormalizedChain == "Walmart")), Times.Once);
+    }
+
+    // --- GetImportStatus (updated with new sources) ---
+
+    [Fact]
+    public async Task GetImportStatus_ReturnsOkWithAllSources()
+    {
+        // Arrange
+        _repositoryMock.Setup(r => r.GetLastImportAsync(It.IsAny<string>())).ReturnsAsync((StoreImportLogDto?)null);
+
+        // Act
+        var result = await _controller.GetImportStatus();
+
+        // Assert
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.StatusCode.Should().Be(200);
+        // Verify all 5 sources are queried
+        _repositoryMock.Verify(r => r.GetLastImportAsync("USDA_SNAP"), Times.Once);
+        _repositoryMock.Verify(r => r.GetLastImportAsync("OPENSTREETMAP"), Times.Once);
+        _repositoryMock.Verify(r => r.GetLastImportAsync("OVERTURE_MAPS"), Times.Once);
+        _repositoryMock.Verify(r => r.GetLastImportAsync("HIFLD"), Times.Once);
     }
 }

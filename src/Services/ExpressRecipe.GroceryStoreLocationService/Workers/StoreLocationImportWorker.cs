@@ -5,8 +5,9 @@ namespace ExpressRecipe.GroceryStoreLocationService.Workers;
 
 /// <summary>
 /// Background service that imports and refreshes grocery store location data.
-/// - On startup (after 2 min delay): runs initial USDA SNAP import if fewer than 100 stores exist.
-/// - Daily at 2:00 AM: refreshes from USDA SNAP, OSM, and OpenPrices.
+/// - On startup (after 2 min delay): runs initial Overture/SNAP import if fewer than 100 stores exist.
+/// - Daily at 2:00 AM: refreshes from configured sources (OpenPrices, SNAP, OSM, Overture, HIFLD).
+/// Each source can be individually enabled/disabled via StoreLocationImport config.
 /// </summary>
 public class StoreLocationImportWorker : BackgroundService
 {
@@ -39,11 +40,30 @@ public class StoreLocationImportWorker : BackgroundService
 
         try
         {
+            await WarmChainNormalizerAsync(stoppingToken);
             await PerformInitialImportIfNeededAsync(stoppingToken);
             await RunDailyScheduleAsync(stoppingToken);
         }
         catch (OperationCanceledException) { _logger.LogInformation("StoreLocationImportWorker is stopping."); }
         catch (Exception ex) { _logger.LogError(ex, "Fatal error in StoreLocationImportWorker"); }
+    }
+
+    private async Task WarmChainNormalizerAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var normalizer = scope.ServiceProvider.GetService<IStoreChainNormalizer>();
+            if (normalizer is StoreChainNormalizer concreteNormalizer)
+            {
+                await concreteNormalizer.EnsureLoadedAsync(stoppingToken);
+                _logger.LogInformation("StoreChainNormalizer warmed successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "StoreChainNormalizer warm-up failed (non-fatal)");
+        }
     }
 
     private async Task PerformInitialImportIfNeededAsync(CancellationToken stoppingToken)
@@ -63,8 +83,18 @@ public class StoreLocationImportWorker : BackgroundService
             }
 
             _logger.LogInformation("Store count is low ({Count}). Running initial imports...", count);
-            await RunOpenPricesImportAsync(stoppingToken);
-            
+
+            // Overture is the primary source
+            var overtureEnabled = _configuration.GetValue<bool>("StoreLocationImport:Overture:Enabled", false);
+            if (overtureEnabled)
+            {
+                await RunOvertureImportAsync(stoppingToken);
+            }
+            else
+            {
+                await RunOpenPricesImportAsync(stoppingToken);
+            }
+
             if (await repo.GetStoreCountAsync() < 100)
             {
                 await RunSnapImportAsync(stoppingToken);
@@ -83,6 +113,10 @@ public class StoreLocationImportWorker : BackgroundService
             await RunSnapImportAsync(cancellationToken);
         if (all || source.Equals("osm", StringComparison.OrdinalIgnoreCase))
             await RunOsmImportAsync(cancellationToken);
+        if (all || source.Equals("overture", StringComparison.OrdinalIgnoreCase))
+            await RunOvertureImportAsync(cancellationToken);
+        if (all || source.Equals("hifld", StringComparison.OrdinalIgnoreCase))
+            await RunHifldImportAsync(cancellationToken);
     }
 
     private async Task RunDailyScheduleAsync(CancellationToken stoppingToken)
@@ -94,13 +128,18 @@ public class StoreLocationImportWorker : BackgroundService
             await Task.Delay(nextRun - now, stoppingToken);
 
             _logger.LogInformation("Running daily store location import...");
+
             var openPricesEnabled = _configuration.GetValue<bool>("StoreLocationImport:OpenPricesEnabled", true);
             var snapEnabled = _configuration.GetValue<bool>("StoreLocationImport:UsSnapEnabled", true);
             var osmEnabled = _configuration.GetValue<bool>("StoreLocationImport:OpenStreetMapEnabled", true);
+            var overtureEnabled = _configuration.GetValue<bool>("StoreLocationImport:Overture:Enabled", false);
+            var hifldEnabled = _configuration.GetValue<bool>("StoreLocationImport:Hifld:Enabled", false);
 
+            if (overtureEnabled) await RunOvertureImportAsync(stoppingToken);
             if (openPricesEnabled) await RunOpenPricesImportAsync(stoppingToken);
             if (snapEnabled) await RunSnapImportAsync(stoppingToken);
             if (osmEnabled) await RunOsmImportAsync(stoppingToken);
+            if (hifldEnabled) await RunHifldImportAsync(stoppingToken);
         }
     }
 
@@ -179,7 +218,7 @@ public class StoreLocationImportWorker : BackgroundService
                 Success = error == null
             });
 
-            _logger.LogInformation("[{Source}] Import complete: {Imported}/{Total} stores saved to database", 
+            _logger.LogInformation("[{Source}] Import complete: {Imported}/{Total} stores saved to database",
                 source, imported, stores.Count);
         }
         else
@@ -206,11 +245,11 @@ public class StoreLocationImportWorker : BackgroundService
                 return;
             }
 
-            await LogResultAsync(repo, "USDA-SNAP", stores, error);
+            await LogResultAsync(repo, "USDA_SNAP", stores, error);
         }
-        catch (Exception ex) 
-        { 
-            _logger.LogError(ex, "[USDA-SNAP] Import failed with exception"); 
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[USDA-SNAP] Import failed with exception");
         }
     }
 
@@ -222,12 +261,130 @@ public class StoreLocationImportWorker : BackgroundService
             var importService = scope.ServiceProvider.GetRequiredService<OpenStreetMapImportService>();
             var repo = scope.ServiceProvider.GetRequiredService<IGroceryStoreRepository>();
 
-            _logger.LogInformation("Starting OSM import for NC...");
-            var (stores, error) = await importService.FetchStoresForStateAsync("NC", stoppingToken);
+            var stateCodes = _configuration.GetSection("StoreLocationImport:OsmStateCodes").Get<string[]>()
+                ?? new[] { "NC" };
+
+            _logger.LogInformation("[OSM] Starting import for states: {States}", string.Join(", ", stateCodes));
+
+            var (stores, error) = await importService.FetchStoresForStatesAsync(stateCodes, stoppingToken);
             var imported = stores.Count > 0 ? await repo.BulkUpsertAsync(stores) : 0;
-            await repo.LogImportAsync(new StoreImportLogDto { DataSource = "OSM", RecordsProcessed = stores.Count, RecordsImported = imported, Success = error == null });
-            _logger.LogInformation("OSM import complete: {Imported}/{Total} stores", imported, stores.Count);
+
+            await repo.LogImportAsync(new StoreImportLogDto
+            {
+                DataSource = "OPENSTREETMAP",
+                RecordsProcessed = stores.Count,
+                RecordsImported = imported,
+                Success = error == null,
+                ErrorMessage = error
+            });
+
+            _logger.LogInformation("[OSM] Import complete: {Imported}/{Total} stores", imported, stores.Count);
         }
-        catch (Exception ex) { _logger.LogError(ex, "OSM import failed"); }
+        catch (Exception ex) { _logger.LogError(ex, "[OSM] Import failed"); }
+    }
+
+    private async Task RunOvertureImportAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var importService = scope.ServiceProvider.GetRequiredService<OvertureImportService>();
+            var repo = scope.ServiceProvider.GetRequiredService<IGroceryStoreRepository>();
+
+            _logger.LogInformation("[OVERTURE] Starting import...");
+            var (stores, error) = await importService.FetchStoresAsync(stoppingToken);
+
+            if (stores.Count == 0)
+            {
+                _logger.LogWarning("[OVERTURE] No stores found. Error: {Error}", error ?? "Unknown");
+                await repo.LogImportAsync(new StoreImportLogDto { DataSource = "OVERTURE_MAPS", Success = false, ErrorMessage = error ?? "No stores" });
+                return;
+            }
+
+            await LogResultAsync(repo, "OVERTURE_MAPS", stores, error);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[OVERTURE] Import failed with exception");
+        }
+    }
+
+    private async Task RunHifldImportAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var importService = scope.ServiceProvider.GetRequiredService<HifldImportService>();
+            var repo = scope.ServiceProvider.GetRequiredService<IGroceryStoreRepository>();
+
+            _logger.LogInformation("[HIFLD] Starting verification import...");
+            var (records, error) = await importService.FetchVerificationRecordsAsync(stoppingToken);
+
+            if (records.Count == 0)
+            {
+                _logger.LogWarning("[HIFLD] No records found. Error: {Error}", error ?? "Unknown");
+                await repo.LogImportAsync(new StoreImportLogDto { DataSource = "HIFLD", Success = false, ErrorMessage = error ?? "No records" });
+                return;
+            }
+
+            // HIFLD is verification only: cross-match by Address+ZipCode and mark IsVerified=1
+            var verifiedCount = 0;
+            var processedCount = 0;
+
+            foreach (var record in records)
+            {
+                stoppingToken.ThrowIfCancellationRequested();
+                processedCount++;
+
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(record.Address) || string.IsNullOrWhiteSpace(record.ZipCode))
+                        continue;
+
+                    // Try to find existing store by ExternalId (HIFLD) or Address+Zip
+                    GroceryStoreDto? existing = null;
+
+                    if (!string.IsNullOrWhiteSpace(record.HifldId))
+                    {
+                        existing = await repo.GetByExternalIdAsync($"HIFLD_{record.HifldId}", "HIFLD");
+                    }
+
+                    if (existing == null && !string.IsNullOrWhiteSpace(record.Address) && !string.IsNullOrWhiteSpace(record.ZipCode))
+                    {
+                        // Upsert will handle address+zip dedup
+                        await repo.UpsertAsync(record);
+                        verifiedCount++;
+                    }
+                    else if (existing != null)
+                    {
+                        await repo.MarkVerifiedAsync(existing.Id, "HIFLD");
+                        verifiedCount++;
+                    }
+
+                    if (processedCount % 1000 == 0)
+                    {
+                        _logger.LogInformation("[HIFLD] Progress: {Processed}/{Total} records processed, {Verified} verified",
+                            processedCount, records.Count, verifiedCount);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "[HIFLD] Error processing record {Name}", record.Name);
+                }
+            }
+
+            await repo.LogImportAsync(new StoreImportLogDto
+            {
+                DataSource = "HIFLD",
+                RecordsProcessed = processedCount,
+                RecordsImported = verifiedCount,
+                Success = error == null,
+                ErrorMessage = error
+            });
+
+            _logger.LogInformation("[HIFLD] Verification complete: {Verified}/{Total} stores verified", verifiedCount, processedCount);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { _logger.LogError(ex, "[HIFLD] Import failed"); }
     }
 }
