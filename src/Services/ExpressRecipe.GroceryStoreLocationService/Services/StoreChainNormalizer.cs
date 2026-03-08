@@ -117,11 +117,23 @@ public class StoreChainNormalizer : IStoreChainNormalizer
     }
 
     /// <summary>
-    /// Ensures the alias map is warmed. Call this from a hosted service on startup.
+    /// Ensures the alias map is loaded. Should be called on application startup.
+    /// Uses double-checked locking to avoid redundant DB calls under concurrency.
     /// </summary>
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
         if (_aliasMap != null) return;
-        await RefreshAsync(cancellationToken);
+
+        await _loadLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_aliasMap != null) return;
+            _aliasMap = await BuildAliasMapAsync(cancellationToken);
+            _logger.LogDebug("StoreChainNormalizer warmed: {Count} alias entries loaded", _aliasMap.Count);
+        }
+        finally
+        {
+            _loadLock.Release();
+        }
     }
 }

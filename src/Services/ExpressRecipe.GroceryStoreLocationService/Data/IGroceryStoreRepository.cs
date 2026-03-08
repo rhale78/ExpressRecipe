@@ -6,6 +6,7 @@ public interface IGroceryStoreRepository
     Task<GroceryStoreDto?> GetByExternalIdAsync(string externalId, string dataSource);
     Task<GroceryStoreDto?> GetByOsmIdAsync(long osmId);
     Task<GroceryStoreDto?> GetByGersIdAsync(string gersId);
+    Task<GroceryStoreDto?> GetByAddressAndZipAsync(string address, string zipCode);
     Task<List<GroceryStoreDto>> SearchAsync(GroceryStoreSearchRequest request);
     Task<int> GetSearchCountAsync(GroceryStoreSearchRequest request);
     Task<List<GroceryStoreDto>> GetNearbyAsync(double latitude, double longitude, double radiusMiles, int limit = 50);

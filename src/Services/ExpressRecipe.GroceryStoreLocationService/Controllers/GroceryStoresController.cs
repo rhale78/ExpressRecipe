@@ -131,6 +131,12 @@ public class GroceryStoresController : ControllerBase
         var store = await _repository.GetByIdAsync(id);
         if (store == null) return NotFound();
 
+        var invalidDays = hours.Where(h => !h.IsHoliday && h.DayOfWeek > 6).ToList();
+        if (invalidDays.Count > 0)
+        {
+            return BadRequest($"DayOfWeek must be 0–6 (Sunday–Saturday). Invalid values: {string.Join(", ", invalidDays.Select(h => h.DayOfWeek))}");
+        }
+
         var updated = await _repository.UpsertStoreHoursAsync(id, hours);
         return Ok(new { Updated = updated });
     }

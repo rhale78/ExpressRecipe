@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using CsvHelper;
 using CsvHelper.Configuration;
 
@@ -76,12 +77,22 @@ public class OvertureImportService
             "No DuckDB binary and no cached CSV available. Configure StoreLocationImport:Overture:DuckDbPath.");
     }
 
+    private static readonly Regex OvertureReleasePattern =
+        new(@"^\d{4}-\d{2}-\d{2}\.\d+$", RegexOptions.Compiled);
+
     private async Task<(bool Success, string? Error)> RunDuckDbQueryAsync(
         string duckDbPath,
         string outputCsvPath,
         string overtureRelease,
         CancellationToken cancellationToken)
     {
+        // Validate overtureRelease to prevent DuckDB SQL injection from config
+        if (!OvertureReleasePattern.IsMatch(overtureRelease))
+        {
+            _logger.LogError("[OVERTURE] Invalid OvertureRelease format: '{Release}'. Expected format: YYYY-MM-DD.N", overtureRelease);
+            return (false, $"Invalid OvertureRelease format: '{overtureRelease}'");
+        }
+
         var query = $@"
 LOAD spatial;
 LOAD httpfs;
@@ -104,13 +115,14 @@ COPY (
 
         // Write query to a temp file to avoid shell escaping issues
         var queryFile = Path.Combine(Path.GetTempPath(), $"overture_query_{Guid.NewGuid():N}.sql");
+        Process? process = null;
         try
         {
             await File.WriteAllTextAsync(queryFile, query, cancellationToken);
 
             _logger.LogInformation("[OVERTURE] Running DuckDB query for release {Release}", overtureRelease);
 
-            using var process = new Process
+            process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
@@ -148,6 +160,8 @@ COPY (
         }
         catch (OperationCanceledException)
         {
+            // Kill the subprocess to avoid orphaned DuckDB processes consuming resources
+            try { process?.Kill(entireProcessTree: true); } catch { /* best effort */ }
             throw;
         }
         catch (Exception ex)
@@ -157,6 +171,7 @@ COPY (
         }
         finally
         {
+            process?.Dispose();
             if (File.Exists(queryFile))
             {
                 File.Delete(queryFile);

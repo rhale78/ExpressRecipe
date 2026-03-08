@@ -455,5 +455,6 @@ public class GroceryStoresControllerTests
         _repositoryMock.Verify(r => r.GetLastImportAsync("OPENSTREETMAP"), Times.Once);
         _repositoryMock.Verify(r => r.GetLastImportAsync("OVERTURE_MAPS"), Times.Once);
         _repositoryMock.Verify(r => r.GetLastImportAsync("HIFLD"), Times.Once);
+        _repositoryMock.Verify(r => r.GetLastImportAsync("OpenPrices"), Times.Once);
     }
 }

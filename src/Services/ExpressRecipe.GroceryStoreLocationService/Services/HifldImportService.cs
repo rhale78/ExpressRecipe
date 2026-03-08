@@ -37,7 +37,7 @@ public class HifldImportService
     public async Task<(List<Data.UpsertGroceryStoreRequest> Stores, string? ErrorMessage)> FetchVerificationRecordsAsync(
         CancellationToken cancellationToken = default)
     {
-        var localFilePath = _configuration["StoreLocationImport:HifldFilePath"];
+        var localFilePath = _configuration["StoreLocationImport:Hifld:HifldFilePath"];
         if (!string.IsNullOrWhiteSpace(localFilePath) && File.Exists(localFilePath))
         {
             _logger.LogInformation("[HIFLD] Loading from local file {Path}", localFilePath);
@@ -52,7 +52,7 @@ public class HifldImportService
             }
         }
 
-        var url = _configuration["StoreLocationImport:HifldUrl"] ?? DefaultGeoJsonUrl;
+        var url = _configuration["StoreLocationImport:Hifld:HifldUrl"] ?? DefaultGeoJsonUrl;
 
         try
         {

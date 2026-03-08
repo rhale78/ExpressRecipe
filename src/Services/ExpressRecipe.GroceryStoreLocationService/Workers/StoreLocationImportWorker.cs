@@ -327,7 +327,8 @@ public class StoreLocationImportWorker : BackgroundService
                 return;
             }
 
-            // HIFLD is verification only: cross-match by Address+ZipCode and mark IsVerified=1
+            // HIFLD is verification only: cross-match by HifldId or Address+ZipCode and mark IsVerified=1.
+            // Never insert new stores from HIFLD data.
             var verifiedCount = 0;
             var processedCount = 0;
 
@@ -338,24 +339,24 @@ public class StoreLocationImportWorker : BackgroundService
 
                 try
                 {
-                    if (string.IsNullOrWhiteSpace(record.Address) || string.IsNullOrWhiteSpace(record.ZipCode))
-                        continue;
-
-                    // Try to find existing store by ExternalId (HIFLD) or Address+Zip
                     GroceryStoreDto? existing = null;
 
+                    // 1. Try to find by HifldId (previously stored from a prior HIFLD run)
                     if (!string.IsNullOrWhiteSpace(record.HifldId))
                     {
                         existing = await repo.GetByExternalIdAsync($"HIFLD_{record.HifldId}", "HIFLD");
                     }
 
-                    if (existing == null && !string.IsNullOrWhiteSpace(record.Address) && !string.IsNullOrWhiteSpace(record.ZipCode))
+                    // 2. Fall back to Address+ZipCode lookup across all data sources
+                    if (existing == null
+                        && !string.IsNullOrWhiteSpace(record.Address)
+                        && !string.IsNullOrWhiteSpace(record.ZipCode))
                     {
-                        // Upsert will handle address+zip dedup
-                        await repo.UpsertAsync(record);
-                        verifiedCount++;
+                        existing = await repo.GetByAddressAndZipAsync(record.Address, record.ZipCode);
                     }
-                    else if (existing != null)
+
+                    // Only mark as verified if a matching store already exists in the DB
+                    if (existing != null)
                     {
                         await repo.MarkVerifiedAsync(existing.Id, "HIFLD");
                         verifiedCount++;

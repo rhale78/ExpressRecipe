@@ -111,6 +111,26 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
         return results.FirstOrDefault();
     }
 
+    public async Task<GroceryStoreDto?> GetByAddressAndZipAsync(string address, string zipCode)
+    {
+        const string sql = @"
+            SELECT TOP 1 Id, Name, Chain, NormalizedChain, StoreType, Address, City, State, ZipCode, County,
+                   CAST(Latitude AS FLOAT) AS Latitude, CAST(Longitude AS FLOAT) AS Longitude,
+                   PhoneNumber, Website, ExternalId, DataSource,
+                   OsmId, GersId, SnapStoreId, HifldId,
+                   AcceptsSnap, IsActive, IsOnline, DeliveryAvailable, PickupAvailable,
+                   BaseDeliveryFee, FreeDeliveryMin, AvgDeliveryDays,
+                   IsVerified, VerifiedAt, VerifiedSource,
+                   OpeningHours, CreatedAt, UpdatedAt
+            FROM GroceryStore
+            WHERE Address = @Address AND ZipCode = @ZipCode";
+
+        var results = await ExecuteReaderAsync(sql, MapStore,
+            CreateParameter("@Address", address),
+            CreateParameter("@ZipCode", zipCode));
+        return results.FirstOrDefault();
+    }
+
     public async Task<List<GroceryStoreDto>> SearchAsync(GroceryStoreSearchRequest request)
     {
         if (_cache != null)
@@ -297,70 +317,117 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
 
     public async Task<Guid> UpsertAsync(UpsertGroceryStoreRequest request)
     {
-        // Priority dedup strategy:
+        // Priority dedup cascade:
         // 1. GersId (Overture) - highest fidelity
         // 2. OsmId
         // 3. ExternalId + DataSource
-        // 4. Address + ZipCode (cross-source match)
+        // 4. Address + ZipCode (cross-source fallback)
+        // Sequential SELECT avoids MERGE error 8672 (multiple rows matched via OR branches).
+        var existingId = await FindExistingStoreIdAsync(request);
+
+        if (existingId.HasValue)
+        {
+            await UpdateExistingStoreAsync(existingId.Value, request);
+            return existingId.Value;
+        }
+
+        return await InsertNewStoreAsync(request);
+    }
+
+    private async Task<Guid?> FindExistingStoreIdAsync(UpsertGroceryStoreRequest request)
+    {
+        // 1. Match by GersId
+        if (!string.IsNullOrWhiteSpace(request.GersId))
+        {
+            const string sql = "SELECT Id FROM GroceryStore WHERE GersId = @GersId";
+            var id = await ExecuteScalarAsync<Guid?>(sql, new SqlParameter("@GersId", request.GersId));
+            if (id.HasValue) return id;
+        }
+
+        // 2. Match by OsmId
+        if (request.OsmId.HasValue)
+        {
+            const string sql = "SELECT Id FROM GroceryStore WHERE OsmId = @OsmId";
+            var id = await ExecuteScalarAsync<Guid?>(sql, new SqlParameter("@OsmId", request.OsmId.Value));
+            if (id.HasValue) return id;
+        }
+
+        // 3. Match by ExternalId + DataSource
+        if (!string.IsNullOrWhiteSpace(request.ExternalId) && !string.IsNullOrWhiteSpace(request.DataSource))
+        {
+            const string sql = "SELECT Id FROM GroceryStore WHERE ExternalId = @ExternalId AND DataSource = @DataSource";
+            var id = await ExecuteScalarAsync<Guid?>(sql,
+                new SqlParameter("@ExternalId", request.ExternalId),
+                new SqlParameter("@DataSource", request.DataSource));
+            if (id.HasValue) return id;
+        }
+
+        // 4. Match by Address + ZipCode (cross-source dedup)
+        if (!string.IsNullOrWhiteSpace(request.Address) && !string.IsNullOrWhiteSpace(request.ZipCode))
+        {
+            const string sql = "SELECT TOP 1 Id FROM GroceryStore WHERE Address = @Address AND ZipCode = @ZipCode";
+            var id = await ExecuteScalarAsync<Guid?>(sql,
+                new SqlParameter("@Address", request.Address),
+                new SqlParameter("@ZipCode", request.ZipCode));
+            if (id.HasValue) return id;
+        }
+
+        return null;
+    }
+
+    private async Task UpdateExistingStoreAsync(Guid id, UpsertGroceryStoreRequest request)
+    {
         const string sql = @"
-            MERGE GroceryStore AS target
-            USING (SELECT
-                @ExternalId AS ExternalId,
-                @DataSource AS DataSource,
-                @GersId     AS GersId,
-                @OsmId      AS OsmId,
-                @Address    AS Address,
-                @ZipCode    AS ZipCode
-            ) AS source
-            ON (
-                (source.GersId IS NOT NULL AND target.GersId = source.GersId)
-                OR (source.GersId IS NULL AND source.OsmId IS NOT NULL AND target.OsmId = source.OsmId)
-                OR (source.GersId IS NULL AND source.OsmId IS NULL
-                    AND target.ExternalId = source.ExternalId AND target.DataSource = source.DataSource)
-                OR (source.GersId IS NULL AND source.OsmId IS NULL
-                    AND source.Address IS NOT NULL AND source.ZipCode IS NOT NULL
-                    AND target.Address = source.Address AND target.ZipCode = source.ZipCode)
-            )
-            WHEN MATCHED THEN
-                UPDATE SET
-                    Name              = @Name,
-                    Chain             = @Chain,
-                    NormalizedChain   = @NormalizedChain,
-                    StoreType         = @StoreType,
-                    Address           = @Address,
-                    City              = @City,
-                    State             = @State,
-                    ZipCode           = @ZipCode,
-                    County            = @County,
-                    Latitude          = @Latitude,
-                    Longitude         = @Longitude,
-                    PhoneNumber       = COALESCE(@PhoneNumber, target.PhoneNumber),
-                    Website           = COALESCE(@Website, target.Website),
-                    ExternalId        = CASE WHEN target.DataSource = @DataSource THEN @ExternalId ELSE target.ExternalId END,
-                    DataSource        = CASE WHEN target.DataSource = @DataSource THEN @DataSource ELSE target.DataSource END,
-                    OsmId             = COALESCE(@OsmId, target.OsmId),
-                    GersId            = COALESCE(@GersId, target.GersId),
-                    SnapStoreId       = COALESCE(@SnapStoreId, target.SnapStoreId),
-                    HifldId           = COALESCE(@HifldId, target.HifldId),
-                    AcceptsSnap       = CASE WHEN @AcceptsSnap = 1 THEN 1 ELSE target.AcceptsSnap END,
-                    IsActive          = @IsActive,
-                    IsOnline          = @IsOnline,
-                    DeliveryAvailable = @DeliveryAvailable,
-                    PickupAvailable   = @PickupAvailable,
-                    OpeningHours      = COALESCE(@OpeningHours, target.OpeningHours),
-                    UpdatedAt         = GETUTCDATE()
-            WHEN NOT MATCHED THEN
-                INSERT (Name, Chain, NormalizedChain, StoreType, Address, City, State, ZipCode, County,
-                        Latitude, Longitude, PhoneNumber, Website, ExternalId, DataSource,
-                        OsmId, GersId, SnapStoreId, HifldId,
-                        AcceptsSnap, IsActive, IsOnline, DeliveryAvailable, PickupAvailable,
-                        OpeningHours, CreatedAt)
-                VALUES (@Name, @Chain, @NormalizedChain, @StoreType, @Address, @City, @State, @ZipCode, @County,
-                        @Latitude, @Longitude, @PhoneNumber, @Website, @ExternalId, @DataSource,
-                        @OsmId, @GersId, @SnapStoreId, @HifldId,
-                        @AcceptsSnap, @IsActive, @IsOnline, @DeliveryAvailable, @PickupAvailable,
-                        @OpeningHours, GETUTCDATE())
-            OUTPUT INSERTED.Id;";
+            UPDATE GroceryStore SET
+                Name              = @Name,
+                Chain             = @Chain,
+                NormalizedChain   = @NormalizedChain,
+                StoreType         = @StoreType,
+                Address           = @Address,
+                City              = @City,
+                State             = @State,
+                ZipCode           = @ZipCode,
+                County            = @County,
+                Latitude          = @Latitude,
+                Longitude         = @Longitude,
+                PhoneNumber       = COALESCE(@PhoneNumber, PhoneNumber),
+                Website           = COALESCE(@Website, Website),
+                ExternalId        = CASE WHEN DataSource = @DataSource THEN @ExternalId ELSE ExternalId END,
+                DataSource        = CASE WHEN DataSource = @DataSource THEN @DataSource ELSE DataSource END,
+                OsmId             = COALESCE(@OsmId, OsmId),
+                GersId            = COALESCE(@GersId, GersId),
+                SnapStoreId       = COALESCE(@SnapStoreId, SnapStoreId),
+                HifldId           = COALESCE(@HifldId, HifldId),
+                AcceptsSnap       = CASE WHEN @AcceptsSnap = 1 THEN 1 ELSE AcceptsSnap END,
+                IsActive          = @IsActive,
+                IsOnline          = @IsOnline,
+                DeliveryAvailable = @DeliveryAvailable,
+                PickupAvailable   = @PickupAvailable,
+                OpeningHours      = COALESCE(@OpeningHours, OpeningHours),
+                UpdatedAt         = GETUTCDATE()
+            WHERE Id = @Id";
+
+        var parameters = BuildUpsertParameters(request);
+        parameters.Add(new SqlParameter("@Id", id));
+        await ExecuteNonQueryAsync(sql, parameters.ToArray());
+    }
+
+    private async Task<Guid> InsertNewStoreAsync(UpsertGroceryStoreRequest request)
+    {
+        const string sql = @"
+            INSERT INTO GroceryStore
+                (Name, Chain, NormalizedChain, StoreType, Address, City, State, ZipCode, County,
+                 Latitude, Longitude, PhoneNumber, Website, ExternalId, DataSource,
+                 OsmId, GersId, SnapStoreId, HifldId,
+                 AcceptsSnap, IsActive, IsOnline, DeliveryAvailable, PickupAvailable,
+                 OpeningHours, CreatedAt)
+            OUTPUT INSERTED.Id
+            VALUES
+                (@Name, @Chain, @NormalizedChain, @StoreType, @Address, @City, @State, @ZipCode, @County,
+                 @Latitude, @Longitude, @PhoneNumber, @Website, @ExternalId, @DataSource,
+                 @OsmId, @GersId, @SnapStoreId, @HifldId,
+                 @AcceptsSnap, @IsActive, @IsOnline, @DeliveryAvailable, @PickupAvailable,
+                 @OpeningHours, GETUTCDATE())";
 
         return await ExecuteScalarAsync<Guid>(sql, BuildUpsertParameters(request).ToArray());
     }
@@ -436,32 +503,36 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
     public async Task<int> UpsertStoreHoursAsync(Guid storeId, IEnumerable<StoreHoursRequest> hours)
     {
         var hoursList = hours.ToList();
-        var total = 0;
 
-        foreach (var hour in hoursList)
+        await ExecuteTransactionAsync(async (connection, transaction) =>
         {
-            const string sql = @"
-                MERGE StoreHours AS target
-                USING (SELECT @StoreId AS StoreId, @DayOfWeek AS DayOfWeek) AS source
-                ON target.StoreId = source.StoreId AND target.DayOfWeek = source.DayOfWeek
-                WHEN MATCHED THEN
-                    UPDATE SET OpenTime = @OpenTime, CloseTime = @CloseTime,
-                               IsClosed = @IsClosed, IsHoliday = @IsHoliday, HolidayDate = @HolidayDate
-                WHEN NOT MATCHED THEN
-                    INSERT (StoreId, DayOfWeek, OpenTime, CloseTime, IsClosed, IsHoliday, HolidayDate)
-                    VALUES (@StoreId, @DayOfWeek, @OpenTime, @CloseTime, @IsClosed, @IsHoliday, @HolidayDate);";
+            foreach (var hour in hoursList)
+            {
+                const string sql = @"
+                    MERGE StoreHours AS target
+                    USING (SELECT @StoreId AS StoreId, @DayOfWeek AS DayOfWeek) AS source
+                    ON target.StoreId = source.StoreId AND target.DayOfWeek = source.DayOfWeek
+                    WHEN MATCHED THEN
+                        UPDATE SET OpenTime = @OpenTime, CloseTime = @CloseTime,
+                                   IsClosed = @IsClosed, IsHoliday = @IsHoliday, HolidayDate = @HolidayDate
+                    WHEN NOT MATCHED THEN
+                        INSERT (StoreId, DayOfWeek, OpenTime, CloseTime, IsClosed, IsHoliday, HolidayDate)
+                        VALUES (@StoreId, @DayOfWeek, @OpenTime, @CloseTime, @IsClosed, @IsHoliday, @HolidayDate);";
 
-            total += await ExecuteNonQueryAsync(sql,
-                CreateParameter("@StoreId", storeId),
-                CreateParameter("@DayOfWeek", hour.DayOfWeek),
-                new SqlParameter("@OpenTime", hour.OpenTime.HasValue ? (object)hour.OpenTime.Value : DBNull.Value),
-                new SqlParameter("@CloseTime", hour.CloseTime.HasValue ? (object)hour.CloseTime.Value : DBNull.Value),
-                CreateParameter("@IsClosed", hour.IsClosed),
-                CreateParameter("@IsHoliday", hour.IsHoliday),
-                new SqlParameter("@HolidayDate", hour.HolidayDate.HasValue ? (object)hour.HolidayDate.Value.Date : DBNull.Value));
-        }
+                await using var command = new SqlCommand(sql, connection, transaction);
+                command.Parameters.AddWithValue("@StoreId", storeId);
+                command.Parameters.AddWithValue("@DayOfWeek", hour.DayOfWeek);
+                command.Parameters.Add(new SqlParameter("@OpenTime", hour.OpenTime.HasValue ? (object)hour.OpenTime.Value : DBNull.Value));
+                command.Parameters.Add(new SqlParameter("@CloseTime", hour.CloseTime.HasValue ? (object)hour.CloseTime.Value : DBNull.Value));
+                command.Parameters.AddWithValue("@IsClosed", hour.IsClosed);
+                command.Parameters.AddWithValue("@IsHoliday", hour.IsHoliday);
+                command.Parameters.Add(new SqlParameter("@HolidayDate", hour.HolidayDate.HasValue ? (object)hour.HolidayDate.Value.Date : DBNull.Value));
 
-        return total;
+                await command.ExecuteNonQueryAsync();
+            }
+        });
+
+        return hoursList.Count;
     }
 
     public async Task<List<StoreChainDto>> GetAllChainsAsync()
