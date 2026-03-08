@@ -41,8 +41,22 @@ public sealed class HouseholdMemberSubscriber : IHostedService
             using IServiceScope scope = _scopeFactory.CreateScope();
             IAllergenProfileRepository repo = scope.ServiceProvider.GetRequiredService<IAllergenProfileRepository>();
 
-            _logger.LogInformation("Initialising allergen profile for new member {MemberId} in household {HouseholdId}",
-                evt.MemberId, evt.HouseholdId);
+            // Verify no existing entries exist before initialising (idempotency guard)
+            List<ExpressRecipe.SafeForkService.Contracts.Responses.AllergenProfileEntryDto> existing =
+                await repo.GetByMemberIdAsync(evt.MemberId, ct);
+
+            if (existing.Count == 0)
+            {
+                _logger.LogInformation(
+                    "Allergen profile initialised (empty) for member {MemberId} in household {HouseholdId}",
+                    evt.MemberId, evt.HouseholdId);
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Allergen profile for member {MemberId} already has {Count} entries — skipping init",
+                    evt.MemberId, existing.Count);
+            }
         }
         catch (Exception ex)
         {

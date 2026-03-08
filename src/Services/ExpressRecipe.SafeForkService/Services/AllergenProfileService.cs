@@ -283,10 +283,14 @@ public class AllergenProfileService : IAllergenProfileService
 
     public async Task<List<AllergenProfileEntryDto>> GetHouseholdHardExcludesAsync(Guid householdId, CancellationToken ct)
     {
-        // In this service we don't have direct household->member mapping;
-        // return an empty list as the caller should resolve memberIds via ProfileService
-        // and then call the repository directly. This method is a convenience stub.
-        _logger.LogDebug("GetHouseholdHardExcludesAsync called for household {HouseholdId} — no member mapping available at this layer", householdId);
+        // This method requires resolving household members from the ProfileService.
+        // Without a member ID list, we cannot query the AllergenProfile table directly.
+        // Callers that have the member IDs should use IAllergenProfileRepository.GetHouseholdHardExcludesAsync
+        // with the resolved member ID list. Returning empty here is intentional until a household-member
+        // HTTP client is wired into this service.
+        _logger.LogDebug(
+            "GetHouseholdHardExcludesAsync: no ProfileService HTTP client available — returning empty list for household {HouseholdId}",
+            householdId);
         return await Task.FromResult(new List<AllergenProfileEntryDto>());
     }
 }

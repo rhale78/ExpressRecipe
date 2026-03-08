@@ -188,14 +188,23 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
             return new List<AllergenProfileEntryDto>();
         }
 
-        // Build a comma-separated list of quoted GUIDs for IN clause
-        string idList = string.Join(",", memberIds.Select(id => $"'{id}'"));
+        // Build parameterized IN clause with individual parameters
+        List<System.Data.Common.DbParameter> parameters = new List<System.Data.Common.DbParameter>();
+        List<string> paramNames = new List<string>();
 
+        for (int i = 0; i < memberIds.Count; i++)
+        {
+            string paramName = $"@MemberId{i}";
+            paramNames.Add(paramName);
+            parameters.Add(CreateParameter(paramName, memberIds[i]));
+        }
+
+        string inClause = string.Join(",", paramNames);
         string sql = $@"
             SELECT Id, MemberId, AllergenId, FreeFormName, FreeFormBrand,
                    IsUnresolved, ExposureThreshold, Severity, HouseholdExclude, CreatedAt
             FROM AllergenProfile
-            WHERE MemberId IN ({idList})
+            WHERE MemberId IN ({inClause})
               AND HouseholdExclude = 1
               AND IsDeleted = 0
             ORDER BY MemberId, CreatedAt DESC";
@@ -214,7 +223,8 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
                 Severity = GetString(reader, "Severity") ?? "Moderate",
                 HouseholdExclude = GetBoolean(reader, "HouseholdExclude"),
                 CreatedAt = GetDateTime(reader, "CreatedAt")
-            });
+            },
+            parameters.ToArray());
     }
 
     public async Task SoftDeleteAllForMemberAsync(Guid memberId, CancellationToken ct = default)
