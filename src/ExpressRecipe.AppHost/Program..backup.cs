@@ -110,11 +110,18 @@ var inventoryService = builder.AddProject<Projects.ExpressRecipe_InventoryServic
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
 
+// Vision Service - AI image analysis (stateless)
+var visionService = builder.AddProject<Projects.ExpressRecipe_VisionService>("visionservice", launchProfileName: null)
+    .WithReference(redis)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
 // Scanner Service - Barcode scanning and allergen alerts
 var scannerService = builder.AddProject<Projects.ExpressRecipe_ScannerService>("scannerservice", launchProfileName: null)
     .WithReference(scanDb)
     .WithReference(redis)
     .WithReference(messaging)
+    .WithReference(visionService)
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
 
@@ -255,6 +262,7 @@ var webApp = builder.AddProject<Projects.ExpressRecipe_BlazorWeb>("webapp", laun
     .WithReference(recipeService)
     .WithReference(inventoryService)
     .WithReference(scannerService)
+    .WithReference(visionService)
     .WithReference(shoppingService)
     .WithReference(mealPlanningService)
     .WithReference(priceService)
