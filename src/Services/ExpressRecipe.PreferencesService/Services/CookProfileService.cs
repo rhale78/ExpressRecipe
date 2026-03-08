@@ -6,6 +6,8 @@ namespace ExpressRecipe.PreferencesService.Services;
 
 public class CookProfileService : ICookProfileService
 {
+    private const string ComfortLevelLearning = "Learning";
+
     private readonly ICookProfileRepository _repository;
     private readonly ILogger<CookProfileService> _logger;
 
@@ -86,7 +88,7 @@ public class CookProfileService : ICookProfileService
 
         // TechniqueComfort "Learning" override — treat member as Beginner for this technique
         bool learningOverride = comfort is not null &&
-            string.Equals(comfort.ComfortLevel, "Learning", StringComparison.OrdinalIgnoreCase);
+            string.Equals(comfort.ComfortLevel, ComfortLevelLearning, StringComparison.OrdinalIgnoreCase);
 
         string effectiveSkill = learningOverride ? "Beginner" : profile.OverallSkillLevel;
 

@@ -58,7 +58,8 @@ public class DatabaseMigrator
             {
                 checkCmd.CommandText = "SELECT COUNT(*) FROM MigrationHistory WHERE MigrationName = @Name";
                 checkCmd.Parameters.AddWithValue("@Name", migrationName);
-                int count = (int)(await checkCmd.ExecuteScalarAsync())!;
+                object? scalar = await checkCmd.ExecuteScalarAsync();
+                int count = scalar is int intResult ? intResult : 0;
 
                 if (count > 0)
                 {
@@ -73,7 +74,7 @@ public class DatabaseMigrator
             string[] batches = Regex.Split(sql, @"^\s*GO\s*$(\r?\n)?", RegexOptions.Multiline | RegexOptions.IgnoreCase)
                 .Select(b => b?.Trim())
                 .Where(b => !string.IsNullOrWhiteSpace(b))
-                .ToArray()!;
+                .ToArray();
 
             await using SqlTransaction transaction = (SqlTransaction)await connection.BeginTransactionAsync();
             try
