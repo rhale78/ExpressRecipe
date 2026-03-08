@@ -48,7 +48,7 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
 
         try
         {
-            var products = await SearchProductsAsync(name);
+            var products = await SearchProductsAsync(name, ct: ct);
             return products.Select(p =>
             {
                 var offer = p.PageMap?.Offers?.FirstOrDefault();
@@ -75,7 +75,7 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
     /// <summary>
     /// Search products via Google Custom Search (Shopping results).
     /// </summary>
-    public async Task<List<GoogleShoppingProduct>> SearchProductsAsync(string query, int maxResults = 10)
+    public async Task<List<GoogleShoppingProduct>> SearchProductsAsync(string query, int maxResults = 10, CancellationToken ct = default)
     {
         try
         {
@@ -88,7 +88,7 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
             _logger.LogInformation("Searching Google Shopping for: {Query}", query);
 
             var url = $"customsearch/v1?key={_apiKey}&cx={_searchEngineId}&q={Uri.EscapeDataString(query)}&num={maxResults}";
-            var response = await _httpClient.GetAsync(url);
+            var response = await _httpClient.GetAsync(url, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -96,7 +96,7 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
                 return new List<GoogleShoppingProduct>();
             }
 
-            var json = await response.Content.ReadAsStringAsync();
+            var json = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<GoogleShoppingResponse>(json);
 
             return result?.Items ?? new List<GoogleShoppingProduct>();
@@ -111,7 +111,7 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
     /// <summary>
     /// Get product offers by GTIN (Global Trade Item Number - includes UPC/EAN)
     /// </summary>
-    public async Task<List<GoogleShoppingProduct>> SearchByGTINAsync(string gtin)
+    public async Task<List<GoogleShoppingProduct>> SearchByGTINAsync(string gtin, CancellationToken ct = default)
     {
         try
         {
@@ -123,8 +123,7 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
 
             _logger.LogInformation("Searching Google Shopping by GTIN: {GTIN}", gtin);
 
-            // Search with GTIN in query
-            return await SearchProductsAsync($"gtin:{gtin}");
+            return await SearchProductsAsync($"gtin:{gtin}", ct: ct);
         }
         catch (Exception ex)
         {

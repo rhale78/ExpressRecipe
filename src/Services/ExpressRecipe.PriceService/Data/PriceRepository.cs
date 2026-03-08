@@ -660,8 +660,11 @@ public class PriceRepository : SqlHelper, IPriceRepository
 
     public async Task BulkInsertPriceHistoryAsync(IEnumerable<PriceHistoryRecord> records, CancellationToken ct = default)
     {
+        // Use a connection-scoped local temp table (#) so parallel imports on different
+        // connections never collide. Global temp tables (##) are shared across all sessions.
+        var tempName = "#PriceHistoryBulk";
         var table = new DataTable();
-        table.TableName = "##PriceHistoryBulk";
+        table.TableName = tempName;
         table.Columns.Add("ProductId", typeof(Guid));
         table.Columns.Add("Upc", typeof(string));
         table.Columns.Add("ProductName", typeof(string));
@@ -706,8 +709,8 @@ public class PriceRepository : SqlHelper, IPriceRepository
 
         if (table.Rows.Count == 0) { return; }
 
-        const string createTempSql = @"
-            CREATE TABLE ##PriceHistoryBulk (
+        var createTempSql = $@"
+            CREATE TABLE {tempName} (
                 ProductId        UNIQUEIDENTIFIER NOT NULL,
                 Upc              NVARCHAR(100) NULL,
                 ProductName      NVARCHAR(300) NOT NULL,
@@ -728,7 +731,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
                 ImportedAt       DATETIME2 NOT NULL
             )";
 
-        const string insertSql = @"
+        var insertSql = $@"
             INSERT INTO PriceHistory
                 (ProductId, Upc, ProductName, StoreId, StoreName, StoreChain, IsOnline,
                  BasePrice, FinalPrice, Currency, Unit, Quantity, PricePerOz, PricePerHundredG,
@@ -736,7 +739,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
             SELECT ProductId, Upc, ProductName, StoreId, StoreName, StoreChain, IsOnline,
                    BasePrice, FinalPrice, Currency, Unit, Quantity, PricePerOz, PricePerHundredG,
                    DataSource, ExternalId, ObservedAt, ImportedAt
-            FROM ##PriceHistoryBulk";
+            FROM {tempName}";
 
         await BulkMergeAsync(createTempSql, table, insertSql);
     }
@@ -770,14 +773,18 @@ public class PriceRepository : SqlHelper, IPriceRepository
 
     public async Task<PriceHistoryStatsDto> GetPriceStatsAsync(Guid productId, Guid? storeId, int daysBack, CancellationToken ct = default)
     {
-        var sql = new StringBuilder(@"
+        // Build the store sub-filter once so both the outer query and the CurrentPrice
+        // subquery use the same predicate (keeps CurrentPrice consistent with the stats set).
+        var storeSubFilter = storeId.HasValue ? " AND StoreId = @StoreIdSub" : string.Empty;
+
+        var sql = new StringBuilder($@"
             SELECT
                 COUNT(*)                                                    AS ObservationCount,
                 MIN(FinalPrice)                                             AS MinPrice,
                 MAX(FinalPrice)                                             AS MaxPrice,
                 AVG(FinalPrice)                                             AS AveragePrice,
                 (SELECT TOP 1 FinalPrice FROM PriceHistory
-                 WHERE ProductId = @ProductIdSub
+                 WHERE ProductId = @ProductIdSub{storeSubFilter}
                  ORDER BY ObservedAt DESC)                                  AS CurrentPrice,
                 MIN(ObservedAt)                                             AS OldestObservation,
                 MAX(ObservedAt)                                             AS NewestObservation,
@@ -798,6 +805,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
         {
             sql.Append(" AND ph.StoreId = @StoreId");
             parameters.Add(CreateParameter("@StoreId", storeId.Value));
+            parameters.Add(CreateParameter("@StoreIdSub", storeId.Value));
         }
 
         var rows = await ExecuteReaderAsync(sql.ToString(), r => new

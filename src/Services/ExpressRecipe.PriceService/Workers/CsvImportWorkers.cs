@@ -4,7 +4,7 @@ namespace ExpressRecipe.PriceService.Workers;
 
 /// <summary>
 /// Background worker that imports USDA FMAP data on a daily schedule.
-/// Config: PriceImport:UsdaFmap:FilePath, :Enabled (default false), :BatchSize (default 5000)
+/// Config: PriceImport:UsdaFmap:FilePath, :Enabled (default false)
 /// </summary>
 public class UsdaFmapImportWorker : BackgroundService
 {

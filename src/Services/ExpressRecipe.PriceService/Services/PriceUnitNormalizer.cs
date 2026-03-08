@@ -13,8 +13,8 @@ public interface IPriceUnitNormalizer
     string? NormalizeUnit(string? rawUnit);
 
     /// <summary>
-    /// Compute PricePerOz and PricePerHundredG for a given price record.
-    /// Updates the record's computed fields in place and returns it.
+    /// Compute per-unit price metrics (PricePerOz, PricePerHundredG) for the given price, unit, and quantity.
+    /// Returns a new <see cref="PriceUnitMetrics"/> instance; does not mutate any input values.
     /// </summary>
     PriceUnitMetrics ComputeUnitPrices(decimal finalPrice, string? unit, decimal? quantity);
 }

@@ -1,5 +1,4 @@
 using ExpressRecipe.PriceService.Data;
-using ExpressRecipe.PriceService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,16 +10,13 @@ public class DealsController : ControllerBase
 {
     private readonly ILogger<DealsController> _logger;
     private readonly IPriceRepository _repository;
-    private readonly IEffectivePriceCalculator _effectivePriceCalculator;
 
     public DealsController(
         ILogger<DealsController> logger,
-        IPriceRepository repository,
-        IEffectivePriceCalculator effectivePriceCalculator)
+        IPriceRepository repository)
     {
         _logger = logger;
         _repository = repository;
-        _effectivePriceCalculator = effectivePriceCalculator;
     }
 
     /// <summary>POST /api/deals/enhanced — Create an enhanced deal with full discount metadata</summary>

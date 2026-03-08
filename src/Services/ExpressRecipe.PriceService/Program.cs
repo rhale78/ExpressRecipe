@@ -110,7 +110,12 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<KrogerApiClient>();
 builder.Services.AddHttpClient<FlippApiClient>();
 builder.Services.AddHttpClient<FoodLionApiClient>();
-builder.Services.AddScoped<IExternalPriceApiClient, GoogleShoppingApiClient>();
+// Register all external price API clients as IExternalPriceApiClient so they can be
+// resolved as IEnumerable<IExternalPriceApiClient>. Each client checks IsEnabled at runtime.
+builder.Services.AddScoped<IExternalPriceApiClient>(sp => sp.GetRequiredService<GoogleShoppingApiClient>());
+builder.Services.AddScoped<IExternalPriceApiClient>(sp => sp.GetRequiredService<KrogerApiClient>());
+builder.Services.AddScoped<IExternalPriceApiClient>(sp => sp.GetRequiredService<FlippApiClient>());
+builder.Services.AddScoped<IExternalPriceApiClient>(sp => sp.GetRequiredService<FoodLionApiClient>());
 
 // Register unit normalizer and effective price calculator
 builder.Services.AddSingleton<IPriceUnitNormalizer, PriceUnitNormalizer>();

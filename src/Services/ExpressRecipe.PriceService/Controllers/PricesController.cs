@@ -12,17 +12,20 @@ public class PricesController : ControllerBase
 {
     private readonly ILogger<PricesController> _logger;
     private readonly IPriceRepository _repository;
+    private readonly IPriceUnitNormalizer _unitNormalizer;
     private readonly PriceDataImportWorker? _importWorker;
     private readonly IConfiguration _configuration;
 
     public PricesController(
         ILogger<PricesController> logger,
         IPriceRepository repository,
+        IPriceUnitNormalizer unitNormalizer,
         IConfiguration configuration,
         PriceDataImportWorker? importWorker = null)
     {
         _logger = logger;
         _repository = repository;
+        _unitNormalizer = unitNormalizer;
         _importWorker = importWorker;
         _configuration = configuration;
     }
@@ -154,6 +157,8 @@ public class PricesController : ControllerBase
         if (request.ProductId == Guid.Empty) { return BadRequest("productId is required"); }
         if (request.FinalPrice <= 0) { return BadRequest("finalPrice must be greater than zero"); }
 
+        var unitMetrics = _unitNormalizer.ComputeUnitPrices(request.FinalPrice, request.Unit, request.Quantity);
+
         var record = new PriceHistoryRecord
         {
             ProductId = request.ProductId,
@@ -165,8 +170,10 @@ public class PricesController : ControllerBase
             BasePrice = request.BasePrice > 0 ? request.BasePrice : request.FinalPrice,
             FinalPrice = request.FinalPrice,
             Currency = request.Currency ?? "USD",
-            Unit = request.Unit,
+            Unit = unitMetrics.NormalizedUnit ?? request.Unit,
             Quantity = request.Quantity,
+            PricePerOz = unitMetrics.PricePerOz,
+            PricePerHundredG = unitMetrics.PricePerHundredG,
             DataSource = "Manual",
             ObservedAt = request.ObservedAt.HasValue
                 ? new DateTimeOffset(request.ObservedAt.Value, TimeSpan.Zero)

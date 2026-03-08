@@ -114,7 +114,7 @@
     [Parameter] public int DaysBack { get; set; } = 90;
     [Parameter] public bool ShowAllStores { get; set; } = true;
     [Parameter] public bool ShowUnitPrice { get; set; } = false;
-    /// <summary>When true, suppresses all calorie/macro framing (EatingDisorderRecovery mode).</summary>
+    /// <summary>When true, hides price statistics and charts to reduce price-focused framing (EatingDisorderRecovery mode).</summary>
     [Parameter] public bool HasEatingDisorderRecovery { get; set; } = false;
 
     private List<ProductPriceItemDto> _history = new();

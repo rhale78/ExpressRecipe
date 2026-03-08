@@ -76,6 +76,11 @@ public class CostcoKaggleImportService
             };
 
             CreateEnhancedDealRequest? deal = null;
+            // Enhanced deal creation is currently disabled because deals must be linked
+            // to a real ProductId. ImportFromFileAsync only inserts deals when
+            // deal.ProductId != Guid.Empty, and this import does not yet perform
+            // product/store linking. Once linking is implemented, re-enable deal
+            // creation here after mapping to a real product.
             if (discountAmount > 0m && storeId.HasValue)
             {
                 deal = new CreateEnhancedDealRequest
