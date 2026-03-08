@@ -230,6 +230,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.SafeForkServi
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Messaging", "Messaging", "{31A2F926-5798-41A3-B767-DB296FC4C7C2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.ProfileService", "src\Services\ExpressRecipe.ProfileService\ExpressRecipe.ProfileService.csproj", "{98C880D8-5E32-4C3D-B548-1FC79262D86F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -743,6 +745,18 @@ Global
 		{10C12052-9F4E-4CC2-B37A-1F7F75A74435}.Release|x64.Build.0 = Release|Any CPU
 		{10C12052-9F4E-4CC2-B37A-1F7F75A74435}.Release|x86.ActiveCfg = Release|Any CPU
 		{10C12052-9F4E-4CC2-B37A-1F7F75A74435}.Release|x86.Build.0 = Release|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Debug|x64.Build.0 = Debug|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Debug|x86.Build.0 = Debug|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Release|x64.ActiveCfg = Release|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Release|x64.Build.0 = Release|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Release|x86.ActiveCfg = Release|Any CPU
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -794,6 +808,7 @@ Global
 		{CD8887EB-25AF-83A0-D84C-3BC28A9232EE} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
 		{10C12052-9F4E-4CC2-B37A-1F7F75A74435} = {CD8887EB-25AF-83A0-D84C-3BC28A9232EE}
 		{31A2F926-5798-41A3-B767-DB296FC4C7C2} = {8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}
+		{98C880D8-5E32-4C3D-B548-1FC79262D86F} = {CD8887EB-25AF-83A0-D84C-3BC28A9232EE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A0CA3AE9-2448-4D31-A125-E5F3C0FD8FC0}
