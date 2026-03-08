@@ -217,7 +217,8 @@ builder.AddRabbitMQClient("messaging");
 builder.Services.AddControllers();
 
 var app = builder.Build();
-await app.RunDatabaseManagementAsync("ProductService", "productdb"); // migrations
+await app.RunDatabaseManagementAsync("ProductService", "productdb"); // optional pre-migration database management (e.g., drop/create)
+await app.RunMigrationsAsync("ProductService", "productdb");         // migrations
 app.MapDefaultEndpoints();  // Aspire health checks
 app.MapControllers();
 app.Run();
