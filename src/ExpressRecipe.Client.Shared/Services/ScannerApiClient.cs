@@ -59,12 +59,39 @@ public class ScanHistoryItem
     public bool HadAllergenAlert { get; set; }
 }
 
+public class VisionCaptureRequest
+{
+    public string CaptureBase64 { get; set; } = string.Empty;
+    public string? DetectedBarcode { get; set; }
+    public string? DetectedProductName { get; set; }
+    public string? DetectedBrand { get; set; }
+    public string? ProviderUsed { get; set; }
+    public double? Confidence { get; set; }
+    public Guid? ScanHistoryId { get; set; }
+}
+
+public class CorrectionReportRequest
+{
+    public Guid VisionCaptureId { get; set; }
+    public string? AiGuess { get; set; }
+    public string? UserCorrection { get; set; }
+    public string? UserNote { get; set; }
+}
+
+// Response DTO for the vision capture creation endpoint
+internal sealed class VisionCaptureCreatedResponse
+{
+    public Guid? Id { get; set; }
+}
+
 public interface IScannerApiClient
 {
     Task<BarcodeScanResult?> ScanBarcodeAsync(string barcode, string format = "UPC-A");
     Task<BarcodeScanResult?> ScanBarcodeWithUserProfileAsync(string barcode, Guid userId);
     Task<List<ScanHistoryItem>> GetScanHistoryAsync(int limit = 50);
     Task<bool> ReportMissingProductAsync(string barcode, string productName);
+    Task<Guid?> SaveVisionCaptureAsync(VisionCaptureRequest capture, CancellationToken ct = default);
+    Task<bool> CreateCorrectionReportAsync(CorrectionReportRequest report, CancellationToken ct = default);
 }
 
 public class ScannerApiClient : IScannerApiClient
@@ -126,6 +153,38 @@ public class ScannerApiClient : IScannerApiClient
             ProductName = productName
         });
 
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<Guid?> SaveVisionCaptureAsync(VisionCaptureRequest capture, CancellationToken ct = default)
+    {
+        // Convert base64 string to byte array for the service
+        byte[] imageBytes = Convert.FromBase64String(capture.CaptureBase64);
+        object requestBody = new
+        {
+            captureImageJpeg = imageBytes,
+            capture.DetectedBarcode,
+            capture.DetectedProductName,
+            capture.DetectedBrand,
+            capture.ProviderUsed,
+            confidence = (decimal?)capture.Confidence,
+            capture.ScanHistoryId
+        };
+
+        HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/scanner/vision/capture", requestBody, ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        VisionCaptureCreatedResponse? result = await response.Content.ReadFromJsonAsync<VisionCaptureCreatedResponse>(cancellationToken: ct);
+        return result?.Id;
+    }
+
+    public async Task<bool> CreateCorrectionReportAsync(CorrectionReportRequest report, CancellationToken ct = default)
+    {
+        HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/scanner/correction", report, ct);
         return response.IsSuccessStatusCode;
     }
 }
