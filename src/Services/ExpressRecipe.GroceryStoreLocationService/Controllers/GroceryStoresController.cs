@@ -1,4 +1,5 @@
 using ExpressRecipe.GroceryStoreLocationService.Data;
+using ExpressRecipe.GroceryStoreLocationService.Services;
 using ExpressRecipe.GroceryStoreLocationService.Workers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -33,6 +34,8 @@ public class GroceryStoresController : ControllerBase
         [FromQuery] string? zipCode,
         [FromQuery] string? storeType,
         [FromQuery] bool? acceptsSnap,
+        [FromQuery] bool? isVerified,
+        [FromQuery] string? normalizedChain,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
@@ -43,12 +46,14 @@ public class GroceryStoresController : ControllerBase
         {
             Name = name,
             Chain = chain,
+            NormalizedChain = normalizedChain,
             City = city,
             State = state,
             ZipCode = zipCode,
             StoreType = storeType,
             AcceptsSnap = acceptsSnap,
             IsActive = true,
+            IsVerified = isVerified,
             Page = page,
             PageSize = pageSize
         };
@@ -90,6 +95,52 @@ public class GroceryStoresController : ControllerBase
         return Ok(stores);
     }
 
+    /// <summary>GET /api/grocerystores/chain/{normalizedChain} - Get stores by canonical chain name</summary>
+    [HttpGet("chain/{normalizedChain}")]
+    public async Task<IActionResult> GetByChain(string normalizedChain, [FromQuery] int limit = 100)
+    {
+        limit = Math.Clamp(limit, 1, 500);
+        var stores = await _repository.GetByChainAsync(normalizedChain, limit);
+        return Ok(stores);
+    }
+
+    /// <summary>GET /api/grocerystores/chains - List all known chains</summary>
+    [HttpGet("chains")]
+    public async Task<IActionResult> GetChains()
+    {
+        var chains = await _repository.GetAllChainsAsync();
+        return Ok(chains);
+    }
+
+    /// <summary>GET /api/grocerystores/{id}/hours - Get structured store hours</summary>
+    [HttpGet("{id:guid}/hours")]
+    public async Task<IActionResult> GetStoreHours(Guid id)
+    {
+        var store = await _repository.GetByIdAsync(id);
+        if (store == null) return NotFound();
+
+        var hours = await _repository.GetStoreHoursAsync(id);
+        return Ok(hours);
+    }
+
+    /// <summary>PUT /api/grocerystores/{id}/hours - Update store hours (admin only)</summary>
+    [HttpPut("{id:guid}/hours")]
+    [Authorize]
+    public async Task<IActionResult> UpsertStoreHours(Guid id, [FromBody] List<StoreHoursRequest> hours)
+    {
+        var store = await _repository.GetByIdAsync(id);
+        if (store == null) return NotFound();
+
+        var invalidDays = hours.Where(h => !h.IsHoliday && h.DayOfWeek > 6).ToList();
+        if (invalidDays.Count > 0)
+        {
+            return BadRequest($"DayOfWeek must be 0–6 (Sunday–Saturday). Invalid values: {string.Join(", ", invalidDays.Select(h => h.DayOfWeek))}");
+        }
+
+        var updated = await _repository.UpsertStoreHoursAsync(id, hours);
+        return Ok(new { Updated = updated });
+    }
+
     /// <summary>POST /api/grocerystores/import/trigger - Trigger import (admin only)</summary>
     [HttpPost("import/trigger")]
     [Authorize]
@@ -113,14 +164,18 @@ public class GroceryStoresController : ControllerBase
     public async Task<IActionResult> GetImportStatus()
     {
         var snapLog = await _repository.GetLastImportAsync("USDA_SNAP");
-        var osmLog = await _repository.GetLastImportAsync("OSM");
+        var osmLog = await _repository.GetLastImportAsync("OPENSTREETMAP");
         var openPricesLog = await _repository.GetLastImportAsync("OpenPrices");
+        var overtureLog = await _repository.GetLastImportAsync("OVERTURE_MAPS");
+        var hifldLog = await _repository.GetLastImportAsync("HIFLD");
 
         return Ok(new
         {
             USDA_SNAP = snapLog,
             OSM = osmLog,
-            OpenPrices = openPricesLog
+            OpenPrices = openPricesLog,
+            Overture = overtureLog,
+            HIFLD = hifldLog
         });
     }
 }
