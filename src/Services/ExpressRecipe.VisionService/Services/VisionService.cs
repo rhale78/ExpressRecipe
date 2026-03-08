@@ -53,8 +53,8 @@ public class VisionService : IVisionService
 
         await Task.WhenAll(onnxTask, paddleTask);
 
-        VisionResult onnxResult = onnxTask.Result;
-        VisionResult paddleResult = paddleTask.Result;
+        VisionResult onnxResult = await onnxTask;
+        VisionResult paddleResult = await paddleTask;
 
         VisionResult best = SelectBestResult(onnxResult, paddleResult);
 
@@ -110,8 +110,8 @@ public class VisionService : IVisionService
         await Task.WhenAll(onnxTask, paddleTask);
 
         List<VisionResult> combined = new List<VisionResult>();
-        combined.AddRange(onnxTask.Result);
-        combined.AddRange(paddleTask.Result);
+        combined.AddRange(await onnxTask);
+        combined.AddRange(await paddleTask);
         return combined;
     }
 

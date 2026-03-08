@@ -18,6 +18,8 @@ public class ProductMatchResult
 /// </summary>
 public class ProductServiceNameMatcher : IProductNameMatcher
 {
+    private const double DefaultMatchScore = 0.8;
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<ProductServiceNameMatcher> _logger;
 
@@ -52,7 +54,7 @@ public class ProductServiceNameMatcher : IProductNameMatcher
                 ProductId = top.Id,
                 ProductName = top.Name,
                 Brand = top.Brand,
-                Score = 0.8
+                Score = DefaultMatchScore
             };
         }
         catch (Exception ex)
