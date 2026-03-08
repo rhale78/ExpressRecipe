@@ -30,7 +30,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
     public async Task<List<RestaurantDto>> SearchAsync(RestaurantSearchRequest request)
     {
-        var whereClauses = new List<string> { "IsActive = 1" };
+        var whereClauses = new List<string> { "IsDeleted = 0", "IsActive = 1" };
         var parameters = new List<SqlParameter>();
 
         if (request.OnlyApproved == true)
@@ -89,7 +89,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                    ApprovalStatus, ApprovedBy, ApprovedAt, SubmittedBy,
                    AverageRating, RatingCount, IsActive, CreatedAt, UpdatedAt
             FROM Restaurant
-            WHERE Id = @Id AND IsActive = 1";
+            WHERE Id = @Id AND IsDeleted = 0 AND IsActive = 1";
 
         var results = await ExecuteReaderAsync(
             sql,
@@ -166,7 +166,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                 IsChain = @IsChain,
                 UpdatedBy = @UpdatedBy,
                 UpdatedAt = GETUTCDATE()
-            WHERE Id = @Id AND IsActive = 1";
+            WHERE Id = @Id AND IsDeleted = 0 AND IsActive = 1";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
@@ -196,10 +196,12 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     {
         const string sql = @"
             UPDATE Restaurant
-            SET IsActive = 0,
+            SET IsDeleted = 1,
+                IsActive = 0,
+                DeletedAt = GETUTCDATE(),
                 UpdatedBy = @DeletedBy,
                 UpdatedAt = GETUTCDATE()
-            WHERE Id = @Id AND IsActive = 1";
+            WHERE Id = @Id AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
@@ -218,7 +220,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
                 ApprovedAt = GETUTCDATE(),
                 UpdatedBy = @ApprovedBy,
                 UpdatedAt = GETUTCDATE()
-            WHERE Id = @Id AND IsActive = 1";
+            WHERE Id = @Id AND IsDeleted = 0 AND IsActive = 1";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
@@ -231,7 +233,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
 
     public async Task<bool> RestaurantExistsAsync(Guid id)
     {
-        const string sql = "SELECT COUNT(*) FROM Restaurant WHERE Id = @Id AND IsActive = 1";
+        const string sql = "SELECT COUNT(*) FROM Restaurant WHERE Id = @Id AND IsDeleted = 0 AND IsActive = 1";
 
         var count = await ExecuteScalarAsync<int>(
             sql,
@@ -247,7 +249,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
         const string sql = @"
             SELECT UserId, RestaurantId, Rating, Review, CreatedAt, UpdatedAt
             FROM UserRestaurantRating
-            WHERE RestaurantId = @RestaurantId
+            WHERE RestaurantId = @RestaurantId AND IsDeleted = 0
             ORDER BY CreatedAt DESC";
 
         return await ExecuteReaderAsync(
@@ -269,7 +271,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
         const string sql = @"
             SELECT UserId, RestaurantId, Rating, Review, CreatedAt, UpdatedAt
             FROM UserRestaurantRating
-            WHERE RestaurantId = @RestaurantId AND UserId = @UserId";
+            WHERE RestaurantId = @RestaurantId AND UserId = @UserId AND IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
             sql,
@@ -295,7 +297,7 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             SET Rating = @Rating,
                 Review = @Review,
                 UpdatedAt = GETUTCDATE()
-            WHERE RestaurantId = @RestaurantId AND UserId = @UserId";
+            WHERE RestaurantId = @RestaurantId AND UserId = @UserId AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             updateSql,
@@ -334,8 +336,11 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     public async Task<bool> DeleteRatingAsync(Guid restaurantId, Guid userId)
     {
         const string sql = @"
-            DELETE FROM UserRestaurantRating
-            WHERE RestaurantId = @RestaurantId AND UserId = @UserId";
+            UPDATE UserRestaurantRating
+            SET IsDeleted = 1,
+                DeletedAt = GETUTCDATE(),
+                UpdatedAt = GETUTCDATE()
+            WHERE RestaurantId = @RestaurantId AND UserId = @UserId AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
@@ -357,12 +362,12 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             SET AverageRating = (
                     SELECT AVG(CAST(Rating AS DECIMAL(3,2)))
                     FROM UserRestaurantRating
-                    WHERE RestaurantId = @RestaurantId
+                    WHERE RestaurantId = @RestaurantId AND IsDeleted = 0
                 ),
                 RatingCount = (
                     SELECT COUNT(*)
                     FROM UserRestaurantRating
-                    WHERE RestaurantId = @RestaurantId
+                    WHERE RestaurantId = @RestaurantId AND IsDeleted = 0
                 ),
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @RestaurantId";

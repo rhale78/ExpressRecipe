@@ -31,7 +31,9 @@ builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 var app = builder.Build();
 
-// Run database migrations
+// Run database management (drop/reset) if configured, then migrations
+await app.RunDatabaseManagementAsync("MenuItemService", "menuitemdb");
+
 var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
 if (!Directory.Exists(migrationsPath))
 {

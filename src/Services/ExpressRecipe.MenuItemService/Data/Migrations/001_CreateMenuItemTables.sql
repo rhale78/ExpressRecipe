@@ -83,30 +83,38 @@ CREATE TABLE MenuItemNutrition (
     CreatedBy           UNIQUEIDENTIFIER NULL,
     UpdatedAt           DATETIME2 NULL,
     UpdatedBy           UNIQUEIDENTIFIER NULL,
+    IsDeleted           BIT NOT NULL DEFAULT 0,
+    DeletedAt           DATETIME2 NULL,
+    RowVersion          ROWVERSION,
     CONSTRAINT FK_MenuItemNutrition_MenuItem FOREIGN KEY (MenuItemId)
         REFERENCES MenuItem(Id) ON DELETE CASCADE
 );
 GO
 
-CREATE INDEX IX_MenuItemNutrition_MenuItemId ON MenuItemNutrition(MenuItemId);
+CREATE INDEX IX_MenuItemNutrition_MenuItemId ON MenuItemNutrition(MenuItemId) WHERE IsDeleted = 0;
 GO
 
 -- User MenuItem Ratings
 CREATE TABLE UserMenuItemRating (
-    Id            UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    UserId        UNIQUEIDENTIFIER NOT NULL,
-    MenuItemId    UNIQUEIDENTIFIER NOT NULL,
-    Rating        INT NOT NULL CHECK (Rating >= 1 AND Rating <= 5),
-    Review        NVARCHAR(MAX) NULL,
+    Id              UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    UserId          UNIQUEIDENTIFIER NOT NULL,
+    MenuItemId      UNIQUEIDENTIFIER NOT NULL,
+    Rating          INT NOT NULL CHECK (Rating >= 1 AND Rating <= 5),
+    Review          NVARCHAR(MAX) NULL,
     WouldOrderAgain BIT NULL,
-    CreatedAt     DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    UpdatedAt     DATETIME2 NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy       UNIQUEIDENTIFIER NULL,
+    UpdatedAt       DATETIME2 NULL,
+    UpdatedBy       UNIQUEIDENTIFIER NULL,
+    IsDeleted       BIT NOT NULL DEFAULT 0,
+    DeletedAt       DATETIME2 NULL,
+    RowVersion      ROWVERSION,
     CONSTRAINT FK_UserMenuItemRating_MenuItem FOREIGN KEY (MenuItemId)
         REFERENCES MenuItem(Id) ON DELETE CASCADE,
     CONSTRAINT UQ_UserMenuItemRating_User_MenuItem UNIQUE (UserId, MenuItemId)
 );
 GO
 
-CREATE INDEX IX_UserMenuItemRating_UserId    ON UserMenuItemRating(UserId);
-CREATE INDEX IX_UserMenuItemRating_MenuItemId ON UserMenuItemRating(MenuItemId);
+CREATE INDEX IX_UserMenuItemRating_UserId     ON UserMenuItemRating(UserId)     WHERE IsDeleted = 0;
+CREATE INDEX IX_UserMenuItemRating_MenuItemId ON UserMenuItemRating(MenuItemId) WHERE IsDeleted = 0;
 GO

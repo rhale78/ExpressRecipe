@@ -410,7 +410,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
         const string sql = @"
             SELECT Id, UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedAt, UpdatedAt
             FROM UserMenuItemRating
-            WHERE MenuItemId = @MenuItemId
+            WHERE MenuItemId = @MenuItemId AND IsDeleted = 0
             ORDER BY CreatedAt DESC";
 
         return await ExecuteReaderAsync(
@@ -434,7 +434,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
         const string sql = @"
             SELECT Id, UserId, MenuItemId, Rating, Review, WouldOrderAgain, CreatedAt, UpdatedAt
             FROM UserMenuItemRating
-            WHERE MenuItemId = @MenuItemId AND UserId = @UserId";
+            WHERE MenuItemId = @MenuItemId AND UserId = @UserId AND IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
             sql,
@@ -463,7 +463,7 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
                 Review = @Review,
                 WouldOrderAgain = @WouldOrderAgain,
                 UpdatedAt = GETUTCDATE()
-            WHERE MenuItemId = @MenuItemId AND UserId = @UserId";
+            WHERE MenuItemId = @MenuItemId AND UserId = @UserId AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             updateSql,
@@ -502,8 +502,11 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     public async Task<bool> DeleteRatingAsync(Guid menuItemId, Guid userId)
     {
         const string sql = @"
-            DELETE FROM UserMenuItemRating
-            WHERE MenuItemId = @MenuItemId AND UserId = @UserId";
+            UPDATE UserMenuItemRating
+            SET IsDeleted = 1,
+                DeletedAt = GETUTCDATE(),
+                UpdatedAt = GETUTCDATE()
+            WHERE MenuItemId = @MenuItemId AND UserId = @UserId AND IsDeleted = 0";
 
         var rowsAffected = await ExecuteNonQueryAsync(
             sql,
@@ -525,12 +528,12 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             SET AverageRating = (
                     SELECT AVG(CAST(Rating AS DECIMAL(3,2)))
                     FROM UserMenuItemRating
-                    WHERE MenuItemId = @MenuItemId
+                    WHERE MenuItemId = @MenuItemId AND IsDeleted = 0
                 ),
                 RatingCount = (
                     SELECT COUNT(*)
                     FROM UserMenuItemRating
-                    WHERE MenuItemId = @MenuItemId
+                    WHERE MenuItemId = @MenuItemId AND IsDeleted = 0
                 ),
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @MenuItemId";

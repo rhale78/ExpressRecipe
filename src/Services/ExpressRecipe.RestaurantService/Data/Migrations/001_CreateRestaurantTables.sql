@@ -34,19 +34,22 @@ CREATE TABLE Restaurant (
     CreatedBy        UNIQUEIDENTIFIER NULL,
     UpdatedAt        DATETIME2 NULL,
     UpdatedBy        UNIQUEIDENTIFIER NULL,
+    IsDeleted        BIT NOT NULL DEFAULT 0,
+    DeletedAt        DATETIME2 NULL,
+    RowVersion       ROWVERSION,
     CONSTRAINT CK_Restaurant_ApprovalStatus CHECK (ApprovalStatus IN ('Pending','Approved','Rejected')),
     CONSTRAINT CK_Restaurant_RestaurantType CHECK (RestaurantType IN ('FastFood','SitDown','FastCasual','Cafe','Bakery','FoodTruck'))
 );
 GO
 
-CREATE INDEX IX_Restaurant_City_State   ON Restaurant(City, State) WHERE IsActive = 1;
-CREATE INDEX IX_Restaurant_Lat_Lon      ON Restaurant(Latitude, Longitude) WHERE IsActive = 1;
-CREATE INDEX IX_Restaurant_Chain        ON Restaurant(ChainBrandId);
-CREATE INDEX IX_Restaurant_ExternalId   ON Restaurant(ExternalId, DataSource);
-CREATE INDEX IX_Restaurant_Name         ON Restaurant(Name) WHERE IsActive = 1;
-CREATE INDEX IX_Restaurant_CuisineType  ON Restaurant(CuisineType) WHERE IsActive = 1;
-CREATE INDEX IX_Restaurant_ApprovalStatus ON Restaurant(ApprovalStatus) WHERE IsActive = 1;
-CREATE UNIQUE INDEX IX_Restaurant_OsmId ON Restaurant(OsmId) WHERE OsmId IS NOT NULL;
+CREATE INDEX IX_Restaurant_City_State     ON Restaurant(City, State)         WHERE IsDeleted = 0 AND IsActive = 1;
+CREATE INDEX IX_Restaurant_Lat_Lon        ON Restaurant(Latitude, Longitude) WHERE IsDeleted = 0 AND IsActive = 1;
+CREATE INDEX IX_Restaurant_Chain          ON Restaurant(ChainBrandId);
+CREATE INDEX IX_Restaurant_ExternalId     ON Restaurant(ExternalId, DataSource);
+CREATE INDEX IX_Restaurant_Name           ON Restaurant(Name)                WHERE IsDeleted = 0 AND IsActive = 1;
+CREATE INDEX IX_Restaurant_CuisineType    ON Restaurant(CuisineType)         WHERE IsDeleted = 0 AND IsActive = 1;
+CREATE INDEX IX_Restaurant_ApprovalStatus ON Restaurant(ApprovalStatus)      WHERE IsDeleted = 0 AND IsActive = 1;
+CREATE UNIQUE INDEX IX_Restaurant_OsmId   ON Restaurant(OsmId)               WHERE OsmId IS NOT NULL;
 GO
 
 -- Restaurant Hours
@@ -96,12 +99,17 @@ CREATE TABLE UserRestaurantRating (
     Review       NVARCHAR(MAX) NULL,
     VisitDate    DATETIME2 NULL,
     CreatedAt    DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy    UNIQUEIDENTIFIER NULL,
     UpdatedAt    DATETIME2 NULL,
+    UpdatedBy    UNIQUEIDENTIFIER NULL,
+    IsDeleted    BIT NOT NULL DEFAULT 0,
+    DeletedAt    DATETIME2 NULL,
+    RowVersion   ROWVERSION,
     CONSTRAINT FK_UserRestaurantRating_Restaurant FOREIGN KEY (RestaurantId) REFERENCES Restaurant(Id) ON DELETE CASCADE,
     CONSTRAINT UQ_UserRestaurantRating_User_Restaurant UNIQUE (UserId, RestaurantId)
 );
 GO
 
-CREATE INDEX IX_UserRestaurantRating_UserId       ON UserRestaurantRating(UserId);
-CREATE INDEX IX_UserRestaurantRating_RestaurantId ON UserRestaurantRating(RestaurantId);
+CREATE INDEX IX_UserRestaurantRating_UserId       ON UserRestaurantRating(UserId)       WHERE IsDeleted = 0;
+CREATE INDEX IX_UserRestaurantRating_RestaurantId ON UserRestaurantRating(RestaurantId) WHERE IsDeleted = 0;
 GO
