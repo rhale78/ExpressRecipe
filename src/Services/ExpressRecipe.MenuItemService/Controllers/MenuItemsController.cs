@@ -1,10 +1,10 @@
+using ExpressRecipe.MenuItemService.Data;
 using ExpressRecipe.Shared.DTOs.Product;
-using ExpressRecipe.ProductService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
-namespace ExpressRecipe.ProductService.Controllers;
+namespace ExpressRecipe.MenuItemService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -64,11 +64,13 @@ public class MenuItemsController : ControllerBase
                 return NotFound(new { message = "Menu item not found" });
             }
 
-            // Load ingredients
-            menuItem.Ingredients = await _repository.GetMenuItemIngredientsAsync(id);
+            // Load ingredients and nutrition in parallel
+            var ingredientsTask = _repository.GetMenuItemIngredientsAsync(id);
+            var nutritionTask = _repository.GetMenuItemNutritionAsync(id);
+            await Task.WhenAll(ingredientsTask, nutritionTask);
 
-            // Load nutrition
-            menuItem.Nutrition = await _repository.GetMenuItemNutritionAsync(id);
+            menuItem.Ingredients = await ingredientsTask;
+            menuItem.Nutrition = await nutritionTask;
 
             return Ok(menuItem);
         }
@@ -151,8 +153,11 @@ public class MenuItemsController : ControllerBase
             var menuItem = await _repository.GetByIdAsync(id);
             if (menuItem != null)
             {
-                menuItem.Ingredients = await _repository.GetMenuItemIngredientsAsync(id);
-                menuItem.Nutrition = await _repository.GetMenuItemNutritionAsync(id);
+                var ingredientsTask = _repository.GetMenuItemIngredientsAsync(id);
+                var nutritionTask = _repository.GetMenuItemNutritionAsync(id);
+                await Task.WhenAll(ingredientsTask, nutritionTask);
+                menuItem.Ingredients = await ingredientsTask;
+                menuItem.Nutrition = await nutritionTask;
             }
 
             _logger.LogInformation("Menu item {MenuItemId} updated by user {UserId}", id, userId);
@@ -234,7 +239,6 @@ public class MenuItemsController : ControllerBase
                 return Unauthorized();
             }
 
-            // Verify menu item exists
             if (!await _repository.MenuItemExistsAsync(id))
             {
                 return NotFound(new { message = "Menu item not found" });
@@ -329,7 +333,6 @@ public class MenuItemsController : ControllerBase
                 return Unauthorized();
             }
 
-            // Verify menu item exists
             if (!await _repository.MenuItemExistsAsync(id))
             {
                 return NotFound(new { message = "Menu item not found" });
@@ -416,7 +419,6 @@ public class MenuItemsController : ControllerBase
                 return Unauthorized();
             }
 
-            // Verify menu item exists
             if (!await _repository.MenuItemExistsAsync(id))
             {
                 return NotFound(new { message = "Menu item not found" });
