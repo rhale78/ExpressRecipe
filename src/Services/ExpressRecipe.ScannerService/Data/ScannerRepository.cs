@@ -304,4 +304,218 @@ public class ScannerRepository : IScannerRepository
 
         return results;
     }
+
+    public async Task<Guid> SaveVisionCaptureAsync(VisionCaptureRecord capture, CancellationToken ct = default)
+    {
+        const string sql = @"
+            INSERT INTO VisionCapture
+                (UserId, ScanHistoryId, CaptureImageJpeg, DetectedBarcode, DetectedProductName,
+                 DetectedBrand, ProviderUsed, Confidence, ProductFoundInDb, ResolvedProductId,
+                 IsTrainingData, CapturedAt)
+            OUTPUT INSERTED.Id
+            VALUES
+                (@UserId, @ScanHistoryId, @CaptureImageJpeg, @DetectedBarcode, @DetectedProductName,
+                 @DetectedBrand, @ProviderUsed, @Confidence, @ProductFoundInDb, @ResolvedProductId,
+                 @IsTrainingData, GETUTCDATE())";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", capture.UserId);
+        command.Parameters.AddWithValue("@ScanHistoryId", capture.ScanHistoryId.HasValue ? capture.ScanHistoryId.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@CaptureImageJpeg", capture.CaptureImageJpeg);
+        command.Parameters.AddWithValue("@DetectedBarcode", capture.DetectedBarcode ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@DetectedProductName", capture.DetectedProductName ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@DetectedBrand", capture.DetectedBrand ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@ProviderUsed", capture.ProviderUsed ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@Confidence", capture.Confidence.HasValue ? capture.Confidence.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@ProductFoundInDb", capture.ProductFoundInDb);
+        command.Parameters.AddWithValue("@ResolvedProductId", capture.ResolvedProductId.HasValue ? capture.ResolvedProductId.Value : DBNull.Value);
+        command.Parameters.AddWithValue("@IsTrainingData", capture.IsTrainingData);
+
+        return (Guid)((await command.ExecuteScalarAsync(ct)) ?? throw new InvalidOperationException("Failed to insert VisionCapture record."));
+    }
+
+    public async Task UpdateVisionCaptureProductAsync(Guid captureId, Guid productId, bool found, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE VisionCapture
+            SET ProductFoundInDb = @Found, ResolvedProductId = @ProductId
+            WHERE Id = @CaptureId";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@CaptureId", captureId);
+        command.Parameters.AddWithValue("@ProductId", productId);
+        command.Parameters.AddWithValue("@Found", found);
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<List<VisionCaptureRecord>> GetCapturePendingReviewAsync(int limit, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT TOP (@Limit)
+                Id, UserId, ScanHistoryId, CaptureImageJpeg, DetectedBarcode,
+                DetectedProductName, DetectedBrand, ProviderUsed, Confidence,
+                ProductFoundInDb, ResolvedProductId, IsTrainingData, CapturedAt
+            FROM VisionCapture
+            WHERE IsTrainingData = 0
+            ORDER BY CapturedAt DESC";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Limit", limit);
+
+        List<VisionCaptureRecord> captures = new List<VisionCaptureRecord>();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            captures.Add(new VisionCaptureRecord
+            {
+                Id = reader.GetGuid(0),
+                UserId = reader.GetGuid(1),
+                ScanHistoryId = reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                CaptureImageJpeg = (byte[])reader[3],
+                DetectedBarcode = reader.IsDBNull(4) ? null : reader.GetString(4),
+                DetectedProductName = reader.IsDBNull(5) ? null : reader.GetString(5),
+                DetectedBrand = reader.IsDBNull(6) ? null : reader.GetString(6),
+                ProviderUsed = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Confidence = reader.IsDBNull(8) ? null : reader.GetDecimal(8),
+                ProductFoundInDb = reader.GetBoolean(9),
+                ResolvedProductId = reader.IsDBNull(10) ? null : reader.GetGuid(10),
+                IsTrainingData = reader.GetBoolean(11),
+                CapturedAt = reader.GetDateTime(12)
+            });
+        }
+
+        return captures;
+    }
+
+    public async Task<Guid> CreateCorrectionReportAsync(CorrectionReportRecord report, CancellationToken ct = default)
+    {
+        const string sql = @"
+            INSERT INTO CorrectionReport
+                (VisionCaptureId, UserId, AiGuess, UserCorrection, UserNote, Status, CreatedAt)
+            OUTPUT INSERTED.Id
+            VALUES
+                (@VisionCaptureId, @UserId, @AiGuess, @UserCorrection, @UserNote, 'Pending', GETUTCDATE())";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@VisionCaptureId", report.VisionCaptureId);
+        command.Parameters.AddWithValue("@UserId", report.UserId);
+        command.Parameters.AddWithValue("@AiGuess", report.AiGuess ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@UserCorrection", report.UserCorrection ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@UserNote", report.UserNote ?? (object)DBNull.Value);
+
+        return (Guid)((await command.ExecuteScalarAsync(ct)) ?? throw new InvalidOperationException("Failed to insert CorrectionReport record."));
+    }
+
+    public async Task<List<CorrectionReportRecord>> GetCorrectionReportsAsync(string? status, int limit, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT TOP (@Limit)
+                Id, VisionCaptureId, UserId, AiGuess, UserCorrection,
+                UserNote, Status, ReviewedBy, ReviewedAt, CreatedAt
+            FROM CorrectionReport
+            WHERE (@Status IS NULL OR Status = @Status)
+            ORDER BY CreatedAt DESC";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Limit", limit);
+        command.Parameters.AddWithValue("@Status", status ?? (object)DBNull.Value);
+
+        List<CorrectionReportRecord> reports = new List<CorrectionReportRecord>();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            reports.Add(new CorrectionReportRecord
+            {
+                Id = reader.GetGuid(0),
+                VisionCaptureId = reader.GetGuid(1),
+                UserId = reader.GetGuid(2),
+                AiGuess = reader.IsDBNull(3) ? null : reader.GetString(3),
+                UserCorrection = reader.IsDBNull(4) ? null : reader.GetString(4),
+                UserNote = reader.IsDBNull(5) ? null : reader.GetString(5),
+                Status = reader.GetString(6),
+                ReviewedBy = reader.IsDBNull(7) ? null : reader.GetGuid(7),
+                ReviewedAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
+                CreatedAt = reader.GetDateTime(9)
+            });
+        }
+
+        return reports;
+    }
+
+    public async Task UpdateCorrectionStatusAsync(Guid reportId, string status, Guid reviewedBy, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE CorrectionReport
+            SET Status = @Status, ReviewedBy = @ReviewedBy, ReviewedAt = GETUTCDATE()
+            WHERE Id = @ReportId";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@ReportId", reportId);
+        command.Parameters.AddWithValue("@Status", status);
+        command.Parameters.AddWithValue("@ReviewedBy", reviewedBy);
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<List<TrainingExportRow>> GetTrainingExportAsync(int limit, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT TOP (@Limit)
+                vc.Id,
+                vc.DetectedBarcode,
+                vc.DetectedProductName,
+                vc.DetectedBrand,
+                vc.ProviderUsed,
+                vc.Confidence,
+                cr.UserCorrection,
+                vc.CapturedAt
+            FROM VisionCapture vc
+            LEFT JOIN CorrectionReport cr ON cr.VisionCaptureId = vc.Id AND cr.Status = 'Approved'
+            WHERE vc.IsTrainingData = 1
+            ORDER BY vc.CapturedAt DESC";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Limit", limit);
+
+        List<TrainingExportRow> rows = new List<TrainingExportRow>();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            rows.Add(new TrainingExportRow
+            {
+                CaptureId = reader.GetGuid(0),
+                DetectedBarcode = reader.IsDBNull(1) ? null : reader.GetString(1),
+                DetectedProductName = reader.IsDBNull(2) ? null : reader.GetString(2),
+                DetectedBrand = reader.IsDBNull(3) ? null : reader.GetString(3),
+                ProviderUsed = reader.IsDBNull(4) ? null : reader.GetString(4),
+                Confidence = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                CorrectedProductName = reader.IsDBNull(6) ? null : reader.GetString(6),
+                CapturedAt = reader.GetDateTime(7)
+            });
+        }
+
+        return rows;
+    }
 }
