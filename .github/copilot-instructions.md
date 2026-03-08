@@ -191,15 +191,18 @@ public class ProductsController : ControllerBase
 
 ### Microservice Structure
 
-Each service MUST have:
+All services MUST have:
 - `Controllers/` — API endpoints
 - `Services/` — Business logic
+- `Program.cs` — Service registration and startup
+
+For data-backed services (services that own a database) you MUST also include:
 - `Data/` — Repositories and migrations (`Data/Migrations/001_Initial.sql`, …)
 - `Models/` — Domain models
 - `Contracts/` — DTOs (Requests/Responses)
-- `Events/` — Message bus event definitions
-- `Program.cs` — Service registration and startup
+- `Events/` — Message bus event definitions (where the service publishes or consumes messages)
 
+Services without their own data store (e.g., pure AI or integration services) typically still use `Models/`, `Contracts/`, and `Events/`, but these folders are optional and should be added when they provide clarity.
 **Standard `Program.cs` pattern:**
 
 ```csharp
