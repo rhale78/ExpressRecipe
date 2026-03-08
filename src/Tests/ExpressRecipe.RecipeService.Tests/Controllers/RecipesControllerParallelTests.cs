@@ -32,6 +32,8 @@ public class RecipesControllerParallelTests
             _repo.Object,
             new ServingSizeService(),
             new ShoppingListIntegrationService(),
+            new NullRecipeEventPublisher(),
+            new Mock<IRecipeBatchChannel>().Object,
             _logger.Object);
 
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_userId);

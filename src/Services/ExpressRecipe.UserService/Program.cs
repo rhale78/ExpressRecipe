@@ -20,61 +20,30 @@ builder.AddSqlServerClient("userdb");
 builder.AddRedisClient("redis");
 
 // Configure JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
-if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
-    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
-var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService";
-var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
-
-// Log JWT configuration for debugging
-var loggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
-var startupLogger = loggerFactory.CreateLogger("Startup");
-startupLogger.LogInformation("JWT Configuration:");
-startupLogger.LogInformation("  Issuer: {Issuer}", issuer);
-startupLogger.LogInformation("  Audience: {Audience}", audience);
-startupLogger.LogInformation("  SecretKey Length: {Length}", secretKey.Length);
-startupLogger.LogInformation("  SecretKey Preview: {Preview}...", secretKey.Substring(0, Math.Min(5, secretKey.Length)));
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.AddExpressRecipeAuthentication(options =>
+{
+    options.Events = new JwtBearerEvents
     {
-        options.TokenValidationParameters = new TokenValidationParameters
+        OnAuthenticationFailed = context =>
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = issuer,
-            ValidAudience = audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-            ClockSkew = TimeSpan.Zero
-        };
-
-        options.Events = new JwtBearerEvents
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogError("Authentication failed: {Message}", context.Exception.Message);
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = context =>
         {
-            OnAuthenticationFailed = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogError("Authentication failed: {Message}", context.Exception.Message);
-                return Task.CompletedTask;
-            },
-            OnTokenValidated = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogDebug("Token validated for user: {User}", context.Principal?.Identity?.Name);
-                return Task.CompletedTask;
-            },
-            OnChallenge = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogWarning("Authentication challenge: {Error}, {ErrorDescription}", context.Error, context.ErrorDescription);
-                return Task.CompletedTask;
-            }
-        };
-    });
-
-builder.Services.AddAuthorization();
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogDebug("Token validated for user: {User}", context.Principal?.Identity?.Name);
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogWarning("Authentication challenge: {Error}, {ErrorDescription}", context.Error, context.ErrorDescription);
+            return Task.CompletedTask;
+        }
+    };
+});
 
 // Register repositories
 var connectionString = builder.Configuration.GetConnectionString("userdb")

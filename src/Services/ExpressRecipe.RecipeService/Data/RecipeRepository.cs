@@ -232,7 +232,6 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             dt.Columns.Add("Id", typeof(Guid));
             dt.Columns.Add("RecipeId", typeof(Guid));
             dt.Columns.Add("IngredientId", typeof(Guid));
-            dt.Columns.Add("BaseIngredientId", typeof(Guid));
             dt.Columns.Add("IngredientName", typeof(string));
             dt.Columns.Add("Quantity", typeof(decimal));
             dt.Columns.Add("Unit", typeof(string));
@@ -249,7 +248,6 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                     Guid.NewGuid(),
                     recipeId,
                     (object?)ing.IngredientId ?? DBNull.Value,
-                    (object?)ing.BaseIngredientId ?? DBNull.Value,
                     (object?)ing.IngredientName ?? DBNull.Value,
                     (object?)ing.Quantity ?? DBNull.Value,
                     (object?)ing.Unit ?? DBNull.Value,
@@ -566,8 +564,8 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                         foreach (var ing in item.Ingredients)
                         {
                             ingredientData.Add(new object[] {
-                                BulkOperationsHelper.CreateSequentialGuid(), recipeId, (object?)ing.IngredientId ?? DBNull.Value, (object?)ing.BaseIngredientId ?? DBNull.Value,
-                                (object?)ing.IngredientName ?? DBNull.Value, (object?)ing.Quantity ?? DBNull.Value, (object?)ing.Unit ?? DBNull.Value, ing.OrderIndex, 
+                                BulkOperationsHelper.CreateSequentialGuid(), recipeId, (object?)ing.IngredientId ?? DBNull.Value,
+                                (object?)ing.IngredientName ?? DBNull.Value, (object?)ing.Quantity ?? DBNull.Value, (object?)ing.Unit ?? DBNull.Value, ing.OrderIndex,
                                 (object?)ing.PreparationNote ?? DBNull.Value, ing.IsOptional, (object?)ing.SubstituteNotes ?? DBNull.Value, Guid.Empty, timestamp,
                                 DBNull.Value, DBNull.Value, false, DBNull.Value, (object?)ing.GroupName ?? DBNull.Value, (object?)ing.OriginalText ?? DBNull.Value
                             });
@@ -611,7 +609,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 await DisableNonEssentialIndexesAsync(connection, transaction);
                 await CreateStagingTablesAsync(connection, transaction, 1);
 
-                if (ingredientData.Any()) await BulkInsertToStagingTableAsync(connection, transaction, "#RecipeIngredient_W0", ingredientData, new[] { "Id", "RecipeId", "IngredientId", "BaseIngredientId", "IngredientName", "Quantity", "Unit", "OrderIndex", "PreparationNote", "IsOptional", "SubstituteNotes", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "IsDeleted", "DeletedAt", "GroupName", "OriginalText" });
+                if (ingredientData.Any()) await BulkInsertToStagingTableAsync(connection, transaction, "#RecipeIngredient_W0", ingredientData, new[] { "Id", "RecipeId", "IngredientId", "IngredientName", "Quantity", "Unit", "OrderIndex", "PreparationNote", "IsOptional", "SubstituteNotes", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt", "IsDeleted", "DeletedAt", "GroupName", "OriginalText" });
                 if (instructionData.Any()) await BulkInsertToStagingTableAsync(connection, transaction, "#RecipeInstruction_W0", instructionData, new[] { "Id", "RecipeId", "OrderIndex", "Instruction", "TimeMinutes", "ImageUrl", "Tips", "CreatedBy", "CreatedAt", "UpdatedBy", "UpdatedAt" });
                 if (imageData.Any()) await BulkInsertToStagingTableAsync(connection, transaction, "#RecipeImage_W0", imageData, new[] { "Id", "RecipeId", "ImageUrl", "LocalPath", "IsPrimary", "DisplayOrder", "SourceSystem", "CreatedAt" });
                 if (tagMappingData.Any()) await BulkInsertToStagingTableAsync(connection, transaction, "#RecipeTagMapping_W0", tagMappingData, new[] { "Id", "RecipeId", "TagId", "CreatedAt" });
@@ -690,7 +688,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         for (int i = 0; i < workerCount; i++)
         {
             createSql.AppendLine($@"
-                CREATE TABLE #RecipeIngredient_W{i} (Id UNIQUEIDENTIFIER, RecipeId UNIQUEIDENTIFIER, IngredientId UNIQUEIDENTIFIER, BaseIngredientId UNIQUEIDENTIFIER, IngredientName NVARCHAR(200), Quantity DECIMAL(18,4), Unit NVARCHAR(50), OrderIndex INT, PreparationNote NVARCHAR(500), IsOptional BIT, SubstituteNotes NVARCHAR(500), CreatedBy UNIQUEIDENTIFIER, CreatedAt DATETIME2, UpdatedBy UNIQUEIDENTIFIER, UpdatedAt DATETIME2, IsDeleted BIT, DeletedAt DATETIME2, GroupName NVARCHAR(100), OriginalText NVARCHAR(MAX));
+                CREATE TABLE #RecipeIngredient_W{i} (Id UNIQUEIDENTIFIER, RecipeId UNIQUEIDENTIFIER, IngredientId UNIQUEIDENTIFIER, IngredientName NVARCHAR(200), Quantity DECIMAL(18,4), Unit NVARCHAR(50), OrderIndex INT, PreparationNote NVARCHAR(500), IsOptional BIT, SubstituteNotes NVARCHAR(500), CreatedBy UNIQUEIDENTIFIER, CreatedAt DATETIME2, UpdatedBy UNIQUEIDENTIFIER, UpdatedAt DATETIME2, IsDeleted BIT, DeletedAt DATETIME2, GroupName NVARCHAR(100), OriginalText NVARCHAR(MAX));
                 CREATE TABLE #RecipeInstruction_W{i} (Id UNIQUEIDENTIFIER, RecipeId UNIQUEIDENTIFIER, OrderIndex INT, Instruction NVARCHAR(MAX), TimeMinutes INT, ImageUrl NVARCHAR(500), Tips NVARCHAR(MAX), CreatedBy UNIQUEIDENTIFIER, CreatedAt DATETIME2, UpdatedBy UNIQUEIDENTIFIER, UpdatedAt DATETIME2);
                 CREATE TABLE #RecipeImage_W{i} (Id UNIQUEIDENTIFIER, RecipeId UNIQUEIDENTIFIER, ImageUrl NVARCHAR(500), LocalPath NVARCHAR(500), IsPrimary BIT, DisplayOrder INT, SourceSystem NVARCHAR(100), CreatedAt DATETIME2);
                 CREATE TABLE #RecipeTagMapping_W{i} (Id UNIQUEIDENTIFIER, RecipeId UNIQUEIDENTIFIER, TagId UNIQUEIDENTIFIER, CreatedAt DATETIME2);");
@@ -722,7 +720,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
 
     private async Task MergeFromStagingTablesAsync(SqlConnection connection, SqlTransaction transaction, int workerCount)
     {
-        string ingredientCols = "Id, RecipeId, IngredientId, BaseIngredientId, IngredientName, Quantity, Unit, OrderIndex, PreparationNote, IsOptional, SubstituteNotes, CreatedBy, CreatedAt, UpdatedBy, UpdatedAt, IsDeleted, DeletedAt, GroupName, OriginalText";
+        string ingredientCols = "Id, RecipeId, IngredientId, IngredientName, Quantity, Unit, OrderIndex, PreparationNote, IsOptional, SubstituteNotes, CreatedBy, CreatedAt, UpdatedBy, UpdatedAt, IsDeleted, DeletedAt, GroupName, OriginalText";
         var ingredientUnion = new StringBuilder($"INSERT INTO RecipeIngredient ({ingredientCols}) SELECT {ingredientCols} FROM #RecipeIngredient_W0");
         string instructionCols = "Id, RecipeId, OrderIndex, Instruction, TimeMinutes, ImageUrl, Tips, CreatedBy, CreatedAt, UpdatedBy, UpdatedAt";
         var instructionUnion = new StringBuilder($"INSERT INTO RecipeInstruction ({instructionCols}) SELECT {instructionCols} FROM #RecipeInstruction_W0");

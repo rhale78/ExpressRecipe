@@ -31,6 +31,8 @@ public class RecipesControllerTests
             _mockRepo.Object,
             _servingSizeService,
             _shoppingListService,
+            new NullRecipeEventPublisher(),
+            new Mock<IRecipeBatchChannel>().Object,
             _mockLogger.Object);
 
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_userId);

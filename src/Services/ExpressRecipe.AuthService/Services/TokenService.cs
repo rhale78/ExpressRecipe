@@ -1,5 +1,6 @@
 using ExpressRecipe.AuthService.Models;
 using ExpressRecipe.Shared.Models;
+using ExpressRecipe.Shared.Security;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -36,11 +37,14 @@ public class TokenService : ITokenService
         var secretKey = jwtSettings["SecretKey"] ?? _configuration["JWT_SECRET_KEY"] ?? "development-secret-key-change-in-production-min-32-chars-required!";
         if (secretKey == "development-secret-key-change-in-production-min-32-chars-required!")
             _logger.LogWarning("JWT secret key is using development fallback. Configure JWT_SECRET_KEY for production use.");
-        var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe";
+        var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService";
         var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
         var expirationMinutes = int.Parse(jwtSettings["ExpirationMinutes"] ?? "60");
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+        {
+            KeyId = ExpressRecipe.Shared.Security.JwtConstants.SigningKeyId
+        };
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]
@@ -70,11 +74,14 @@ public class TokenService : ITokenService
         var secretKey = jwtSettings["SecretKey"] ?? _configuration["JWT_SECRET_KEY"] ?? "development-secret-key-change-in-production-min-32-chars-required!";
         if (secretKey == "development-secret-key-change-in-production-min-32-chars-required!")
             _logger.LogWarning("JWT secret key is using development fallback. Configure JWT_SECRET_KEY for production use.");
-        var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe";
+        var issuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService";
         var audience = jwtSettings["Audience"] ?? "ExpressRecipe.API";
         var expirationMinutes = int.Parse(jwtSettings["ExpirationMinutes"] ?? "60");
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+        {
+            KeyId = ExpressRecipe.Shared.Security.JwtConstants.SigningKeyId
+        };
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var claims = new[]

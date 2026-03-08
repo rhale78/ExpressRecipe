@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="..\..\Services\ExpressRecipe.IngredientService\Services\Parsing\AdvancedIngredientParser.cs" />
     <Compile Include="..\..\Services\ExpressRecipe.IngredientService\Services\Parsing\IngredientParser.cs" />
+    <Compile Include="..\..\Services\ExpressRecipe.IngredientService\Services\IngredientEventPublisher.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -31,6 +32,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Core\ExpressRecipe.Messaging.Core.csproj" />
   </ItemGroup>
 
 </Project>

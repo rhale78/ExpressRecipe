@@ -170,7 +170,7 @@ public sealed class RabbitMqMessageBus : IMessageBus, IAsyncDisposable
         where THandler : IMessageHandler<TMessage>
     {
         var opts = options ?? new SubscribeOptions();
-        _subscriptionRegistry.Add(new TypedSubscriptionRegistration<TMessage, THandler>(_serviceProvider!, opts));
+        _subscriptionRegistry.Add(new TypedSubscriptionRegistration<TMessage, THandler>(() => _serviceProvider!, opts));
         return Task.CompletedTask;
     }
 
@@ -191,7 +191,7 @@ public sealed class RabbitMqMessageBus : IMessageBus, IAsyncDisposable
         where THandler : IRequestHandler<TRequest, TResponse>
     {
         var opts = options ?? new SubscribeOptions();
-        _subscriptionRegistry.Add(new TypedRequestSubscriptionRegistration<TRequest, TResponse, THandler>(_serviceProvider!, opts));
+        _subscriptionRegistry.Add(new TypedRequestSubscriptionRegistration<TRequest, TResponse, THandler>(() => _serviceProvider!, opts));
         return Task.CompletedTask;
     }
 

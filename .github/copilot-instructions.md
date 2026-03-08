@@ -121,8 +121,7 @@ Example:public class ProductRepository : SqlHelper
 
         return products.FirstOrDefault();
     }
-}
-**SqlHelper provides helper methods for safe data reading:**
+}**SqlHelper provides helper methods for safe data reading:**
 - `GetGuid(reader, "ColumnName")` - Get Guid by column name
 - `GetGuidNullable(reader, "ColumnName")` - Get nullable Guid
 - `GetString(reader, "ColumnName")` - Get string (nullable)
@@ -209,11 +208,8 @@ All tables MUST include these base columns:
         using var conn = new SqlConnection(_connectionString);
         // Direct SQL in controller - BAD
     }
-}
-// DON'T use blocking callsvar result = _service.GetAsync().Result; // Deadlock risk!
-// DON'T expose domain models[HttpPost]
-public async Task<Product> Create(Product product) // Domain model exposed
-### ✅ DO
+}// DON'T use blocking callsvar result = _service.GetAsync().Result; // Deadlock risk!// DON'T expose domain models[HttpPost]
+public async Task<Product> Create(Product product) // Domain model exposed### ✅ DO
 // DO separate concerns - Controller → Service → Repositorypublic class ProductsController : ControllerBase
 {
     private readonly IProductService _service;
@@ -224,24 +220,32 @@ public async Task<Product> Create(Product product) // Domain model exposed
         var products = await _service.GetAllAsync();
         return Ok(products);
     }
-}
-// DO use proper asyncvar result = await _service.GetAsync();
-// DO use DTOs for APIs[HttpPost]
+}// DO use proper asyncvar result = await _service.GetAsync();// DO use DTOs for APIs[HttpPost]
 public async Task<ProductResponse> Create(CreateProductRequest request)
 ## Development Workflow
 
 ### Building and Testing
-# Restore dependenciesdotnet restore
-# Build solutiondotnet build
-# Run all testsdotnet test
-# Run specific servicecd src/Services/ExpressRecipe.ProductService
+# Restore dependencies
+dotnet restore
+# Build solution
+dotnet build
+# Run all tests
+dotnet test
+# Run specific service
+cd src/Services/ExpressRecipe.ProductService
 dotnet run
-# Run with Aspire (all services)cd src/ExpressRecipe.AppHost
+# Run with Aspire (all services)
+cd src/ExpressRecipe.AppHost
 dotnet run
+
 ### Docker Development
-# Start all servicesdocker compose up -d
-# View logsdocker compose logs -f
-# Stop servicesdocker compose down
+# Start all services
+docker compose up -d
+# View logs
+docker compose logs -f
+# Stop services
+docker compose down
+
 ### Migrations
 
 - SQL scripts in `Data/Migrations/` folder
@@ -303,6 +307,11 @@ app.Run();
 ## Solution Structure
 
 - When reorganizing solution structure, preserve and validate the active `.sln` file format and avoid relying on `.slnx` for changes/build guidance unless explicitly requested.
+
+## Messaging Integration
+
+- Prices, products, recipes, and ingredients services should use messaging by default instead of REST fallback.
+- When implementing messaging resilience, keep messaging enabled for diagnostics and use runtime REST fallback instead of disabling messaging at startup.
 
 ---
 

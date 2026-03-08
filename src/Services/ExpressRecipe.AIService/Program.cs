@@ -24,27 +24,8 @@ builder.Services.AddControllers();
 //     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.AIService API", Version = "v1" });
 // });
 
-// Configure JWT Authentication (use global JwtSettings)
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var jwt = builder.Configuration.GetSection("JwtSettings");
-        var secretKey = jwt["SecretKey"] ?? Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? "development-secret-key-change-in-production-min-32-chars-required!";
-if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
-    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwt["Issuer"] ?? "ExpressRecipe.AuthService",
-            ValidAudience = jwt["Audience"] ?? "ExpressRecipe.API",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
-        };
-    });
-
-builder.Services.AddAuthorization();
+// Configure JWT Authentication
+builder.AddExpressRecipeAuthentication();
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);

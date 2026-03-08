@@ -1,3 +1,4 @@
+using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.Core.Extensions;
 using ExpressRecipe.Messaging.RabbitMQ.Internal;
 using ExpressRecipe.Messaging.RabbitMQ.Options;
@@ -62,7 +63,14 @@ public static class RabbitMqMessagingExtensions
 
         services.AddSingleton<SubscriptionRegistry>();
         services.AddSingleton<RabbitMqMessageBus>();
-        services.AddSingleton<ExpressRecipe.Messaging.Core.Abstractions.IMessageBus>(sp => sp.GetRequiredService<RabbitMqMessageBus>());
+        services.AddSingleton<IMessageBus>(sp => sp.GetRequiredService<RabbitMqMessageBus>());
+
+        // Health tracker — must be registered as both IHostedService and IMessagingStatus
+        // so callers can inject IMessagingStatus without knowing the concrete type.
+        services.AddSingleton<MessagingStatusService>();
+        services.AddSingleton<IMessagingStatus>(sp => sp.GetRequiredService<MessagingStatusService>());
+        services.AddHostedService(sp => sp.GetRequiredService<MessagingStatusService>());
+
         services.AddHostedService<RabbitMqConsumerHostedService>();
     }
 }

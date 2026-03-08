@@ -1,12 +1,14 @@
+using System.Text;
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.IngredientService.Data;
+using ExpressRecipe.IngredientService.Services;
 using ExpressRecipe.IngredientService.Services.Parsing;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.CQRS;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,31 +35,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
 // Configure JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var secretKey = jwtSettings["SecretKey"] ?? 
-                builder.Configuration["Jwt:Key"] ?? 
-                Environment.GetEnvironmentVariable("JWT_SECRET_KEY") ?? 
-                "development-secret-key-change-in-production-min-32-chars-required!";
-if (builder.Environment.IsProduction() && (secretKey == "development-secret-key-change-in-production-min-32-chars-required!" || secretKey.Length < 32))
-    throw new InvalidOperationException("[FATAL] JWT_SECRET_KEY must be configured in production and must be at least 32 characters.");
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"] ?? "ExpressRecipe.AuthService",
-            ValidAudience = jwtSettings["Audience"] ?? "ExpressRecipe.API",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-            ClockSkew = TimeSpan.Zero
-        };
-    });
-
-builder.Services.AddAuthorization();
+builder.AddExpressRecipeAuthentication();
 
 // Register token provider (service-to-service authentication)
 builder.Services.AddScoped<ITokenProvider>(sp =>
@@ -71,6 +49,29 @@ builder.Services.ConfigureHttpClientDefaults(http =>
 {
     http.AddHttpMessageHandler<AuthenticationDelegatingHandler>();
 });
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    builder.Services.AddSingleton<IIngredientEventPublisher, IngredientEventPublisher>();
+
+    // Handle lookup and bulk-create requests from ProductService, RecipeService, etc.
+    builder.Services.AddScoped<IngredientQueryHandler>();
+    builder.Services.AddHostedService<IngredientQuerySubscriber>();
+}
+else
+{
+    builder.Services.AddSingleton<IIngredientEventPublisher, NullIngredientEventPublisher>();
+}
+
+// Register ingredient batch channel (async path) – always available regardless of messaging
+builder.Services.AddSingleton<IIngredientBatchChannel, IngredientBatchChannel>();
+builder.Services.AddHostedService<IngredientBatchChannelWorker>();
 
 var app = builder.Build();
 

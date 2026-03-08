@@ -1,13 +1,17 @@
 using ExpressRecipe.Messaging.RabbitMQ.Internal;
+using ExpressRecipe.Messaging.RabbitMQ.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 
 namespace ExpressRecipe.Messaging.RabbitMQ;
 
 /// <summary>
-/// An <see cref="IHostedService"/> that starts all registered consumers when the application starts
-/// and gracefully shuts them down when the application stops.
+/// Starts consumers for every subscription registered in <see cref="SubscriptionRegistry"/>,
+/// including subscriptions that arrive after the host has started (solving the IHostedService
+/// startup-ordering timing race where subscriber services call SubscribeAsync in their own
+/// StartAsync, which runs after this service's ExecuteAsync snapshot).
 /// </summary>
 public sealed class RabbitMqConsumerHostedService : BackgroundService
 {
@@ -15,47 +19,45 @@ public sealed class RabbitMqConsumerHostedService : BackgroundService
     private readonly SubscriptionRegistry _registry;
     private readonly IConnection _connection;
     private readonly IServiceProvider _serviceProvider;
+    private readonly RabbitMqMessagingOptions _options;
     private readonly ILogger<RabbitMqConsumerHostedService> _logger;
 
     private readonly List<IChannel> _consumerChannels = new();
 
-    /// <summary>
-    /// Initializes a new instance of <see cref="RabbitMqConsumerHostedService"/>.
-    /// </summary>
     public RabbitMqConsumerHostedService(
         RabbitMqMessageBus bus,
         SubscriptionRegistry registry,
         IConnection connection,
         IServiceProvider serviceProvider,
+        IOptions<RabbitMqMessagingOptions> options,
         ILogger<RabbitMqConsumerHostedService> logger)
     {
         _bus = bus;
         _registry = registry;
         _connection = connection;
         _serviceProvider = serviceProvider;
+        _options = options.Value;
         _logger = logger;
     }
 
-    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _bus.SetServiceProvider(_serviceProvider);
 
-        var registrations = _registry.GetAll();
-        if (registrations.Count == 0)
-        {
-            _logger.LogDebug("No subscriptions registered. Consumer hosted service is idle.");
-            await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
-            return;
-        }
+        _logger.LogInformation("Consumer hosted service started; awaiting subscription registrations.");
 
-        _logger.LogInformation("Starting {Count} consumer(s)...", registrations.Count);
-
-        foreach (var registration in registrations)
+        // ReadAllAsync yields each registration as it arrives, whether registered before
+        // or after this method starts executing.
+        await foreach (var registration in _registry.Pending.ReadAllAsync(stoppingToken).ConfigureAwait(false))
         {
             try
             {
-                var channel = await _connection.CreateChannelAsync(cancellationToken: stoppingToken).ConfigureAwait(false);
+                var concurrency = (ushort)(registration.Options.ConsumerConcurrency ?? _options.ConsumerConcurrency);
+                var channelOptions = new CreateChannelOptions(
+                    publisherConfirmationsEnabled: false,
+                    publisherConfirmationTrackingEnabled: false,
+                    consumerDispatchConcurrency: concurrency);
+                var channel = await _connection.CreateChannelAsync(channelOptions, stoppingToken).ConfigureAwait(false);
                 _consumerChannels.Add(channel);
                 await _bus.StartConsumerAsync(channel, registration, stoppingToken).ConfigureAwait(false);
             }
@@ -64,17 +66,13 @@ public sealed class RabbitMqConsumerHostedService : BackgroundService
                 _logger.LogError(ex, "Failed to start consumer for message type '{MessageType}'", registration.MessageType.Name);
             }
         }
-
-        _logger.LogInformation("All consumers started.");
-
-        // Keep running until cancelled
-        await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
     }
 
-    /// <inheritdoc />
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Stopping consumers...");
+        _registry.Complete();
+
+        _logger.LogInformation("Stopping {Count} consumer channel(s)...", _consumerChannels.Count);
 
         foreach (var channel in _consumerChannels)
         {
@@ -93,3 +91,4 @@ public sealed class RabbitMqConsumerHostedService : BackgroundService
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
 }
+

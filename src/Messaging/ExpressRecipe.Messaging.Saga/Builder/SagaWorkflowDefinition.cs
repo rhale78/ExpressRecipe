@@ -19,8 +19,12 @@ public sealed class SagaWorkflowDefinition<TState> where TState : class, ISagaSt
     /// <summary>Bitmask representing all steps; set when all steps are complete.</summary>
     public long CompletionMask { get; }
 
-    internal Func<TState, IMessageBus, CancellationToken, Task>? OnCompleted { get; }
-    internal Func<TState, Exception, IMessageBus, CancellationToken, Task>? OnFailed { get; }
+    public Func<TState, IMessageBus, CancellationToken, Task>? OnWorkflowCompleted { get; }
+    public Func<TState, Exception, IMessageBus, CancellationToken, Task>? OnWorkflowFailed { get; }
+
+    // Keep internal aliases so the existing saga runtime (which uses OnCompleted/OnFailed) still compiles
+    internal Func<TState, IMessageBus, CancellationToken, Task>? OnCompleted => OnWorkflowCompleted;
+    internal Func<TState, Exception, IMessageBus, CancellationToken, Task>? OnFailed => OnWorkflowFailed;
 
     internal SagaWorkflowDefinition(
         string workflowName,
@@ -29,11 +33,11 @@ public sealed class SagaWorkflowDefinition<TState> where TState : class, ISagaSt
         Func<TState, IMessageBus, CancellationToken, Task>? onCompleted,
         Func<TState, Exception, IMessageBus, CancellationToken, Task>? onFailed)
     {
-        WorkflowName = workflowName;
-        Steps = steps;
-        CompletionMask = completionMask;
-        OnCompleted = onCompleted;
-        OnFailed = onFailed;
+        WorkflowName       = workflowName;
+        Steps              = steps;
+        CompletionMask     = completionMask;
+        OnWorkflowCompleted = onCompleted;
+        OnWorkflowFailed    = onFailed;
     }
 
     /// <summary>
