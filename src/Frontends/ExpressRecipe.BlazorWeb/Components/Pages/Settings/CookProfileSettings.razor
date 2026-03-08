@@ -1,0 +1,139 @@
+@page "/settings/cookprofile/{MemberId:guid}"
+@page "/setup/cookprofile/{MemberId:guid}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+
+<PageTitle>Cook Profile - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo("/settings/household"))">
+                    ← Back to Household
+                </button>
+                <h1>🍳 Cook Profile</h1>
+            </div>
+            <p class="settings-subtitle">
+                Set cooking skill level, frequency, and preferences for this member.
+            </p>
+
+            @if (_isLoading)
+            {
+                <div class="loading-container"><div class="spinner"></div><p>Loading cook profile...</p></div>
+            }
+            else
+            {
+                <div class="settings-section">
+                    <div class="section-header">
+                        <h2>Skill &amp; Frequency</h2>
+                        @if (!_isEditing)
+                        {
+                            <button class="btn btn-outline btn-sm" @onclick="StartEditing">✏️ Edit</button>
+                        }
+                    </div>
+
+                    @if (_isEditing)
+                    {
+                        <div class="form-group">
+                            <label>Overall Skill Level</label>
+                            <select class="form-control" @bind="_editSkillLevel">
+                                <option value="Beginner">Beginner</option>
+                                <option value="HomeCook">Home Cook</option>
+                                <option value="ConfidentCook">Confident Cook</option>
+                                <option value="Advanced">Advanced</option>
+                                <option value="Professional">Professional</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Cooking Frequency</label>
+                            <select class="form-control" @bind="_editFrequency">
+                                <option value="Rarely">Rarely</option>
+                                <option value="Occasionally">Occasionally</option>
+                                <option value="Regular">Regular</option>
+                                <option value="Daily">Daily</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" @bind="_editEatingDisorderRecovery" />
+                                Eating Disorder Recovery Mode
+                            </label>
+                            <small class="form-hint">
+                                Hides calorie counts and weight/macro framing throughout the app.
+                            </small>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn btn-outline" @onclick="CancelEditing">Cancel</button>
+                            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_isSaving">
+                                @(_isSaving ? "Saving..." : "Save")
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p><strong>Skill Level:</strong> @_skillLevel</p>
+                        <p><strong>Cooking Frequency:</strong> @_frequency</p>
+                        @if (_eatingDisorderRecovery)
+                        {
+                            <p class="badge badge-info">🛡️ Eating Disorder Recovery Mode Active</p>
+                        }
+                    }
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="settings-container">
+            <p>Please <a href="/login">sign in</a> to manage cook profiles.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid MemberId { get; set; }
+
+    private bool _isLoading = true;
+    private bool _isEditing;
+    private bool _isSaving;
+    private string _skillLevel = "HomeCook";
+    private string _frequency = "Regular";
+    private bool _eatingDisorderRecovery;
+    private string _editSkillLevel = "HomeCook";
+    private string _editFrequency = "Regular";
+    private bool _editEatingDisorderRecovery;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Load cook profile via PreferencesService HTTP client
+        await Task.Delay(10);
+        _isLoading = false;
+    }
+
+    private void StartEditing()
+    {
+        _editSkillLevel = _skillLevel;
+        _editFrequency = _frequency;
+        _editEatingDisorderRecovery = _eatingDisorderRecovery;
+        _isEditing = true;
+    }
+
+    private void CancelEditing()
+    {
+        _isEditing = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _isSaving = true;
+        // TODO: PUT to PreferencesService
+        await Task.Delay(100);
+        _skillLevel = _editSkillLevel;
+        _frequency = _editFrequency;
+        _eatingDisorderRecovery = _editEatingDisorderRecovery;
+        _isSaving = false;
+        _isEditing = false;
+    }
+}

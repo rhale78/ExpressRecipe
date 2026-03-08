@@ -1,0 +1,85 @@
+@page "/settings/tips/{MemberId:guid}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+
+<PageTitle>Cooking Tips - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo($"/settings/cookprofile/{MemberId}"))">
+                    ← Back to Cook Profile
+                </button>
+                <h1>💡 Cooking Tips</h1>
+            </div>
+            <p class="settings-subtitle">
+                Manage dismissed cooking tips. Restore tips you'd like to see again.
+            </p>
+            <div class="settings-section">
+                <div class="section-header">
+                    <h2>Dismissed Tips</h2>
+                </div>
+                @if (_isLoading)
+                {
+                    <div class="loading-container"><div class="spinner"></div><p>Loading dismissed tips...</p></div>
+                }
+                else if (_dismissedTips.Count == 0)
+                {
+                    <p class="empty-message">No dismissed tips. Tips you dismiss will appear here so you can restore them.</p>
+                }
+                else
+                {
+                    @foreach (DismissedTipItem tip in _dismissedTips)
+                    {
+                        <div class="action-card">
+                            <div class="action-card-content">
+                                <h3>@tip.TipId</h3>
+                                <p>Dismissed: @tip.DismissedAt.ToShortDateString()</p>
+                            </div>
+                            <div class="action-card-actions">
+                                <button class="btn btn-outline btn-sm" @onclick="@(() => RestoreTipAsync(tip.TipId))">
+                                    Restore
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="settings-container">
+            <p>Please <a href="/login">sign in</a> to manage tip settings.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid MemberId { get; set; }
+
+    private bool _isLoading = true;
+    private List<DismissedTipItem> _dismissedTips = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Load dismissed tips via PreferencesService HTTP client
+        await Task.Delay(10);
+        _isLoading = false;
+    }
+
+    private async Task RestoreTipAsync(Guid tipId)
+    {
+        // TODO: DELETE via PreferencesService
+        await Task.CompletedTask;
+        _dismissedTips.RemoveAll(t => t.TipId == tipId);
+    }
+
+    private class DismissedTipItem
+    {
+        public Guid TipId { get; set; }
+        public DateTime DismissedAt { get; set; }
+    }
+}
