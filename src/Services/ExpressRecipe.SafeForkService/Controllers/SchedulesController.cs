@@ -50,7 +50,7 @@ public class SchedulesController : ControllerBase
     [HttpDelete("{memberId:guid}/{scheduleId:guid}")]
     public async Task<IActionResult> DeleteSchedule(Guid memberId, Guid scheduleId, CancellationToken ct = default)
     {
-        bool deleted = await _scheduleRepo.SoftDeleteAsync(scheduleId, ct);
+        bool deleted = await _scheduleRepo.SoftDeleteForMemberAsync(memberId, scheduleId, ct);
         if (!deleted)
         {
             return NotFound();

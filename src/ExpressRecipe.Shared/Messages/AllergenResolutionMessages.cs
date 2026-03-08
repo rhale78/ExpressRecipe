@@ -29,7 +29,7 @@ public record RequestProductLookup(
 public record RequestIngredientGraphWalk(
     string CorrelationId,
     Guid AllergenProfileId,
-    Guid ProductId) : IMessage;
+    Guid? ProductId) : IMessage;
 
 public record RequestPersistResolution(
     string CorrelationId,

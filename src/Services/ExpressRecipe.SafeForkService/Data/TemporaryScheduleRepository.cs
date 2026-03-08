@@ -69,4 +69,19 @@ public class TemporaryScheduleRepository : SqlHelper, ITemporaryScheduleReposito
 
         return rowsAffected > 0;
     }
+
+    public async Task<bool> SoftDeleteForMemberAsync(Guid memberId, Guid scheduleId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE TemporarySchedule
+            SET IsDeleted = 1, UpdatedAt = GETUTCDATE()
+            WHERE Id = @Id AND MemberId = @MemberId AND IsDeleted = 0";
+
+        int rowsAffected = await ExecuteNonQueryAsync(
+            sql,
+            CreateParameter("@Id", scheduleId),
+            CreateParameter("@MemberId", memberId));
+
+        return rowsAffected > 0;
+    }
 }

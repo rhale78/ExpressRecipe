@@ -9,6 +9,7 @@ public interface IAllergenProfileRepository
     Task<Guid> AddCuratedEntryAsync(Guid memberId, AddCuratedAllergenRequest request, Guid? createdBy = null, CancellationToken ct = default);
     Task<Guid> AddFreeformEntryAsync(Guid memberId, string freeFormText, string? brand, Guid? createdBy = null, CancellationToken ct = default);
     Task<bool> SoftDeleteEntryAsync(Guid entryId, CancellationToken ct = default);
+    Task<bool> SoftDeleteEntryForMemberAsync(Guid memberId, Guid entryId, CancellationToken ct = default);
     Task<bool> SetHouseholdExcludeAsync(Guid entryId, bool value, CancellationToken ct = default);
     Task<bool> SetUnresolvedAsync(Guid entryId, bool isUnresolved, CancellationToken ct = default);
     Task AddLinkAsync(Guid allergenProfileId, string linkType, Guid linkedId, string matchMethod, decimal confidenceScore = 1.000m, CancellationToken ct = default);

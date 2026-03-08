@@ -41,14 +41,17 @@ public sealed class HouseholdMemberSubscriber : IHostedService
             using IServiceScope scope = _scopeFactory.CreateScope();
             IAllergenProfileRepository repo = scope.ServiceProvider.GetRequiredService<IAllergenProfileRepository>();
 
-            // Verify no existing entries exist before initialising (idempotency guard)
+            // The allergen profile is modelled as a collection of entries — there is no separate
+            // "profile header" row to insert. An empty profile (zero entries) IS the initialized state.
+            // This subscriber exists to handle the HouseholdMemberAdded event fired by the ProfileService
+            // REST path. Idempotency: if entries already exist (e.g. saga already ran), skip.
             List<ExpressRecipe.SafeForkService.Contracts.Responses.AllergenProfileEntryDto> existing =
                 await repo.GetByMemberIdAsync(evt.MemberId, ct);
 
             if (existing.Count == 0)
             {
                 _logger.LogInformation(
-                    "Allergen profile initialised (empty) for member {MemberId} in household {HouseholdId}",
+                    "Allergen profile ready (empty) for new member {MemberId} in household {HouseholdId}",
                     evt.MemberId, evt.HouseholdId);
             }
             else

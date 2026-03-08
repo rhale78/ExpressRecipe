@@ -258,9 +258,33 @@ public class AllergenProfileService : IAllergenProfileService
             }
         }
 
+        await _cache.RemoveAsync($"allergen:member:{memberId}", ct);
         await _publisher.PublishAllergenProfileUpdatedAsync(memberId, null, ct);
 
         return entryId;
+    }
+
+    public async Task<Guid> AddCuratedAllergenAsync(Guid memberId, AddCuratedAllergenRequest request, CancellationToken ct)
+    {
+        Guid entryId = await _profileRepo.AddCuratedEntryAsync(memberId, request, ct: ct);
+
+        await _cache.RemoveAsync($"allergen:member:{memberId}", ct);
+        await _publisher.PublishAllergenProfileUpdatedAsync(memberId, null, ct);
+
+        return entryId;
+    }
+
+    public async Task<bool> DeleteEntryForMemberAsync(Guid memberId, Guid entryId, CancellationToken ct)
+    {
+        bool deleted = await _profileRepo.SoftDeleteEntryForMemberAsync(memberId, entryId, ct);
+
+        if (deleted)
+        {
+            await _cache.RemoveAsync($"allergen:member:{memberId}", ct);
+            await _publisher.PublishAllergenProfileUpdatedAsync(memberId, null, ct);
+        }
+
+        return deleted;
     }
 
     public async Task<Guid> AddTemporaryScheduleAsync(Guid memberId, string scheduleType, DateTimeOffset start, DateTimeOffset end, string? configJson, CancellationToken ct)
@@ -279,18 +303,5 @@ public class AllergenProfileService : IAllergenProfileService
     public async Task<List<TemporaryScheduleDto>> GetActiveSchedulesAsync(Guid memberId, CancellationToken ct)
     {
         return await _scheduleRepo.GetActiveAsync(memberId, ct);
-    }
-
-    public async Task<List<AllergenProfileEntryDto>> GetHouseholdHardExcludesAsync(Guid householdId, CancellationToken ct)
-    {
-        // This method requires resolving household members from the ProfileService.
-        // Without a member ID list, we cannot query the AllergenProfile table directly.
-        // Callers that have the member IDs should use IAllergenProfileRepository.GetHouseholdHardExcludesAsync
-        // with the resolved member ID list. Returning empty here is intentional until a household-member
-        // HTTP client is wired into this service.
-        _logger.LogDebug(
-            "GetHouseholdHardExcludesAsync: no ProfileService HTTP client available — returning empty list for household {HouseholdId}",
-            householdId);
-        return await Task.FromResult(new List<AllergenProfileEntryDto>());
     }
 }

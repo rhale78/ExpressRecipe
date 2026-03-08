@@ -48,7 +48,7 @@ public static class AllergenResolutionWorkflow
                 .Sends(s => new RequestIngredientGraphWalk(
                     s.CorrelationId,
                     s.AllergenProfileId,
-                    s.ProductId ?? Guid.Empty))
+                    s.ProductId))
                 .SendsTo(AllergenResolutionKeys.IngredientGraphWalk)
                 .OnResult<IngredientGraphWalkResult>((state, result, ct) =>
                 {

@@ -4,15 +4,16 @@ namespace ExpressRecipe.ProfileService.Services;
 
 /// <summary>
 /// Background service that purges expired TemporaryVisitor records daily at 02:00 UTC.
+/// Uses IServiceScopeFactory to avoid the captive dependency anti-pattern (singleton holding scoped repo).
 /// </summary>
 public class GuestExpiryWorker : BackgroundService
 {
-    private readonly IHouseholdMemberRepository _repository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GuestExpiryWorker> _logger;
 
-    public GuestExpiryWorker(IHouseholdMemberRepository repository, ILogger<GuestExpiryWorker> logger)
+    public GuestExpiryWorker(IServiceScopeFactory scopeFactory, ILogger<GuestExpiryWorker> logger)
     {
-        _repository = repository;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -43,12 +44,16 @@ public class GuestExpiryWorker : BackgroundService
     {
         try
         {
+            using IServiceScope scope = _scopeFactory.CreateScope();
+            IHouseholdMemberRepository repository =
+                scope.ServiceProvider.GetRequiredService<IHouseholdMemberRepository>();
+
             List<ExpressRecipe.ProfileService.Contracts.Responses.HouseholdMemberDto> expired =
-                await _repository.GetExpiredTemporaryVisitorsAsync(ct);
+                await repository.GetExpiredTemporaryVisitorsAsync(ct);
 
             int count = expired.Count;
 
-            await _repository.PurgeExpiredTemporaryVisitorsAsync(ct);
+            await repository.PurgeExpiredTemporaryVisitorsAsync(ct);
 
             _logger.LogInformation("GuestExpiryWorker purged {Count} expired temporary visitor(s)", count);
         }

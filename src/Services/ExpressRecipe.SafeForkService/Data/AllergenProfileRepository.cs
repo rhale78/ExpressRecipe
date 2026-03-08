@@ -95,6 +95,21 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
         return rowsAffected > 0;
     }
 
+    public async Task<bool> SoftDeleteEntryForMemberAsync(Guid memberId, Guid entryId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE AllergenProfile
+            SET IsDeleted = 1, UpdatedAt = GETUTCDATE()
+            WHERE Id = @Id AND MemberId = @MemberId AND IsDeleted = 0";
+
+        int rowsAffected = await ExecuteNonQueryAsync(
+            sql,
+            CreateParameter("@Id", entryId),
+            CreateParameter("@MemberId", memberId));
+
+        return rowsAffected > 0;
+    }
+
     public async Task<bool> SetHouseholdExcludeAsync(Guid entryId, bool value, CancellationToken ct = default)
     {
         const string sql = @"

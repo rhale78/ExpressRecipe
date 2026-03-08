@@ -1,4 +1,5 @@
 @page "/settings/tips/{MemberId:guid}"
+@page "/setup/tips/{MemberId:guid}"
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
 @inject NavigationManager Navigation
@@ -35,7 +36,7 @@
                     {
                         <div class="action-card">
                             <div class="action-card-content">
-                                <h3>@tip.TipId</h3>
+                                <h3>@(string.IsNullOrWhiteSpace(tip.TipTitle) ? $"Tip ({tip.TipId})" : tip.TipTitle)</h3>
                                 <p>Dismissed: @tip.DismissedAt.ToShortDateString()</p>
                             </div>
                             <div class="action-card-actions">
@@ -80,6 +81,7 @@
     private class DismissedTipItem
     {
         public Guid TipId { get; set; }
+        public string TipTitle { get; set; } = string.Empty;
         public DateTime DismissedAt { get; set; }
     }
 }

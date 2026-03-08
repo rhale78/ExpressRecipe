@@ -1,6 +1,5 @@
 using ExpressRecipe.SafeForkService.Contracts.Requests;
 using ExpressRecipe.SafeForkService.Contracts.Responses;
-using ExpressRecipe.SafeForkService.Data;
 using ExpressRecipe.SafeForkService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,16 +12,13 @@ namespace ExpressRecipe.SafeForkService.Controllers;
 public class AllergenProfileController : ControllerBase
 {
     private readonly IAllergenProfileService _service;
-    private readonly IAllergenProfileRepository _profileRepo;
     private readonly ILogger<AllergenProfileController> _logger;
 
     public AllergenProfileController(
         IAllergenProfileService service,
-        IAllergenProfileRepository profileRepo,
         ILogger<AllergenProfileController> logger)
     {
         _service = service;
-        _profileRepo = profileRepo;
         _logger = logger;
     }
 
@@ -41,7 +37,7 @@ public class AllergenProfileController : ControllerBase
     [HttpPost("{memberId:guid}/curated")]
     public async Task<IActionResult> AddCuratedAllergen(Guid memberId, [FromBody] AddCuratedAllergenRequest request, CancellationToken ct = default)
     {
-        Guid entryId = await _profileRepo.AddCuratedEntryAsync(memberId, request, ct: ct);
+        Guid entryId = await _service.AddCuratedAllergenAsync(memberId, request, ct);
         return CreatedAtAction(nameof(GetEffectiveProfile), new { memberId }, new { entryId });
     }
 
@@ -55,7 +51,7 @@ public class AllergenProfileController : ControllerBase
     [HttpDelete("{memberId:guid}/entry/{entryId:guid}")]
     public async Task<IActionResult> DeleteEntry(Guid memberId, Guid entryId, CancellationToken ct = default)
     {
-        bool deleted = await _profileRepo.SoftDeleteEntryAsync(entryId, ct);
+        bool deleted = await _service.DeleteEntryForMemberAsync(memberId, entryId, ct);
         if (!deleted)
         {
             return NotFound();
