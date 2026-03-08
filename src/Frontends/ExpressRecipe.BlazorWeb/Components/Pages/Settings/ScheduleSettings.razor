@@ -1,0 +1,94 @@
+@page "/settings/schedules/{MemberId:guid}"
+@page "/setup/schedules/{MemberId:guid}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+
+<PageTitle>Temporary Schedules - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo($"/settings/allergens/{MemberId}"))">
+                    ← Back to Allergen Profile
+                </button>
+                <h1>📅 Temporary Schedules</h1>
+            </div>
+            <p class="settings-subtitle">
+                Add time-limited dietary overlays such as pregnancy, fasting, or elimination diet trials.
+            </p>
+            <div class="settings-section">
+                <div class="section-header">
+                    <h2>Active Schedules</h2>
+                    <button class="btn btn-primary btn-sm" @onclick="ShowAddForm">+ Add Schedule</button>
+                </div>
+                @if (_isLoading)
+                {
+                    <div class="loading-container"><div class="spinner"></div><p>Loading schedules...</p></div>
+                }
+                else if (_schedules.Count == 0)
+                {
+                    <p class="empty-message">No active schedules. Add a temporary schedule to apply an overlay to your allergen profile.</p>
+                }
+                else
+                {
+                    @foreach (ScheduleItem schedule in _schedules)
+                    {
+                        <div class="action-card">
+                            <div class="action-card-content">
+                                <h3>@schedule.ScheduleType</h3>
+                                <p>@schedule.ActiveFrom.DateTime.ToShortDateString() – @schedule.ActiveUntil.DateTime.ToShortDateString()</p>
+                            </div>
+                            <div class="action-card-actions">
+                                <button class="btn btn-outline btn-sm" @onclick="@(() => RemoveScheduleAsync(schedule.Id))">
+                                    Remove
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="settings-container">
+            <p>Please <a href="/login">sign in</a> to manage schedules.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid MemberId { get; set; }
+
+    private bool _isLoading = true;
+    private List<ScheduleItem> _schedules = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Load schedules via SafeForkService HTTP client
+        await Task.Delay(10);
+        _isLoading = false;
+    }
+
+    private void ShowAddForm()
+    {
+        // TODO: Show add schedule form
+    }
+
+    private async Task RemoveScheduleAsync(Guid scheduleId)
+    {
+        // TODO: DELETE via SafeForkService
+        await Task.CompletedTask;
+        _schedules.RemoveAll(s => s.Id == scheduleId);
+    }
+
+    private class ScheduleItem
+    {
+        public Guid Id { get; set; }
+        public string ScheduleType { get; set; } = string.Empty;
+        public DateTimeOffset ActiveFrom { get; set; }
+        public DateTimeOffset ActiveUntil { get; set; }
+    }
+}

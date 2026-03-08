@@ -19,7 +19,9 @@
         </header>
 
         <main class="page-content">
-            @Body
+            <CascadingValue Name="EatingDisorderRecovery" Value="@_eatingDisorderRecovery">
+                @Body
+            </CascadingValue>
         </main>
     </div>
 </div>
@@ -28,6 +30,8 @@
 
 @code {
     private int _unreadCount = 0;
+    private bool _eatingDisorderRecovery = false;
+    // TODO: Load from PreferencesService for the authenticated user's primary profile
 
     // TODO: Load unread notification count when NotificationService is available
     // protected override async Task OnInitializedAsync()

@@ -1,0 +1,84 @@
+<div class="settings-section">
+    <h5>Additional allergens or sensitivities</h5>
+    <p>
+        Type anything — a food, brand, ingredient, or product name.
+    </p>
+    <div class="freeform-input-row">
+        <input type="text"
+               class="form-control"
+               @bind="_freeformText"
+               placeholder="e.g. palm oil, Kraft Mac and Cheese" />
+        <input type="text"
+               class="form-control"
+               @bind="_brand"
+               placeholder="Brand (optional)" />
+        <button class="btn btn-primary" @onclick="AddEntryAsync" disabled="@_isAdding">
+            @if (_isAdding)
+            {
+                <span class="spinner-small"></span>
+            }
+            else
+            {
+                <span>Add</span>
+            }
+        </button>
+    </div>
+
+    @foreach (FreeformEntryModel entry in _freeformEntries)
+    {
+        <div class="allergen-checkbox-card @(entry.IsUnresolved ? "allergen-unresolved" : string.Empty)">
+            <span>@entry.FreeFormName</span>
+            @if (entry.IsUnresolved)
+            {
+                <span class="unresolved-badge">⚠ Not matched — verify manually</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid MemberId { get; set; }
+
+    [Parameter]
+    public EventCallback<FreeformEntryModel> OnEntryAdded { get; set; }
+
+    private string _freeformText = string.Empty;
+    private string? _brand;
+    private bool _isAdding;
+    private List<FreeformEntryModel> _freeformEntries = new();
+
+    private async Task AddEntryAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_freeformText))
+        {
+            return;
+        }
+
+        _isAdding = true;
+
+        // TODO: Call SafeForkService POST /{memberId}/freeform endpoint
+        await Task.Delay(100);
+
+        FreeformEntryModel newEntry = new()
+        {
+            Id = Guid.NewGuid(),
+            FreeFormName = _freeformText,
+            IsUnresolved = true
+        };
+
+        _freeformEntries.Add(newEntry);
+        await OnEntryAdded.InvokeAsync(newEntry);
+
+        _freeformText = string.Empty;
+        _brand = null;
+        _isAdding = false;
+    }
+
+    public class FreeformEntryModel
+    {
+        public Guid Id { get; set; }
+        public string FreeFormName { get; set; } = string.Empty;
+        public bool IsUnresolved { get; set; }
+    }
+}
