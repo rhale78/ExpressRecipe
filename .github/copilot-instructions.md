@@ -2,101 +2,135 @@
 
 ## Project Overview
 
-**ExpressRecipe** is a local-first, cloud-capable dietary management platform built with .NET 10, Aspire, and microservices architecture. The application helps individuals with dietary restrictions (medical, religious, health-related, or personal) manage food choices, meal planning, inventory, and shopping.
+**ExpressRecipe** is a local-first, cloud-capable dietary management platform built with .NET 10, Aspire, and microservices architecture. It helps individuals with dietary restrictions manage food choices, meal planning, inventory, and shopping.
 
 **Key Architecture Principles:**
 - **Local-first design** - All user data stored locally (SQLite) by default, cloud sync is optional
-- **Microservices** - 15 specialized services with bounded contexts
+- **Microservices** - 15+ specialized services with bounded contexts
 - **.NET Aspire orchestration** - Service discovery, configuration, and observability
 - **ADO.NET data access** - Direct SQL for performance, no Entity Framework
 - **Multi-platform** - Blazor Web, WinUI 3, .NET MAUI, PWA
 
 ## Technology Stack
 
-- **Framework**: .NET 10
-- **Orchestration**: .NET Aspire
-- **Data Access**: ADO.NET (custom `SqlHelper` base class)
-- **Databases**: SQL Server (cloud), SQLite (local)
-- **Cache**: Redis
-- **Messaging**: RabbitMQ/Azure Service Bus
-- **Web UI**: Blazor (Auto rendering mode)
-- **Desktop**: WinUI 3
-- **Mobile**: .NET MAUI
-- **Auth**: OAuth 2.0 / OpenID Connect
-- **Logging**: Serilog with structured logging
-- **Metrics**: OpenTelemetry
-- **AI**: Ollama (llama2, mistral, codellama)
+| Component | Technology |
+|-----------|------------|
+| Framework | .NET 10 |
+| Orchestration | .NET Aspire |
+| Data Access | ADO.NET (custom `SqlHelper` base class) |
+| Cloud DB | SQL Server |
+| Local DB | SQLite |
+| Cache | Redis |
+| Messaging | RabbitMQ / Azure Service Bus |
+| Web UI | Blazor (Auto rendering mode) |
+| Desktop | WinUI 3 |
+| Mobile | .NET MAUI |
+| Auth | OAuth 2.0 / OpenID Connect |
+| Logging | Serilog |
+| Metrics | OpenTelemetry |
+| AI | Ollama (llama2, mistral, codellama) |
 
 ## Project Structure
+
+```
 src/
-├── ExpressRecipe.AppHost/          # Aspire orchestration
-├── ExpressRecipe.ServiceDefaults/   # Shared defaults
-├── ExpressRecipe.Shared/            # Shared models/DTOs
-├── ExpressRecipe.Data.Common/       # ADO.NET helpers
-├── Services/                        # Microservices
+├── ExpressRecipe.AppHost/           # Aspire orchestration entry point
+├── ExpressRecipe.ServiceDefaults/   # Shared Aspire defaults (logging, health, telemetry)
+├── ExpressRecipe.Shared/            # Shared models/DTOs/messages
+├── ExpressRecipe.Data.Common/       # ADO.NET SqlHelper base class
+├── Messaging/                       # RabbitMQ and saga infrastructure
+├── Services/                        # Microservices (25+ services)
 │   ├── ExpressRecipe.AuthService/
 │   ├── ExpressRecipe.ProductService/
 │   ├── ExpressRecipe.RecipeService/
+│   ├── ExpressRecipe.IngredientService/
 │   ├── ExpressRecipe.InventoryService/
 │   ├── ExpressRecipe.ShoppingService/
 │   ├── ExpressRecipe.MealPlanningService/
-│   ├── ExpressRecipe.AIService/
-│   ├── ExpressRecipe.NotificationService/
-│   ├── ExpressRecipe.AnalyticsService/
-│   ├── ExpressRecipe.CommunityService/
 │   ├── ExpressRecipe.PriceService/
-│   └── ... (15 services total)
+│   ├── ExpressRecipe.GroceryStoreLocationService/
+│   ├── ExpressRecipe.NotificationService/
+│   ├── ExpressRecipe.AIService/
+│   ├── ExpressRecipe.VisionService/
+│   ├── ExpressRecipe.SafeForkService/
+│   ├── ExpressRecipe.ProfileService/
+│   ├── ExpressRecipe.PreferencesService/
+│   └── ... (see src/Services/ for full list)
 └── Frontends/
-    ├── ExpressRecipe.BlazorWeb/
-    ├── ExpressRecipe.Windows/
-    └── ExpressRecipe.MAUI/
+    ├── ExpressRecipe.BlazorWeb/     # Blazor web app
+    ├── ExpressRecipe.Windows/       # WinUI 3 desktop
+    └── ExpressRecipe.MAUI/          # Android/iOS mobile
+```
+
+## Building and Testing
+
+```bash
+# Restore and build the solution
+dotnet restore
+dotnet build
+
+# Run all tests
+dotnet test
+
+# Run with Aspire (orchestrates all services)
+cd src/ExpressRecipe.AppHost
+dotnet run
+
+# Run a single service
+cd src/Services/ExpressRecipe.ProductService
+dotnet run
+```
+
+> **Note:** The AppHost `Program.cs` is a minimal diagnostic stub. The full Aspire wiring is in `Program..backup.cs`. Do not modify `Program.cs` without understanding this distinction.
 
 ## Coding Standards
 
 ### Naming Conventions
 
-- **Classes**: PascalCase (`ProductService`, `InventoryRepository`)
-- **Interfaces**: IPascalCase (`IProductService`, `IRepository<T>`)
-- **Methods**: PascalCase (`GetProductByIdAsync`)
-- **Parameters**: camelCase (`productId`, `userName`)
-- **Private fields**: `_camelCase` (`_httpClient`, `_connectionString`)
-- **Constants**: PascalCase (`MaxRetryAttempts`)
-- **Database tables**: PascalCase, singular (`Product`, `User`)
-- **Database columns**: PascalCase (`ProductId`, `CreatedAt`)
+| Element | Convention | Example |
+|---------|------------|---------|
+| Classes | PascalCase | `ProductService` |
+| Interfaces | `I` + PascalCase | `IProductService` |
+| Methods | PascalCase | `GetProductByIdAsync` |
+| Parameters | camelCase | `productId` |
+| Private fields | `_camelCase` | `_httpClient` |
+| Constants | PascalCase | `MaxRetryAttempts` |
+| DB tables | PascalCase singular | `Product` |
+| DB columns | PascalCase | `ProductId` |
 
 ### File Organization
 
-- One class per file
+- One class per file; file name matches class name
 - Namespace matches folder structure
-- File name matches primary class name
 - `Program.cs` for service entry points
-- `*.Tests.cs` for test files
 
 ### API Design
 
-**RESTful conventions:**
-- GET    /api/products          - List products
-- GET    /api/products/{id}     - Get product by ID
-- POST   /api/products          - Create product
-- PUT    /api/products/{id}     - Update product
-- DELETE /api/products/{id}     - Delete product
-- GET    /api/products/search   - Search products
+```
+GET    /api/products          List products
+GET    /api/products/{id}     Get by ID
+POST   /api/products          Create
+PUT    /api/products/{id}     Update
+DELETE /api/products/{id}     Delete
+GET    /api/products/search   Search
+```
 
-**Always use DTOs for API contracts, never expose domain models directly.**
+Always use DTOs for API contracts — never expose domain models directly.
 
 ## Critical Rules
 
 ### Data Access
 
-1. **NEVER use Entity Framework** - Use ADO.NET with the custom `SqlHelper` base class
-2. **Always use the `SqlHelper` base class** for data access - provides `ExecuteScalarAsync`, `ExecuteNonQueryAsync`, `ExecuteReaderAsync`, `ExecuteTransactionAsync`
-3. **Always use parameterized queries** to prevent SQL injection - use `CreateParameter(name, value)` helper
-4. **Always filter soft-deleted records** with `WHERE IsDeleted = 0`
-5. **Always use transactions** for multi-statement operations
-6. **Deadlock handling is automatic** - SqlHelper includes built-in retry logic with exponential backoff
-7. **Use helper methods for safe reading** - SqlHelper provides `GetGuid()`, `GetString()`, `GetInt32()`, etc. that handle nulls and column names
+1. **NEVER use Entity Framework** — use ADO.NET with the custom `SqlHelper` base class
+2. **Always use parameterized queries** to prevent SQL injection via `CreateParameter(name, value)`
+3. **Always filter soft-deleted records** with `WHERE IsDeleted = 0`
+4. **Always use transactions** for multi-statement operations
+5. **Deadlock handling is automatic** — `SqlHelper` has built-in retry with exponential backoff
 
-Example:public class ProductRepository : SqlHelper
+**SqlHelper repository example:**
+
+```csharp
+public class ProductRepository : SqlHelper
 {
     public ProductRepository(string connectionString) : base(connectionString) { }
 
@@ -121,96 +155,24 @@ Example:public class ProductRepository : SqlHelper
 
         return products.FirstOrDefault();
     }
-}**SqlHelper provides helper methods for safe data reading:**
-- `GetGuid(reader, "ColumnName")` - Get Guid by column name
-- `GetGuidNullable(reader, "ColumnName")` - Get nullable Guid
-- `GetString(reader, "ColumnName")` - Get string (nullable)
-- `GetInt32(reader, "ColumnName")` - Get int
-- `GetIntNullable(reader, "ColumnName")` - Get nullable int
-- `GetBoolean(reader, "ColumnName")` - Get bool
-- `GetBool(reader, "ColumnName")` - Get nullable bool
-- `GetDateTime(reader, "ColumnName")` - Get DateTime
-- `GetDateTimeNullable(reader, "ColumnName")` - Get nullable DateTime
-- `GetDecimal(reader, "ColumnName")` - Get decimal
-- `GetDecimalNullable(reader, "ColumnName")` - Get nullable decimal
-- `CreateParameter(name, value)` - Create SQL parameter safely
+}
+```
 
-### Architecture Patterns
-
-1. **Repository Pattern** - All data access through repositories
-2. **Service Layer** - Business logic in service classes
-3. **DTOs for API boundaries** - Request/Response objects separate from domain models
-4. **Dependency Injection** - Use built-in DI container
-5. **CQRS** - Separate command and query models for complex operations
-
-### Microservice Structure
-
-Each microservice MUST have:
-- `Controllers/` - API endpoints
-- `Services/` - Business logic
-- `Data/` - Repositories and data access
-- `Models/` - Domain models
-- `Contracts/` - DTOs (Request/Response)
-- `Events/` - Message bus event definitions
-- `Program.cs` - Service registration and startup
-
-### Database Schema Rules
-
-All tables MUST include these base columns:
-- Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-- CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-- CreatedBy UNIQUEIDENTIFIER NULL,
-- UpdatedAt DATETIME2 NULL,
-- UpdatedBy UNIQUEIDENTIFIER NULL,
-- IsDeleted BIT NOT NULL DEFAULT 0,
-- DeletedAt DATETIME2 NULL,
-- RowVersion ROWVERSION
+**SqlHelper safe-read helpers:** `GetGuid`, `GetGuidNullable`, `GetString`, `GetInt32`, `GetIntNullable`, `GetBoolean`, `GetBool`, `GetDateTime`, `GetDateTimeNullable`, `GetDecimal`, `GetDecimalNullable`, `CreateParameter`.
 
 ### Async/Await
 
-1. **Always use async/await** for I/O operations
-2. **NEVER use `.Result` or `.Wait()`** - causes deadlocks
-3. **Always suffix async methods with `Async`**
-4. **Always use `ConfigureAwait(false)`** in library code
+- **Always use async/await** for I/O operations; suffix async methods with `Async`
+- **NEVER use `.Result` or `.Wait()`** — causes deadlocks
+- Use `ConfigureAwait(false)` in library code
 
-### Error Handling
+### Architecture Patterns
 
-1. **Use structured logging** with Serilog
-2. **Log exceptions with context** - include relevant IDs and parameters
-3. **Return appropriate HTTP status codes** (200, 201, 400, 404, 500)
-4. **Never expose internal error details** to clients
-5. **Use middleware for global exception handling**
+Each microservice follows **Controller → Service → Repository**:
 
-### Testing
-
-1. **Unit tests** - 80% of test coverage (business logic)
-2. **Integration tests** - 15% (API + DB)
-3. **E2E tests** - 5% (critical workflows)
-4. **Use xUnit** for all tests
-5. **Follow AAA pattern** (Arrange, Act, Assert)
-6. **Mock external dependencies** in unit tests
-
-### Synchronization
-
-1. **Every create/update/delete** must enqueue for sync (if applicable)
-2. **Think offline-first** - operations must work without network
-3. **Handle conflicts gracefully** - last-write-wins or custom resolution
-4. **Use sync queue pattern** for reliable cloud sync
-
-## Common Pitfalls to Avoid
-
-### ❌ DON'T
-// DON'T mix concerns - no database access in controllerspublic class ProductsController : ControllerBase
-{
-    [HttpGet]
-    public async Task<IActionResult> Get()
-    {
-        using var conn = new SqlConnection(_connectionString);
-        // Direct SQL in controller - BAD
-    }
-}// DON'T use blocking callsvar result = _service.GetAsync().Result; // Deadlock risk!// DON'T expose domain models[HttpPost]
-public async Task<Product> Create(Product product) // Domain model exposed### ✅ DO
-// DO separate concerns - Controller → Service → Repositorypublic class ProductsController : ControllerBase
+```csharp
+// ✅ DO: separate concerns
+public class ProductsController : ControllerBase
 {
     private readonly IProductService _service;
 
@@ -220,99 +182,84 @@ public async Task<Product> Create(Product product) // Domain model exposed### �
         var products = await _service.GetAllAsync();
         return Ok(products);
     }
-}// DO use proper asyncvar result = await _service.GetAsync();// DO use DTOs for APIs[HttpPost]
-public async Task<ProductResponse> Create(CreateProductRequest request)
-## Development Workflow
+}
 
-### Building and Testing
-# Restore dependencies
-dotnet restore
-# Build solution
-dotnet build
-# Run all tests
-dotnet test
-# Run specific service
-cd src/Services/ExpressRecipe.ProductService
-dotnet run
-# Run with Aspire (all services)
-cd src/ExpressRecipe.AppHost
-dotnet run
+// ❌ DON'T: database access directly in controllers
+// ❌ DON'T: var result = _service.GetAsync().Result; // deadlock risk
+// ❌ DON'T: expose domain models in API responses
+```
 
-### Docker Development
-# Start all services
-docker compose up -d
-# View logs
-docker compose logs -f
-# Stop services
-docker compose down
+### Microservice Structure
 
-### Migrations
+All services MUST have:
+- `Controllers/` — API endpoints
+- `Services/` — Business logic
+- `Program.cs` — Service registration and startup
 
-- SQL scripts in `Data/Migrations/` folder
-- Numbered sequentially: `001_Initial.sql`, `002_AddIndexes.sql`
-- Run on startup in development
-- Use DbUp or FluentMigrator for production
+For data-backed services (services that own a database) you MUST also include:
+- `Data/` — Repositories and migrations (`Data/Migrations/001_Initial.sql`, …)
+- `Models/` — Domain models
+- `Contracts/` — DTOs (Requests/Responses)
+- `Events/` — Message bus event definitions (where the service publishes or consumes messages)
 
-## Additional Resources
+Services without their own data store (e.g., pure AI or integration services) typically still use `Models/`, `Contracts/`, and `Events/`, but these folders are optional and should be added when they provide clarity.
+**Standard `Program.cs` pattern:**
 
-- **Planning Docs**: See `/docs` folder for comprehensive architecture documentation
-- **CLAUDE.md**: Detailed AI assistant guide with code examples and patterns
-- **README.md**: Project overview and getting started guide
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+builder.AddServiceDefaults();  // Aspire: logging, health checks, telemetry
 
-## Aspire Service Registration
-
-Each service should register with Aspire defaults:var builder = WebApplication.CreateBuilder(args);
-
-// Add Aspire defaults (logging, health checks, telemetry)
-builder.AddServiceDefaults();
-
-// Database
 builder.Services.AddSingleton<IProductRepository>(sp =>
     new ProductRepository(builder.Configuration.GetConnectionString("ProductDb")));
-
-// Business logic
 builder.Services.AddScoped<IProductService, ProductService>();
-
-// Caching
 builder.AddRedisClient("cache");
-
-// Message bus
 builder.AddRabbitMQClient("messaging");
-
-// Controllers
 builder.Services.AddControllers();
 
 var app = builder.Build();
-
-app.MapDefaultEndpoints(); // Aspire health checks
+await app.RunDatabaseManagementAsync("ProductService", "productdb"); // optional pre-migration database management (e.g., drop/create)
+await app.RunMigrationsAsync("ProductService", "productdb");         // migrations
+app.MapDefaultEndpoints();  // Aspire health checks
 app.MapControllers();
 app.Run();
-## Security
+```
 
-1. **NEVER commit secrets** - use User Secrets, environment variables, or Azure Key Vault
-2. **Always validate input** - use Data Annotations and FluentValidation
-3. **Always sanitize output** - prevent XSS attacks
-4. **Use authentication middleware** - verify JWT tokens
-5. **Follow OWASP guidelines** for secure coding
+### Database Schema
 
-## AI Integration (Ollama)
+All tables MUST include these base columns:
 
-- **AIService** handles all AI operations
-- Use `llama2` for general recommendations
-- Use `mistral` for complex reasoning
-- Use `codellama` for technical queries
-- Always provide context and examples in prompts
-- Handle timeout gracefully (AI operations can be slow)
+```sql
+Id          UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+CreatedAt   DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
+CreatedBy   UNIQUEIDENTIFIER NULL,
+UpdatedAt   DATETIME2        NULL,
+UpdatedBy   UNIQUEIDENTIFIER NULL,
+IsDeleted   BIT              NOT NULL DEFAULT 0,
+DeletedAt   DATETIME2        NULL,
+RowVersion  ROWVERSION
+```
 
-## Solution Structure
+Use soft deletes (`IsDeleted = 1`) — never hard delete rows.
 
-- When reorganizing solution structure, preserve and validate the active `.sln` file format and avoid relying on `.slnx` for changes/build guidance unless explicitly requested.
+### Messaging
 
-## Messaging Integration
+- Prices, products, recipes, and ingredients services use messaging (RabbitMQ) by default.
+- Keep messaging enabled; use runtime REST fallback instead of disabling at startup.
+- Both sync REST path and async channel path (`System.Threading.Channels`) exist in each major service.
 
-- Prices, products, recipes, and ingredients services should use messaging by default instead of REST fallback.
-- When implementing messaging resilience, keep messaging enabled for diagnostics and use runtime REST fallback instead of disabling messaging at startup.
+### Error Handling & Security
+
+- Use structured logging with Serilog; include relevant IDs in log context
+- Return appropriate HTTP status codes (200, 201, 400, 404, 500)
+- Never expose internal error details to clients; use global exception-handling middleware
+- **NEVER commit secrets** — use User Secrets, environment variables, or Azure Key Vault
+- Always validate input with Data Annotations; sanitize output to prevent XSS
+
+### Solution Structure
+
+- The active solution file is `ExpressRecipe.sln` — no `.slnx` file exists.
+- When reorganizing solution structure, preserve and validate this file.
 
 ---
 
-**For more detailed guidance, see `CLAUDE.md` in the repository root.**
+**For detailed guidance, see `CLAUDE.md` in the repository root and `AGENTS.md` for Aspire-specific agent instructions.**
