@@ -8,7 +8,7 @@ public interface IPriceUnitNormalizer
 {
     /// <summary>
     /// Normalize an arbitrary unit string to the canonical form.
-    /// Returns null when the unit cannot be recognised.
+    /// Returns null when the unit cannot be recognized.
     /// </summary>
     string? NormalizeUnit(string? rawUnit);
 

@@ -52,7 +52,8 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
             return products.Select(p =>
             {
                 var offer = p.PageMap?.Offers?.FirstOrDefault();
-                decimal.TryParse(offer?.Price?.Replace("$", ""), System.Globalization.NumberStyles.Any,
+                var priceStr = offer?.Price?.Replace("$", string.Empty);
+                decimal.TryParse(priceStr, System.Globalization.NumberStyles.Any,
                     System.Globalization.CultureInfo.InvariantCulture, out var price);
                 return new ExternalPriceResult
                 {

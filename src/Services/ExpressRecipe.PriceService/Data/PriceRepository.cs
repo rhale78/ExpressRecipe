@@ -772,23 +772,25 @@ public class PriceRepository : SqlHelper, IPriceRepository
     {
         var sql = new StringBuilder(@"
             SELECT
-                COUNT(*)                                                AS ObservationCount,
-                MIN(FinalPrice)                                         AS MinPrice,
-                MAX(FinalPrice)                                         AS MaxPrice,
-                AVG(FinalPrice)                                         AS AveragePrice,
-                MAX(CASE WHEN ObservedAt = MaxObs.MaxDate THEN FinalPrice END) AS CurrentPrice,
-                MIN(ObservedAt)                                         AS OldestObservation,
-                MAX(ObservedAt)                                         AS NewestObservation,
-                AVG(PricePerOz)                                         AS AvgPricePerOz,
-                AVG(PricePerHundredG)                                   AS AvgPricePerHundredG
+                COUNT(*)                                                    AS ObservationCount,
+                MIN(FinalPrice)                                             AS MinPrice,
+                MAX(FinalPrice)                                             AS MaxPrice,
+                AVG(FinalPrice)                                             AS AveragePrice,
+                (SELECT TOP 1 FinalPrice FROM PriceHistory
+                 WHERE ProductId = @ProductIdSub
+                 ORDER BY ObservedAt DESC)                                  AS CurrentPrice,
+                MIN(ObservedAt)                                             AS OldestObservation,
+                MAX(ObservedAt)                                             AS NewestObservation,
+                AVG(PricePerOz)                                             AS AvgPricePerOz,
+                AVG(PricePerHundredG)                                       AS AvgPricePerHundredG
             FROM PriceHistory ph
-            CROSS APPLY (SELECT MAX(ObservedAt) AS MaxDate FROM PriceHistory WHERE ProductId = ph.ProductId) MaxObs
             WHERE ph.ProductId = @ProductId
               AND ph.ObservedAt >= DATEADD(day, -@DaysBack, GETUTCDATE())");
 
         var parameters = new List<DbParameter>
         {
             CreateParameter("@ProductId", productId),
+            CreateParameter("@ProductIdSub", productId),
             CreateParameter("@DaysBack", daysBack)
         };
 
@@ -822,10 +824,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
         decimal? priceChange30DaysPct = null;
         if (daysBack > 30)
         {
-            var p30Params = new List<DbParameter>
-            {
-                CreateParameter("@ProductId30", productId)
-            };
+            var p30Params = new List<DbParameter> { CreateParameter("@ProductId30", productId) };
             if (storeId.HasValue) { p30Params.Add(CreateParameter("@StoreId30", storeId.Value)); }
             var storeFilter = storeId.HasValue ? " AND StoreId = @StoreId30" : string.Empty;
             var p30Sql = $@"
@@ -1020,8 +1019,8 @@ public class PriceRepository : SqlHelper, IPriceRepository
             OriginalPrice = GetDecimal(r, "OriginalPrice"),
             SalePrice = GetDecimal(r, "SalePrice"),
             DiscountType = GetNullableString(r, "DiscountType"),
-            BuyQuantity = GetInt32Nullable(r, "BuyQuantity"),
-            GetQuantity = GetInt32Nullable(r, "GetQuantity"),
+            BuyQuantity = GetIntNullable(r, "BuyQuantity"),
+            GetQuantity = GetIntNullable(r, "GetQuantity"),
             GetPercentOff = GetDecimalNullable(r, "GetPercentOff"),
             CouponCode = GetNullableString(r, "CouponCode"),
             RebateAmount = GetDecimalNullable(r, "RebateAmount")
@@ -1127,24 +1126,4 @@ public class PriceRepository : SqlHelper, IPriceRepository
         LastPriceId = GetGuidNullable(r, "LastPriceId"),
         DataSource = GetString(r, "DataSource") ?? string.Empty
     };
-
-    private static int? GetInt32Nullable(IDataRecord r, string column)
-    {
-        try
-        {
-            var ordinal = r.GetOrdinal(column);
-            return r.IsDBNull(ordinal) ? null : r.GetInt32(ordinal);
-        }
-        catch { return null; }
-    }
-
-    private static DateTime? GetNullableDateTime(IDataRecord r, string column)
-    {
-        try
-        {
-            var ordinal = r.GetOrdinal(column);
-            return r.IsDBNull(ordinal) ? null : r.GetDateTime(ordinal);
-        }
-        catch { return null; }
-    }
 }

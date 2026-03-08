@@ -258,9 +258,13 @@ public sealed class FoodLionApiClient : IExternalPriceApiClient
         try
         {
             var url = $"{_baseUrl}/products/search?q={Uri.EscapeDataString(name)}";
-            if (!string.IsNullOrWhiteSpace(_apiKey)) { _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-Api-Key", _apiKey); }
-
-            var json = await _httpClient.GetStringAsync(url, ct);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(_apiKey))
+            {
+                request.Headers.TryAddWithoutValidation("X-Api-Key", _apiKey);
+            }
+            using var response = await _httpClient.SendAsync(request, ct);
+            var json = await response.Content.ReadAsStringAsync(ct);
             _logger.LogDebug("FoodLion: received response ({Length} chars) for '{Name}'", json.Length, name);
             return new List<ExternalPriceResult>();
         }

@@ -2,6 +2,7 @@
 @using ExpressRecipe.Client.Shared.Models.Price
 @inject IPriceApiClient PriceApi
 @inject IJSRuntime JS
+@inject ILogger<PriceHistoryChart> Logger
 @implements IAsyncDisposable
 
 <div class="settings-section">
@@ -229,9 +230,10 @@
                 await JS.InvokeVoidAsync("renderChart", _barChartId, barConfig);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Chart rendering is best-effort; swallow JS interop errors silently
+            // Chart rendering is best-effort; log but don't propagate JS interop errors
+            Logger.LogDebug(ex, "PriceHistoryChart: chart rendering failed for product {ProductId}", ProductId);
         }
     }
 
