@@ -8,7 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="System.Text.Json" />
-    <PackageReference Include="YamlDotNet" />
     <PackageReference Include="QuestPDF" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 </Project>

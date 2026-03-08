@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Services\ExpressRecipe.PriceService\ExpressRecipe.PriceService.csproj" />
     <ProjectReference Include="..\..\Services\ExpressRecipe.ProductService\ExpressRecipe.ProductService.csproj" />
-    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Saga\ExpressRecipe.Messaging.Saga.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Core\ExpressRecipe.Messaging.Core.csproj" />
+    <ProjectReference Include="..\..\Services\ExpressRecipe.PriceService\ExpressRecipe.PriceService.csproj" />
   </ItemGroup>
 </Project>
