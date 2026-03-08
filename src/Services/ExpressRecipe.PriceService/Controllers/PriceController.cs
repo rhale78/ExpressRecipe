@@ -268,8 +268,6 @@ public class PriceController : ControllerBase
     }
 }
 
-// ── Request models ──────────────────────────────────────────────────────────
-
 public class AddStoreRequest
 {
     public string Name { get; set; } = string.Empty;

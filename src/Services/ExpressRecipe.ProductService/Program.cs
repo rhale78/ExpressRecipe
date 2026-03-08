@@ -70,8 +70,6 @@ builder.Services.AddScoped<IIngredientRepository>(sp =>
     var logger = sp.GetRequiredService<ILogger<IngredientRepository>>();
     return new IngredientRepository(connectionString, client, cache, logger);
 });
-builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
-builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
 builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
 builder.Services.AddScoped<IStoreRepository>(sp => new StoreRepository(connectionString));
 builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connectionString));

@@ -4,15 +4,21 @@ using System.Text.Json.Serialization;
 namespace ExpressRecipe.PriceService.Services;
 
 /// <summary>
-/// Client for Google Shopping (Google Content API for Shopping)
-/// API Documentation: https://developers.google.com/shopping-content/guides/quickstart
-/// Note: Requires Google API Key and Merchant Center account
+/// Client for Google Shopping (Google Custom Search API with Shopping results).
+/// Disabled by default — set ExternalApis:GoogleShopping:Enabled=true and provide ApiKey + SearchEngineId.
+/// Requires a Programmable Search Engine (cx) scoped to shopping sites.
+/// API Documentation: https://developers.google.com/custom-search/v1/overview
 /// </summary>
-public class GoogleShoppingApiClient
+public class GoogleShoppingApiClient : IExternalPriceApiClient
 {
+    public const string DataSourceCode = "GOOGLE_SHOPPING";
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<GoogleShoppingApiClient> _logger;
     private readonly string? _apiKey;
+    private readonly string? _searchEngineId;
+
+    public bool IsEnabled { get; }
 
     public GoogleShoppingApiClient(
         HttpClient httpClient,
@@ -21,28 +27,69 @@ public class GoogleShoppingApiClient
     {
         _httpClient = httpClient;
         _logger = logger;
-        _apiKey = configuration["GoogleShopping:ApiKey"];
+        IsEnabled = configuration.GetValue<bool>("ExternalApis:GoogleShopping:Enabled", false);
+        _apiKey = configuration["ExternalApis:GoogleShopping:ApiKey"]
+                  ?? configuration["GoogleShopping:ApiKey"];
+        _searchEngineId = configuration["ExternalApis:GoogleShopping:SearchEngineId"]
+                          ?? configuration["GoogleShopping:SearchEngineId"];
 
         _httpClient.BaseAddress = new Uri("https://www.googleapis.com/");
     }
 
+    // IExternalPriceApiClient implementation
+    public Task<List<ExternalPriceResult>> GetPricesAsync(string upc, CancellationToken ct)
+    {
+        if (!IsEnabled) { return Task.FromResult(new List<ExternalPriceResult>()); }
+        return SearchByNameAsync(upc, null, ct);
+    }
+
+    public async Task<List<ExternalPriceResult>> SearchByNameAsync(string name, string? zipCode, CancellationToken ct)
+    {
+        if (!IsEnabled) { return new List<ExternalPriceResult>(); }
+
+        try
+        {
+            var products = await SearchProductsAsync(name, ct: ct);
+            return products.Select(p =>
+            {
+                var offer = p.PageMap?.Offers?.FirstOrDefault();
+                var priceStr = offer?.Price?.Replace("$", string.Empty);
+                decimal.TryParse(priceStr, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var price);
+                return new ExternalPriceResult
+                {
+                    ProductName = p.Title ?? string.Empty,
+                    Price = price,
+                    DataSource = DataSourceCode,
+                    ExternalId = p.Link,
+                    ObservedAt = DateTimeOffset.UtcNow
+                };
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "GoogleShopping search failed for '{Name}'", name);
+            return new List<ExternalPriceResult>();
+        }
+    }
+
     /// <summary>
-    /// Search products via Google Shopping
+    /// Search products via Google Custom Search (Shopping results).
     /// </summary>
-    public async Task<List<GoogleShoppingProduct>> SearchProductsAsync(string query, int maxResults = 10)
+    public async Task<List<GoogleShoppingProduct>> SearchProductsAsync(string query, int maxResults = 10, CancellationToken ct = default)
     {
         try
         {
-            if (string.IsNullOrEmpty(_apiKey))
+            if (string.IsNullOrEmpty(_apiKey) || string.IsNullOrEmpty(_searchEngineId))
             {
-                _logger.LogWarning("Google Shopping API key not configured");
+                _logger.LogWarning("Google Shopping API key or Search Engine ID not configured");
                 return new List<GoogleShoppingProduct>();
             }
 
             _logger.LogInformation("Searching Google Shopping for: {Query}", query);
 
-            var url = $"customsearch/v1?key={_apiKey}&cx=YOUR_SEARCH_ENGINE_ID&q={Uri.EscapeDataString(query)}&num={maxResults}";
-            var response = await _httpClient.GetAsync(url);
+            var url = $"customsearch/v1?key={_apiKey}&cx={_searchEngineId}&q={Uri.EscapeDataString(query)}&num={maxResults}";
+            var response = await _httpClient.GetAsync(url, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -50,7 +97,7 @@ public class GoogleShoppingApiClient
                 return new List<GoogleShoppingProduct>();
             }
 
-            var json = await response.Content.ReadAsStringAsync();
+            var json = await response.Content.ReadAsStringAsync(ct);
             var result = JsonSerializer.Deserialize<GoogleShoppingResponse>(json);
 
             return result?.Items ?? new List<GoogleShoppingProduct>();
@@ -65,7 +112,7 @@ public class GoogleShoppingApiClient
     /// <summary>
     /// Get product offers by GTIN (Global Trade Item Number - includes UPC/EAN)
     /// </summary>
-    public async Task<List<GoogleShoppingProduct>> SearchByGTINAsync(string gtin)
+    public async Task<List<GoogleShoppingProduct>> SearchByGTINAsync(string gtin, CancellationToken ct = default)
     {
         try
         {
@@ -77,8 +124,7 @@ public class GoogleShoppingApiClient
 
             _logger.LogInformation("Searching Google Shopping by GTIN: {GTIN}", gtin);
 
-            // Search with GTIN in query
-            return await SearchProductsAsync($"gtin:{gtin}");
+            return await SearchProductsAsync($"gtin:{gtin}", ct: ct);
         }
         catch (Exception ex)
         {

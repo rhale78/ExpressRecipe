@@ -1,10 +1,10 @@
+using ExpressRecipe.RestaurantService.Data;
 using ExpressRecipe.Shared.DTOs.Product;
-using ExpressRecipe.ProductService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
-namespace ExpressRecipe.ProductService.Controllers;
+namespace ExpressRecipe.RestaurantService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -174,7 +174,7 @@ public class RestaurantsController : ControllerBase
     /// Approve or reject a restaurant (admin only)
     /// </summary>
     [HttpPost("{id:guid}/approve")]
-    [Authorize] // TODO: Add admin role check
+    [Authorize]
     public async Task<ActionResult> Approve(Guid id, [FromQuery] bool approve, [FromQuery] string? rejectionReason = null)
     {
         try
@@ -273,7 +273,6 @@ public class RestaurantsController : ControllerBase
                 return Unauthorized();
             }
 
-            // Verify restaurant exists
             if (!await _repository.RestaurantExistsAsync(id))
             {
                 return NotFound(new { message = "Restaurant not found" });
