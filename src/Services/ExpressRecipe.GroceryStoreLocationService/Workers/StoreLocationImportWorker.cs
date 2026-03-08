@@ -54,9 +54,9 @@ public class StoreLocationImportWorker : BackgroundService
         {
             using var scope = _serviceProvider.CreateScope();
             var normalizer = scope.ServiceProvider.GetService<IStoreChainNormalizer>();
-            if (normalizer is StoreChainNormalizer concreteNormalizer)
+            if (normalizer != null)
             {
-                await concreteNormalizer.EnsureLoadedAsync(stoppingToken);
+                await normalizer.EnsureLoadedAsync(stoppingToken);
                 _logger.LogInformation("StoreChainNormalizer warmed successfully");
             }
         }

@@ -115,7 +115,7 @@ COPY (
                 StartInfo = new ProcessStartInfo
                 {
                     FileName = duckDbPath,
-                    Arguments = $"-c \".read '{queryFile.Replace("'", "\\'")}'\""  ,
+                    Arguments = $"-c \".read '{queryFile.Replace("'", "\\'")}'\"",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,

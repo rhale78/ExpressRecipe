@@ -390,7 +390,7 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
 
             totalImported += batchCount;
 
-            if ((i / BatchSize + 1) % 2 == 0 || i + BatchSize >= storeList.Count)
+            if (totalImported % 1000 < BatchSize || i + BatchSize >= storeList.Count)
             {
                 _logger?.LogInformation("Bulk upsert progress: {Done}/{Total} stores processed",
                     Math.Min(i + BatchSize, storeList.Count), storeList.Count);

@@ -87,7 +87,7 @@ public class StoreChainNormalizer : IStoreChainNormalizer
             {
                 try
                 {
-                    var aliases = System.Text.Json.JsonSerializer.Deserialize<string[]>(chain.Aliases);
+                    var aliases = JsonSerializer.Deserialize<string[]>(chain.Aliases);
                     if (aliases != null)
                     {
                         foreach (var alias in aliases)
@@ -99,7 +99,7 @@ public class StoreChainNormalizer : IStoreChainNormalizer
                         }
                     }
                 }
-                catch (System.Text.Json.JsonException ex)
+                catch (JsonException ex)
                 {
                     _logger.LogWarning(ex, "Failed to parse aliases JSON for chain {Chain}", canonical);
                 }

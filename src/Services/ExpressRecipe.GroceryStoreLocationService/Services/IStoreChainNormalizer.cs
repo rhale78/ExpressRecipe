@@ -16,4 +16,9 @@ public interface IStoreChainNormalizer
     /// Refreshes the alias cache from the database.
     /// </summary>
     Task RefreshAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Ensures the alias map is loaded. Should be called on application startup.
+    /// </summary>
+    Task EnsureLoadedAsync(CancellationToken cancellationToken = default);
 }
