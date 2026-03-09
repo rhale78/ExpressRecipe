@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
 
@@ -33,16 +34,15 @@ var connectionString = builder.Configuration.GetConnectionString("mealplandb")
 // Register repositories
 builder.Services.AddScoped<IMealPlanningRepository>(sp =>
     new MealPlanningRepository(connectionString, sp.GetRequiredService<ILogger<MealPlanningRepository>>()));
+builder.Services.AddScoped<IMealCourseRepository>(_ => new MealCourseRepository(connectionString));
+builder.Services.AddScoped<IMealAttendeeRepository>(_ => new MealAttendeeRepository(connectionString));
+
+// Register services
+builder.Services.AddScoped<IMealPlanCopyService, MealPlanCopyService>();
+builder.Services.AddScoped<IMealPlanTemplateService, MealPlanTemplateService>();
 
 // Add controllers
 builder.Services.AddControllers();
-
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.MealPlanningService API", Version = "v1" });
-// });
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -64,12 +64,6 @@ await app.RunMigrationsAsync(connectionString, migrations);
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-if (app.Environment.IsDevelopment())
-{
-    // app.UseSwagger();
-    // app.UseSwaggerUI();
-}
 
 app.UseCors();
 app.UseAuthentication();

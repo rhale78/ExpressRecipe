@@ -173,3 +173,12 @@ public class QuickMealPlanRequest
     public int DefaultServings { get; set; } = 4;
     public bool UseUserPreferences { get; set; } = true; // Auto-filter recipes by user/family allergens
 }
+
+/// <summary>Single day entry returned by the month-calendar endpoint.</summary>
+public class MealPlanCalendarDay
+{
+    public DateOnly Date { get; set; }
+    public int MealCount { get; set; }
+    public bool HasFuturePlan { get; set; }
+    public string? HolidayLabel { get; set; }
+}
