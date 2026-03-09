@@ -22,8 +22,11 @@ public sealed class GardenController : ControllerBase
         _seasonal  = seasonal;
     }
 
-    private Guid GetHouseholdId()
-        => Guid.Parse(User.FindFirstValue("household_id") ?? Guid.Empty.ToString());
+    private Guid? GetHouseholdId()
+    {
+        string? claim = User.FindFirstValue("household_id");
+        return Guid.TryParse(claim, out Guid id) ? id : null;
+    }
 
     private Guid? GetUserId()
     {
@@ -33,17 +36,23 @@ public sealed class GardenController : ControllerBase
 
     [HttpGet]
     public async Task<IActionResult> GetPlantings(CancellationToken ct)
-        => Ok(await _garden.GetPlantingsAsync(GetHouseholdId(), ct));
+    {
+        Guid? householdId = GetHouseholdId();
+        if (!householdId.HasValue) { return Unauthorized(); }
+        return Ok(await _garden.GetPlantingsAsync(householdId.Value, ct));
+    }
 
     [HttpPost]
     public async Task<IActionResult> AddPlanting([FromBody] AddPlantingRequest request, CancellationToken ct)
     {
+        Guid? householdId = GetHouseholdId();
+        if (!householdId.HasValue) { return Unauthorized(); }
         DateOnly? expectedRipe = request.ExpectedRipeDate;
         if (!expectedRipe.HasValue && PlantTypeDaysToHarvest.TryGetValue(request.PlantType, out int days))
         {
             expectedRipe = request.PlantedDate.AddDays(days);
         }
-        Guid id = await _garden.AddPlantingAsync(GetHouseholdId(), request.PlantName, request.VarietyNotes,
+        Guid id = await _garden.AddPlantingAsync(householdId.Value, request.PlantName, request.VarietyNotes,
             request.PlantType, request.PlantedDate, expectedRipe, request.QuantityPlanted, ct);
         return Ok(new { id });
     }
@@ -68,7 +77,9 @@ public sealed class GardenController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (!userId.HasValue) { return Unauthorized(); }
-            inventoryItemId = await _inventory.CreateFromGardenHarvestAsync(userId.Value, GetHouseholdId(),
+            Guid? householdId = GetHouseholdId();
+            if (!householdId.HasValue) { return Unauthorized(); }
+            inventoryItemId = await _inventory.CreateFromGardenHarvestAsync(userId.Value, householdId.Value,
                 request.PlantName, request.Quantity, request.Unit,
                 SeasonalProduceService.GetFreshnessDays(request.PlantName), ct);
             await _garden.LinkHarvestToInventoryAsync(harvestId, inventoryItemId.Value, ct);
@@ -77,11 +88,19 @@ public sealed class GardenController : ControllerBase
     }
 
     [HttpGet("seasonal")]
-    public IActionResult GetSeasonalProduce([FromQuery] string region, [FromQuery] int? month)
+    public IActionResult GetSeasonalProduce([FromQuery] string? region, [FromQuery] int? month)
     {
+        if (string.IsNullOrWhiteSpace(region))
+        {
+            return BadRequest(new { message = "region is required" });
+        }
+        if (month.HasValue && (month.Value < 1 || month.Value > 12))
+        {
+            return BadRequest(new { message = "month must be between 1 and 12" });
+        }
         DateOnly date = month.HasValue
-            ? new DateOnly(DateTime.Today.Year, month.Value, 1)
-            : DateOnly.FromDateTime(DateTime.Today);
+            ? new DateOnly(DateTime.UtcNow.Year, month.Value, 1)
+            : DateOnly.FromDateTime(DateTime.UtcNow);
         return Ok(_seasonal.GetInSeasonProduce(region, date));
     }
 

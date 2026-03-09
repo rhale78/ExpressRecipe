@@ -48,6 +48,26 @@ public class SeasonalProduceServiceTests
     }
 
     [Fact]
+    public void GetInSeasonProduce_NullRegion_ReturnsEmptyList()
+    {
+        // Act
+        List<string> produce = _service.GetInSeasonProduce(null!, new DateOnly(2025, 7, 1));
+
+        // Assert
+        produce.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GetInSeasonProduce_WhitespaceRegion_ReturnsEmptyList()
+    {
+        // Act
+        List<string> produce = _service.GetInSeasonProduce("   ", new DateOnly(2025, 7, 1));
+
+        // Assert
+        produce.Should().BeEmpty();
+    }
+
+    [Fact]
     public void GetInSeasonProduce_UnknownRegion_ReturnsEmptyList()
     {
         // Act

@@ -53,6 +53,20 @@ public class GardenControllerTests
         (result as OkObjectResult)!.Value.Should().BeEquivalentTo(plantings);
     }
 
+    [Fact]
+    public async Task GetPlantings_MissingHouseholdClaim_ReturnsUnauthorized()
+    {
+        // Arrange — controller without household_id claim
+        GardenController controller = new(_mockGarden.Object, _mockInventory.Object, _mockSeasonal.Object);
+        controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
+
+        // Act
+        IActionResult result = await controller.GetPlantings(default);
+
+        // Assert
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
     #endregion
 
     #region AddPlanting Tests
@@ -218,6 +232,39 @@ public class GardenControllerTests
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public void GetSeasonalProduce_NullRegion_ReturnsBadRequest()
+    {
+        // Act
+        IActionResult result = _controller.GetSeasonalProduce(null, 8);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public void GetSeasonalProduce_EmptyRegion_ReturnsBadRequest()
+    {
+        // Act
+        IActionResult result = _controller.GetSeasonalProduce("   ", 8);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(13)]
+    [InlineData(-1)]
+    public void GetSeasonalProduce_InvalidMonth_ReturnsBadRequest(int invalidMonth)
+    {
+        // Act
+        IActionResult result = _controller.GetSeasonalProduce("northeast", invalidMonth);
+
+        // Assert
+        result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     #endregion

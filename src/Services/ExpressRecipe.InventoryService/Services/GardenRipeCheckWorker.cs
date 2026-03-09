@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using ExpressRecipe.InventoryService.Data;
 
 namespace ExpressRecipe.InventoryService.Services;
@@ -32,12 +33,15 @@ public sealed class GardenRipeCheckWorker : BackgroundService
     {
         List<GardenPlantingDto> due = await _garden.GetRipeCheckDuePlantingsAsync(3, ct);
         HttpClient client = _http.CreateClient("NotificationService");
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         foreach (IGrouping<Guid, GardenPlantingDto> group in due.GroupBy(p => p.HouseholdId))
         {
             Guid householdId = group.Key;
             string plantList = string.Join(", ", group.Select(p =>
-                p.RipeStatus == "Ready" ? $"{p.PlantName} (ready!)" : p.PlantName));
+                p.ExpectedRipeDate.HasValue && p.ExpectedRipeDate.Value <= today
+                    ? $"{p.PlantName} (ready!)"
+                    : p.PlantName));
             try
             {
                 await client.PostAsJsonAsync("/api/notifications/internal/household",

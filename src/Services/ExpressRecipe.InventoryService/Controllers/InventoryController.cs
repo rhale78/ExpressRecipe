@@ -475,11 +475,13 @@ public class InventoryController : ControllerBase
         try
         {
             Guid? userId = GetUserId();
-            if (userId == null) return Unauthorized();
+            if (userId == null) { return Unauthorized(); }
+            Guid? householdId = GetHouseholdId();
+            if (!householdId.HasValue) { return Unauthorized(); }
             Guid id = await _repository.AddItemAsync(new AddItemRequest
             {
                 UserId              = userId.Value,
-                HouseholdId         = GetHouseholdId(),
+                HouseholdId         = householdId,
                 Name                = request.Name,
                 Quantity            = request.Quantity,
                 Unit                = request.Unit,
@@ -529,7 +531,7 @@ public class InventoryController : ControllerBase
 
     private static DateTime ComputeExpiration(string? storageMethod, DateTime? processDate)
     {
-        DateTime from = processDate ?? DateTime.Today;
+        DateTime from = processDate ?? DateTime.UtcNow.Date;
         return storageMethod switch
         {
             "Canned"         => from.AddMonths(18),

@@ -77,7 +77,10 @@ public sealed class SeasonalProduceService : ISeasonalProduceService
         => FreshnessDays.TryGetValue(plantName, out int days) ? days : 7;
 
     public List<string> GetInSeasonProduce(string region, DateOnly date)
-        => Calendar.TryGetValue((region.ToLowerInvariant(), date.Month), out string[]? items) ? items.ToList() : new List<string>();
+    {
+        if (string.IsNullOrWhiteSpace(region)) { return new List<string>(); }
+        return Calendar.TryGetValue((region.ToLowerInvariant(), date.Month), out string[]? items) ? items.ToList() : new List<string>();
+    }
 
     public bool IsInSeason(string produceName, string region, DateOnly date)
         => GetInSeasonProduce(region, date).Any(i => i.Equals(produceName, StringComparison.OrdinalIgnoreCase));

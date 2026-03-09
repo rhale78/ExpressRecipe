@@ -5,7 +5,8 @@ CREATE TABLE GardenProfile (
     GardenNotes NVARCHAR(MAX) NULL,
     CreatedAt   DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
     UpdatedAt   DATETIME2 NULL,
-    CONSTRAINT UQ_GardenProfile_Household UNIQUE (HouseholdId)
+    CONSTRAINT UQ_GardenProfile_Household UNIQUE (HouseholdId),
+    CONSTRAINT FK_GardenProfile_Household FOREIGN KEY (HouseholdId) REFERENCES Household(Id) ON DELETE CASCADE
 );
 GO
 
@@ -39,6 +40,7 @@ CREATE TABLE GardenHarvest (
     InventoryItemId   UNIQUEIDENTIFIER NULL,
     Notes             NVARCHAR(MAX) NULL,
     CreatedAt         DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    CONSTRAINT FK_GardenHarvest_Planting FOREIGN KEY (PlantingId) REFERENCES GardenPlanting(Id) ON DELETE CASCADE
+    CONSTRAINT FK_GardenHarvest_Planting FOREIGN KEY (PlantingId) REFERENCES GardenPlanting(Id) ON DELETE CASCADE,
+    CONSTRAINT FK_GardenHarvest_InventoryItem FOREIGN KEY (InventoryItemId) REFERENCES InventoryItem(Id) ON DELETE SET NULL
 );
 GO

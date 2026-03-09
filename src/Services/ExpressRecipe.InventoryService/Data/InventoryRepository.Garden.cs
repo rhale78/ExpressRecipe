@@ -35,8 +35,13 @@ public partial class InventoryRepository
 
     public async Task<Guid> AddItemAsync(AddItemRequest request, CancellationToken ct = default)
     {
+        if (!request.HouseholdId.HasValue || request.HouseholdId.Value == Guid.Empty)
+        {
+            throw new ArgumentException("A valid HouseholdId is required to add an inventory item.", nameof(request));
+        }
+
         Guid storageLocationId = await GetOrCreateHouseholdDefaultStorageAsync(
-            request.UserId, request.HouseholdId ?? Guid.Empty, ct);
+            request.UserId, request.HouseholdId.Value, ct);
 
         const string sql = @"
             INSERT INTO InventoryItem

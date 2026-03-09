@@ -195,7 +195,7 @@ public sealed class GardenRepository : IGardenRepository
         await using SqlCommand cmd = new(sql, conn);
         cmd.Parameters.AddWithValue("@HouseholdId", householdId);
         List<GardenPlantingDto> results = new();
-        DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
         await using SqlDataReader r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
