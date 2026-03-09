@@ -1,5 +1,6 @@
 using ExpressRecipe.PriceService.Controllers;
 using ExpressRecipe.PriceService.Data;
+using ExpressRecipe.PriceService.Services;
 using ExpressRecipe.PriceService.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,7 @@ public class PricesControllerTests
 {
     private readonly Mock<IPriceRepository> _repositoryMock;
     private readonly Mock<ILogger<PricesController>> _loggerMock;
+    private readonly Mock<IPriceUnitNormalizer> _unitNormalizerMock;
     private readonly IConfiguration _configuration;
     private readonly PricesController _controller;
 
@@ -21,11 +23,18 @@ public class PricesControllerTests
     {
         _repositoryMock = new Mock<IPriceRepository>();
         _loggerMock = new Mock<ILogger<PricesController>>();
+        _unitNormalizerMock = new Mock<IPriceUnitNormalizer>();
         _configuration = new ConfigurationBuilder().Build();
+
+        // Default setup: return empty metrics for any unit computation
+        _unitNormalizerMock
+            .Setup(n => n.ComputeUnitPrices(It.IsAny<decimal>(), It.IsAny<string?>(), It.IsAny<decimal?>()))
+            .Returns(new PriceUnitMetrics());
 
         _controller = new PricesController(
             _loggerMock.Object,
             _repositoryMock.Object,
+            _unitNormalizerMock.Object,
             _configuration);
     }
 
@@ -301,7 +310,7 @@ public class PricesControllerTests
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
-        _repositoryMock.Verify(r => r.GetLastImportAsync(It.IsAny<string>()), Times.Exactly(4));
+        _repositoryMock.Verify(r => r.GetLastImportAsync(It.IsAny<string>()), Times.Exactly(8));
         _repositoryMock.Verify(r => r.GetProductPriceCountAsync(), Times.Once);
     }
 

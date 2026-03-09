@@ -1,0 +1,66 @@
+@page "/settings/adaptation"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+
+<PageTitle>Meal Adaptation Settings - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo("/settings"))">
+                    ← Back to Settings
+                </button>
+                <h1>🍽️ Meal Adaptation</h1>
+            </div>
+            <p class="settings-subtitle">
+                Choose how recipes are adapted when household members have conflicting allergen needs.
+            </p>
+            <div class="settings-section">
+                <h2>Default Strategy</h2>
+                <div class="form-group">
+                    <label>
+                        <input type="radio" name="strategy" value="AdaptAll" @onchange="@(() => _strategy = "AdaptAll")" checked="@(_strategy == "AdaptAll")" />
+                        Adapt All — Modify the recipe for everyone
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="radio" name="strategy" value="SplitMeal" @onchange="@(() => _strategy = "SplitMeal")" checked="@(_strategy == "SplitMeal")" />
+                        Split Meal — Cook separate portions for affected members
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="radio" name="strategy" value="SeparateMeal" @onchange="@(() => _strategy = "SeparateMeal")" checked="@(_strategy == "SeparateMeal")" />
+                        Separate Meal — Cook a completely different meal for affected members
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_isSaving">
+                        @(_isSaving ? "Saving..." : "Save")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="settings-container">
+            <p>Please <a href="/login">sign in</a> to manage adaptation settings.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string _strategy = "AdaptAll";
+    private bool _isSaving;
+
+    private async Task SaveAsync()
+    {
+        _isSaving = true;
+        // TODO: PUT to SafeForkService adaptation override
+        await Task.Delay(100);
+        _isSaving = false;
+    }
+}

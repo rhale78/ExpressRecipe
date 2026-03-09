@@ -49,6 +49,10 @@ public interface IPriceApiClient
     Task<List<ProductPriceItemDto>> GetBatchPricesAsync(BatchPriceRequest request);
     Task<List<ProductPriceItemDto>> GetBestPricesAsync(Guid productId);
     Task<List<PriceImportStatusDto>> GetImportStatusAsync();
+
+    // Price History (append-only)
+    Task<List<ProductPriceItemDto>> GetPriceHistoryItemsAsync(Guid productId, Guid? storeId = null, int daysBack = 90);
+    Task<PriceHistoryStatsClientDto?> GetPriceStatsAsync(Guid productId, Guid? storeId = null, int daysBack = 90);
 }
 
 public class PriceApiClient : IPriceApiClient
@@ -505,6 +509,35 @@ public class PriceApiClient : IPriceApiClient
         catch
         {
             return new List<PriceImportStatusDto>();
+        }
+    }
+
+    public async Task<List<ProductPriceItemDto>> GetPriceHistoryItemsAsync(Guid productId, Guid? storeId = null, int daysBack = 90)
+    {
+        try
+        {
+            var url = $"/api/prices/{productId}/history?daysBack={daysBack}";
+            if (storeId.HasValue) { url += $"&storeId={storeId.Value}"; }
+            var result = await _httpClient.GetFromJsonAsync<List<ProductPriceItemDto>>(url);
+            return result ?? new List<ProductPriceItemDto>();
+        }
+        catch
+        {
+            return new List<ProductPriceItemDto>();
+        }
+    }
+
+    public async Task<PriceHistoryStatsClientDto?> GetPriceStatsAsync(Guid productId, Guid? storeId = null, int daysBack = 90)
+    {
+        try
+        {
+            var url = $"/api/prices/{productId}/stats?daysBack={daysBack}";
+            if (storeId.HasValue) { url += $"&storeId={storeId.Value}"; }
+            return await _httpClient.GetFromJsonAsync<PriceHistoryStatsClientDto>(url);
+        }
+        catch
+        {
+            return null;
         }
     }
 }

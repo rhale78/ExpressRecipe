@@ -44,8 +44,11 @@ var analyticsDb = sqlServer.AddDatabase("analyticsdb", "ExpressRecipe.Analytics"
 var ingredientDb = sqlServer.AddDatabase("ingredientdb", "ExpressRecipe.Ingredients");
 var cookbookDb = sqlServer.AddDatabase("cookbookdb", "ExpressRecipe.Cookbooks");
 var groceryStoreDb = sqlServer.AddDatabase("grocerystoredb", "ExpressRecipe.GroceryStores");
+var safeForkDb = sqlServer.AddDatabase("safeforkdb", "ExpressRecipe.SafeFork");
+var profilesDb = sqlServer.AddDatabase("profilesdb", "ExpressRecipe.Profiles");
+var preferencesDb = sqlServer.AddDatabase("preferencesdb", "ExpressRecipe.Preferences");
 
-logger.LogInformation("18 databases configured");
+logger.LogInformation("21 databases configured");
 
 // Redis - Caching layer
 var redis = builder.AddRedis("redis")
@@ -212,7 +215,31 @@ var aiService = builder.AddProject<Projects.ExpressRecipe_AIService>("aiservice"
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
 
-logger.LogInformation("18 microservices configured");
+// SafeFork Service - Allergen profile management and recipe safety evaluation
+var safeForkService = builder.AddProject<Projects.ExpressRecipe_SafeForkService>("safeforkservice", launchProfileName: null)
+    .WithReference(safeForkDb)
+    .WithReference(redis)
+    .WithReference(messaging)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
+// Profile Service - Household member management
+var profileService = builder.AddProject<Projects.ExpressRecipe_ProfileService>("profileservice", launchProfileName: null)
+    .WithReference(profilesDb)
+    .WithReference(redis)
+    .WithReference(messaging)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
+// Preferences Service - Cook profiles and tip delivery
+var preferencesService = builder.AddProject<Projects.ExpressRecipe_PreferencesService>("preferencesservice", launchProfileName: null)
+    .WithReference(preferencesDb)
+    .WithReference(redis)
+    .WithReference(messaging)
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
+
+logger.LogInformation("21 microservices configured");
 
 // ========================================
 // Frontend Applications
@@ -241,6 +268,9 @@ var webApp = builder.AddProject<Projects.ExpressRecipe_BlazorWeb>("webapp", laun
     .WithReference(cookbookService)
     .WithReference(groceryStoreLocationService)
     .WithReference(aiService)
+    .WithReference(safeForkService)
+    .WithReference(profileService)
+    .WithReference(preferencesService)
     .WithReference(redis)
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);

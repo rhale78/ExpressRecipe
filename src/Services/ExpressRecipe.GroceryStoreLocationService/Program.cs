@@ -57,6 +57,25 @@ builder.Services.AddHttpClient<OpenStreetMapImportService>()
 builder.Services.AddHttpClient<IOpenPricesLocationImportService, OpenPricesLocationImportService>()
     .AddStandardResilienceHandler();
 
+builder.Services.AddHttpClient<HifldImportService>(client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(10);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "ExpressRecipe.GroceryStoreLocationService/1.0");
+})
+    .AddStandardResilienceHandler();
+
+// Overture import service (uses DuckDB subprocess; no HttpClient needed)
+builder.Services.AddSingleton<OvertureImportService>();
+
+// Chain normalizer (singleton: alias map is lazily loaded and cached in memory)
+builder.Services.AddSingleton<IStoreChainNormalizer>(sp =>
+{
+    var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+    var logger = sp.GetRequiredService<ILogger<StoreChainNormalizer>>();
+    var cache = sp.GetService<HybridCacheService>();
+    return new StoreChainNormalizer(scopeFactory, logger, cache);
+});
+
 // Register background worker as singleton so it can be injected into controllers
 builder.Services.AddSingleton<StoreLocationImportWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<StoreLocationImportWorker>());
