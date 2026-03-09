@@ -125,7 +125,7 @@ public class RecipesController : ControllerBase
                 "preptime" => sortDescending ? recipes.OrderByDescending(r => r.PrepTimeMinutes).ToList() : recipes.OrderBy(r => r.PrepTimeMinutes).ToList(),
                 "cooktime" => sortDescending ? recipes.OrderByDescending(r => r.CookTimeMinutes).ToList() : recipes.OrderBy(r => r.CookTimeMinutes).ToList(),
                 "difficulty" => sortDescending ? recipes.OrderByDescending(r => r.DifficultyLevel).ToList() : recipes.OrderBy(r => r.DifficultyLevel).ToList(),
-                "cost" => recipes.OrderBy(r => r.EstimatedCostPerServing).ToList(),
+                "cost" => recipes.OrderBy(r => r.EstimatedCostPerServing.HasValue ? 0 : 1).ThenBy(r => r.EstimatedCostPerServing).ToList(),
                 _ => sortDescending ? recipes.OrderByDescending(r => r.CreatedAt).ToList() : recipes.OrderBy(r => r.CreatedAt).ToList()
             };
 

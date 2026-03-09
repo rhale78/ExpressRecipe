@@ -79,14 +79,13 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
                 HolidayLabel = _holidays.GetHolidayLabel(d),
                 Meals        = dayMeals.Select(m =>
                 {
-                    recipeData.TryGetValue(m.RecipeId ?? Guid.Empty, out RecipePrintData? rd);
                     recipeData.TryGetValue(m.RecipeId ?? Guid.Empty, out RecipePrintData? recipe);
                     return new PrintMeal
                     {
                         MealType      = m.MealType,
                         DisplayName   = m.RecipeName ?? m.CustomMealName ?? "Custom Meal",
                         Servings      = m.Servings,
-                        EstimatedCost = m.RecipeId.HasValue && rd is not null ? rd.EstimatedCost : null,
+                        EstimatedCost = m.RecipeId.HasValue && recipe is not null ? recipe.EstimatedCost : null,
                         RecipeData    = options.IncludeRecipes && m.RecipeId.HasValue ? recipe : null
                     };
                 }).ToList()

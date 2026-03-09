@@ -36,7 +36,7 @@ public class MealPlanningRepository : IMealPlanningRepository
     {
         const string sql = @"
             SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
-                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id) AS TotalMeals,
+                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1) AS CompletedMeals
             FROM MealPlan mp
             WHERE mp.UserId = @UserId AND mp.IsDeleted = 0
@@ -72,7 +72,7 @@ public class MealPlanningRepository : IMealPlanningRepository
     {
         const string sql = @"
             SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
-                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id) AS TotalMeals,
+                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1) AS CompletedMeals
             FROM MealPlan mp
             WHERE mp.Id = @PlanId AND mp.UserId = @UserId AND mp.IsDeleted = 0";
@@ -107,7 +107,7 @@ public class MealPlanningRepository : IMealPlanningRepository
     {
         const string sql = @"
             SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
-                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id) AS TotalMeals,
+                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1) AS CompletedMeals
             FROM MealPlan mp
             WHERE mp.Id = @PlanId AND mp.IsDeleted = 0";
@@ -176,7 +176,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         var sql = @"
             SELECT pm.Id, pm.MealPlanId, pm.RecipeId, pm.CustomMealName, pm.PlannedDate, pm.MealType, pm.Servings, pm.IsCompleted, pm.CompletedAt
             FROM PlannedMeal pm
-            WHERE pm.MealPlanId = @MealPlanId";
+            WHERE pm.MealPlanId = @MealPlanId AND pm.IsDeleted = 0";
 
         if (startDate.HasValue)
             sql += " AND pm.PlannedDate >= @StartDate";
@@ -237,7 +237,7 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task RemovePlannedMealAsync(Guid plannedMealId)
     {
-        const string sql = "DELETE FROM PlannedMeal WHERE Id = @PlannedMealId";
+        const string sql = "UPDATE PlannedMeal SET IsDeleted = 1, DeletedAt = GETUTCDATE() WHERE Id = @PlannedMealId";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();

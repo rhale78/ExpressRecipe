@@ -111,8 +111,9 @@ public class MealPlanningController : ControllerBase
     {
         byte[] pdf = await _pdfService.GeneratePdfAsync(options with { MealPlanId = id }, GetUserId(), ct);
         MealPlanDto? plan = await _repository.GetMealPlanByIdAsync(id, ct);
-        string planName = plan?.Name ?? "MealPlan";
-        return File(pdf, "application/pdf", $"MealPlan_{planName.Replace(" ", "_")}_{DateTime.UtcNow:yyyyMMdd}.pdf");
+        string rawName = plan?.Name ?? "MealPlan";
+        string safeName = string.Concat(rawName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Replace(' ', '_');
+        return File(pdf, "application/pdf", $"MealPlan_{safeName}_{DateTime.UtcNow:yyyyMMdd}.pdf");
     }
 
     [HttpGet("plans/{id}/print/preview")]

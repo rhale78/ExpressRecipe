@@ -94,7 +94,7 @@ public class SearchRecipesQueryHandler : IQueryHandler<SearchRecipesQuery, Searc
             "name" => query.SortDescending
                 ? recipesWithRatings.OrderByDescending(r => r.recipe.Name)
                 : recipesWithRatings.OrderBy(r => r.recipe.Name),
-            "cost" => recipesWithRatings.OrderBy(r => r.recipe.EstimatedCostPerServing),
+            "cost" => recipesWithRatings.OrderBy(r => r.recipe.EstimatedCostPerServing.HasValue ? 0 : 1).ThenBy(r => r.recipe.EstimatedCostPerServing),
             _ => query.SortDescending
                 ? recipesWithRatings.OrderByDescending(r => r.recipe.CreatedAt)
                 : recipesWithRatings.OrderBy(r => r.recipe.CreatedAt)
