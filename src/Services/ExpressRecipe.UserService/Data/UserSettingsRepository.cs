@@ -131,6 +131,7 @@ public sealed class UserSettingsRepository : SqlHelper, IUserSettingsRepository
     /// <summary>
     /// Validates settings values against the schema.
     /// Returns list of validation error strings (empty list = valid).
+    /// Unknown keys (not present in schema) are also rejected.
     /// </summary>
     public async Task<List<string>> ValidateAsync(string group, Dictionary<string, object?> values, CancellationToken ct = default)
     {
@@ -142,6 +143,22 @@ public sealed class UserSettingsRepository : SqlHelper, IUserSettingsRepository
         {
             JsonDocument doc = JsonDocument.Parse(schemaRow.SchemaJson);
             if (!doc.RootElement.TryGetProperty("settings", out JsonElement settingsEl)) { return errors; }
+
+            // Build set of known keys from schema
+            HashSet<string> knownKeys = new(StringComparer.OrdinalIgnoreCase);
+            foreach (JsonElement settingDef in settingsEl.EnumerateArray())
+            {
+                if (settingDef.TryGetProperty("key", out JsonElement kEl)) { knownKeys.Add(kEl.GetString() ?? ""); }
+            }
+
+            // Reject keys not present in schema
+            foreach (string key in values.Keys)
+            {
+                if (!knownKeys.Contains(key))
+                {
+                    errors.Add($"Unknown setting key '{key}'");
+                }
+            }
 
             foreach (JsonElement settingDef in settingsEl.EnumerateArray())
             {
@@ -189,7 +206,7 @@ public sealed class UserSettingsRepository : SqlHelper, IUserSettingsRepository
 
     private static Dictionary<string, object?> ParseGroupFromJson(string? json, string group)
     {
-        if (string.IsNullOrWhiteSpace(json)) { return new Dictionary<string, object?>(); }
+        if (string.IsNullOrWhiteSpace(json)) { return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase); }
         try
         {
             JsonDocument doc = JsonDocument.Parse(json);
@@ -207,7 +224,7 @@ public sealed class UserSettingsRepository : SqlHelper, IUserSettingsRepository
             }
         }
         catch (JsonException) { }
-        return new Dictionary<string, object?>();
+        return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
     }
 
     private static Dictionary<string, object?> GetDefaultsFromSchema(string schemaJson)

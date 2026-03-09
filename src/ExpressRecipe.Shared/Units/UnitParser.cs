@@ -9,11 +9,12 @@ public static class UnitParser
     private static readonly Dictionary<string, UnitCode> Aliases =
         new(StringComparer.OrdinalIgnoreCase)
     {
-        // Teaspoon
+        // Teaspoon — "t" is kept; the ambiguous uppercase "T" (tablespoon) is omitted to avoid
+        // collision under OrdinalIgnoreCase. Use "tbsp" or "tbs" for tablespoon.
         { "t", UnitCode.Teaspoon }, { "tsp", UnitCode.Teaspoon },
         { "teaspoon", UnitCode.Teaspoon }, { "teaspoons", UnitCode.Teaspoon },
         // Tablespoon
-        { "T", UnitCode.Tablespoon }, { "tbsp", UnitCode.Tablespoon }, { "tbs", UnitCode.Tablespoon },
+        { "tbsp", UnitCode.Tablespoon }, { "tbs", UnitCode.Tablespoon },
         { "tablespoon", UnitCode.Tablespoon }, { "tablespoons", UnitCode.Tablespoon },
         // Cup
         { "c", UnitCode.Cup }, { "cup", UnitCode.Cup }, { "cups", UnitCode.Cup },

@@ -20,13 +20,19 @@ BEGIN
         Id          UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
         GroupName   NVARCHAR(100)    NOT NULL,
         SchemaJson  NVARCHAR(MAX)    NOT NULL,
-        UpdatedAt   DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
+        CreatedAt   DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
+        CreatedBy   UNIQUEIDENTIFIER NULL,
+        UpdatedAt   DATETIME2        NULL,
+        UpdatedBy   UNIQUEIDENTIFIER NULL,
+        IsDeleted   BIT              NOT NULL DEFAULT 0,
+        DeletedAt   DATETIME2        NULL,
+        RowVersion  ROWVERSION,
         CONSTRAINT UQ_UserSettingsSchema_Group UNIQUE (GroupName)
     );
 END
 GO
 
--- Seed display settings schema (upsert so re-running migration is safe)
+-- Seed display settings schema (insert if the row does not yet exist)
 IF NOT EXISTS (SELECT 1 FROM UserSettingsSchema WHERE GroupName = 'display')
 BEGIN
     INSERT INTO UserSettingsSchema (Id, GroupName, SchemaJson)

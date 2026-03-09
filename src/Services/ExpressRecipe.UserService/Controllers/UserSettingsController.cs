@@ -33,6 +33,7 @@ public class UserSettingsController : ControllerBase
 
     /// <summary>
     /// Gets settings values for the current user and group.
+    /// Returns 404 if the group is not a recognized settings group.
     /// </summary>
     [HttpGet("{group}")]
     public async Task<IActionResult> GetSettings(string group, CancellationToken ct)
@@ -40,6 +41,8 @@ public class UserSettingsController : ControllerBase
         try
         {
             Guid userId = GetCurrentUserId();
+            UserSettingsSchemaRow? schema = await _settingsRepo.GetSchemaAsync(group, ct);
+            if (schema is null) { return NotFound(new { message = $"Unknown settings group '{group}'" }); }
             Dictionary<string, object?> values = await _settingsRepo.GetAsync(userId, group, ct);
             return Ok(values);
         }

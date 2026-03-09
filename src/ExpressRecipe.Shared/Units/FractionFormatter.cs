@@ -61,8 +61,8 @@ public static class FractionFormatter
     {
         if (value == Math.Floor(value) && value >= long.MinValue && value <= long.MaxValue)
         {
-            return ((long)value).ToString();
+            return ((long)value).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
-        return value.ToString("G4");
+        return value.ToString("G4", System.Globalization.CultureInfo.InvariantCulture);
     }
 }
