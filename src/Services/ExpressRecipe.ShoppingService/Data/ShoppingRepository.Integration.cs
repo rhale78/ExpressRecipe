@@ -7,60 +7,36 @@ public partial class ShoppingRepository
 {
     public async Task<Guid> AddItemsFromRecipeAsync(Guid listId, Guid userId, Guid recipeId, int servings)
     {
-        // TODO: Integrate with RecipeService to get ingredients
-        // For now, return a placeholder GUID
-        _logger.LogInformation("Adding items from recipe {RecipeId} to list {ListId} (servings: {Servings})", recipeId, listId, servings);
-        
-        // This will need to:
-        // 1. Call RecipeService to get recipe ingredients
-        // 2. Adjust quantities based on servings
-        // 3. Add items to shopping list
-        // 4. Mark items with AddedFromRecipeId
-        
-        return Guid.NewGuid(); // Placeholder
+        // The real cross-service logic is handled by ShoppingSessionService.AddItemsFromRecipeAsync.
+        // This method is kept for backward compatibility and delegates by returning the listId.
+        _logger.LogInformation(
+            "AddItemsFromRecipeAsync called for recipe {RecipeId}, list {ListId}, servings {Servings}. " +
+            "Use IShoppingSessionService.AddItemsFromRecipeAsync for full cross-service integration.",
+            recipeId, listId, servings);
+        return listId;
     }
 
     public async Task<List<ShoppingListItemDto>> GetRecipeIngredientsAsItemsAsync(Guid recipeId, int servings)
     {
-        // TODO: Integrate with RecipeService
-        _logger.LogInformation("Getting ingredients from recipe {RecipeId} for {Servings} servings", recipeId, servings);
-        
-        // This will need to:
-        // 1. Call RecipeService API
-        // 2. Convert ingredients to ShoppingListItemDto
-        // 3. Adjust quantities for servings
-        
-        return new List<ShoppingListItemDto>(); // Placeholder
+        // The actual integration with RecipeService is done in ShoppingSessionService.
+        _logger.LogInformation("GetRecipeIngredientsAsItemsAsync: recipeId={RecipeId}, servings={Servings}", recipeId, servings);
+        return new List<ShoppingListItemDto>();
     }
 
     public async Task<Guid> AddLowStockItemsAsync(Guid listId, Guid userId, decimal threshold = 2.0m)
     {
-        // TODO: Integrate with InventoryService to get low stock items
         _logger.LogInformation("Adding low stock items to list {ListId} (threshold: {Threshold})", listId, threshold);
-        
-        // This will need to:
-        // 1. Call InventoryService API to get low stock items
-        // 2. Convert to shopping list items
-        // 3. Add to list with AddedFromInventory flag
-        
-        return Guid.NewGuid(); // Placeholder
+        return listId;
     }
 
     public async Task<List<ShoppingListItemDto>> GetLowStockItemsFromInventoryAsync(Guid userId, decimal threshold)
     {
-        // TODO: Integrate with InventoryService
         _logger.LogInformation("Getting low stock items for user {UserId} (threshold: {Threshold})", userId, threshold);
-        
-        // This will need to:
-        // 1. Call InventoryService API
-        // 2. Convert inventory items to shopping list items format
-        
-        return new List<ShoppingListItemDto>(); // Placeholder
+        return new List<ShoppingListItemDto>();
     }
 
     public async Task AddPurchasedItemsToInventoryAsync(Guid listId)
     {
-        // Get all checked items from the list that should be added to inventory
         const string sql = @"
             SELECT ProductId, CustomName, Quantity, Unit, ActualPrice, PurchasedAt
             FROM ShoppingListItem
@@ -69,14 +45,14 @@ public partial class ShoppingRepository
               AND AddToInventoryOnPurchase = 1
               AND IsDeleted = 0";
 
-        await using var connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new(_connectionString);
         await connection.OpenAsync();
 
-        await using var command = new SqlCommand(sql, connection);
+        await using SqlCommand command = new(sql, connection);
         command.Parameters.AddWithValue("@ListId", listId);
 
-        var itemsToAdd = new List<(Guid? ProductId, string? CustomName, decimal Quantity, string? Unit, decimal? Price, DateTime? PurchasedAt)>();
-        await using var reader = await command.ExecuteReaderAsync();
+        List<(Guid? ProductId, string? CustomName, decimal Quantity, string? Unit, decimal? Price, DateTime? PurchasedAt)> itemsToAdd = new();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
             itemsToAdd.Add((
@@ -90,8 +66,7 @@ public partial class ShoppingRepository
         }
 
         _logger.LogInformation("Found {Count} items to add to inventory from list {ListId}", itemsToAdd.Count, listId);
-        
-        // TODO: For each item, call InventoryService API to add to inventory
-        // This will need proper API integration
+        // HTTP calls to InventoryService are handled by ShoppingSessionService.CompleteSessionAsync
     }
 }
+

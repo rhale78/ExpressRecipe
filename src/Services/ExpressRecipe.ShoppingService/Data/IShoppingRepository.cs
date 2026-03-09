@@ -86,6 +86,25 @@ public interface IShoppingRepository
 
     // Reports
     Task<ShoppingReportDto> GetShoppingReportAsync(Guid userId, Guid? householdId = null);
+
+    // Category preferences
+    Task UpsertStoreCategoryPreferenceAsync(UserStoreCategoryPreferenceRecord pref, CancellationToken ct = default);
+    Task<List<UserStoreCategoryPreferenceDto>> GetUserCategoryPreferencesAsync(Guid userId, CancellationToken ct = default);
+    Task DeleteStoreCategoryPreferenceAsync(Guid preferenceId, Guid userId, CancellationToken ct = default);
+
+    // Optimization
+    Task SaveOptimizationResultAsync(Guid listId, string strategy, string resultJson, decimal total, decimal totalWithDeals, CancellationToken ct = default);
+    Task<ShoppingListOptimizationDto?> GetOptimizationResultAsync(Guid listId, CancellationToken ct = default);
+
+    // Price search profile
+    Task UpsertPriceSearchProfileAsync(UserPriceSearchProfileRecord profile, CancellationToken ct = default);
+    Task<UserPriceSearchProfileDto?> GetPriceSearchProfileAsync(Guid userId, CancellationToken ct = default);
+
+    // Aisle-sorted list retrieval
+    Task<List<OptimizedShoppingItem>> GetItemsSortedByAisleAsync(Guid listId, Guid storeId, string sortMode, CancellationToken ct = default);
+
+    // Complete shopping session + notify inventory service
+    Task<ShoppingSessionSummaryDto> CompleteShoppingSessionAsync(Guid sessionId, CancellationToken ct = default);
 }
 
 public class ShoppingListDto
@@ -267,4 +286,114 @@ public class ShoppingReportDto
     public string MostUsedStoreName { get; set; } = string.Empty;
     public Dictionary<string, int> ItemsByCategory { get; set; } = new();
     public List<FavoriteItemDto> TopFavorites { get; set; } = new();
+}
+
+// ── Optimization models ────────────────────────────────────────────────────
+
+public class OptimizedShoppingPlan
+{
+    public List<StoreShoppingGroup> StoreGroups { get; init; } = new();
+    public decimal TotalEstimate { get; init; }
+    public decimal TotalWithDeals { get; init; }
+    public int StoreCount { get; init; }
+    public string Strategy { get; init; } = string.Empty;
+    public List<string> Warnings { get; init; } = new();
+}
+
+public class StoreShoppingGroup
+{
+    public Guid StoreId { get; init; }
+    public string StoreName { get; init; } = string.Empty;
+    public string? StoreAddress { get; init; }
+    public decimal SubTotal { get; init; }
+    public List<OptimizedShoppingItem> Items { get; init; } = new();
+}
+
+public class OptimizedShoppingItem
+{
+    public Guid ShoppingListItemId { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public decimal Quantity { get; init; }
+    public string? Unit { get; init; }
+    public string? Aisle { get; init; }
+    public int AisleOrder { get; init; }
+    public decimal? Price { get; init; }
+    public bool HasDeal { get; init; }
+    public string? DealDescription { get; init; }
+    public decimal? Savings { get; init; }
+}
+
+public class ShoppingListOptimizationDto
+{
+    public Guid Id { get; set; }
+    public Guid ShoppingListId { get; set; }
+    public string Strategy { get; set; } = string.Empty;
+    public DateTime OptimizedAt { get; set; }
+    public decimal? TotalEstimate { get; set; }
+    public decimal? TotalWithDeals { get; set; }
+    public int StoreCount { get; set; }
+    public string ResultJson { get; set; } = string.Empty;
+}
+
+// ── Category preference models ──────────────────────────────────────────────
+
+public class UserStoreCategoryPreferenceDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public Guid PreferredStoreId { get; set; }
+    public string? PreferredStoreName { get; set; }
+    public int RankOrder { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class UserStoreCategoryPreferenceRecord
+{
+    public Guid? Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public Guid PreferredStoreId { get; set; }
+    public int RankOrder { get; set; } = 1;
+}
+
+// ── Price search profile models ─────────────────────────────────────────────
+
+public class UserPriceSearchProfileDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string StrategyPriority { get; set; } = string.Empty;
+    public int MaxStoreDistanceMiles { get; set; }
+    public bool OnlineAllowed { get; set; }
+    public bool DeliveryAllowed { get; set; }
+    public string? PreferredBrandIds { get; set; }
+    public decimal? MinRating { get; set; }
+    public bool TryNewBrandsEnabled { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+public class UserPriceSearchProfileRecord
+{
+    public Guid UserId { get; set; }
+    public string StrategyPriority { get; set; } = "[\"PreferredBrands\",\"Cheapest\"]";
+    public int MaxStoreDistanceMiles { get; set; } = 25;
+    public bool OnlineAllowed { get; set; } = true;
+    public bool DeliveryAllowed { get; set; } = true;
+    public string? PreferredBrandIds { get; set; }
+    public decimal? MinRating { get; set; }
+    public bool TryNewBrandsEnabled { get; set; }
+}
+
+// ── Session summary ─────────────────────────────────────────────────────────
+
+public class ShoppingSessionSummaryDto
+{
+    public Guid SessionId { get; set; }
+    public int ItemsChecked { get; set; }
+    public int InventoryEventsPublished { get; set; }
+    public decimal? TotalSpent { get; set; }
+    public DateTime CompletedAt { get; set; }
 }
