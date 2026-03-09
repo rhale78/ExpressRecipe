@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.ShoppingService.Data;
+using ExpressRecipe.ShoppingService.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -52,6 +53,7 @@ public class PrintController : ControllerBase
 
         // Try to load optimization result; fall back to raw items
         ShoppingListOptimizationDto? optimization = await _repository.GetOptimizationResultAsync(listId);
+        _logger.LogPrintRequest(userId, listId, format, optimization != null);
         List<StoreShoppingGroup> storeGroups;
 
         if (optimization != null)
@@ -95,10 +97,12 @@ public class PrintController : ControllerBase
         if (format.Equals("html", StringComparison.OrdinalIgnoreCase))
         {
             string html = GenerateHtml(list.Name, storeGroups);
+            _logger.LogPrintComplete(userId, listId, format, storeGroups.Count);
             return Content(html, "text/html");
         }
 
         byte[] pdf = GeneratePdf(list.Name, storeGroups);
+        _logger.LogPrintComplete(userId, listId, format, storeGroups.Count);
         return File(pdf, "application/pdf", "ShoppingList.pdf");
     }
 

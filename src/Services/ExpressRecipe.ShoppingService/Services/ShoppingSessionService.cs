@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using ExpressRecipe.ShoppingService.Data;
+using ExpressRecipe.ShoppingService.Logging;
 
 namespace ExpressRecipe.ShoppingService.Services;
 
@@ -32,21 +33,21 @@ public class ShoppingSessionService : IShoppingSessionService
 
     public async Task<ShoppingSessionSummaryDto> CompleteSessionAsync(Guid sessionId, Guid userId, CancellationToken ct = default)
     {
+        _logger.LogSessionCompleting(userId, sessionId);
         ShoppingSessionSummaryDto summary = await _repository.CompleteShoppingSessionAsync(sessionId, userId, ct);
 
-        // Inventory event publishing requires the checked items from the completed session.
-        // The DB-level completion (marking session ended) is done in CompleteShoppingSessionAsync.
-        // Further inventory events can be dispatched asynchronously via a background job or messaging bus
-        // once that integration is wired up.
         _logger.LogInformation(
             "Session {SessionId} completed for user {UserId}. {Count} items checked.",
             sessionId, userId, summary.ItemsChecked);
+        _logger.LogSessionCompleted(userId, sessionId, summary.ItemsChecked);
 
         return summary;
     }
 
     public async Task<Guid> AddItemsFromRecipeAsync(Guid listId, Guid userId, Guid recipeId, int servings, CancellationToken ct = default)
     {
+        _logger.LogImportingRecipeIngredients(userId, listId, recipeId, servings);
+
         // 1. Get recipe ingredients from RecipeService
         List<RecipeIngredientDto> ingredients = new();
         try
@@ -128,6 +129,7 @@ public class ShoppingSessionService : IShoppingSessionService
 
         _logger.LogInformation("Added {Count} ingredients from recipe {RecipeId} to list {ListId} (servings={Servings}).",
             added, recipeId, listId, servings);
+        _logger.LogRecipeImportComplete(userId, listId, added);
 
         return listId;
     }

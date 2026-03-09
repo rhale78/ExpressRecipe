@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.ShoppingService.Data;
+using ExpressRecipe.ShoppingService.Logging;
 using ExpressRecipe.ShoppingService.Services;
 
 namespace ExpressRecipe.ShoppingService.Controllers;
@@ -51,7 +52,9 @@ public class OptimizationController : ControllerBase
             ShoppingListDto? list = await _repository.GetShoppingListAsync(listId, userId);
             if (list == null) return NotFound();
 
+            _logger.LogOptimizingList(userId, listId, strategy);
             OptimizedShoppingPlan plan = await _optimizationService.OptimizeAsync(listId, userId, strategy, ct);
+            _logger.LogListOptimized(userId, listId, strategy, plan.StoreGroups?.Count ?? 0);
             return Ok(plan);
         }
         catch (Exception ex)
@@ -73,6 +76,7 @@ public class OptimizationController : ControllerBase
             ShoppingListDto? list = await _repository.GetShoppingListAsync(listId, userId);
             if (list == null) return NotFound();
 
+            _logger.LogGettingOptimization(userId, listId);
             ShoppingListOptimizationDto? result = await _repository.GetOptimizationResultAsync(listId, ct);
             if (result == null) return NotFound(new { message = "No optimization result found. Run POST /{listId}/optimize first." });
             return Ok(result);
@@ -111,6 +115,7 @@ public class OptimizationController : ControllerBase
             ShoppingListDto? list = await _repository.GetShoppingListAsync(listId, userId);
             if (list == null) return NotFound();
 
+            _logger.LogAddingFromRecipe(userId, listId, request.RecipeId, request.Servings);
             Guid resultId = await _sessionService.AddItemsFromRecipeAsync(listId, userId, request.RecipeId, request.Servings, ct);
             if (resultId == Guid.Empty)
             {
@@ -149,6 +154,7 @@ public class OptimizationController : ControllerBase
             ShoppingListDto? list = await _repository.GetShoppingListAsync(listId, userId);
             if (list == null) return NotFound();
 
+            _logger.LogGettingSortedItems(userId, listId, storeId.Value, mode);
             List<OptimizedShoppingItem> items = await _repository.GetItemsSortedByAisleAsync(listId, storeId.Value, mode, ct);
             return Ok(items);
         }
@@ -170,6 +176,7 @@ public class OptimizationController : ControllerBase
         try
         {
             Guid userId = GetUserId();
+            _logger.LogGettingCategoryPrefs(userId);
             List<UserStoreCategoryPreferenceDto> prefs = await _repository.GetUserCategoryPreferencesAsync(userId, ct);
             return Ok(prefs);
         }
@@ -196,6 +203,7 @@ public class OptimizationController : ControllerBase
                 pref.UserId = userId;
                 await _repository.UpsertStoreCategoryPreferenceAsync(pref, ct);
             }
+            _logger.LogCategoryPrefsUpdated(userId, preferences.Count);
             return NoContent();
         }
         catch (Exception ex)
@@ -215,6 +223,7 @@ public class OptimizationController : ControllerBase
         {
             Guid userId = GetUserId();
             await _repository.DeleteStoreCategoryPreferenceAsync(preferenceId, userId, ct);
+            _logger.LogCategoryPrefDeleted(userId, preferenceId);
             return NoContent();
         }
         catch (Exception ex)
@@ -235,6 +244,7 @@ public class OptimizationController : ControllerBase
         try
         {
             Guid userId = GetUserId();
+            _logger.LogGettingPriceProfile(userId);
             UserPriceSearchProfileDto? profile = await _repository.GetPriceSearchProfileAsync(userId, ct);
             if (profile == null) return NotFound(new { message = "No price search profile found." });
             return Ok(profile);
@@ -259,6 +269,7 @@ public class OptimizationController : ControllerBase
             Guid userId = GetUserId();
             profile.UserId = userId;
             await _repository.UpsertPriceSearchProfileAsync(profile, ct);
+            _logger.LogPriceProfileUpdated(userId);
             return NoContent();
         }
         catch (Exception ex)
