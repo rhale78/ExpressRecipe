@@ -61,6 +61,7 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
 
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
+builder.Services.AddScoped<IRecipeNutritionRepository>(sp => new RecipeNutritionRepository(connectionString));
 builder.Services.AddScoped<IRecipeRepository>(sp => 
 {
     var client = sp.GetRequiredService<IIngredientServiceClient>();
@@ -84,6 +85,10 @@ if (messagingEnabled)
 {
     builder.AddRabbitMqMessaging("messaging");
     builder.Services.AddSingleton<IRecipeEventPublisher, RecipeEventPublisher>();
+
+    // Handle nutrition query messages from MealPlanningService and other consumers
+    builder.Services.AddScoped<RecipeNutritionQueryHandler>();
+    builder.Services.AddHostedService<RecipeNutritionQuerySubscriber>();
 
     // Replace REST ingredient client with messaging-based client (last registration wins)
     builder.Services.AddScoped<IIngredientServiceClient>(sp =>
