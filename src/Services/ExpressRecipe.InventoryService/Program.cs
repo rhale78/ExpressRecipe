@@ -41,6 +41,15 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 builder.Services.AddScoped<IInventoryRepository>(sp =>
     new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
 
+builder.Services.AddScoped<IEquipmentRepository>(sp =>
+    new EquipmentRepository(connectionString));
+
+builder.Services.AddScoped<IStorageLocationExtendedRepository>(sp =>
+    new StorageLocationExtendedRepository(connectionString));
+
+builder.Services.AddScoped<IInventoryStorageReminderQuery>(sp =>
+    new InventoryStorageReminderQuery(connectionString));
+
 // Register RabbitMQ for event publishing (legacy EventPublisher)
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
@@ -94,6 +103,7 @@ builder.Services.AddHttpClient("recipeservice", client =>
 builder.Services.AddHostedService<ExpirationAlertWorker>();
 builder.Services.AddHostedService<LowStockMonitorWorker>();
 builder.Services.AddHostedService<PatternAnalysisWorker>();
+builder.Services.AddHostedService<StorageReminderWorker>();
 
 // Register messaging and subscribers (optional — requires RabbitMQ)
 bool messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
@@ -104,6 +114,7 @@ if (messagingEnabled)
 {
     builder.AddRabbitMqMessaging("messaging");
     builder.Services.AddHostedService<RecipeCookedEventSubscriber>();
+    builder.Services.AddHostedService<MealDelayStorageSubscriber>();
 }
 
 // Add controllers
