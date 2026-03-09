@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Logging;
 using ExpressRecipe.MealPlanningService.Services;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
@@ -41,8 +42,10 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> CreateMealPlan([FromBody] CreatePlanRequest request)
     {
         Guid userId = GetUserId();
+        _logger.LogCreatingMealPlan(userId, request.StartDate, request.EndDate);
         Guid planId = await _repository.CreateMealPlanAsync(userId, request.StartDate, request.EndDate, request.Name);
         MealPlanDto? plan = await _repository.GetMealPlanAsync(planId, userId);
+        _logger.LogMealPlanCreated(userId, planId);
         return CreatedAtAction(nameof(GetMealPlan), new { id = planId }, plan);
     }
 
@@ -50,6 +53,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetMealPlans()
     {
         Guid userId = GetUserId();
+        _logger.LogGettingMealPlans(userId);
         List<MealPlanDto> plans = await _repository.GetUserMealPlansAsync(userId);
         return Ok(plans);
     }
@@ -58,6 +62,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetMealPlan(Guid id)
     {
         Guid userId = GetUserId();
+        _logger.LogGettingMealPlan(userId, id);
         MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId);
         if (plan == null) return NotFound();
         return Ok(plan);
@@ -68,6 +73,7 @@ public class MealPlanningController : ControllerBase
     {
         Guid userId = GetUserId();
         await _repository.DeleteMealPlanAsync(id, userId);
+        _logger.LogMealPlanDeleted(userId, id);
         return NoContent();
     }
 
@@ -77,14 +83,17 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> AddPlannedMeal(Guid id, [FromBody] AddMealRequest request)
     {
         Guid userId = GetUserId();
+        _logger.LogAddingPlannedMeal(userId, id, request.RecipeId);
         Guid mealId = await _repository.AddPlannedMealAsync(
             id, userId, request.RecipeId, request.PlannedFor, request.MealType, request.Servings);
+        _logger.LogPlannedMealAdded(userId, id, mealId);
         return Ok(new { id = mealId });
     }
 
     [HttpGet("plans/{id}/meals")]
     public async Task<IActionResult> GetPlannedMeals(Guid id, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
+        _logger.LogGettingPlannedMeals(id);
         List<PlannedMealDto> meals = await _repository.GetPlannedMealsAsync(id, startDate, endDate);
         return Ok(meals);
     }
@@ -93,6 +102,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> CompletePlannedMeal(Guid id, Guid mealId, [FromBody] CompleteMealRequest? request = null)
     {
         Guid userId = GetUserId();
+        _logger.LogCompletingPlannedMeal(userId, id, mealId);
 
         PlannedMealDto? meal = await _repository.GetPlannedMealAsync(mealId);
         if (meal == null) return NotFound();
@@ -121,6 +131,7 @@ public class MealPlanningController : ControllerBase
         };
 
         Guid historyId = await _repository.RecordCookingHistoryAsync(record);
+        _logger.LogPlannedMealCompleted(userId, mealId, historyId);
 
         return Ok(new { historyId });
     }
@@ -139,6 +150,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> SetGoal([FromBody] SetGoalRequest request)
     {
         Guid userId = GetUserId();
+        _logger.LogSettingGoal(userId, request.GoalType);
         Guid goalId = await _repository.SetNutritionalGoalAsync(
             userId, request.GoalType, request.TargetValue, request.Unit, request.StartDate, request.EndDate);
         return Ok(new { id = goalId });
@@ -148,6 +160,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetGoals()
     {
         Guid userId = GetUserId();
+        _logger.LogGettingGoals(userId);
         List<NutritionalGoalDto> goals = await _repository.GetUserGoalsAsync(userId);
         return Ok(goals);
     }
@@ -156,6 +169,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetNutritionSummary([FromQuery] DateTime date)
     {
         Guid userId = GetUserId();
+        _logger.LogNutritionSummaryRequest(userId, date);
         NutritionSummaryDto summary = await _repository.GetNutritionSummaryAsync(userId, date);
         return Ok(summary);
     }
@@ -166,6 +180,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> RecordCookingHistory([FromBody] RecordCookingHistoryRequest request)
     {
         Guid userId = GetUserId();
+        _logger.LogRecordingCookingHistory(userId, request.RecipeId, request.HouseholdId);
         CookingHistoryRecord record = new()
         {
             UserId      = userId,
@@ -179,6 +194,7 @@ public class MealPlanningController : ControllerBase
         };
 
         Guid historyId = await _repository.RecordCookingHistoryAsync(record);
+        _logger.LogCookingHistoryRecorded(userId, historyId);
         return Ok(new { id = historyId });
     }
 
@@ -186,6 +202,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> UpdateCookingRating(Guid id, [FromBody] UpdateRatingRequest request)
     {
         Guid userId = GetUserId();
+        _logger.LogUpdatingCookingRating(userId, id, request.Rating);
         await _repository.UpdateCookingRatingAsync(id, userId, request.Rating, request.WouldCookAgain, request.Notes);
         return NoContent();
     }
@@ -194,6 +211,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetCookingHistory([FromQuery] int daysBack = 90)
     {
         Guid userId = GetUserId();
+        _logger.LogGettingCookingHistory(userId, daysBack);
         List<CookingHistoryDto> history = await _repository.GetCookingHistoryAsync(userId, daysBack);
         return Ok(history);
     }
@@ -202,6 +220,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetMostCooked([FromQuery] int limit = 10, [FromQuery] int daysBack = 365)
     {
         Guid userId = GetUserId();
+        _logger.LogMostCookedRequest(userId, daysBack);
         List<CookingHistorySummaryDto> summary = await _repository.GetMostCookedAsync(userId, limit, daysBack);
         return Ok(summary);
     }
@@ -212,6 +231,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetSuggestions([FromBody] SuggestionRequest request)
     {
         Guid userId = GetUserId();
+        _logger.LogGettingSuggestions(userId, request.SuggestionMode, request.MealType ?? "any");
         SuggestionRequest requestWithUserId = new()
         {
             UserId           = userId,
@@ -227,6 +247,7 @@ public class MealPlanningController : ControllerBase
         };
 
         List<MealSuggestion> suggestions = await _suggestionService.SuggestAsync(requestWithUserId);
+        _logger.LogSuggestionsGenerated(userId, suggestions.Count);
         return Ok(suggestions);
     }
 
@@ -234,6 +255,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GetWeekSuggestions([FromBody] SuggestionRequest request)
     {
         Guid userId = GetUserId();
+        _logger.LogWeekSuggestionsRequested(userId, request.SuggestionMode);
         List<MealSuggestion> suggestions = await _suggestionService.SuggestForWeekAsync(
             userId, request.HouseholdId, request);
         return Ok(suggestions);
@@ -253,6 +275,8 @@ public class MealPlanningController : ControllerBase
         // Load all non-completed planned meals for this plan
         List<PlannedMealDto> meals = await _repository.GetPlannedMealsAsync(id, null, null);
         meals = meals.Where(m => !m.IsCompleted).ToList();
+
+        _logger.LogGeneratingShoppingList(userId, id, meals.Count);
 
         if (meals.Count == 0)
         {
@@ -362,6 +386,7 @@ public class MealPlanningController : ControllerBase
             }
         }
 
+        _logger.LogShoppingListGenerated(userId, id, itemsAdded);
         return Ok(new { itemsAdded });
     }
 }

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Logging;
 using Microsoft.Extensions.Caching.Hybrid;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("ExpressRecipe.MealPlanningService.Tests")]
@@ -81,6 +82,7 @@ public class MealSuggestionService : IMealSuggestionService
     {
         // 1. Fetch candidate recipes from RecipeService (cached)
         List<RecipeCandidate> candidates = await GetCandidatesAsync(request.UserId, request.MealType, ct);
+        _logger.LogSuggestionCandidates(request.UserId, candidates.Count, request.MealType ?? "any");
 
         // Apply MaxCookMinutes filter early
         if (request.MaxCookMinutes > 0)
@@ -88,6 +90,7 @@ public class MealSuggestionService : IMealSuggestionService
             candidates = candidates
                 .Where(c => c.CookTimeMinutes == null || c.CookTimeMinutes <= request.MaxCookMinutes)
                 .ToList();
+            _logger.LogSuggestionFiltered(request.UserId, candidates.Count, "MaxCookMinutes");
         }
 
         // Apply explicit exclude list
@@ -142,17 +145,22 @@ public class MealSuggestionService : IMealSuggestionService
     {
         List<MealSuggestion> scored = new(candidates.Count);
 
+        int allergenUnsafeCount = 0;
+        int recentDaysExcludedCount = 0;
+
         foreach (RecipeCandidate candidate in candidates)
         {
             bool isAllergenSafe = !safeForkResults.TryGetValue(candidate.Id, out bool isSafe) || isSafe;
 
             if (!isAllergenSafe)
             {
+                allergenUnsafeCount++;
                 continue;  // Allergen-unsafe recipes are excluded entirely
             }
 
             if (request.ExcludeRecentDays && recentIds.Contains(candidate.Id))
             {
+                recentDaysExcludedCount++;
                 continue;  // Recently cooked — skip
             }
 
@@ -192,6 +200,10 @@ public class MealSuggestionService : IMealSuggestionService
                 Tags                = candidate.Tags ?? new List<string>()
             });
         }
+
+        _logger.LogSuggestionFiltered(request.UserId, candidates.Count - allergenUnsafeCount, "AllergenFilter");
+        int afterBothFilters = candidates.Count - allergenUnsafeCount - recentDaysExcludedCount;
+        _logger.LogSuggestionFiltered(request.UserId, afterBothFilters, "ExcludeRecentDays");
 
         return scored
             .OrderByDescending(s => s.Score)
@@ -380,11 +392,23 @@ public class MealSuggestionService : IMealSuggestionService
         if (_hybridCache != null)
         {
             string cacheKey = $"suggestions:{userId}:candidates:{mealType}";
-            return await _hybridCache.GetOrCreateAsync(
+            bool factoryInvoked = false;
+            List<RecipeCandidate> result = await _hybridCache.GetOrCreateAsync(
                 cacheKey,
-                async token => await FetchCandidatesFromServiceAsync(mealType, token),
+                async token =>
+                {
+                    factoryInvoked = true;
+                    return await FetchCandidatesFromServiceAsync(mealType, token);
+                },
                 new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(5) },
                 cancellationToken: ct);
+
+            if (factoryInvoked)
+                _logger.LogSuggestionCacheMiss(userId, cacheKey);
+            else
+                _logger.LogSuggestionCacheHit(userId, cacheKey);
+
+            return result;
         }
 
         return await FetchCandidatesFromServiceAsync(mealType, ct);

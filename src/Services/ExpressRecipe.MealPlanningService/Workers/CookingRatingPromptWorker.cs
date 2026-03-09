@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Logging;
 
 namespace ExpressRecipe.MealPlanningService.Workers;
 
@@ -67,6 +68,7 @@ public class CookingRatingPromptWorker : BackgroundService
         {
             try
             {
+                _logger.LogSendingRatingPrompt(row.UserId, row.Id, row.RecipeName);
                 NotificationPayload payload = new()
                 {
                     UserId    = row.UserId,
@@ -84,7 +86,6 @@ public class CookingRatingPromptWorker : BackgroundService
                 if (response.IsSuccessStatusCode)
                 {
                     await repository.MarkRatingPromptSentAsync(row.Id, ct);
-                    _logger.LogDebug("Sent rating prompt for history {HistoryId}", row.Id);
                 }
                 else
                 {

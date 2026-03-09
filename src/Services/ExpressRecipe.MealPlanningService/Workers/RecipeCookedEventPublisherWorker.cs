@@ -1,4 +1,5 @@
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Logging;
 using ExpressRecipe.Shared.Messages;
 using ExpressRecipe.Messaging.Core.Abstractions;
 
@@ -73,6 +74,7 @@ public class RecipeCookedEventPublisherWorker : BackgroundService
         {
             try
             {
+                _logger.LogPublishingRecipeCookedEvent(row.UserId, row.HouseholdId, row.Id);
                 RecipeCookedEvent evt = new(
                     RecipeId:         row.RecipeId,
                     UserId:           row.UserId,
@@ -83,8 +85,6 @@ public class RecipeCookedEventPublisherWorker : BackgroundService
 
                 await messageBus.PublishAsync(evt, cancellationToken: ct);
                 await repository.MarkInventoryDeductionSentAsync(row.Id, ct);
-
-                _logger.LogDebug("Published RecipeCookedEvent for history {HistoryId}", row.Id);
             }
             catch (Exception ex)
             {
