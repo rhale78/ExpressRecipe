@@ -36,9 +36,6 @@ public class ShoppingSessionService : IShoppingSessionService
         _logger.LogSessionCompleting(userId, sessionId);
         ShoppingSessionSummaryDto summary = await _repository.CompleteShoppingSessionAsync(sessionId, userId, ct);
 
-        _logger.LogInformation(
-            "Session {SessionId} completed for user {UserId}. {Count} items checked.",
-            sessionId, userId, summary.ItemsChecked);
         _logger.LogSessionCompleted(userId, sessionId, summary.ItemsChecked);
 
         return summary;
@@ -127,8 +124,6 @@ public class ShoppingSessionService : IShoppingSessionService
             }
         }
 
-        _logger.LogInformation("Added {Count} ingredients from recipe {RecipeId} to list {ListId} (servings={Servings}).",
-            added, recipeId, listId, servings);
         _logger.LogRecipeImportComplete(userId, listId, added);
 
         return listId;
