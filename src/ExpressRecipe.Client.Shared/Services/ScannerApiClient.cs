@@ -59,12 +59,66 @@ public class ScanHistoryItem
     public bool HadAllergenAlert { get; set; }
 }
 
+public class VisionCaptureRequest
+{
+    public string CaptureBase64 { get; set; } = string.Empty;
+    public string? DetectedBarcode { get; set; }
+    public string? DetectedProductName { get; set; }
+    public string? DetectedBrand { get; set; }
+    public string? ProviderUsed { get; set; }
+    public double? Confidence { get; set; }
+    public Guid? ScanHistoryId { get; set; }
+    public bool IsTrainingData { get; set; }
+}
+
+public class CorrectionReportRequest
+{
+    public Guid VisionCaptureId { get; set; }
+    public string? AiGuess { get; set; }
+    public string? UserCorrection { get; set; }
+    public string? UserNote { get; set; }
+}
+
+// Response DTO for the vision capture creation endpoint
+internal sealed class VisionCaptureCreatedResponse
+{
+    public Guid? Id { get; set; }
+}
+
+public class CorrectionReportItem
+{
+    public Guid Id { get; set; }
+    public Guid VisionCaptureId { get; set; }
+    public string? AiGuess { get; set; }
+    public string? UserCorrection { get; set; }
+    public string? UserNote { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}
+
+public class TrainingExportItem
+{
+    public Guid CaptureId { get; set; }
+    public string? DetectedBarcode { get; set; }
+    public string? DetectedProductName { get; set; }
+    public string? DetectedBrand { get; set; }
+    public string? ProviderUsed { get; set; }
+    public decimal? Confidence { get; set; }
+    public string? CorrectedProductName { get; set; }
+    public DateTime CapturedAt { get; set; }
+}
+
 public interface IScannerApiClient
 {
     Task<BarcodeScanResult?> ScanBarcodeAsync(string barcode, string format = "UPC-A");
     Task<BarcodeScanResult?> ScanBarcodeWithUserProfileAsync(string barcode, Guid userId);
     Task<List<ScanHistoryItem>> GetScanHistoryAsync(int limit = 50);
     Task<bool> ReportMissingProductAsync(string barcode, string productName);
+    Task<Guid?> SaveVisionCaptureAsync(VisionCaptureRequest capture, CancellationToken ct = default);
+    Task<bool> CreateCorrectionReportAsync(CorrectionReportRequest report, CancellationToken ct = default);
+    Task<List<CorrectionReportItem>> GetAdminCorrectionReportsAsync(string? status, int limit = 100, CancellationToken ct = default);
+    Task<bool> UpdateAdminCorrectionStatusAsync(Guid reportId, string status, CancellationToken ct = default);
+    Task<List<TrainingExportItem>> GetTrainingExportAsync(int limit = 500, CancellationToken ct = default);
 }
 
 public class ScannerApiClient : IScannerApiClient
@@ -120,12 +174,93 @@ public class ScannerApiClient : IScannerApiClient
 
     public async Task<bool> ReportMissingProductAsync(string barcode, string productName)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/scanner/report-missing", new
+        HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/scanner/unknown", new
         {
             Barcode = barcode,
             ProductName = productName
         });
 
         return response.IsSuccessStatusCode;
+    }
+
+    public async Task<Guid?> SaveVisionCaptureAsync(VisionCaptureRequest capture, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(capture.CaptureBase64))
+        {
+            return null;
+        }
+
+        byte[] buffer = new byte[((capture.CaptureBase64.Length + 3) / 4) * 3];
+        if (!Convert.TryFromBase64String(capture.CaptureBase64, buffer, out int bytesWritten))
+        {
+            return null;
+        }
+
+        byte[] imageBytes = new byte[bytesWritten];
+        Array.Copy(buffer, imageBytes, bytesWritten);
+
+        object requestBody = new
+        {
+            captureImageJpeg = imageBytes,
+            capture.DetectedBarcode,
+            capture.DetectedProductName,
+            capture.DetectedBrand,
+            capture.ProviderUsed,
+            confidence = (decimal?)capture.Confidence,
+            capture.ScanHistoryId,
+            capture.IsTrainingData
+        };
+
+        HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/scanner/vision/capture", requestBody, ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        VisionCaptureCreatedResponse? result = await response.Content.ReadFromJsonAsync<VisionCaptureCreatedResponse>(cancellationToken: ct);
+        return result?.Id;
+    }
+
+    public async Task<bool> CreateCorrectionReportAsync(CorrectionReportRequest report, CancellationToken ct = default)
+    {
+        HttpResponseMessage response = await _httpClient.PostAsJsonAsync("/api/scanner/correction", report, ct);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<List<CorrectionReportItem>> GetAdminCorrectionReportsAsync(string? status, int limit = 100, CancellationToken ct = default)
+    {
+        string url = status == null
+            ? $"/api/admin/scanner/corrections?limit={limit}"
+            : $"/api/admin/scanner/corrections?status={Uri.EscapeDataString(status)}&limit={limit}";
+
+        HttpResponseMessage response = await _httpClient.GetAsync(url, ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return new List<CorrectionReportItem>();
+        }
+
+        return await response.Content.ReadFromJsonAsync<List<CorrectionReportItem>>(cancellationToken: ct)
+               ?? new List<CorrectionReportItem>();
+    }
+
+    public async Task<bool> UpdateAdminCorrectionStatusAsync(Guid reportId, string status, CancellationToken ct = default)
+    {
+        HttpResponseMessage response = await _httpClient.PutAsJsonAsync($"/api/admin/scanner/corrections/{reportId}", new { status }, ct);
+        return response.IsSuccessStatusCode;
+    }
+
+    public async Task<List<TrainingExportItem>> GetTrainingExportAsync(int limit = 500, CancellationToken ct = default)
+    {
+        HttpResponseMessage response = await _httpClient.GetAsync($"/api/admin/scanner/training-export?limit={limit}", ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return new List<TrainingExportItem>();
+        }
+
+        return await response.Content.ReadFromJsonAsync<List<TrainingExportItem>>(cancellationToken: ct)
+               ?? new List<TrainingExportItem>();
     }
 }

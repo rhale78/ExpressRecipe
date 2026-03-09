@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.ShoppingService.Data;
+using ExpressRecipe.ShoppingService.Logging;
 
 namespace ExpressRecipe.ShoppingService.Controllers;
 
@@ -35,6 +36,7 @@ public class ShoppingController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingLists(userId.Value);
             var lists = await _repository.GetUserListsAsync(userId.Value);
             return Ok(lists);
         }
@@ -56,6 +58,7 @@ public class ShoppingController : ControllerBase
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
             var listId = await _repository.CreateShoppingListAsync(userId.Value, null, request.Name, request.Description);
+            _logger.LogListCreated(userId.Value, listId);
             var list = await _repository.GetShoppingListAsync(listId, userId.Value);
             return CreatedAtAction(nameof(GetList), new { id = listId }, list);
         }
@@ -76,6 +79,7 @@ public class ShoppingController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingList(userId.Value, id);
             var list = await _repository.GetShoppingListAsync(id, userId.Value);
             if (list == null)
                 return NotFound();
@@ -105,6 +109,7 @@ public class ShoppingController : ControllerBase
                 return NotFound();
 
             await _repository.UpdateShoppingListAsync(id, request.Name, request.Description);
+            _logger.LogListUpdated(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -125,6 +130,7 @@ public class ShoppingController : ControllerBase
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
             await _repository.DeleteShoppingListAsync(id, userId.Value);
+            _logger.LogListDeleted(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -144,6 +150,7 @@ public class ShoppingController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingListItems(userId.Value, id);
             var items = await _repository.GetListItemsAsync(id, userId.Value);
             return Ok(items);
         }
@@ -166,6 +173,7 @@ public class ShoppingController : ControllerBase
             if (userId == null) return Unauthorized();
             var itemId = await _repository.AddItemToListAsync(
                 id, userId.Value, request.ProductId, request.CustomName, request.Quantity, request.Unit, request.Category);
+            _logger.LogItemAdded(userId.Value, id);
             return Ok(new { id = itemId });
         }
         catch (Exception ex)
@@ -190,6 +198,7 @@ public class ShoppingController : ControllerBase
             var list = await _repository.GetShoppingListAsync(item.ShoppingListId, userId.Value);
             if (list == null) return Forbid();
             await _repository.UpdateItemQuantityAsync(id, request.Quantity);
+            _logger.LogItemQuantityUpdated(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -214,6 +223,7 @@ public class ShoppingController : ControllerBase
             var list = await _repository.GetShoppingListAsync(item.ShoppingListId, userId.Value);
             if (list == null) return Forbid();
             await _repository.ToggleItemCheckedAsync(id);
+            _logger.LogItemToggled(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -238,6 +248,7 @@ public class ShoppingController : ControllerBase
             var list = await _repository.GetShoppingListAsync(item.ShoppingListId, userId.Value);
             if (list == null) return Forbid();
             await _repository.RemoveItemFromListAsync(id);
+            _logger.LogItemRemoved(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -258,6 +269,7 @@ public class ShoppingController : ControllerBase
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
             var shareId = await _repository.ShareListAsync(id, userId.Value, request.SharedWithUserId, request.Permission);
+            _logger.LogListShared(userId.Value, id);
             return Ok(new { id = shareId });
         }
         catch (Exception ex)
@@ -277,6 +289,7 @@ public class ShoppingController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingSharedLists(userId.Value);
             var lists = await _repository.GetSharedListsAsync(userId.Value);
             return Ok(lists);
         }
@@ -297,6 +310,7 @@ public class ShoppingController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingStores(userId.Value);
             var stores = await _repository.GetUserStoresAsync(userId.Value);
             return Ok(stores);
         }
@@ -318,6 +332,7 @@ public class ShoppingController : ControllerBase
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
             var storeId = await _repository.CreateStoreLayoutAsync(userId.Value, Guid.Empty, request.StoreName, request.Address, 0);
+            _logger.LogStoreCreated(userId.Value);
             return Ok(new { id = storeId });
         }
         catch (Exception ex)

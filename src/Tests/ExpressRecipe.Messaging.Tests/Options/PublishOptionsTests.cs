@@ -50,7 +50,7 @@ public class SubscribeOptionsTests
         Assert.True(opts.Durable);
         Assert.False(opts.AutoAck);
         Assert.False(opts.Exclusive);
-        Assert.Equal(10, opts.PrefetchCount);
+        Assert.Equal(20, opts.PrefetchCount);
         Assert.Equal(RoutingMode.CompetingConsumer, opts.RoutingMode);
         Assert.Null(opts.QueueName);
         Assert.False(opts.AutoDelete);

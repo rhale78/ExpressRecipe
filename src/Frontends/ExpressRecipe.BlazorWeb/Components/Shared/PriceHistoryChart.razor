@@ -1,0 +1,273 @@
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Price
+@inject IPriceApiClient PriceApi
+@inject IJSRuntime JS
+@inject ILogger<PriceHistoryChart> Logger
+@implements IAsyncDisposable
+
+<div class="settings-section">
+    <h3>💰 Price History</h3>
+
+    <div class="form-group-checkbox">
+        <label>
+            <input type="checkbox" checked="@ShowAllStores" @onchange="OnShowAllStoresChanged" />
+            Show all stores
+        </label>
+        <label>
+            <input type="checkbox" checked="@ShowUnitPrice" @onchange="OnShowUnitPriceChanged" />
+            Show unit price (per oz)
+        </label>
+    </div>
+
+    <div class="form-group">
+        <label>Days back:</label>
+        <select class="form-input" @onchange="OnDaysBackChanged">
+            <option value="30" selected="@(DaysBack == 30)">30 days</option>
+            <option value="60" selected="@(DaysBack == 60)">60 days</option>
+            <option value="90" selected="@(DaysBack == 90)">90 days</option>
+            <option value="180" selected="@(DaysBack == 180)">180 days</option>
+            <option value="365" selected="@(DaysBack == 365)">1 year</option>
+        </select>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading price history...</p>
+        </div>
+    }
+    else if (_stats != null && _history.Count > 0 && !HasEatingDisorderRecovery)
+    {
+        <div class="price-stats-row">
+            <div class="price-stat">
+                <span class="stat-label">Current</span>
+                <span class="stat-value">@_stats.CurrentPrice.ToString("C")</span>
+            </div>
+            <div class="price-stat">
+                <span class="stat-label">Avg</span>
+                <span class="stat-value">@_stats.AveragePrice.ToString("C")</span>
+            </div>
+            <div class="price-stat">
+                <span class="stat-label">Min</span>
+                <span class="stat-value price-min">@_stats.MinPrice.ToString("C")</span>
+            </div>
+            <div class="price-stat">
+                <span class="stat-label">Max</span>
+                <span class="stat-value price-max">@_stats.MaxPrice.ToString("C")</span>
+            </div>
+            <div class="price-stat">
+                <span class="stat-label">Trend</span>
+                <span class="stat-value trend-@_stats.Trend.ToLower()">
+                    @(_stats.Trend == "Rising" ? "↑" : _stats.Trend == "Falling" ? "↓" : "→") @_stats.Trend
+                </span>
+            </div>
+        </div>
+
+        <!-- Line chart: history over time -->
+        <div class="chart-container">
+            <canvas id="@_lineChartId"></canvas>
+        </div>
+
+        @if (_storeGroups.Count > 1)
+        {
+            <!-- Bar chart: compare stores -->
+            <div class="chart-container">
+                <h4>Store Comparison</h4>
+                <canvas id="@_barChartId"></canvas>
+            </div>
+        }
+    }
+    else if (!_isLoading && _history.Count == 0)
+    {
+        <p class="empty-state">No price history available for this product yet.</p>
+    }
+</div>
+
+<style>
+    .settings-section { background: #f8f9fa; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+    .settings-section h3 { margin: 0 0 0.75rem 0; font-size: 1rem; font-weight: 600; }
+    .form-group-checkbox { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .form-group-checkbox label { display: flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; cursor: pointer; }
+    .form-group { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .form-group label { font-size: 0.85rem; font-weight: 600; }
+    .form-input { padding: 0.3rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; }
+    .price-stats-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .price-stat { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.4rem 0.75rem; text-align: center; }
+    .stat-label { display: block; font-size: 0.7rem; color: #888; text-transform: uppercase; }
+    .stat-value { font-size: 0.95rem; font-weight: 700; }
+    .price-min { color: #198754; }
+    .price-max { color: #dc3545; }
+    .trend-rising { color: #dc3545; }
+    .trend-falling { color: #198754; }
+    .trend-stable { color: #888; }
+    .chart-container { margin-top: 0.75rem; }
+    .empty-state { text-align: center; color: #888; padding: 1rem; }
+    .loading-container { text-align: center; padding: 1rem; color: #666; }
+    .spinner { display: inline-block; width: 1.5rem; height: 1.5rem; border: 3px solid #ddd; border-top-color: #0d6efd; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+@code {
+    [Parameter] public Guid ProductId { get; set; }
+    [Parameter] public Guid? StoreId { get; set; }
+    [Parameter] public int DaysBack { get; set; } = 90;
+    [Parameter] public bool ShowAllStores { get; set; } = true;
+    [Parameter] public bool ShowUnitPrice { get; set; } = false;
+    /// <summary>When true, hides price statistics and charts to reduce price-focused framing (EatingDisorderRecovery mode).</summary>
+    [Parameter] public bool HasEatingDisorderRecovery { get; set; } = false;
+
+    private List<ProductPriceItemDto> _history = new();
+    private PriceHistoryStatsClientDto? _stats;
+    private Dictionary<string, List<ProductPriceItemDto>> _storeGroups = new();
+    private bool _isLoading = true;
+    private readonly string _lineChartId = $"price-line-chart-{Guid.NewGuid():N}";
+    private readonly string _barChartId = $"price-bar-chart-{Guid.NewGuid():N}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            var storeFilter = ShowAllStores ? null : StoreId;
+            var historyTask = PriceApi.GetPriceHistoryItemsAsync(ProductId, storeFilter, DaysBack);
+            var statsTask = PriceApi.GetPriceStatsAsync(ProductId, storeFilter, DaysBack);
+            await Task.WhenAll(historyTask, statsTask);
+            _history = await historyTask;
+            _stats = await statsTask;
+
+            _storeGroups = _history
+                .GroupBy(h => h.StoreName ?? "Unknown")
+                .ToDictionary(g => g.Key, g => g.OrderBy(h => h.ObservedAt).ToList());
+        }
+        catch (Exception)
+        {
+            _history = new List<ProductPriceItemDto>();
+            _stats = null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_isLoading && _history.Count > 0 && !HasEatingDisorderRecovery)
+        {
+            await RenderChartsAsync();
+        }
+    }
+
+    private async Task RenderChartsAsync()
+    {
+        try
+        {
+            // Line chart: price over time per store
+            var lineLabels = _history
+                .Select(h => h.ObservedAt.ToString("MMM d"))
+                .Distinct()
+                .ToList();
+
+            var colors = new[] { "#0d6efd", "#198754", "#dc3545", "#fd7e14", "#6f42c1", "#20c997" };
+            var lineDatasets = _storeGroups.Select((kv, i) => new
+            {
+                label = kv.Key,
+                data = kv.Value.Select(h => ShowUnitPrice ? (h.PricePerUnit ?? h.Price) : h.Price).ToList(),
+                borderColor = colors[i % colors.Length],
+                backgroundColor = colors[i % colors.Length] + "22",
+                fill = false,
+                tension = 0.3
+            }).ToList();
+
+            var lineConfig = new
+            {
+                type = "line",
+                data = new { labels = lineLabels, datasets = lineDatasets },
+                options = new
+                {
+                    responsive = true,
+                    plugins = new { legend = new { position = "top" } },
+                    scales = new
+                    {
+                        y = new { beginAtZero = false, title = new { display = true, text = ShowUnitPrice ? "Price / oz" : "Price ($)" } }
+                    }
+                }
+            };
+
+            await JS.InvokeVoidAsync("renderChart", _lineChartId, lineConfig);
+
+            // Bar chart: store comparison (only when > 1 store)
+            if (_storeGroups.Count > 1)
+            {
+                var barLabels = _storeGroups.Keys.ToList();
+                var barData = _storeGroups.Values.Select(v => v.Count > 0 ? v.Last().Price : 0m).ToList();
+                var barConfig = new
+                {
+                    type = "bar",
+                    data = new
+                    {
+                        labels = barLabels,
+                        datasets = new[]
+                        {
+                            new { label = "Current Price ($)", data = barData, backgroundColor = "#0d6efd88" }
+                        }
+                    },
+                    options = new
+                    {
+                        responsive = true,
+                        plugins = new { legend = new { display = false } },
+                        scales = new { y = new { beginAtZero = false } }
+                    }
+                };
+
+                await JS.InvokeVoidAsync("renderChart", _barChartId, barConfig);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Chart rendering is best-effort; log but don't propagate JS interop errors
+            Logger.LogDebug(ex, "PriceHistoryChart: chart rendering failed for product {ProductId}", ProductId);
+        }
+    }
+
+    private async Task OnShowAllStoresChanged(ChangeEventArgs e)
+    {
+        ShowAllStores = e.Value is bool b ? b : true;
+        await LoadDataAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnShowUnitPriceChanged(ChangeEventArgs e)
+    {
+        ShowUnitPrice = e.Value is bool b ? b : false;
+        await LoadDataAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnDaysBackChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var days)) { DaysBack = days; }
+        await LoadDataAsync();
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("destroyChart", _lineChartId);
+            await JS.InvokeVoidAsync("destroyChart", _barChartId);
+        }
+        catch (Exception)
+        {
+            // Ignore disposal errors
+        }
+    }
+}

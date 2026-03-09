@@ -173,3 +173,21 @@ public class QuickMealPlanRequest
     public int DefaultServings { get; set; } = 4;
     public bool UseUserPreferences { get; set; } = true; // Auto-filter recipes by user/family allergens
 }
+
+/// <summary>
+/// Client-side model for a meal suggestion returned by POST /api/mealplanning/suggest.
+/// </summary>
+public class MealSuggestionResult
+{
+    public Guid RecipeId { get; set; }
+    public string RecipeName { get; set; } = string.Empty;
+    public int CookMinutes { get; set; }
+    public decimal UserRating { get; set; }
+    public decimal GlobalRating { get; set; }
+    public int UserCookCount { get; set; }
+    public decimal InventoryMatchPct { get; set; }
+    public bool IsAllergenSafe { get; set; }
+    public decimal Score { get; set; }
+    public List<string> MissingIngredients { get; set; } = new();
+    public List<string> Tags { get; set; } = new();
+}
