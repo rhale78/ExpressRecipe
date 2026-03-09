@@ -69,7 +69,17 @@ public sealed class MealPlanTemplateService : IMealPlanTemplateService
             throw new KeyNotFoundException($"Template {templateId} not found");
         }
 
-        using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(template.TemplateJson);
+        System.Text.Json.JsonDocument doc;
+        try
+        {
+            doc = System.Text.Json.JsonDocument.Parse(template.TemplateJson);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            throw new InvalidOperationException($"Failed to parse template JSON for template {templateId}", ex);
+        }
+
+        using (doc)
         foreach (System.Text.Json.JsonElement mealEl in doc.RootElement.GetProperty("meals").EnumerateArray())
         {
             int dayOffset = mealEl.GetProperty("dayOffset").GetInt32();

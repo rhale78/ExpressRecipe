@@ -87,10 +87,11 @@ public sealed class MealPlanCopyService : IMealPlanCopyService
             throw new KeyNotFoundException($"Plan {planId} not found");
         }
 
-        int spanDays = (DateOnly.FromDateTime(source.EndDate).DayNumber - DateOnly.FromDateTime(source.StartDate).DayNumber);
+        // daysBetween: number of days from StartDate to EndDate (exclusive end), used to set the same duration
+        int daysBetween = (DateOnly.FromDateTime(source.EndDate).DayNumber - DateOnly.FromDateTime(source.StartDate).DayNumber);
         Guid newPlanId = await _plans.CreateMealPlanAsync(source.UserId,
             newStartDate.ToDateTime(TimeOnly.MinValue),
-            newStartDate.AddDays(spanDays).ToDateTime(TimeOnly.MinValue), newName, ct);
+            newStartDate.AddDays(daysBetween).ToDateTime(TimeOnly.MinValue), newName, ct);
 
         List<PlannedMealDto> allMeals = await _plans.GetPlannedMealsAsync(planId, null, null, ct);
         foreach (PlannedMealDto meal in allMeals)

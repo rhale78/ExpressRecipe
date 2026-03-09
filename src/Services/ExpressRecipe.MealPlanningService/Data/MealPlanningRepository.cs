@@ -142,10 +142,12 @@ public class MealPlanningRepository : IMealPlanningRepository
         return (Guid)(await command.ExecuteScalarAsync(ct))!;
     }
 
+    private static readonly string EmptyGuidStr = Guid.Empty.ToString();
+
     public async Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate, CancellationToken ct = default)
     {
-        string sql = @"
-            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '00000000-0000-0000-0000-000000000000'), pm.RecipeId,
+        string sql = $@"
+            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
                    '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt
             FROM PlannedMeal pm
             WHERE pm.MealPlanId = @MealPlanId AND pm.IsDeleted = 0";
@@ -179,8 +181,8 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid mealId, CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '00000000-0000-0000-0000-000000000000'), pm.RecipeId,
+        string sql = $@"
+            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
                    '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt
             FROM PlannedMeal pm
             WHERE pm.Id = @Id AND pm.IsDeleted = 0";
@@ -202,8 +204,8 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task<List<PlannedMealDto>> GetMealsByDateAsync(Guid planId, DateOnly date, CancellationToken ct = default)
     {
-        const string sql = @"
-            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '00000000-0000-0000-0000-000000000000'), pm.RecipeId,
+        string sql = $@"
+            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
                    '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt
             FROM PlannedMeal pm
             WHERE pm.MealPlanId = @PlanId AND pm.PlannedDate = @Date AND pm.IsDeleted = 0
@@ -419,11 +421,19 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task<List<PlanTemplateDto>> GetTemplatesAsync(Guid userId, bool includePublic = true, CancellationToken ct = default)
     {
-        string sql = @"
+        const string sqlOwnerOnly = @"
             SELECT Id, UserId, Name, Description, ISNULL(Category, ''), ISNULL(SpanDays, 7), IsPublic, CreatedAt, TemplateData
             FROM PlanTemplate
-            WHERE (UserId = @UserId" + (includePublic ? " OR IsPublic = 1" : "") + @")
+            WHERE UserId = @UserId
             ORDER BY CreatedAt DESC";
+
+        const string sqlIncludePublic = @"
+            SELECT Id, UserId, Name, Description, ISNULL(Category, ''), ISNULL(SpanDays, 7), IsPublic, CreatedAt, TemplateData
+            FROM PlanTemplate
+            WHERE UserId = @UserId OR IsPublic = 1
+            ORDER BY CreatedAt DESC";
+
+        string sql = includePublic ? sqlIncludePublic : sqlOwnerOnly;
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);

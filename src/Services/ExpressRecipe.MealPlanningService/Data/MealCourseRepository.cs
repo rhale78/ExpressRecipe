@@ -123,13 +123,24 @@ public class MealCourseRepository : IMealCourseRepository
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
+        await using SqlTransaction tx = (SqlTransaction)await connection.BeginTransactionAsync(ct);
 
-        foreach ((Guid courseId, int sortOrder) in ordering)
+        try
         {
-            await using SqlCommand command = new SqlCommand(sql, connection);
-            command.Parameters.AddWithValue("@Id", courseId);
-            command.Parameters.AddWithValue("@SortOrder", sortOrder);
-            await command.ExecuteNonQueryAsync(ct);
+            foreach ((Guid courseId, int sortOrder) in ordering)
+            {
+                await using SqlCommand command = new SqlCommand(sql, connection, tx);
+                command.Parameters.AddWithValue("@Id", courseId);
+                command.Parameters.AddWithValue("@SortOrder", sortOrder);
+                await command.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
         }
     }
 

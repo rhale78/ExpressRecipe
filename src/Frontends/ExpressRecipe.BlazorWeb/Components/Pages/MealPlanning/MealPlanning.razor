@@ -299,7 +299,7 @@
 
     private DateTime GetWeekStart(DateTime date)
     {
-        // Get Sunday of the week
+        // Calculate offset to the previous Sunday; formula returns 0 when date is already a Sunday
         int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
         return date.AddDays(-1 * diff).Date;
     }
