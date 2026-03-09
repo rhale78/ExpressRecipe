@@ -1,12 +1,26 @@
 -- Migration: 009_MealPlanHistoryTables
 -- Description: Add MealPlanSnapshot and MealChangeLog tables for history/undo support
--- Prerequisite guards: adds SortOrder to PlannedMeal and creates MealCourse if not already
+-- Prerequisite guards: adds SortOrder, IsDeleted, DeletedAt to PlannedMeal and creates MealCourse if not already
 -- present from prior migrations (PR #32 / Part 1).
 
 -- Add SortOrder to PlannedMeal if it does not exist yet
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'PlannedMeal') AND name = N'SortOrder')
 BEGIN
     ALTER TABLE PlannedMeal ADD SortOrder INT NOT NULL DEFAULT 0;
+END
+GO
+
+-- Add IsDeleted to PlannedMeal if it does not exist yet (soft-delete support)
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'PlannedMeal') AND name = N'IsDeleted')
+BEGIN
+    ALTER TABLE PlannedMeal ADD IsDeleted BIT NOT NULL DEFAULT 0;
+END
+GO
+
+-- Add DeletedAt to PlannedMeal if it does not exist yet
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'PlannedMeal') AND name = N'DeletedAt')
+BEGIN
+    ALTER TABLE PlannedMeal ADD DeletedAt DATETIME2 NULL;
 END
 GO
 

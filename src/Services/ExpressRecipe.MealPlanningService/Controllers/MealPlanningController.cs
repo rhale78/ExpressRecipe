@@ -114,11 +114,19 @@ public class MealPlanningController : ControllerBase
 
     [HttpGet("plans/{id}/history")]
     public async Task<IActionResult> GetPlanHistory(Guid id, [FromQuery] string? scope, CancellationToken ct)
-        => Ok(await _history.GetSnapshotsAsync(id, scope, ct));
+    {
+        Guid userId = GetUserId();
+        if (await _repository.GetMealPlanAsync(id, userId) is null) { return NotFound(); }
+        return Ok(await _history.GetSnapshotsAsync(id, scope, ct));
+    }
 
     [HttpPost("plans/{id}/snapshot")]
     public async Task<IActionResult> TakeSnapshot(Guid id, [FromBody] TakeSnapshotRequest request, CancellationToken ct)
-        => Ok(new { id = await _history.TakePlanSnapshotAsync(id, GetUserId(), "Manual", request.Label, ct) });
+    {
+        Guid userId = GetUserId();
+        if (await _repository.GetMealPlanAsync(id, userId) is null) { return NotFound(); }
+        return Ok(new { id = await _history.TakePlanSnapshotAsync(id, userId, "Manual", request.Label, ct) });
+    }
 
     [HttpPost("snapshots/{id}/restore")]
     public async Task<IActionResult> RestoreSnapshot(Guid id, CancellationToken ct)
@@ -129,32 +137,46 @@ public class MealPlanningController : ControllerBase
 
     [HttpGet("meals/{id}/history")]
     public async Task<IActionResult> GetMealHistory(Guid id, CancellationToken ct)
-        => Ok(await _history.GetMealHistoryAsync(id, ct));
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        return Ok(await _history.GetMealHistoryAsync(id, ct));
+    }
 
     // ── Voting ────────────────────────────────────────────────────────────────────
 
     [HttpPost("meals/{id}/vote")]
     public async Task<IActionResult> Vote(Guid id, [FromBody] VoteRequest request, CancellationToken ct)
     {
-        await _voting.UpsertVoteAsync(id, GetUserId(), request.Reaction, request.Comment, ct);
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        await _voting.UpsertVoteAsync(id, userId, request.Reaction, request.Comment, ct);
         return NoContent();
     }
 
     [HttpDelete("meals/{id}/vote")]
     public async Task<IActionResult> RemoveVote(Guid id, CancellationToken ct)
     {
-        await _voting.DeleteVoteAsync(id, GetUserId(), ct);
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        await _voting.DeleteVoteAsync(id, userId, ct);
         return NoContent();
     }
 
     [HttpGet("meals/{id}/votes")]
     public async Task<IActionResult> GetVotes(Guid id, CancellationToken ct)
-        => Ok(await _voting.GetVoteSummaryAsync(id, ct));
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        return Ok(await _voting.GetVoteSummaryAsync(id, ct));
+    }
 
     [HttpPost("meals/{id}/review")]
     public async Task<IActionResult> PostReview(Guid id, [FromBody] PostMealReviewRequest request, CancellationToken ct)
     {
-        await _voting.UpsertPostMealReviewAsync(id, GetUserId(), request.MealRating, request.Comment, request.WouldHaveAgain, ct);
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        await _voting.UpsertPostMealReviewAsync(id, userId, request.MealRating, request.Comment, request.WouldHaveAgain, ct);
         return NoContent();
     }
 
@@ -162,6 +184,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> PostCourseReviews(Guid id, [FromBody] List<CourseReviewRequest> reviews, CancellationToken ct)
     {
         Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
         foreach (CourseReviewRequest r in reviews)
         {
             await _voting.UpsertCourseReviewAsync(id, r.RecipeId, r.CourseType, userId, r.Rating, r.Comment, ct);

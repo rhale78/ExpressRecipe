@@ -75,7 +75,9 @@ public sealed class MealPlanHistoryService : IMealPlanHistoryService
 
     public async Task RestoreSnapshotAsync(Guid snapshotId, Guid userId, CancellationToken ct = default)
     {
-        const string selectSql = "SELECT MealPlanId, Scope, ScopeDate, SnapshotData FROM MealPlanSnapshot WHERE Id = @Id";
+        const string selectSql = @"SELECT MealPlanId, Scope, ScopeDate, SnapshotData
+            FROM MealPlanSnapshot
+            WHERE Id = @Id AND UserId = @UserId";
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
 
@@ -85,7 +87,8 @@ public sealed class MealPlanHistoryService : IMealPlanHistoryService
         DateOnly? scopeDate;
         await using (SqlCommand cmd = new(selectSql, conn))
         {
-            cmd.Parameters.AddWithValue("@Id", snapshotId);
+            cmd.Parameters.AddWithValue("@Id",     snapshotId);
+            cmd.Parameters.AddWithValue("@UserId", userId);
             await using SqlDataReader reader = await cmd.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) { throw new KeyNotFoundException("Snapshot not found"); }
             rawPlanId = reader.GetGuid(0).ToString();
@@ -96,8 +99,19 @@ public sealed class MealPlanHistoryService : IMealPlanHistoryService
 
         Guid planId = Guid.Parse(rawPlanId);
         await TakePlanSnapshotAsync(planId, userId, "Auto", "Pre-restore", ct);
-        await DeleteMealsInScopeAsync(planId, scope, scopeDate, conn, ct);
-        await RecreateMealsFromJsonAsync(scopeData, planId, userId, conn, ct);
+
+        await using SqlTransaction tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await SoftDeleteMealsInScopeAsync(planId, scope, scopeDate, conn, tx, ct);
+            await RecreateMealsFromJsonAsync(scopeData, planId, userId, conn, tx, ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task LogChangeAsync(Guid plannedMealId, Guid planId, string changeType,
@@ -210,21 +224,21 @@ public sealed class MealPlanHistoryService : IMealPlanHistoryService
         return (Guid)await cmd.ExecuteScalarAsync(ct)!;
     }
 
-    private async Task DeleteMealsInScopeAsync(Guid planId, string scope, DateOnly? scopeDate, SqlConnection conn, CancellationToken ct)
+    private async Task SoftDeleteMealsInScopeAsync(Guid planId, string scope, DateOnly? scopeDate, SqlConnection conn, SqlTransaction tx, CancellationToken ct)
     {
         string sql = scope switch
         {
-            "Day"  => "DELETE FROM PlannedMeal WHERE MealPlanId=@PlanId AND PlannedDate=@Date",
-            "Week" => "DELETE FROM PlannedMeal WHERE MealPlanId=@PlanId AND PlannedDate BETWEEN @Date AND DATEADD(day,6,@Date)",
-            _      => "DELETE FROM PlannedMeal WHERE MealPlanId=@PlanId"
+            "Day"  => "UPDATE PlannedMeal SET IsDeleted=1, DeletedAt=GETUTCDATE() WHERE MealPlanId=@PlanId AND PlannedDate=@Date AND IsDeleted=0",
+            "Week" => "UPDATE PlannedMeal SET IsDeleted=1, DeletedAt=GETUTCDATE() WHERE MealPlanId=@PlanId AND PlannedDate BETWEEN @Date AND DATEADD(day,6,@Date) AND IsDeleted=0",
+            _      => "UPDATE PlannedMeal SET IsDeleted=1, DeletedAt=GETUTCDATE() WHERE MealPlanId=@PlanId AND IsDeleted=0"
         };
-        await using SqlCommand cmd = new(sql, conn);
+        await using SqlCommand cmd = new(sql, conn, tx);
         cmd.Parameters.AddWithValue("@PlanId", planId);
         if (scopeDate.HasValue) { cmd.Parameters.AddWithValue("@Date", scopeDate.Value.ToDateTime(TimeOnly.MinValue)); }
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private async Task RecreateMealsFromJsonAsync(string json, Guid planId, Guid userId, SqlConnection conn, CancellationToken ct)
+    private async Task RecreateMealsFromJsonAsync(string json, Guid planId, Guid userId, SqlConnection conn, SqlTransaction tx, CancellationToken ct)
     {
         using JsonDocument doc = JsonDocument.Parse(json);
         foreach (JsonElement mealEl in doc.RootElement.GetProperty("meals").EnumerateArray())
@@ -233,7 +247,7 @@ public sealed class MealPlanHistoryService : IMealPlanHistoryService
                 (Id, MealPlanId, RecipeId, CustomMealName, MealType, PlannedDate, Servings, Notes, IsCompleted, SortOrder)
                 VALUES (NEWID(), @PlanId, @RecipeId, @CustomName, @MealType, @PlannedDate, @Servings, @Notes, 0, @SortOrder)
                 OUTPUT INSERTED.Id";
-            await using SqlCommand cmd = new(insertMeal, conn);
+            await using SqlCommand cmd = new(insertMeal, conn, tx);
             cmd.Parameters.AddWithValue("@PlanId",      planId);
             cmd.Parameters.AddWithValue("@RecipeId",    mealEl.TryGetProperty("recipeId", out JsonElement rid) && rid.ValueKind != JsonValueKind.Null ? rid.GetGuid() : DBNull.Value);
             cmd.Parameters.AddWithValue("@CustomName",  mealEl.TryGetProperty("customMealName", out JsonElement cn) && cn.ValueKind != JsonValueKind.Null ? cn.GetString() : DBNull.Value);
@@ -250,7 +264,7 @@ public sealed class MealPlanHistoryService : IMealPlanHistoryService
                 {
                     const string insertCourse = @"INSERT INTO MealCourse (Id, PlannedMealId, CourseType, RecipeId, Servings, SortOrder)
                         VALUES (NEWID(), @MealId, @CourseType, @RecipeId, @Servings, @SortOrder)";
-                    await using SqlCommand cc = new(insertCourse, conn);
+                    await using SqlCommand cc = new(insertCourse, conn, tx);
                     cc.Parameters.AddWithValue("@MealId",     newMealId);
                     cc.Parameters.AddWithValue("@CourseType", c.GetProperty("courseType").GetString()!);
                     cc.Parameters.AddWithValue("@RecipeId",   c.TryGetProperty("recipeId", out JsonElement crid) && crid.ValueKind != JsonValueKind.Null ? crid.GetGuid() : DBNull.Value);

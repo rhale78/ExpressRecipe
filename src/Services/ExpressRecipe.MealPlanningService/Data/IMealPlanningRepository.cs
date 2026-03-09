@@ -12,6 +12,7 @@ public interface IMealPlanningRepository
     Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid recipeId, DateTime plannedFor, string mealType, int servings);
     Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate, CancellationToken ct = default);
     Task<List<PlannedMealDto>> GetMealsByDateAsync(Guid mealPlanId, DateOnly date, CancellationToken ct = default);
+    Task<bool> UserCanAccessPlannedMealAsync(Guid plannedMealId, Guid userId, CancellationToken ct = default);
     Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedFor, string mealType, int servings);
     Task RemovePlannedMealAsync(Guid plannedMealId);
     Task MarkMealAsCompletedAsync(Guid plannedMealId);
@@ -43,7 +44,8 @@ public class PlannedMealDto
 {
     public Guid Id { get; set; }
     public Guid MealPlanId { get; set; }
-    public Guid RecipeId { get; set; }
+    public Guid? RecipeId { get; set; }
+    public string? CustomMealName { get; set; }
     public string RecipeName { get; set; } = string.Empty;
     public DateTime PlannedFor { get; set; }
     public string MealType { get; set; } = string.Empty;
