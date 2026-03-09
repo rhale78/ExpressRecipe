@@ -61,16 +61,48 @@ public interface IInventoryRepository
 
     // Expiration Alerts
     Task CreateExpirationAlertsAsync(Guid userId);
+    Task CreateSingleExpirationAlertAsync(Guid userId, Guid inventoryItemId, string alertType, int daysUntilExpiration);
     Task<List<ExpirationAlertDto>> GetActiveAlertsAsync(Guid userId);
     Task DismissAlertAsync(Guid alertId);
 
     // Usage History
     Task<List<InventoryHistoryDto>> GetUsageHistoryAsync(Guid itemId, int limit = 50);
     Task<List<UsagePredictionDto>> GetUsagePredictionsAsync(Guid userId);
-    
+
     // Reports
     Task<InventoryReportDto> GetInventoryReportAsync(Guid userId, Guid? householdId);
     Task<List<InventoryItemDto>> GetItemsAboutToExpireAsync(Guid userId, int daysAhead = 3);
+
+    // Purchase Events
+    Task<Guid> RecordPurchaseEventAsync(PurchaseEventRecord record, CancellationToken ct = default);
+    Task<List<PurchaseEventDto>> GetPurchaseHistoryAsync(Guid userId, Guid? productId, int daysBack, CancellationToken ct = default);
+
+    // Consumption Patterns
+    Task UpsertConsumptionPatternAsync(ProductConsumptionPatternRecord pattern, CancellationToken ct = default);
+    Task<List<ProductConsumptionPatternDto>> GetConsumptionPatternsAsync(Guid userId, CancellationToken ct = default);
+    Task<List<ProductConsumptionPatternDto>> GetAbandonedProductsAsync(Guid userId, CancellationToken ct = default);
+    Task<List<ProductConsumptionPatternDto>> GetLowStockByPredictionAsync(Guid userId, int daysAhead, CancellationToken ct = default);
+
+    // Price Watch
+    Task<Guid> CreatePriceWatchAlertAsync(PriceWatchAlertRecord record, CancellationToken ct = default);
+    Task<List<PriceWatchAlertDto>> GetActiveWatchAlertsAsync(CancellationToken ct = default);
+    Task<List<PriceWatchAlertDto>> GetActiveWatchAlertsByUserAsync(Guid userId, CancellationToken ct = default);
+    Task UpdatePriceWatchDealFoundAsync(Guid alertId, Guid storeId, decimal dealPrice, DateTime dealEndsAt, CancellationToken ct = default);
+    Task ResolvePriceWatchAlertAsync(Guid alertId, CancellationToken ct = default);
+    Task SetPriceWatchTargetPriceAsync(Guid userId, Guid alertId, decimal targetPrice, CancellationToken ct = default);
+
+    // Abandoned Product Inquiry
+    Task<Guid> CreateAbandonedInquiryAsync(Guid userId, Guid? productId, string? customName, CancellationToken ct = default);
+    Task RecordInquiryResponseAsync(Guid userId, Guid inquiryId, string response, string? note, CancellationToken ct = default);
+    Task<List<AbandonedProductInquiryDto>> GetPendingInquiriesAsync(Guid userId, CancellationToken ct = default);
+
+    // Waste Report
+    Task<List<WasteReportMonthDto>> GetWasteReportAsync(Guid userId, Guid? householdId, CancellationToken ct = default);
+
+    // Intelligence helpers
+    Task<List<Guid>> GetDistinctUserIdsWithInventoryAsync(CancellationToken ct = default);
+    Task<List<Guid>> GetDistinctUserIdsWithPurchaseHistoryAsync(CancellationToken ct = default);
+    Task WriteInventoryHistoryDirectAsync(Guid itemId, Guid userId, string actionType, decimal quantityChange, decimal quantityBefore, decimal quantityAfter, string? reason, Guid? recipeId, CancellationToken ct = default);
 }
 
 public class HouseholdDto
@@ -248,4 +280,128 @@ public class UsagePredictionDto
     public decimal? SuggestedQuantity { get; set; }
     public int BasedOnDays { get; set; }
     public DateTime CalculatedAt { get; set; }
+}
+
+public class PurchaseEventRecord
+{
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public Guid? IngredientId { get; set; }
+    public string? CustomName { get; set; }
+    public string? Barcode { get; set; }
+    public decimal Quantity { get; set; } = 1;
+    public string? Unit { get; set; }
+    public decimal? Price { get; set; }
+    public Guid? StoreId { get; set; }
+    public string? StoreName { get; set; }
+    public DateTime PurchasedAt { get; set; } = DateTime.UtcNow;
+    public string Source { get; set; } = "ManualAdd";
+}
+
+public class PurchaseEventDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public Guid? IngredientId { get; set; }
+    public string? CustomName { get; set; }
+    public string? Barcode { get; set; }
+    public decimal Quantity { get; set; }
+    public string? Unit { get; set; }
+    public decimal? Price { get; set; }
+    public Guid? StoreId { get; set; }
+    public string? StoreName { get; set; }
+    public DateTime PurchasedAt { get; set; }
+    public string Source { get; set; } = string.Empty;
+}
+
+public class ProductConsumptionPatternRecord
+{
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public Guid? IngredientId { get; set; }
+    public string? CustomName { get; set; }
+    public decimal? AvgDaysBetweenPurchases { get; set; }
+    public decimal? StdDevDays { get; set; }
+    public int PurchaseCount { get; set; }
+    public DateTime? FirstPurchasedAt { get; set; }
+    public DateTime? LastPurchasedAt { get; set; }
+    public DateTime? EstimatedNextPurchaseDate { get; set; }
+    public int LowStockAlertDaysAhead { get; set; } = 3;
+    public bool IsAbandoned { get; set; }
+    public int? AbandonedAfterCount { get; set; }
+}
+
+public class ProductConsumptionPatternDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public Guid? IngredientId { get; set; }
+    public string? CustomName { get; set; }
+    public decimal? AvgDaysBetweenPurchases { get; set; }
+    public decimal? StdDevDays { get; set; }
+    public int PurchaseCount { get; set; }
+    public DateTime? FirstPurchasedAt { get; set; }
+    public DateTime? LastPurchasedAt { get; set; }
+    public DateTime? EstimatedNextPurchaseDate { get; set; }
+    public int LowStockAlertDaysAhead { get; set; }
+    public bool IsAbandoned { get; set; }
+    public int? AbandonedAfterCount { get; set; }
+    public DateTime CalculatedAt { get; set; }
+}
+
+public class PriceWatchAlertRecord
+{
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public Guid? InventoryItemId { get; set; }
+    public decimal? TargetPrice { get; set; }
+}
+
+public class PriceWatchAlertDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public Guid? InventoryItemId { get; set; }
+    public decimal? TargetPrice { get; set; }
+    public DateTime WatchStartedAt { get; set; }
+    public DateTime? AlertSentAt { get; set; }
+    public bool DealFound { get; set; }
+    public Guid? DealStoreId { get; set; }
+    public decimal? DealPrice { get; set; }
+    public DateTime? DealEndsAt { get; set; }
+    public bool IsResolved { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+}
+
+public class AbandonedProductInquiryDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string? CustomName { get; set; }
+    public DateTime NotificationSentAt { get; set; }
+    public string? Response { get; set; }
+    public string? ResponseNote { get; set; }
+    public DateTime? RespondedAt { get; set; }
+    public bool IsActioned { get; set; }
+}
+
+public class WasteReportMonthDto
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public int ExpiredItemsDisposed { get; set; }
+    public int AllergyDisposed { get; set; }
+    public int BadDisposed { get; set; }
+    public int OtherDisposed { get; set; }
+    public decimal TotalDisposedValue { get; set; }
 }

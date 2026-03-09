@@ -336,6 +336,25 @@ public partial class InventoryRepository : IInventoryRepository
         _logger.LogInformation("Created {Count} expiration alerts for user {UserId}", count, userId);
     }
 
+    public async Task CreateSingleExpirationAlertAsync(Guid userId, Guid inventoryItemId, string alertType, int daysUntilExpiration)
+    {
+        const string sql = @"
+            INSERT INTO ExpirationAlert (UserId, InventoryItemId, AlertType, DaysUntilExpiration, AlertDate)
+            VALUES (@UserId, @InventoryItemId, @AlertType, @DaysUntilExpiration, GETUTCDATE())";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.AddWithValue("@InventoryItemId", inventoryItemId);
+        command.Parameters.AddWithValue("@AlertType", alertType);
+        command.Parameters.AddWithValue("@DaysUntilExpiration", daysUntilExpiration);
+
+        await command.ExecuteNonQueryAsync();
+        _logger.LogDebug("Created {AlertType} expiration alert for item {ItemId}", alertType, inventoryItemId);
+    }
+
     public async Task<List<ExpirationAlertDto>> GetExpirationAlertsAsync(Guid userId)
     {
         const string sql = @"

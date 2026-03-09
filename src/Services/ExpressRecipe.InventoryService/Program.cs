@@ -1,6 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.InventoryService.Data;
 using ExpressRecipe.InventoryService.Services;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Services;
 using ExpressRecipe.Shared.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -40,7 +41,7 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 builder.Services.AddScoped<IInventoryRepository>(sp =>
     new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
 
-// Register RabbitMQ for event publishing
+// Register RabbitMQ for event publishing (legacy EventPublisher)
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
     return new ConnectionFactory
@@ -55,18 +56,58 @@ builder.Services.AddSingleton<IConnectionFactory>(sp =>
 // Register event publisher
 builder.Services.AddSingleton<EventPublisher>();
 
+// Register typed HttpClients for inter-service communication
+builder.Services.AddHttpClient("notificationservice", client =>
+{
+    string? baseUrl = builder.Configuration["Services:NotificationService:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
+builder.Services.AddHttpClient("priceservice", client =>
+{
+    string? baseUrl = builder.Configuration["Services:PriceService:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
+builder.Services.AddHttpClient("shoppingservice", client =>
+{
+    string? baseUrl = builder.Configuration["Services:ShoppingService:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
+builder.Services.AddHttpClient("recipeservice", client =>
+{
+    string? baseUrl = builder.Configuration["Services:RecipeService:BaseUrl"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
+
 // Register background workers
 builder.Services.AddHostedService<ExpirationAlertWorker>();
+builder.Services.AddHostedService<LowStockMonitorWorker>();
+builder.Services.AddHostedService<PatternAnalysisWorker>();
+
+// Register messaging and subscribers (optional — requires RabbitMQ)
+bool messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+string? messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+bool messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    builder.Services.AddHostedService<RecipeCookedEventSubscriber>();
+}
 
 // Add controllers
 builder.Services.AddControllers();
-
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.InventoryService API", Version = "v1" });
-// });
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -88,12 +129,6 @@ await app.RunMigrationsAsync(connectionString, migrations);
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-if (app.Environment.IsDevelopment())
-{
-    // app.UseSwagger();
-    // app.UseSwaggerUI();
-}
 
 app.UseCors();
 
