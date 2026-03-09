@@ -80,7 +80,7 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
         {
             (Guid Id, string Name)? hit = await _cache.GetOrSetAsync(
                 $"{ExactCachePrefix}{norm}",
-                innerCt => new ValueTask<(Guid, string)?>(  _repo.ExactMatchAsync(norm, innerCt)),
+                innerCt => new ValueTask<(Guid, string)?>(_repo.ExactMatchAsync(norm, innerCt)),
                 cancellationToken: ct);
             if (hit.HasValue)
             {
@@ -105,7 +105,7 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
             string norm = normalized[raw];
             (Guid Id, string Name)? hit = await _cache.GetOrSetAsync(
                 $"{AliasCachePrefix}{norm}",
-                innerCt => new ValueTask<(Guid, string)?>(  _repo.AliasMatchAsync(norm, innerCt)),
+                innerCt => new ValueTask<(Guid, string)?>(_repo.AliasMatchAsync(norm, innerCt)),
                 cancellationToken: ct);
             if (hit.HasValue)
             {
@@ -280,14 +280,14 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
     {
         await _repo.ResolveQueueItemAsync(queueItemId, ingredientId, "AliasCreated", ct);
         if (createAlias) { await _repo.CreateAliasAsync(ingredientId, resolvedBy, "UserConfirmed", ct); }
-        _ = _cache.RemoveAsync($"{AliasCachePrefix}{resolvedBy}");
+        await _cache.RemoveAsync($"{AliasCachePrefix}{resolvedBy}", ct);
     }
 
     public async Task CreateAndResolveAsync(Guid queueItemId, string newIngredientName,
         string category, CancellationToken ct = default)
     {
         await _repo.ResolveQueueItemAsync(queueItemId, null, "NewIngredient", ct);
-        _ = _cache.RemoveAsync(TokenIndexKey);
+        await _cache.RemoveAsync(TokenIndexKey, ct);
     }
 
     public async Task RejectAsync(Guid queueItemId, string reason, CancellationToken ct = default) =>
