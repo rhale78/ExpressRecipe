@@ -263,7 +263,7 @@ public class ShoppingOptimizationServiceStrategyTests
     // ── SingleStore ───────────────────────────────────────────────────────────
 
     [Fact]
-    public void SingleStore_AssignsAllItemsToFirstPreferredStore()
+    public void SingleStore_AssignsAllItemsToIsPreferredStore()
     {
         List<ShoppingListItemDto> items = new()
         {
@@ -271,26 +271,59 @@ public class ShoppingOptimizationServiceStrategyTests
             new() { Id = ItemB }
         };
 
-        List<UserStoreCategoryPreferenceDto> prefs = new()
+        List<StoreDto> stores = new()
         {
-            new() { Category = "Produce", PreferredStoreId = StorePublix, RankOrder = 1 }
+            new() { Id = StoreCostco, Name = "Costco", IsPreferred = false },
+            new() { Id = StorePublix, Name = "Publix", IsPreferred = true }
         };
 
-        Dictionary<Guid, Guid> result = ShoppingOptimizationService.ApplySingleStore(items, prefs);
+        List<UserStoreCategoryPreferenceDto> prefs = new()
+        {
+            // Category prefs point elsewhere but IsPreferred should win
+            new() { Category = "Produce", PreferredStoreId = StoreCostco, RankOrder = 1 }
+        };
+
+        Dictionary<Guid, Guid> result = ShoppingOptimizationService.ApplySingleStore(items, stores, prefs);
 
         result[ItemA].Should().Be(StorePublix);
         result[ItemB].Should().Be(StorePublix);
     }
 
     [Fact]
-    public void SingleStore_ReturnsEmptyWhenNoPreferences()
+    public void SingleStore_FallsBackToCategoryPrefWhenNoIsPreferredStore()
+    {
+        List<ShoppingListItemDto> items = new()
+        {
+            new() { Id = ItemA },
+            new() { Id = ItemB }
+        };
+
+        List<StoreDto> stores = new()
+        {
+            new() { Id = StoreCostco, Name = "Costco", IsPreferred = false }
+        };
+
+        List<UserStoreCategoryPreferenceDto> prefs = new()
+        {
+            new() { Category = "Produce", PreferredStoreId = StorePublix, RankOrder = 1 }
+        };
+
+        Dictionary<Guid, Guid> result = ShoppingOptimizationService.ApplySingleStore(items, stores, prefs);
+
+        result[ItemA].Should().Be(StorePublix);
+        result[ItemB].Should().Be(StorePublix);
+    }
+
+    [Fact]
+    public void SingleStore_ReturnsEmptyWhenNoPreferredStoreOrPreferences()
     {
         List<ShoppingListItemDto> items = new()
         {
             new() { Id = ItemA }
         };
 
-        Dictionary<Guid, Guid> result = ShoppingOptimizationService.ApplySingleStore(items, new List<UserStoreCategoryPreferenceDto>());
+        Dictionary<Guid, Guid> result = ShoppingOptimizationService.ApplySingleStore(
+            items, new List<StoreDto>(), new List<UserStoreCategoryPreferenceDto>());
 
         result.Should().BeEmpty();
     }

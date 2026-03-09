@@ -32,7 +32,7 @@ public class ShoppingSessionService : IShoppingSessionService
 
     public async Task<ShoppingSessionSummaryDto> CompleteSessionAsync(Guid sessionId, Guid userId, CancellationToken ct = default)
     {
-        ShoppingSessionSummaryDto summary = await _repository.CompleteShoppingSessionAsync(sessionId, ct);
+        ShoppingSessionSummaryDto summary = await _repository.CompleteShoppingSessionAsync(sessionId, userId, ct);
 
         // Inventory event publishing requires the checked items from the completed session.
         // The DB-level completion (marking session ended) is done in CompleteShoppingSessionAsync.

@@ -5,7 +5,7 @@ namespace ExpressRecipe.ShoppingService.Data;
 // Partial class for recipe and inventory integration
 public partial class ShoppingRepository
 {
-    public async Task<Guid> AddItemsFromRecipeAsync(Guid listId, Guid userId, Guid recipeId, int servings)
+    public Task<Guid> AddItemsFromRecipeAsync(Guid listId, Guid userId, Guid recipeId, int servings)
     {
         // The real cross-service logic is handled by ShoppingSessionService.AddItemsFromRecipeAsync.
         // This method is kept for backward compatibility and delegates by returning the listId.
@@ -13,26 +13,26 @@ public partial class ShoppingRepository
             "AddItemsFromRecipeAsync called for recipe {RecipeId}, list {ListId}, servings {Servings}. " +
             "Use IShoppingSessionService.AddItemsFromRecipeAsync for full cross-service integration.",
             recipeId, listId, servings);
-        return listId;
+        return Task.FromResult(listId);
     }
 
-    public async Task<List<ShoppingListItemDto>> GetRecipeIngredientsAsItemsAsync(Guid recipeId, int servings)
+    public Task<List<ShoppingListItemDto>> GetRecipeIngredientsAsItemsAsync(Guid recipeId, int servings)
     {
         // The actual integration with RecipeService is done in ShoppingSessionService.
         _logger.LogInformation("GetRecipeIngredientsAsItemsAsync: recipeId={RecipeId}, servings={Servings}", recipeId, servings);
-        return new List<ShoppingListItemDto>();
+        return Task.FromResult(new List<ShoppingListItemDto>());
     }
 
-    public async Task<Guid> AddLowStockItemsAsync(Guid listId, Guid userId, decimal threshold = 2.0m)
+    public Task<Guid> AddLowStockItemsAsync(Guid listId, Guid userId, decimal threshold = 2.0m)
     {
         _logger.LogInformation("Adding low stock items to list {ListId} (threshold: {Threshold})", listId, threshold);
-        return listId;
+        return Task.FromResult(listId);
     }
 
-    public async Task<List<ShoppingListItemDto>> GetLowStockItemsFromInventoryAsync(Guid userId, decimal threshold)
+    public Task<List<ShoppingListItemDto>> GetLowStockItemsFromInventoryAsync(Guid userId, decimal threshold)
     {
         _logger.LogInformation("Getting low stock items for user {UserId} (threshold: {Threshold})", userId, threshold);
-        return new List<ShoppingListItemDto>();
+        return Task.FromResult(new List<ShoppingListItemDto>());
     }
 
     public async Task AddPurchasedItemsToInventoryAsync(Guid listId)

@@ -45,6 +45,9 @@ public class ShoppingOptimizationService : IShoppingOptimizationService
         // 2. Load user category preferences
         List<UserStoreCategoryPreferenceDto> categoryPrefs = await _repository.GetUserCategoryPreferencesAsync(userId, ct);
 
+        // 2b. Load user's stores (for SingleStore: use the IsPreferred store)
+        List<StoreDto> userStores = await _repository.GetUserStoresAsync(userId);
+
         // 3. Batch-fetch prices from PriceService
         List<Guid> productIds = items
             .Where(i => i.ProductId.HasValue)
@@ -61,7 +64,7 @@ public class ShoppingOptimizationService : IShoppingOptimizationService
             "PreferredStorePerCategory" => ApplyPreferredStorePerCategory(items, pricesByProduct, categoryPrefs),
             "MinimizeStores" => ApplyMinimizeStores(items, pricesByProduct),
             "Hybrid" => ApplyHybrid(items, pricesByProduct, categoryPrefs),
-            _ => ApplySingleStore(items, categoryPrefs) // SingleStore default
+            _ => ApplySingleStore(items, userStores, categoryPrefs) // SingleStore default
         };
 
         // 5. Load store details for assigned stores
@@ -132,8 +135,13 @@ public class ShoppingOptimizationService : IShoppingOptimizationService
             })
             .ToList();
 
-        decimal totalEstimate = storeGroups.Sum(g => g.SubTotal);
-        decimal totalWithDeals = storeGroups.Sum(g => g.Items.Sum(i => (i.Price ?? 0m) * i.Quantity));
+        // totalWithDeals: sum of actual (deal) prices × quantity
+        decimal totalWithDeals = storeGroups.Sum(g => g.SubTotal);
+
+        // totalEstimate: sum of regular prices (Price + Savings) × quantity.
+        // When no deal applies, Savings is null and regular price equals deal price.
+        decimal totalEstimate = storeGroups.Sum(g =>
+            g.Items.Sum(i => ((i.Price ?? 0m) + (i.Savings ?? 0m)) * i.Quantity));
 
         OptimizedShoppingPlan plan = new()
         {
@@ -156,9 +164,13 @@ public class ShoppingOptimizationService : IShoppingOptimizationService
 
     internal static Dictionary<Guid, Guid> ApplySingleStore(
         List<ShoppingListItemDto> items,
+        List<StoreDto> userStores,
         List<UserStoreCategoryPreferenceDto> prefs)
     {
-        Guid? preferredStore = prefs.OrderBy(p => p.RankOrder).FirstOrDefault()?.PreferredStoreId;
+        // Prefer the store marked IsPreferred; fall back to highest-rank category pref store
+        Guid? preferredStore = userStores.FirstOrDefault(s => s.IsPreferred)?.Id
+            ?? prefs.OrderBy(p => p.RankOrder).FirstOrDefault()?.PreferredStoreId;
+
         Dictionary<Guid, Guid> result = new();
         if (preferredStore.HasValue)
         {
@@ -299,27 +311,33 @@ public class ShoppingOptimizationService : IShoppingOptimizationService
 
         try
         {
-            string csvIds = string.Join(",", productIds);
-            List<BatchPriceResult>? prices = await _priceClient
-                .GetFromJsonAsync<List<BatchPriceResult>>(
-                    $"api/prices/batch?productIds={Uri.EscapeDataString(csvIds)}",
-                    _jsonOptions, ct);
+            // PriceService exposes POST /api/prices/batch with { productIds: [...] }
+            List<ProductPriceApiDto>? prices = await _priceClient
+                .PostAsJsonAsync("api/prices/batch", new { productIds }, ct)
+                .ContinueWith(async t =>
+                {
+                    HttpResponseMessage response = await t;
+                    response.EnsureSuccessStatusCode();
+                    return await response.Content.ReadFromJsonAsync<List<ProductPriceApiDto>>(_jsonOptions, ct);
+                }, ct)
+                .Unwrap();
 
             if (prices != null)
             {
-                foreach (BatchPriceResult p in prices)
+                foreach (ProductPriceApiDto p in prices)
                 {
+                    if (!p.StoreId.HasValue) continue;
                     if (!result.ContainsKey(p.ProductId))
                     {
                         result[p.ProductId] = new List<StorePriceEntry>();
                     }
                     result[p.ProductId].Add(new StorePriceEntry
                     {
-                        StoreId = p.StoreId,
+                        StoreId = p.StoreId.Value,
                         Price = p.Price,
-                        RegularPrice = p.RegularPrice,
-                        HasDeal = p.HasDeal,
-                        DealDescription = p.DealDescription
+                        RegularPrice = null, // ProductPriceDto does not carry a separate regular price
+                        HasDeal = false,
+                        DealDescription = null
                     });
                 }
             }
@@ -343,13 +361,11 @@ public class ShoppingOptimizationService : IShoppingOptimizationService
         public string? DealDescription { get; set; }
     }
 
-    private sealed class BatchPriceResult
+    // Mirrors PriceService's ProductPriceDto (the subset we need)
+    private sealed class ProductPriceApiDto
     {
         public Guid ProductId { get; set; }
-        public Guid StoreId { get; set; }
+        public Guid? StoreId { get; set; }
         public decimal Price { get; set; }
-        public decimal? RegularPrice { get; set; }
-        public bool HasDeal { get; set; }
-        public string? DealDescription { get; set; }
     }
 }

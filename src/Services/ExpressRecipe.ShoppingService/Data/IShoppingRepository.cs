@@ -104,7 +104,7 @@ public interface IShoppingRepository
     Task<List<OptimizedShoppingItem>> GetItemsSortedByAisleAsync(Guid listId, Guid storeId, string sortMode, CancellationToken ct = default);
 
     // Complete shopping session + notify inventory service
-    Task<ShoppingSessionSummaryDto> CompleteShoppingSessionAsync(Guid sessionId, CancellationToken ct = default);
+    Task<ShoppingSessionSummaryDto> CompleteShoppingSessionAsync(Guid sessionId, Guid userId, CancellationToken ct = default);
 }
 
 public class ShoppingListDto

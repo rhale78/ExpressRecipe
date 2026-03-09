@@ -133,7 +133,12 @@ public class ScanController : ControllerBase
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning("Session {SessionId} not found or invalid: {Message}", sessionId, ex.Message);
-            return BadRequest(new { error = ex.Message });
+            return NotFound(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning("Unauthorized attempt to complete session {SessionId}: {Message}", sessionId, ex.Message);
+            return Forbid();
         }
         catch (Exception ex)
         {

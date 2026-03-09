@@ -225,10 +225,11 @@ public partial class ShoppingRepository
                 i.Quantity, i.Unit,
                 sl.Aisle, COALESCE(sl.OrderIndex, 9999) AS AisleOrder,
                 sl.ZoneType,
-                i.EstimatedPrice, i.HasDeal, i.DealDescription
+                i.EstimatedPrice, i.HasDeal, i.DealDescription,
+                i.Category
             FROM ShoppingListItem i
             LEFT JOIN StoreLayout sl ON sl.StoreId = @StoreId
-                AND sl.CategoryName = i.Category
+                AND sl.Category = i.Category
             WHERE i.ShoppingListId = @ListId AND i.IsDeleted = 0 AND i.IsChecked = 0
             ORDER BY COALESCE(sl.OrderIndex, 9999) ASC, i.AddedAt ASC";
 
@@ -238,12 +239,13 @@ public partial class ShoppingRepository
         command.Parameters.AddWithValue("@ListId", listId);
         command.Parameters.AddWithValue("@StoreId", storeId);
 
-        List<(OptimizedShoppingItem Item, string? ZoneType, int AisleOrder)> raw = new();
+        List<(OptimizedShoppingItem Item, string? ZoneType, int AisleOrder, string? Category)> raw = new();
         await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
             string? zoneType = reader.IsDBNull(6) ? null : reader.GetString(6);
             int aisleOrder = reader.GetInt32(5);
+            string? category = reader.IsDBNull(10) ? null : reader.GetString(10);
             raw.Add((new OptimizedShoppingItem
             {
                 ShoppingListItemId = reader.GetGuid(0),
@@ -255,20 +257,20 @@ public partial class ShoppingRepository
                 Price = reader.IsDBNull(7) ? null : reader.GetDecimal(7),
                 HasDeal = reader.GetBoolean(8),
                 DealDescription = reader.IsDBNull(9) ? null : reader.GetString(9)
-            }, zoneType, aisleOrder));
+            }, zoneType, aisleOrder, category));
         }
 
         return ApplyAisleSortMode(raw, sortMode);
     }
 
     private static List<OptimizedShoppingItem> ApplyAisleSortMode(
-        List<(OptimizedShoppingItem Item, string? ZoneType, int AisleOrder)> raw, string sortMode)
+        List<(OptimizedShoppingItem Item, string? ZoneType, int AisleOrder, string? Category)> raw, string sortMode)
     {
-        IEnumerable<(OptimizedShoppingItem Item, string? ZoneType, int AisleOrder)> sorted = sortMode switch
+        IEnumerable<(OptimizedShoppingItem Item, string? ZoneType, int AisleOrder, string? Category)> sorted = sortMode switch
         {
             "ColdLast" => raw.OrderBy(x => IsColdZone(x.ZoneType) ? 1 : 0).ThenBy(x => x.AisleOrder),
             "BackToFront" => raw.OrderByDescending(x => x.AisleOrder),
-            "Category" => raw.OrderBy(x => x.Item.Aisle ?? "ZZZ").ThenBy(x => x.AisleOrder),
+            "Category" => raw.OrderBy(x => x.Category ?? "ZZZ").ThenBy(x => x.Item.Name),
             _ => raw.OrderBy(x => x.AisleOrder) // default: Aisle
         };
         return sorted.Select(x => x.Item).ToList();
@@ -279,15 +281,15 @@ public partial class ShoppingRepository
 
     // ── Complete shopping session ─────────────────────────────────────────────
 
-    public async Task<ShoppingSessionSummaryDto> CompleteShoppingSessionAsync(Guid sessionId, CancellationToken ct = default)
+    public async Task<ShoppingSessionSummaryDto> CompleteShoppingSessionAsync(Guid sessionId, Guid userId, CancellationToken ct = default)
     {
-        // Load session details
+        // Load session details and verify ownership
         const string sessionSql = @"
             SELECT ss.Id, ss.UserId, ss.ShoppingListId, ss.TotalSpent
             FROM ShoppingScanSession ss
             WHERE ss.Id = @SessionId";
 
-        Guid userId;
+        Guid sessionUserId;
         Guid shoppingListId;
         decimal? totalSpent;
 
@@ -302,9 +304,14 @@ public partial class ShoppingRepository
             {
                 throw new InvalidOperationException($"Session {sessionId} not found.");
             }
-            userId = r.GetGuid(1);
+            sessionUserId = r.GetGuid(1);
             shoppingListId = r.GetGuid(2);
             totalSpent = r.IsDBNull(3) ? null : r.GetDecimal(3);
+        }
+
+        if (sessionUserId != userId)
+        {
+            throw new UnauthorizedAccessException($"Session {sessionId} does not belong to user {userId}.");
         }
 
         // Get checked items (including those that should add to inventory)
@@ -343,7 +350,7 @@ public partial class ShoppingRepository
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
-        // Note: actual HTTP calls to InventoryService are handled by ShoppingOptimizationService
+        // Note: actual HTTP calls to InventoryService are handled by ShoppingSessionService
         // Here we just return the summary; the controller calls InventoryService for each item
         _logger.LogInformation(
             "Completed session {SessionId}: {Count} checked items, totalSpent={Total}",
@@ -372,6 +379,6 @@ public partial class ShoppingRepository
             count++;
             idx += marker.Length;
         }
-        return Math.Max(count, 1);
+        return count;
     }
 }

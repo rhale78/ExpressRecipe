@@ -95,13 +95,27 @@ public class OptimizationController : ControllerBase
         [FromBody] AddFromRecipeRequest request,
         CancellationToken ct = default)
     {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request body is required." });
+        }
+
+        if (request.Servings <= 0)
+        {
+            return BadRequest(new { message = "Servings must be greater than zero." });
+        }
+
         try
         {
             Guid userId = GetUserId();
             ShoppingListDto? list = await _repository.GetShoppingListAsync(listId, userId);
             if (list == null) return NotFound();
 
-            await _sessionService.AddItemsFromRecipeAsync(listId, userId, request.RecipeId, request.Servings, ct);
+            Guid resultId = await _sessionService.AddItemsFromRecipeAsync(listId, userId, request.RecipeId, request.Servings, ct);
+            if (resultId == Guid.Empty)
+            {
+                return StatusCode(502, new { message = "Unable to retrieve recipe ingredients or no ingredients needed (all on hand)." });
+            }
             return Ok(new { message = "Ingredients added to list." });
         }
         catch (Exception ex)
@@ -120,17 +134,22 @@ public class OptimizationController : ControllerBase
     [HttpGet("{listId}/items/sorted")]
     public async Task<IActionResult> GetSortedItems(
         Guid listId,
-        [FromQuery] Guid storeId,
+        [FromQuery] Guid? storeId,
         [FromQuery] string mode = "Aisle",
         CancellationToken ct = default)
     {
+        if (!storeId.HasValue || storeId.Value == Guid.Empty)
+        {
+            return BadRequest(new { message = "storeId query parameter is required." });
+        }
+
         try
         {
             Guid userId = GetUserId();
             ShoppingListDto? list = await _repository.GetShoppingListAsync(listId, userId);
             if (list == null) return NotFound();
 
-            List<OptimizedShoppingItem> items = await _repository.GetItemsSortedByAisleAsync(listId, storeId, mode, ct);
+            List<OptimizedShoppingItem> items = await _repository.GetItemsSortedByAisleAsync(listId, storeId.Value, mode, ct);
             return Ok(items);
         }
         catch (Exception ex)
