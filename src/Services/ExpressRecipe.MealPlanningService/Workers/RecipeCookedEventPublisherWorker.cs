@@ -44,7 +44,11 @@ public class RecipeCookedEventPublisherWorker : BackgroundService
         _logger.LogInformation("RecipeCookedEventPublisherWorker stopped");
     }
 
-    private async Task ProcessPendingDeductionsAsync(CancellationToken ct)
+    /// <summary>
+    /// Processes all pending inventory deductions in one cycle.
+    /// Exposed as <c>internal</c> so tests can call it directly without timing-based delays.
+    /// </summary>
+    internal async Task ProcessPendingDeductionsAsync(CancellationToken ct)
     {
         using IServiceScope scope = _serviceProvider.CreateScope();
         IMealPlanningRepository repository = scope.ServiceProvider.GetRequiredService<IMealPlanningRepository>();

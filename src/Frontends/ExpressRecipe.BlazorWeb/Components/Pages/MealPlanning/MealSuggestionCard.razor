@@ -1,4 +1,4 @@
-@using System.Net.Http.Json
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
 
 <div class="suggestion-card @(IsSelected ? "suggestion-card--selected" : "")">
     <div class="suggestion-card-header">
@@ -71,22 +71,4 @@
         >= 0.5m => "inventory-badge--medium",
         _       => "inventory-badge--low"
     };
-}
-
-/// <summary>
-/// Client-side model for a meal suggestion result from the API.
-/// </summary>
-public class MealSuggestionResult
-{
-    public Guid RecipeId { get; set; }
-    public string RecipeName { get; set; } = string.Empty;
-    public int CookMinutes { get; set; }
-    public decimal UserRating { get; set; }
-    public decimal GlobalRating { get; set; }
-    public int UserCookCount { get; set; }
-    public decimal InventoryMatchPct { get; set; }
-    public bool IsAllergenSafe { get; set; }
-    public decimal Score { get; set; }
-    public List<string> MissingIngredients { get; set; } = new();
-    public List<string> Tags { get; set; } = new();
 }

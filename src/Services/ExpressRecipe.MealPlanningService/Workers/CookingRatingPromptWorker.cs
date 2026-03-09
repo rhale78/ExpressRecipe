@@ -13,13 +13,16 @@ public class CookingRatingPromptWorker : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<CookingRatingPromptWorker> _logger;
     private readonly TimeSpan _interval = TimeSpan.FromMinutes(15);
+    private readonly string _notificationUrl;
 
     public CookingRatingPromptWorker(
         IServiceProvider serviceProvider,
+        IConfiguration configuration,
         ILogger<CookingRatingPromptWorker> logger)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _notificationUrl = configuration["Services:NotificationService"] ?? "http://notificationservice";
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -47,10 +50,7 @@ public class CookingRatingPromptWorker : BackgroundService
     {
         using IServiceScope scope = _serviceProvider.CreateScope();
         IMealPlanningRepository repository = scope.ServiceProvider.GetRequiredService<IMealPlanningRepository>();
-        IConfiguration config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
         IHttpClientFactory factory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
-
-        string notificationUrl = config["Services:NotificationService"] ?? "http://notificationservice";
 
         List<RatingPromptRow> rows = await repository.GetUnratedCookingHistoryAsync(ct);
 
@@ -77,7 +77,7 @@ public class CookingRatingPromptWorker : BackgroundService
                 };
 
                 HttpResponseMessage response = await client.PostAsJsonAsync(
-                    $"{notificationUrl}/api/notification/internal",
+                    $"{_notificationUrl}/api/notification/internal",
                     payload,
                     ct);
 

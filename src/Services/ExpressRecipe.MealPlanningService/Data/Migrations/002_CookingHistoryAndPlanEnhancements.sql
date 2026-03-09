@@ -17,7 +17,14 @@ CREATE TABLE CookingHistory (
     Source                  NVARCHAR(50) NOT NULL DEFAULT 'PlannedMeal',
     PlannedMealId           UNIQUEIDENTIFIER NULL,
     InventoryDeductionSent  BIT NOT NULL DEFAULT 0,
-    RatingPromptSent        BIT NOT NULL DEFAULT 0
+    RatingPromptSent        BIT NOT NULL DEFAULT 0,
+    CreatedAt               DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy               UNIQUEIDENTIFIER NULL,
+    UpdatedAt               DATETIME2 NULL,
+    UpdatedBy               UNIQUEIDENTIFIER NULL,
+    IsDeleted               BIT NOT NULL DEFAULT 0,
+    DeletedAt               DATETIME2 NULL,
+    RowVersion              ROWVERSION
 );
 CREATE INDEX IX_CookingHistory_UserId_CookedAt ON CookingHistory(UserId, CookedAt DESC);
 CREATE INDEX IX_CookingHistory_RecipeId ON CookingHistory(RecipeId);

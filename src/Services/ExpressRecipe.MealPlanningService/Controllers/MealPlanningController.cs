@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using ExpressRecipe.MealPlanningService.Data;
@@ -89,19 +90,29 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpPost("plans/{id}/meals/{mealId}/complete")]
-    public async Task<IActionResult> CompletePlannedMeal(Guid id, Guid mealId)
+    public async Task<IActionResult> CompletePlannedMeal(Guid id, Guid mealId, [FromBody] CompleteMealRequest? request = null)
     {
+        Guid userId = GetUserId();
+
         PlannedMealDto? meal = await _repository.GetPlannedMealAsync(mealId);
         if (meal == null) return NotFound();
 
+        // Verify the meal belongs to the plan in the route and to the authenticated user
+        if (meal.MealPlanId != id) return NotFound();
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(meal.MealPlanId, userId);
+        if (plan == null) return Forbid();
+
         await _repository.MarkMealAsCompletedAsync(mealId);
+
+        // RecipeName is not stored on PlannedMeal; use caller-supplied name when available.
+        string recipeName = request?.RecipeName ?? meal.RecipeName;
 
         // Create a cooking history row from the planned meal
         CookingHistoryRecord record = new()
         {
-            UserId      = GetUserId(),
+            UserId      = userId,
             RecipeId    = meal.RecipeId,
-            RecipeName  = meal.RecipeName,
+            RecipeName  = recipeName,
             CookedAt    = DateTime.UtcNow,
             Servings    = meal.Servings,
             MealType    = meal.MealType,
@@ -235,7 +246,11 @@ public class MealPlanningController : ControllerBase
     {
         Guid userId = GetUserId();
 
-        // 1. Load all non-completed planned meals for this plan
+        // Verify the plan belongs to the authenticated user
+        MealPlanDto? mealPlan = await _repository.GetMealPlanAsync(id, userId);
+        if (mealPlan == null) return NotFound();
+
+        // Load all non-completed planned meals for this plan
         List<PlannedMealDto> meals = await _repository.GetPlannedMealsAsync(id, null, null);
         meals = meals.Where(m => !m.IsCompleted).ToList();
 
@@ -250,39 +265,49 @@ public class MealPlanningController : ControllerBase
 
         using HttpClient httpClient = _httpClientFactory.CreateClient("MealPlanningService");
 
-        // 2. Per meal: fetch ingredients and aggregate by ingredient name
+        // Fetch ingredients for all meals concurrently to avoid sequential HTTP calls
+        IEnumerable<Task<(PlannedMealDto Meal, List<RecipeIngredientItem>? Ingredients)>> ingredientTasks =
+            meals.Select(async meal =>
+            {
+                try
+                {
+                    List<RecipeIngredientItem>? ingredients = await httpClient.GetFromJsonAsync<List<RecipeIngredientItem>>(
+                        $"{recipeServiceUrl}/api/recipes/{meal.RecipeId}/ingredients");
+                    return (Meal: meal, Ingredients: ingredients);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to fetch ingredients for recipe {RecipeId}", meal.RecipeId);
+                    return (Meal: meal, Ingredients: (List<RecipeIngredientItem>?)null);
+                }
+            });
+
+        (PlannedMealDto Meal, List<RecipeIngredientItem>? Ingredients)[] mealIngredientResults =
+            await Task.WhenAll(ingredientTasks);
+
+        // Aggregate ingredients by name
         Dictionary<string, AggregatedIngredient> aggregated = new(StringComparer.OrdinalIgnoreCase);
 
-        foreach (PlannedMealDto meal in meals)
+        foreach ((PlannedMealDto meal, List<RecipeIngredientItem>? ingredients) in mealIngredientResults)
         {
-            try
+            if (ingredients == null) continue;
+
+            foreach (RecipeIngredientItem ing in ingredients)
             {
-                List<RecipeIngredientItem>? ingredients = await httpClient.GetFromJsonAsync<List<RecipeIngredientItem>>(
-                    $"{recipeServiceUrl}/api/recipes/{meal.RecipeId}/ingredients");
-
-                if (ingredients == null) continue;
-
-                foreach (RecipeIngredientItem ing in ingredients)
+                string key = ing.Name.ToLowerInvariant();
+                if (aggregated.TryGetValue(key, out AggregatedIngredient? existing))
                 {
-                    string key = ing.Name.ToLowerInvariant();
-                    if (aggregated.TryGetValue(key, out AggregatedIngredient? existing))
-                    {
-                        aggregated[key] = existing with { TotalQuantity = existing.TotalQuantity + (ing.Quantity * meal.Servings) };
-                    }
-                    else
-                    {
-                        aggregated[key] = new AggregatedIngredient(
-                            ing.IngredientId, ing.Name, ing.Quantity * meal.Servings, ing.Unit);
-                    }
+                    aggregated[key] = existing with { TotalQuantity = existing.TotalQuantity + (ing.Quantity * meal.Servings) };
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to fetch ingredients for recipe {RecipeId}", meal.RecipeId);
+                else
+                {
+                    aggregated[key] = new AggregatedIngredient(
+                        ing.IngredientId, ing.Name, ing.Quantity * meal.Servings, ing.Unit);
+                }
             }
         }
 
-        // 3. Fetch on-hand inventory
+        // Fetch on-hand inventory
         Dictionary<string, decimal> onHand = new(StringComparer.OrdinalIgnoreCase);
         try
         {
@@ -302,7 +327,7 @@ public class MealPlanningController : ControllerBase
             _logger.LogWarning(ex, "Failed to fetch inventory for user {UserId} — proceeding without", userId);
         }
 
-        // 4. Determine net quantities needed, respecting the inventory slider
+        // Determine net quantities needed, respecting the inventory slider
         int slider = request.InventorySlider ?? 50;
         Guid? targetListId = request.TargetListId;
         int itemsAdded = 0;
@@ -315,9 +340,9 @@ public class MealPlanningController : ControllerBase
 
             if (netQty <= 0m) continue;
 
-            try
+            if (targetListId.HasValue)
             {
-                if (targetListId.HasValue)
+                try
                 {
                     await httpClient.PostAsJsonAsync(
                         $"{shoppingServiceUrl}/api/shopping/{targetListId.Value}/items",
@@ -327,13 +352,13 @@ public class MealPlanningController : ControllerBase
                             Quantity = netQty,
                             Unit     = agg.Unit
                         });
-                }
 
-                itemsAdded++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to add {Ingredient} to shopping list", agg.Name);
+                    itemsAdded++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to add {Ingredient} to shopping list", agg.Name);
+                }
             }
         }
 
@@ -367,6 +392,15 @@ public class SetGoalRequest
     public DateTime? EndDate { get; set; }
 }
 
+public class CompleteMealRequest
+{
+    /// <summary>
+    /// The display name of the recipe at the time it was cooked.
+    /// Providing this is recommended because RecipeName is not stored on PlannedMeal.
+    /// </summary>
+    public string? RecipeName { get; set; }
+}
+
 public class RecordCookingHistoryRequest
 {
     public Guid? HouseholdId { get; set; }
@@ -379,6 +413,7 @@ public class RecordCookingHistoryRequest
 
 public class UpdateRatingRequest
 {
+    [Range(1, 5, ErrorMessage = "Rating must be between 1 and 5.")]
     public byte Rating { get; set; }
     public bool? WouldCookAgain { get; set; }
     public string? Notes { get; set; }

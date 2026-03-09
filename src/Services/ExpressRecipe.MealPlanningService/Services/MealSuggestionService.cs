@@ -123,7 +123,23 @@ public class MealSuggestionService : IMealSuggestionService
         Guid[] candidateIds = candidates.Select(c => c.Id).ToArray();
         Dictionary<Guid, bool> safeForkResults = await GetSafeForkResultsAsync(candidateIds, request.UserId, ct);
 
-        // 6. Compute score per candidate
+        // 6. Score, filter and sort
+        return ScoreCandidates(candidates, request, userRatings, cookCounts, recentIds, inventory, safeForkResults);
+    }
+
+    /// <summary>
+    /// Scores a pre-filtered candidate list using the supplied pre-loaded user and inventory data.
+    /// Shared by <see cref="SuggestAsync"/> and <see cref="SuggestForWeekAsync"/>.
+    /// </summary>
+    private List<MealSuggestion> ScoreCandidates(
+        List<RecipeCandidate> candidates,
+        SuggestionRequest request,
+        Dictionary<Guid, decimal> userRatings,
+        Dictionary<Guid, int> cookCounts,
+        HashSet<Guid> recentIds,
+        List<InventoryItem> inventory,
+        Dictionary<Guid, bool> safeForkResults)
+    {
         List<MealSuggestion> scored = new(candidates.Count);
 
         foreach (RecipeCandidate candidate in candidates)
@@ -190,13 +206,30 @@ public class MealSuggestionService : IMealSuggestionService
         HashSet<Guid> usedThisWeek = new();
         List<MealSuggestion> weekSuggestions = new();
 
+        // Pre-fetch all user-specific data once to avoid 21 × 5 repeated I/O operations
+        Task<Dictionary<Guid, decimal>> userRatingsTask  = _repository.GetUserRecipeRatingsAsync(userId, ct);
+        Task<Dictionary<Guid, int>> cookCountsTask       = _repository.GetUserRecipeCookCountsAsync(userId, ct);
+        Task<List<Guid>> recentIdsTask                   = baseRequest.ExcludeRecentDays
+            ? _repository.GetRecentlyCookedRecipeIdsAsync(userId, baseRequest.RecentDaysCutoff, ct)
+            : Task.FromResult(new List<Guid>());
+        Task<List<InventoryItem>> inventoryTask          = GetInventoryAsync(userId, ct);
+
+        await Task.WhenAll(userRatingsTask, cookCountsTask, recentIdsTask, inventoryTask);
+
+        Dictionary<Guid, decimal> userRatings  = userRatingsTask.Result;
+        Dictionary<Guid, int> cookCounts       = cookCountsTask.Result;
+        HashSet<Guid> recentIds                = new(recentIdsTask.Result);
+        List<InventoryItem> inventory          = inventoryTask.Result;
+
         for (int day = 0; day < 7; day++)
         {
             foreach (string mealType in mealTypes)
             {
+                // Accumulate week's used recipes + any caller-supplied exclusions
                 List<Guid> excludeIds = new(baseRequest.ExcludeRecipeIds);
                 excludeIds.AddRange(usedThisWeek);
 
+                // Build a per-slot request and score using the pre-fetched data
                 SuggestionRequest dayRequest = new()
                 {
                     UserId           = userId,
@@ -211,7 +244,9 @@ public class MealSuggestionService : IMealSuggestionService
                     ExcludeRecipeIds  = excludeIds
                 };
 
-                List<MealSuggestion> suggestions = await SuggestAsync(dayRequest, ct);
+                List<MealSuggestion> suggestions = await ScoreWithPreloadedDataAsync(
+                    dayRequest, userRatings, cookCounts, recentIds, inventory, ct);
+
                 if (suggestions.Count > 0)
                 {
                     MealSuggestion suggestion = suggestions[0];
@@ -222,6 +257,44 @@ public class MealSuggestionService : IMealSuggestionService
         }
 
         return weekSuggestions;
+    }
+
+    /// <summary>
+    /// Scores candidates using pre-fetched user data and inventory (avoids redundant I/O in loops).
+    /// SafeFork is still called per slot because the candidate set may differ by meal type.
+    /// </summary>
+    private async Task<List<MealSuggestion>> ScoreWithPreloadedDataAsync(
+        SuggestionRequest request,
+        Dictionary<Guid, decimal> userRatings,
+        Dictionary<Guid, int> cookCounts,
+        HashSet<Guid> recentIds,
+        List<InventoryItem> inventory,
+        CancellationToken ct)
+    {
+        List<RecipeCandidate> candidates = await GetCandidatesAsync(request.UserId, request.MealType, ct);
+
+        if (request.MaxCookMinutes > 0)
+        {
+            candidates = candidates
+                .Where(c => c.CookTimeMinutes == null || c.CookTimeMinutes <= request.MaxCookMinutes)
+                .ToList();
+        }
+
+        if (request.ExcludeRecipeIds.Count > 0)
+        {
+            HashSet<Guid> excluded = new(request.ExcludeRecipeIds);
+            candidates = candidates.Where(c => !excluded.Contains(c.Id)).ToList();
+        }
+
+        if (candidates.Count == 0)
+        {
+            return new List<MealSuggestion>();
+        }
+
+        Guid[] candidateIds = candidates.Select(c => c.Id).ToArray();
+        Dictionary<Guid, bool> safeForkResults = await GetSafeForkResultsAsync(candidateIds, request.UserId, ct);
+
+        return ScoreCandidates(candidates, request, userRatings, cookCounts, recentIds, inventory, safeForkResults);
     }
 
     // ── Scoring helpers ───────────────────────────────────────────────────────
