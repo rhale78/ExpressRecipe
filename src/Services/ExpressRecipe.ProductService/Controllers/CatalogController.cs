@@ -118,10 +118,15 @@ public class CatalogController : ControllerBase
         [FromQuery] bool filterAllergens = false,
         CancellationToken ct = default)
     {
-        Guid resolvedUserId = userId ?? GetCurrentUserId() ?? Guid.Empty;
+        Guid? currentUserId = userId ?? GetCurrentUserId();
+
+        // Disable allergen filtering when no authenticated user is available —
+        // calling SafeForkService with an empty userId would produce wrong results.
+        bool effectiveFilterAllergens = filterAllergens && currentUserId.HasValue;
+        Guid resolvedUserId = currentUserId ?? Guid.Empty;
 
         List<SubstituteOption> options = await _substitutionService.GetSubstitutesAsync(
-            ingredientId, resolvedUserId, householdId, filterAllergens, ct);
+            ingredientId, resolvedUserId, householdId, effectiveFilterAllergens, ct);
 
         return Ok(options);
     }

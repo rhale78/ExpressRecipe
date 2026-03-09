@@ -33,6 +33,27 @@ public class FoodGroupMemberDto
     public Guid? HomemadeRecipeId { get; init; }
     public bool IsActive { get; init; }
     public DateTime CreatedAt { get; init; }
+
+    /// <summary>
+    /// Allergens this substitute is free of – deserialized from <see cref="AllergenFreeJson"/>
+    /// and included in API responses so clients do not need to parse the raw JSON.
+    /// </summary>
+    public string[] AllergenFree
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(AllergenFreeJson)) { return Array.Empty<string>(); }
+            try
+            {
+                return System.Text.Json.JsonSerializer.Deserialize<string[]>(AllergenFreeJson)
+                       ?? Array.Empty<string>();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return Array.Empty<string>();
+            }
+        }
+    }
 }
 
 public class SubstitutionHistoryDto

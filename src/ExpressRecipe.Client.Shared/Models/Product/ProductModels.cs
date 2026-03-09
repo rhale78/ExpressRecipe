@@ -89,6 +89,8 @@ public class FoodGroupMemberDto
     public int RankOrder { get; set; }
     public bool IsHomemadeRecipeAvailable { get; set; }
     public Guid? HomemadeRecipeId { get; set; }
+    /// <summary>Allergens this substitute is free of (deserialized from AllergenFreeJson).</summary>
+    public string[] AllergenFree { get; set; } = Array.Empty<string>();
 }
 
 public class SubstituteOptionDto

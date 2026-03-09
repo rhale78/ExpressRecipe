@@ -30,10 +30,10 @@ public class FoodSubstitutionService : IFoodSubstitutionService
         bool filterByAllergens,
         CancellationToken ct = default)
     {
-        // 1. Get all group members that are substitutes for this ingredient
         List<SubstituteOption> options = new List<SubstituteOption>();
 
-        var members = await _catalog.GetSubstitutesForIngredientAsync(ingredientId, ct);
+        // 1. Get all group members that are substitutes for this ingredient
+        List<FoodGroupMemberDto> members = await _catalog.GetSubstitutesForIngredientAsync(ingredientId, ct);
 
         if (members.Count == 0)
         {
@@ -42,67 +42,69 @@ public class FoodSubstitutionService : IFoodSubstitutionService
 
         // 2. Optionally filter by allergens via SafeForkService
         HashSet<string> userAllergens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (filterByAllergens)
+        if (filterByAllergens && userId != Guid.Empty)
         {
             userAllergens = await GetUserAllergensAsync(userId, householdId, ct);
         }
 
-        // 3. Check inventory via InventoryService
-        var ingredientIds = members
+        // 3. Check inventory via InventoryService (only when a real user is known)
+        List<Guid> ingredientIds = members
             .Where(m => m.IngredientId.HasValue)
             .Select(m => m.IngredientId!.Value)
             .Distinct()
             .ToList();
 
-        HashSet<Guid> onHandIds = await GetInventoryOnHandAsync(userId, ingredientIds, ct);
+        HashSet<Guid> onHandIds = userId != Guid.Empty
+            ? await GetInventoryOnHandAsync(userId, ingredientIds, ct)
+            : new HashSet<Guid>();
 
-        // 4. Load substitution history for this user
-        Dictionary<Guid, List<SubstitutionHistoryDto>> historyBySubId =
-            new Dictionary<Guid, List<SubstitutionHistoryDto>>();
-
-        List<Guid> substituteIngredientIds = members
-            .Where(m => m.IngredientId.HasValue)
-            .Select(m => m.IngredientId!.Value)
-            .Distinct()
-            .ToList();
-
-        await Task.WhenAll(substituteIngredientIds.Select(async subId =>
-        {
-            List<SubstitutionHistoryDto> history = await _catalog.GetUserSubstitutionHistoryAsync(userId, subId, ct);
-            lock (historyBySubId)
-            {
-                historyBySubId[subId] = history;
-            }
-        }));
-
-        // Build lookup: substituteIngredientId → (avg rating, used)
+        // 4. Load substitution history in a single bulk query (avoids N+1 per substitute)
         Dictionary<Guid, (decimal AvgRating, bool Used)> historyLookup =
             new Dictionary<Guid, (decimal, bool)>();
 
-        foreach (KeyValuePair<Guid, List<SubstitutionHistoryDto>> kv in historyBySubId)
+        if (userId != Guid.Empty && ingredientIds.Count > 0)
         {
-            if (kv.Value.Count > 0)
+            List<SubstitutionHistoryDto> allHistory =
+                await _catalog.GetUserSubstitutionHistoryBulkAsync(userId, ingredientIds, ct);
+
+            // Only count rows where this ingredient was the *substitute* for the *original* we started with
+            foreach (SubstitutionHistoryDto row in allHistory)
             {
-                List<SubstitutionHistoryDto> rated = kv.Value.Where(h => h.UserRating.HasValue).ToList();
-                decimal avgRating = rated.Count > 0
-                    ? (decimal)rated.Average(h => h.UserRating!.Value)
-                    : 0m;
-                historyLookup[kv.Key] = (avgRating, true);
+                if (row.SubstituteIngredientId == null) { continue; }
+                if (row.OriginalIngredientId != ingredientId) { continue; }
+
+                Guid subId = row.SubstituteIngredientId.Value;
+                if (!historyLookup.TryGetValue(subId, out (decimal AvgRating, bool Used) existing))
+                {
+                    existing = (0m, true);
+                }
+
+                decimal newAvg = row.UserRating.HasValue
+                    ? (existing.AvgRating + row.UserRating.Value) / 2m
+                    : existing.AvgRating;
+
+                historyLookup[subId] = (newAvg, true);
             }
         }
 
         // 5. Build options
-        foreach (var member in members)
+        foreach (FoodGroupMemberDto member in members)
         {
-            // Allergen filtering
-            if (filterByAllergens && userAllergens.Count > 0 && member.AllergenFreeJson != null)
+            // Allergen filtering: when enabled, members with missing allergen metadata are
+            // treated as "unknown" and excluded to protect users with allergen concerns.
+            if (filterByAllergens && userAllergens.Count > 0)
             {
+                if (member.AllergenFreeJson == null)
+                {
+                    // Unknown allergen profile – skip when user has active allergen filters
+                    continue;
+                }
+
                 try
                 {
-                    var memberAllergenFree = JsonSerializer.Deserialize<string[]>(
+                    string[] memberAllergenFree = JsonSerializer.Deserialize<string[]>(
                         member.AllergenFreeJson, JsonOptions) ?? Array.Empty<string>();
 
-                    // If this substitute is NOT free of the user's allergens, skip it
                     bool safe = userAllergens.All(a =>
                         memberAllergenFree.Contains(a, StringComparer.OrdinalIgnoreCase));
 
@@ -114,6 +116,8 @@ public class FoodSubstitutionService : IFoodSubstitutionService
                 catch (JsonException ex)
                 {
                     _logger.LogWarning(ex, "Failed to parse AllergenFreeJson for member {MemberId}", member.Id);
+                    // Treat parse failure as unknown – exclude when filter is active
+                    continue;
                 }
             }
 
@@ -131,9 +135,18 @@ public class FoodSubstitutionService : IFoodSubstitutionService
                 }
             }
 
+            // Resolve a non-empty display name from CustomName -> IngredientId label -> ProductId label
+            string displayName = !string.IsNullOrWhiteSpace(member.CustomName)
+                ? member.CustomName
+                : member.IngredientId.HasValue
+                    ? $"Ingredient {member.IngredientId.Value}"
+                    : member.ProductId.HasValue
+                        ? $"Product {member.ProductId.Value}"
+                        : "Unnamed item";
+
             bool isOnHand = member.IngredientId.HasValue && onHandIds.Contains(member.IngredientId.Value);
             bool usedBefore = member.IngredientId.HasValue && historyLookup.ContainsKey(member.IngredientId.Value);
-            decimal? avgRating = member.IngredientId.HasValue && historyLookup.TryGetValue(member.IngredientId.Value, out var h)
+            decimal? avgRating = member.IngredientId.HasValue && historyLookup.TryGetValue(member.IngredientId.Value, out (decimal AvgRating, bool Used) h)
                 ? h.AvgRating > 0m ? h.AvgRating : null
                 : null;
 
@@ -142,7 +155,7 @@ public class FoodSubstitutionService : IFoodSubstitutionService
                 FoodGroupMemberId = member.Id,
                 IngredientId = member.IngredientId,
                 ProductId = member.ProductId,
-                Name = member.CustomName ?? string.Empty,
+                Name = displayName,
                 SubstitutionRatio = member.SubstitutionRatio,
                 SubstitutionNotes = member.SubstitutionNotes,
                 BestFor = member.BestFor,
@@ -169,7 +182,7 @@ public class FoodSubstitutionService : IFoodSubstitutionService
     }
 
     // -----------------------------------------------------------------------
-    // Helpers – call external services gracefully (non-critical)
+    // Helpers - call external services gracefully (non-critical)
     // -----------------------------------------------------------------------
 
     private async Task<HashSet<string>> GetUserAllergensAsync(
@@ -177,14 +190,14 @@ public class FoodSubstitutionService : IFoodSubstitutionService
     {
         try
         {
-            var client = _httpClientFactory.CreateClient("SafeForkService");
-            var url = $"api/safefork/allergens?userId={userId}";
+            HttpClient client = _httpClientFactory.CreateClient("SafeForkService");
+            string url = $"api/safefork/allergens?userId={userId}";
             if (householdId.HasValue)
             {
                 url += $"&householdId={householdId}";
             }
 
-            var allergens = await client.GetFromJsonAsync<List<string>>(url, JsonOptions, ct);
+            List<string>? allergens = await client.GetFromJsonAsync<List<string>>(url, JsonOptions, ct);
             return allergens != null
                 ? new HashSet<string>(allergens, StringComparer.OrdinalIgnoreCase)
                 : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -206,18 +219,18 @@ public class FoodSubstitutionService : IFoodSubstitutionService
 
         try
         {
-            var client = _httpClientFactory.CreateClient("InventoryService");
-            var ids = string.Join(",", ingredientIds);
-            var url = $"api/inventory/check?userId={userId}&ingredientIds={ids}";
+            HttpClient client = _httpClientFactory.CreateClient("InventoryService");
+            string ids = string.Join(",", ingredientIds);
+            string url = $"api/inventory/check?userId={userId}&ingredientIds={ids}";
 
-            var onHand = await client.GetFromJsonAsync<Dictionary<string, bool>>(url, JsonOptions, ct);
+            Dictionary<string, bool>? onHand = await client.GetFromJsonAsync<Dictionary<string, bool>>(url, JsonOptions, ct);
             if (onHand == null)
             {
                 return new HashSet<Guid>();
             }
 
-            var result = new HashSet<Guid>();
-            foreach (var kvp in onHand)
+            HashSet<Guid> result = new HashSet<Guid>();
+            foreach (KeyValuePair<string, bool> kvp in onHand)
             {
                 if (kvp.Value && Guid.TryParse(kvp.Key, out Guid id))
                 {

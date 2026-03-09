@@ -31,9 +31,10 @@ public class ShareController : ControllerBase
 
     /// <summary>
     /// Render a recipe as PDF or HTML for printing.
+    /// Authenticated users can print any recipe they own or that is public.
+    /// Anonymous users can only print public recipes.
     /// </summary>
     [HttpGet("{id:guid}/print")]
-    [AllowAnonymous]
     public async Task<IActionResult> PrintRecipe(
         Guid id,
         [FromQuery] string format = "html",
@@ -43,6 +44,15 @@ public class ShareController : ControllerBase
         if (recipe == null)
         {
             return NotFound();
+        }
+
+        Guid? currentUserId = GetCurrentUserId();
+        bool isOwner = currentUserId.HasValue && recipe.AuthorId == currentUserId.Value;
+
+        // Anonymous callers or non-owners may only print public recipes
+        if (!isOwner && !recipe.IsPublic)
+        {
+            return Forbid();
         }
 
         if (recipe.Ingredients == null || recipe.Ingredients.Count == 0)
@@ -99,6 +109,15 @@ public class ShareController : ControllerBase
             return NotFound();
         }
 
+        // Only the recipe owner may generate share tokens for private recipes
+        if (!recipe.IsPublic && recipe.AuthorId != userId.Value)
+        {
+            _logger.LogWarning(
+                "User {UserId} attempted to generate share token for unauthorized recipe {RecipeId}",
+                userId.Value, id);
+            return Forbid();
+        }
+
         string token = await _recipeRepository.GenerateShareTokenAsync(id, userId.Value, expiryDays, ct);
         return Ok(token);
     }
@@ -151,9 +170,25 @@ public class ShareController : ControllerBase
     [Authorize]
     public async Task<IActionResult> ShareByEmail(
         Guid id,
-        [FromBody] ShareRecipeEmailRequest request,
+        [FromBody] ShareRecipeEmailRequest? request,
         CancellationToken ct = default)
     {
+        if (request == null)
+        {
+            return BadRequest("Request body is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ToEmail))
+        {
+            return BadRequest("A recipient email address is required.");
+        }
+
+        // Basic email format check
+        if (!request.ToEmail.Contains('@', StringComparison.Ordinal))
+        {
+            return BadRequest("The recipient email address is not valid.");
+        }
+
         RecipeDto? recipe = await _recipeRepository.GetRecipeByIdAsync(id);
         if (recipe == null)
         {

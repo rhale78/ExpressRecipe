@@ -3,7 +3,7 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using System.Text;
-using System.Web;
+
 
 namespace ExpressRecipe.RecipeService.Services;
 
@@ -39,7 +39,7 @@ public class RecipePrintService : IRecipePrintService
         sb.AppendLine("<head>");
         sb.AppendLine("<meta charset=\"UTF-8\">");
         sb.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
-        sb.AppendLine($"<title>{HttpUtility.HtmlEncode(recipe.Name)}</title>");
+        sb.AppendLine($"<title>{System.Net.WebUtility.HtmlEncode(recipe.Name)}</title>");
         sb.AppendLine("<style>");
         sb.AppendLine(GetPrintCss());
         sb.AppendLine("</style>");
@@ -48,7 +48,7 @@ public class RecipePrintService : IRecipePrintService
         sb.AppendLine("<div class=\"recipe-print-container\">");
 
         // Header
-        sb.AppendLine($"<h1 class=\"recipe-title\">{HttpUtility.HtmlEncode(recipe.Name)}</h1>");
+        sb.AppendLine($"<h1 class=\"recipe-title\">{System.Net.WebUtility.HtmlEncode(recipe.Name)}</h1>");
         sb.AppendLine("<div class=\"recipe-meta\">");
         if (recipe.PrepTimeMinutes.HasValue)
         {
@@ -64,11 +64,11 @@ public class RecipePrintService : IRecipePrintService
         }
         if (!string.IsNullOrWhiteSpace(recipe.DifficultyLevel))
         {
-            sb.AppendLine($"<span class=\"meta-item\">Difficulty: {HttpUtility.HtmlEncode(recipe.DifficultyLevel)}</span>");
+            sb.AppendLine($"<span class=\"meta-item\">Difficulty: {System.Net.WebUtility.HtmlEncode(recipe.DifficultyLevel)}</span>");
         }
         if (!string.IsNullOrWhiteSpace(recipe.Cuisine))
         {
-            sb.AppendLine($"<span class=\"meta-item\">Cuisine: {HttpUtility.HtmlEncode(recipe.Cuisine)}</span>");
+            sb.AppendLine($"<span class=\"meta-item\">Cuisine: {System.Net.WebUtility.HtmlEncode(recipe.Cuisine)}</span>");
         }
         sb.AppendLine("</div>");
 
@@ -77,7 +77,7 @@ public class RecipePrintService : IRecipePrintService
         {
             sb.AppendLine("<div class=\"allergen-warning\">");
             sb.AppendLine("<strong>⚠ Allergen Warnings:</strong> ");
-            sb.AppendLine(string.Join(", ", recipe.AllergenWarnings.Select(a => HttpUtility.HtmlEncode(a.AllergenName))));
+            sb.AppendLine(string.Join(", ", recipe.AllergenWarnings.Select(a => System.Net.WebUtility.HtmlEncode(a.AllergenName))));
             sb.AppendLine("</div>");
         }
 
@@ -94,7 +94,7 @@ public class RecipePrintService : IRecipePrintService
             {
                 string qty = ingredient.Quantity.HasValue ? $"{ingredient.Quantity} " : "";
                 string unit = !string.IsNullOrWhiteSpace(ingredient.Unit) ? $"{ingredient.Unit} " : "";
-                string name = HttpUtility.HtmlEncode(ingredient.IngredientName ?? "");
+                string name = System.Net.WebUtility.HtmlEncode(ingredient.IngredientName ?? "");
                 sb.AppendLine($"<li>{qty}{unit}{name}</li>");
             }
         }
@@ -113,7 +113,7 @@ public class RecipePrintService : IRecipePrintService
                 string trimmed = step.Trim();
                 if (!string.IsNullOrWhiteSpace(trimmed))
                 {
-                    sb.AppendLine($"<li>{HttpUtility.HtmlEncode(trimmed)}</li>");
+                    sb.AppendLine($"<li>{System.Net.WebUtility.HtmlEncode(trimmed)}</li>");
                 }
             }
         }

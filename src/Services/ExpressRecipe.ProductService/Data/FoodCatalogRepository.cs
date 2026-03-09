@@ -18,6 +18,13 @@ public interface IFoodCatalogRepository
     // Substitution history
     Task<Guid> RecordSubstitutionAsync(SubstitutionHistoryRecord record, CancellationToken ct = default);
     Task<List<SubstitutionHistoryDto>> GetUserSubstitutionHistoryAsync(Guid userId, Guid ingredientId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk-load substitution history for a given user across multiple substitute ingredient IDs
+    /// in a single query (avoids N+1 pattern).
+    /// </summary>
+    Task<List<SubstitutionHistoryDto>> GetUserSubstitutionHistoryBulkAsync(
+        Guid userId, IReadOnlyList<Guid> substituteIngredientIds, CancellationToken ct = default);
 }
 
 public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
@@ -37,7 +44,7 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
             OUTPUT INSERTED.Id
             VALUES (@Name, @Description, @FunctionalRole)";
 
-        return await ExecuteScalarAsync<Guid>(sql,
+        return await ExecuteScalarAsync<Guid>(sql, ct,
             new SqlParameter("@Name", group.Name),
             new SqlParameter("@Description", (object?)group.Description ?? DBNull.Value),
             new SqlParameter("@FunctionalRole", (object?)group.FunctionalRole ?? DBNull.Value));
@@ -45,8 +52,8 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
 
     public async Task<List<FoodGroupDto>> GetFoodGroupsAsync(string? search, string? functionalRole, CancellationToken ct = default)
     {
-        var conditions = new List<string> { "fg.IsActive = 1" };
-        var parameters = new List<SqlParameter>();
+        List<string> conditions = new List<string> { "fg.IsActive = 1" };
+        List<SqlParameter> parameters = new List<SqlParameter>();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -60,8 +67,8 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
             parameters.Add(new SqlParameter("@FunctionalRole", functionalRole));
         }
 
-        var where = string.Join(" AND ", conditions);
-        var sql = $@"
+        string where = string.Join(" AND ", conditions);
+        string sql = $@"
             SELECT
                 fg.Id,
                 fg.Name,
@@ -77,7 +84,7 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
             GROUP BY fg.Id, fg.Name, fg.Description, fg.FunctionalRole, fg.IsActive, fg.CreatedAt, fg.UpdatedAt
             ORDER BY fg.Name";
 
-        return await ExecuteReaderAsync(sql, MapFoodGroup, parameters.ToArray());
+        return await ExecuteReaderAsync(sql, r => MapFoodGroup((Microsoft.Data.SqlClient.SqlDataReader)r), ct, parameters.ToArray());
     }
 
     public async Task<FoodGroupDto?> GetFoodGroupByIdAsync(Guid id, CancellationToken ct = default)
@@ -97,7 +104,7 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
             WHERE fg.Id = @Id
             GROUP BY fg.Id, fg.Name, fg.Description, fg.FunctionalRole, fg.IsActive, fg.CreatedAt, fg.UpdatedAt";
 
-        var results = await ExecuteReaderAsync(sql, MapFoodGroup, new SqlParameter("@Id", id));
+        List<FoodGroupDto> results = await ExecuteReaderAsync(sql, r => MapFoodGroup((Microsoft.Data.SqlClient.SqlDataReader)r), ct, new SqlParameter("@Id", id));
         return results.FirstOrDefault();
     }
 
@@ -116,7 +123,7 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
                 @RankOrder, @AllergenFreeJson,
                 @IsHomemadeRecipeAvailable, @HomemadeRecipeId)";
 
-        return await ExecuteScalarAsync<Guid>(sql,
+        return await ExecuteScalarAsync<Guid>(sql, ct,
             new SqlParameter("@FoodGroupId", member.FoodGroupId),
             new SqlParameter("@IngredientId", (object?)member.IngredientId ?? DBNull.Value),
             new SqlParameter("@ProductId", (object?)member.ProductId ?? DBNull.Value),
@@ -144,7 +151,7 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
             WHERE FoodGroupId = @FoodGroupId AND IsActive = 1
             ORDER BY RankOrder, CustomName";
 
-        return await ExecuteReaderAsync(sql, MapMember, new SqlParameter("@FoodGroupId", foodGroupId));
+        return await ExecuteReaderAsync(sql, r => MapMember((Microsoft.Data.SqlClient.SqlDataReader)r), ct, new SqlParameter("@FoodGroupId", foodGroupId));
     }
 
     public async Task<List<FoodGroupMemberDto>> GetSubstitutesForIngredientAsync(Guid ingredientId, CancellationToken ct = default)
@@ -167,13 +174,13 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
             AND m.IngredientId != @IngredientId
             ORDER BY m.RankOrder";
 
-        return await ExecuteReaderAsync(sql, MapMember, new SqlParameter("@IngredientId", ingredientId));
+        return await ExecuteReaderAsync(sql, r => MapMember((Microsoft.Data.SqlClient.SqlDataReader)r), ct, new SqlParameter("@IngredientId", ingredientId));
     }
 
     public async Task<int> GetFoodGroupCountAsync(CancellationToken ct = default)
     {
         const string sql = "SELECT COUNT(*) FROM FoodGroup";
-        return await ExecuteScalarAsync<int>(sql);
+        return await ExecuteScalarAsync<int>(sql, ct);
     }
 
     // -----------------------------------------------------------------------
@@ -193,7 +200,7 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
                 @SubstituteIngredientId, @SubstituteCustomName,
                 @RecipeId, @CookedAt, @UserRating, @Notes)";
 
-        return await ExecuteScalarAsync<Guid>(sql,
+        return await ExecuteScalarAsync<Guid>(sql, ct,
             new SqlParameter("@UserId", record.UserId),
             new SqlParameter("@OriginalIngredientId", (object?)record.OriginalIngredientId ?? DBNull.Value),
             new SqlParameter("@OriginalCustomName", (object?)record.OriginalCustomName ?? DBNull.Value),
@@ -217,9 +224,45 @@ public class FoodCatalogRepository : SqlHelper, IFoodCatalogRepository
               AND (OriginalIngredientId = @IngredientId OR SubstituteIngredientId = @IngredientId)
             ORDER BY CreatedAt DESC";
 
-        return await ExecuteReaderAsync(sql, MapHistory,
+        return await ExecuteReaderAsync(sql, r => MapHistory((Microsoft.Data.SqlClient.SqlDataReader)r), ct,
             new SqlParameter("@UserId", userId),
             new SqlParameter("@IngredientId", ingredientId));
+    }
+
+    public async Task<List<SubstitutionHistoryDto>> GetUserSubstitutionHistoryBulkAsync(
+        Guid userId, IReadOnlyList<Guid> substituteIngredientIds, CancellationToken ct = default)
+    {
+        if (substituteIngredientIds.Count == 0)
+        {
+            return new List<SubstitutionHistoryDto>();
+        }
+
+        // Build an IN clause using numbered parameters to avoid SQL injection
+        List<SqlParameter> parameters = new List<SqlParameter>
+        {
+            new SqlParameter("@UserId", userId)
+        };
+
+        List<string> paramNames = new List<string>();
+        for (int i = 0; i < substituteIngredientIds.Count; i++)
+        {
+            string pName = $"@SubId{i}";
+            paramNames.Add(pName);
+            parameters.Add(new SqlParameter(pName, substituteIngredientIds[i]));
+        }
+
+        string inClause = string.Join(", ", paramNames);
+        string sql = $@"
+            SELECT
+                Id, UserId, OriginalIngredientId, OriginalCustomName,
+                SubstituteIngredientId, SubstituteCustomName,
+                RecipeId, CookedAt, UserRating, Notes, CreatedAt
+            FROM IngredientSubstitutionHistory
+            WHERE UserId = @UserId
+              AND SubstituteIngredientId IN ({inClause})
+            ORDER BY CreatedAt DESC";
+
+        return await ExecuteReaderAsync(sql, r => MapHistory((Microsoft.Data.SqlClient.SqlDataReader)r), ct, parameters.ToArray());
     }
 
     // -----------------------------------------------------------------------

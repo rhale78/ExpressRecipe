@@ -22,3 +22,8 @@ CREATE INDEX IX_RecipeShareToken_ExpiresAt ON RecipeShareToken(ExpiresAt);
 ALTER TABLE UserFavoriteRecipe
     ADD IsSharedWithHousehold BIT NOT NULL DEFAULT 0,
         HouseholdId           UNIQUEIDENTIFIER NULL;
+GO
+
+CREATE INDEX IX_UserFavoriteRecipe_HouseholdId_IsSharedWithHousehold
+    ON UserFavoriteRecipe (HouseholdId, IsSharedWithHousehold);
+GO

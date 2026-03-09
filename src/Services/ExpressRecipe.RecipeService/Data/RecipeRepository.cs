@@ -794,20 +794,43 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
 
     public async Task<string> GenerateShareTokenAsync(Guid recipeId, Guid createdBy, int expiryDays, CancellationToken ct = default)
     {
-        string token = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48))
-            .Replace("+", "-").Replace("/", "_").Replace("=", "")[..64];
-
         const string sql = @"
             INSERT INTO RecipeShareToken (RecipeId, Token, CreatedBy, ExpiresAt)
             VALUES (@RecipeId, @Token, @CreatedBy, @ExpiresAt)";
 
-        await ExecuteNonQueryAsync(sql,
-            new SqlParameter("@RecipeId", recipeId),
-            new SqlParameter("@Token", token),
-            new SqlParameter("@CreatedBy", createdBy),
-            new SqlParameter("@ExpiresAt", DateTime.UtcNow.AddDays(expiryDays)));
+        const int MaxAttempts = 5;
 
-        return token;
+        for (int attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            string token = Convert.ToBase64String(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(48))
+                .Replace("+", "-", StringComparison.Ordinal)
+                .Replace("/", "_", StringComparison.Ordinal)
+                .Replace("=", string.Empty, StringComparison.Ordinal)[..64];
+
+            try
+            {
+                await ExecuteNonQueryAsync(sql, ct,
+                    new SqlParameter("@RecipeId", recipeId),
+                    new SqlParameter("@Token", token),
+                    new SqlParameter("@CreatedBy", createdBy),
+                    new SqlParameter("@ExpiresAt", DateTime.UtcNow.AddDays(expiryDays)));
+
+                return token;
+            }
+            catch (Microsoft.Data.SqlClient.SqlException ex)
+                when ((ex.Number == 2627 || ex.Number == 2601)
+                      && ex.Message.Contains("UQ_RecipeShareToken", StringComparison.OrdinalIgnoreCase))
+            {
+                if (attempt == MaxAttempts) { throw; }
+                // Token collision (extremely rare) – generate a new one and retry
+            }
+        }
+
+        // Unreachable, but satisfies the compiler
+        throw new InvalidOperationException("Failed to generate a unique share token.");
     }
 
     public async Task<RecipeShareTokenDto?> GetByShareTokenAsync(string token, CancellationToken ct = default)
@@ -877,12 +900,17 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
 
     public async Task IncrementTokenViewCountAsync(string token, CancellationToken ct = default)
     {
+        // Atomic conditional UPDATE: only increment when the token is still valid
+        // (not expired and under MaxViews). This prevents over-incrementing under
+        // concurrent requests and after token expiry.
         const string sql = @"
             UPDATE RecipeShareToken
             SET ViewCount = ViewCount + 1
-            WHERE Token = @Token";
+            WHERE Token = @Token
+              AND ExpiresAt > GETUTCDATE()
+              AND (MaxViews IS NULL OR ViewCount < MaxViews)";
 
-        await ExecuteNonQueryAsync(sql, new SqlParameter("@Token", token));
+        await ExecuteNonQueryAsync(sql, ct, new SqlParameter("@Token", token));
     }
 
     public async Task<bool> ExpireShareTokenAsync(string token, Guid requestedBy, CancellationToken ct = default)
@@ -892,7 +920,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             SET ExpiresAt = GETUTCDATE()
             WHERE Token = @Token AND CreatedBy = @RequestedBy";
 
-        int affected = await ExecuteNonQueryAsync(sql,
+        int affected = await ExecuteNonQueryAsync(sql, ct,
             new SqlParameter("@Token", token),
             new SqlParameter("@RequestedBy", requestedBy));
 
@@ -911,7 +939,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 HouseholdId = @HouseholdId
             WHERE Id = @FavoriteId AND UserId = @UserId";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             new SqlParameter("@FavoriteId", favoriteId),
             new SqlParameter("@UserId", userId),
             new SqlParameter("@Shared", shared),

@@ -66,7 +66,19 @@
                                 <td class="small">@(member.SubstitutionRatio ?? "—")</td>
                                 <td class="small text-success">@(member.BestFor ?? "—")</td>
                                 <td class="small text-danger">@(member.NotSuitableFor ?? "—")</td>
-                                <td>—</td>
+                                <td class="small">
+                                    @if (member.AllergenFree.Length > 0)
+                                    {
+                                        @foreach (string allergen in member.AllergenFree)
+                                        {
+                                            <span class="badge bg-success me-1">@allergen-free</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
                                 <td>
                                     @if (member.IsHomemadeRecipeAvailable && member.HomemadeRecipeId.HasValue)
                                     {

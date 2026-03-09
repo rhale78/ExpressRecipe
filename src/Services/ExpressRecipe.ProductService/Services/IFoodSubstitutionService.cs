@@ -1,5 +1,4 @@
 using ExpressRecipe.Shared.DTOs.Product;
-using System.Text.Json;
 
 namespace ExpressRecipe.ProductService.Services;
 

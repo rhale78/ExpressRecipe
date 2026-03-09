@@ -4,6 +4,7 @@
 @using ExpressRecipe.Client.Shared.Models.Product
 @inject ICatalogApiClient CatalogApi
 @inject NavigationManager Navigation
+@implements IDisposable
 
 <PageTitle>Food Groups – ExpressRecipe</PageTitle>
 
@@ -136,4 +137,9 @@
     };
 
     private void OpenGroup(Guid id) => Navigation.NavigateTo("/catalog/food-groups/" + id);
+
+    public void Dispose()
+    {
+        _debounce?.Dispose();
+    }
 }

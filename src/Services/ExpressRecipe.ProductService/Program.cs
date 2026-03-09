@@ -82,6 +82,16 @@ builder.Services.AddScoped<IFoodCatalogRepository>(sp => new FoodCatalogReposito
 builder.Services.AddScoped<IFoodSubstitutionService, FoodSubstitutionService>();
 builder.Services.AddScoped<CatalogSeedService>();
 
+// Named HttpClients used by FoodSubstitutionService
+builder.Services.AddHttpClient("SafeForkService", client =>
+{
+    client.BaseAddress = new Uri("http://safeforkservice");
+});
+builder.Services.AddHttpClient("InventoryService", client =>
+{
+    client.BaseAddress = new Uri("http://inventoryservice");
+});
+
 // Register OpenFoodFacts import service
 builder.Services.AddHttpClient<OpenFoodFactsImportService>();
 builder.Services.AddScoped<OpenFoodFactsImportService>(sp => 
