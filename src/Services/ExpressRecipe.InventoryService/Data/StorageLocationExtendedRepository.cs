@@ -47,7 +47,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
             });
         }
 
-        results.Sort((a, b) => b.Score.CompareTo(a.Score));
+        // SQL ORDER BY ItemCount ASC already returns lowest-fill (highest-score) locations first
         return results;
     }
 

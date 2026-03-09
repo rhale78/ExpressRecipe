@@ -81,7 +81,7 @@ public class ExpirationAlertWorker : BackgroundService
                 continue;
             }
 
-            int daysUntilExpiration = (int)(item.ExpirationDate.Value - DateTime.UtcNow).TotalDays;
+            int daysUntilExpiration = (int)Math.Floor((item.ExpirationDate.Value - DateTime.UtcNow).TotalDays);
             string alertType = DetermineAlertType(daysUntilExpiration);
 
             // Skip if an alert for this item at this severity already exists (de-duplicate)

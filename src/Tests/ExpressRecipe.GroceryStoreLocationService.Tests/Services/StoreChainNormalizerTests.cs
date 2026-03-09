@@ -103,16 +103,15 @@ public class StoreChainNormalizerTests
     }
 
     [Fact]
-    public void Normalize_BeforeLoad_ReturnsNull()
+    public void Normalize_BeforeLoad_ThrowsInvalidOperationException()
     {
         // Arrange: do NOT call EnsureLoadedAsync
         var normalizer = new StoreChainNormalizer(_scopeFactoryMock.Object, _loggerMock.Object);
 
-        // Act
-        var result = normalizer.Normalize("Walmart");
-
-        // Assert - map not yet loaded, returns null safely
-        result.Should().BeNull();
+        // Act & Assert - map not yet loaded, should throw to surface the contract violation
+        Action act = () => normalizer.Normalize("Walmart");
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*EnsureLoadedAsync*");
     }
 
     [Fact]

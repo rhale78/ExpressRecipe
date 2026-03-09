@@ -114,7 +114,7 @@ public class CookingHistoryRecord
     public Guid? HouseholdId { get; init; }
     public Guid RecipeId { get; init; }
     public string RecipeName { get; init; } = string.Empty;
-    public DateTime CookedAt { get; init; } = DateTime.UtcNow;
+    public DateTime CookedAt { get; init; }
     public int Servings { get; init; } = 1;
     public string MealType { get; init; } = "Dinner";
     public string Source { get; init; } = "PlannedMeal";

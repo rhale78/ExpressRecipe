@@ -22,7 +22,7 @@ CREATE TABLE PriceHistory (
     ExternalId       NVARCHAR(200) NULL,
     ObservedAt       DATETIME2 NOT NULL,
     ImportedAt       DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    CONSTRAINT CK_PriceHistory_Prices CHECK (BasePrice >= 0 AND FinalPrice >= 0 AND FinalPrice <= BasePrice)
+    CONSTRAINT CK_PriceHistory_Prices CHECK (BasePrice >= 0 AND FinalPrice >= 0)
 );
 CREATE INDEX IX_PriceHistory_ProductId_Observed ON PriceHistory(ProductId, ObservedAt DESC);
 CREATE INDEX IX_PriceHistory_Upc_Observed        ON PriceHistory(Upc, ObservedAt DESC);

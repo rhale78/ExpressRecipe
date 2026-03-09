@@ -128,7 +128,7 @@ public class CookProfileService : ICookProfileService
 
         if (string.Equals(skillLevel, "ConfidentCook", StringComparison.OrdinalIgnoreCase))
         {
-            // Returned only when the Learning override applies — so return all (same as HomeCook path)
+            // ConfidentCook without a learning override receives the same full tip set as HomeCook
             return catalog;
         }
 

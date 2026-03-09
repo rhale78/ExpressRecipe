@@ -95,9 +95,11 @@ public class HouseholdMemberService : IHouseholdMemberService
         }
 
         // CrossHouseholdGuest deletion: convert to RecurringGuest snapshot before removing
+        string effectiveMemberType = member.MemberType;
         if (member.MemberType == "CrossHouseholdGuest")
         {
             await _repository.UpdateMemberTypeAsync(memberId, "RecurringGuest", null, ct);
+            effectiveMemberType = "RecurringGuest";
             _logger.LogInformation(
                 "Converted CrossHouseholdGuest {MemberId} to RecurringGuest snapshot in household {HouseholdId}",
                 memberId, householdId);
@@ -107,11 +109,11 @@ public class HouseholdMemberService : IHouseholdMemberService
 
         if (deleted)
         {
-            await _eventPublisher.PublishMemberRemovedAsync(memberId, householdId, member.MemberType, ct);
+            await _eventPublisher.PublishMemberRemovedAsync(memberId, householdId, effectiveMemberType, ct);
 
             _logger.LogInformation(
                 "Removed household member {MemberId} of type {MemberType} from household {HouseholdId}",
-                memberId, member.MemberType, householdId);
+                memberId, effectiveMemberType, householdId);
         }
 
         return deleted;

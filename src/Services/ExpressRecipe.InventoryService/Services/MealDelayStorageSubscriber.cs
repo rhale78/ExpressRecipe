@@ -47,7 +47,7 @@ public sealed class MealDelayStorageSubscriber : IHostedService
         }
 
         double daysDelta = (evt.NewPlannedDate.Value - evt.OldPlannedDate.Value).TotalDays;
-        if (daysDelta < 2)
+        if ((int)daysDelta < 2)
         {
             return;
         }

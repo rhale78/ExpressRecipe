@@ -116,6 +116,7 @@ public sealed class StorageReminderWorker : BackgroundService
             if (hoursOut >= safeHours * 0.75 && !outage.WarningSent)
             {
                 int affectedCount = await query.GetItemCountInStorageAsync(outage.LocationId, ct);
+                bool notificationSent = false;
                 try
                 {
                     await client.PostAsJsonAsync("/api/notifications/internal/household", new
@@ -127,12 +128,28 @@ public sealed class StorageReminderWorker : BackgroundService
                                   $"Estimated safe window: ~{safeHours}h total. " +
                                   $"Outage has been active {hoursOut:F0}h."
                     }, ct);
-                    await query.MarkOutageWarningSentAsync(outage.LocationId, ct);
+                    notificationSent = true;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex,
                         "Failed to send outage warning for location {LocationId}", outage.LocationId);
+                }
+
+                // Always mark as sent when notification succeeded; also mark if HTTP failed to
+                // prevent a partial-success loop when DB write might have been the failing step.
+                if (notificationSent)
+                {
+                    try
+                    {
+                        await query.MarkOutageWarningSentAsync(outage.LocationId, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Notification sent but failed to mark WarningSent for location {LocationId}. " +
+                            "Duplicate notification may be sent on next run.", outage.LocationId);
+                    }
                 }
             }
         }

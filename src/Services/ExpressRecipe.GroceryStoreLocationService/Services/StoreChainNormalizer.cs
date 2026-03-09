@@ -37,8 +37,9 @@ public class StoreChainNormalizer : IStoreChainNormalizer
 
         if (_aliasMap == null)
         {
-            // Map not yet loaded; return null (caller should await EnsureLoadedAsync first)
-            return null;
+            throw new InvalidOperationException(
+                "StoreChainNormalizer.Normalize was called before the alias map was loaded. " +
+                "Call EnsureLoadedAsync before normalizing names.");
         }
 
         var key = rawName.Trim().ToUpperInvariant();

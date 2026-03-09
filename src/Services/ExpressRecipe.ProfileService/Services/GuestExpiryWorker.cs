@@ -48,14 +48,9 @@ public class GuestExpiryWorker : BackgroundService
             IHouseholdMemberRepository repository =
                 scope.ServiceProvider.GetRequiredService<IHouseholdMemberRepository>();
 
-            List<ExpressRecipe.ProfileService.Contracts.Responses.HouseholdMemberDto> expired =
-                await repository.GetExpiredTemporaryVisitorsAsync(ct);
-
-            int count = expired.Count;
-
             await repository.PurgeExpiredTemporaryVisitorsAsync(ct);
 
-            _logger.LogInformation("GuestExpiryWorker purged {Count} expired temporary visitor(s)", count);
+            _logger.LogInformation("GuestExpiryWorker completed purge of expired temporary visitors");
         }
         catch (Exception ex)
         {
