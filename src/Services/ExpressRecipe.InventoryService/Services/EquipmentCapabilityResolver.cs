@@ -34,7 +34,8 @@ public sealed class EquipmentCapabilityResolver : IEquipmentCapabilityResolver
         string capability, CancellationToken ct = default)
         => await _equipment.GetInstancesByCapabilityAsync(householdId, capability, ct);
 
-    // Returns a human-readable substitute message, or null if no capable equipment found.
+    // Returns a human-readable substitute message, or null if no capable equipment found or if the
+    // household already owns the exact required equipment (no substitute needed).
     // Example: recipe needs "Crock Pot" → household has Instant Pot with SlowCook capability
     // Returns: "Your 'Big Instant Pot' can substitute — it supports SlowCook."
     public async Task<string?> GetSubstituteMessageAsync(Guid householdId,
@@ -46,7 +47,12 @@ public sealed class EquipmentCapabilityResolver : IEquipmentCapabilityResolver
         List<EquipmentInstanceDto> capable = await ResolveAsync(householdId, capability, ct);
         if (capable.Count == 0) { return null; }
 
-        EquipmentInstanceDto match = capable[0];
-        return $"Your '{match.DisplayName}' can substitute — it supports {capability}.";
+        // Find the first instance that is meaningfully different from the required equipment
+        EquipmentInstanceDto? substitute = capable.FirstOrDefault(e =>
+            !string.Equals(e.TemplateName, requiredEquipmentName, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(e.CustomName,   requiredEquipmentName, StringComparison.OrdinalIgnoreCase));
+
+        if (substitute is null) { return null; }
+        return $"Your '{substitute.DisplayName}' can substitute — it supports {capability}.";
     }
 }

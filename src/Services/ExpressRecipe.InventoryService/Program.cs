@@ -40,7 +40,8 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 builder.Services.AddScoped<IInventoryRepository>(sp =>
     new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
 
-builder.Services.AddSingleton<IEquipmentRepository>(new EquipmentRepository(connectionString));
+builder.Services.AddSingleton<IEquipmentRepository>(sp =>
+    new EquipmentRepository(connectionString));
 
 // Register services
 builder.Services.AddSingleton<IEquipmentCapabilityResolver, EquipmentCapabilityResolver>();

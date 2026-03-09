@@ -122,12 +122,13 @@ public sealed class EquipmentRepository : IEquipmentRepository
     {
         const string sql = @"SELECT ei.Id,ei.HouseholdId,ei.AddressId,ei.TemplateId,t.Name AS TemplateName,
                    ei.CustomName,ei.Brand,ei.ModelNumber,ei.SizeValue,ei.SizeUnit,ei.Notes,ei.IsActive,
-                   cap.Capability
+                   c.Capability
             FROM EquipmentInstance ei
             JOIN EquipmentInstanceCapability cap ON cap.InstanceId=ei.Id AND cap.Capability=@Cap
             LEFT JOIN EquipmentTemplate t ON t.Id=ei.TemplateId
             LEFT JOIN EquipmentInstanceCapability c ON c.InstanceId=ei.Id
-            WHERE ei.HouseholdId=@HouseholdId AND ei.IsActive=1";
+            WHERE ei.HouseholdId=@HouseholdId AND ei.IsActive=1
+            ORDER BY ei.Id";
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);

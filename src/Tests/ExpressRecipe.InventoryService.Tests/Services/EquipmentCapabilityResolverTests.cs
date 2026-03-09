@@ -183,9 +183,55 @@ public class EquipmentCapabilityResolverTests
         message.Should().NotContain("Dutch Oven");
     }
 
-    #endregion
+    [Fact]
+    public async Task GetSubstituteMessageAsync_ExactEquipmentPresent_ReturnsNull()
+    {
+        // Arrange — household has an "Instant Pot" and recipe requires "Instant Pot" (exact match)
+        EquipmentInstanceDto instantPot = new()
+        {
+            Id = Guid.NewGuid(), HouseholdId = _householdId,
+            TemplateId = Guid.NewGuid(), TemplateName = "Instant Pot",
+            IsActive = true, Capabilities = new List<string> { "PressureCook" }
+        };
+        _mockRepo.Setup(r => r.GetInstancesByCapabilityAsync(_householdId, "PressureCook", default))
+                 .ReturnsAsync(new List<EquipmentInstanceDto> { instantPot });
 
-    #region EquipmentInstanceDto DisplayName Tests
+        // Act — no substitute message expected because they already have the exact equipment
+        string? message = await _resolver.GetSubstituteMessageAsync(_householdId, "Instant Pot");
+
+        // Assert
+        message.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetSubstituteMessageAsync_ExactEquipmentFirstSubstituteSecond_ReturnsSubstituteMessage()
+    {
+        // Arrange — household has an exact Crock Pot AND an Instant Pot; first match is exact
+        EquipmentInstanceDto crockPot = new()
+        {
+            Id = Guid.NewGuid(), HouseholdId = _householdId,
+            TemplateName = "Crock Pot",
+            IsActive = true, Capabilities = new List<string> { "SlowCook" }
+        };
+        EquipmentInstanceDto instantPot = new()
+        {
+            Id = Guid.NewGuid(), HouseholdId = _householdId,
+            TemplateName = "Instant Pot",
+            IsActive = true, Capabilities = new List<string> { "SlowCook" }
+        };
+        _mockRepo.Setup(r => r.GetInstancesByCapabilityAsync(_householdId, "SlowCook", default))
+                 .ReturnsAsync(new List<EquipmentInstanceDto> { crockPot, instantPot });
+
+        // Act — Crock Pot is the required equipment; should skip it and return Instant Pot as substitute
+        string? message = await _resolver.GetSubstituteMessageAsync(_householdId, "Crock Pot");
+
+        // Assert — substitute found even though exact equipment is also present
+        message.Should().NotBeNull();
+        message.Should().Contain("Instant Pot");
+        message.Should().NotContain("Crock Pot");
+    }
+
+    #endregion
 
     [Fact]
     public void EquipmentInstanceDto_DisplayName_PrefersCustomName()
@@ -225,6 +271,4 @@ public class EquipmentCapabilityResolverTests
 
         dto.DisplayName.Should().Be("Unknown Equipment");
     }
-
-    #endregion
 }
