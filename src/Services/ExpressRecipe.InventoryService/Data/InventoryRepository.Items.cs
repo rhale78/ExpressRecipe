@@ -321,7 +321,7 @@ public partial class InventoryRepository
                     matched.Add(new FrozenIngredientResult
                     {
                         ItemName          = itemName,
-                        FoodCategory      = "Frozen",
+                        FoodCategory      = InferFoodCategory(itemName),
                         StorageLocationId = storageLocationId
                     });
                     break;
@@ -371,6 +371,29 @@ public partial class InventoryRepository
     private sealed class RecipeIngredientSummary
     {
         public string? IngredientName { get; set; }
+    }
+
+    private static readonly (string[] Keywords, string Category)[] CategoryKeywords =
+    [
+        (["chicken", "turkey", "poultry", "duck", "hen"], "Poultry"),
+        (["beef", "steak", "pork", "lamb", "veal", "bison", "venison", "ground meat", "mince"], "Meat"),
+        (["shrimp", "prawn", "salmon", "tuna", "fish", "lobster", "crab", "scallop", "cod", "tilapia", "halibut", "seafood"], "Seafood"),
+        (["milk", "cheese", "butter", "cream", "yogurt", "dairy"], "Dairy"),
+    ];
+
+    private static string InferFoodCategory(string itemName)
+    {
+        foreach ((string[] keywords, string category) in CategoryKeywords)
+        {
+            foreach (string keyword in keywords)
+            {
+                if (itemName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    return category;
+                }
+            }
+        }
+        return "Frozen";
     }
 
     #endregion

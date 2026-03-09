@@ -15,17 +15,30 @@ public sealed class HouseholdTaskController : ControllerBase
     public HouseholdTaskController(IHouseholdTaskRepository tasks) { _tasks = tasks; }
 
     private Guid GetHouseholdId()
-        => Guid.Parse(User.FindFirstValue("household_id") ?? Guid.Empty.ToString());
+    {
+        string? claim = User.FindFirstValue("household_id");
+        if (string.IsNullOrEmpty(claim) || !Guid.TryParse(claim, out Guid id) || id == Guid.Empty)
+            throw new InvalidOperationException("household_id claim is missing or invalid.");
+        return id;
+    }
 
     private Guid GetUserId()
-        => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? Guid.Empty.ToString());
+    {
+        string? claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(claim) || !Guid.TryParse(claim, out Guid id))
+            throw new InvalidOperationException("User identity claim is missing or invalid.");
+        return id;
+    }
 
     /// <summary>
     /// Get active (Pending + Escalated) tasks for the caller's household.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetActive(CancellationToken ct)
-        => Ok(await _tasks.GetActiveTasksAsync(GetHouseholdId(), ct));
+    {
+        try { return Ok(await _tasks.GetActiveTasksAsync(GetHouseholdId(), ct)); }
+        catch (InvalidOperationException) { return Unauthorized(); }
+    }
 
     /// <summary>
     /// Get task history for a date range (defaults to last 30 days).
@@ -34,9 +47,13 @@ public sealed class HouseholdTaskController : ControllerBase
     public async Task<IActionResult> GetHistory(
         [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
     {
-        DateOnly rangeFrom = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
-        DateOnly rangeTo   = to   ?? DateOnly.FromDateTime(DateTime.Today);
-        return Ok(await _tasks.GetTaskHistoryAsync(GetHouseholdId(), rangeFrom, rangeTo, ct));
+        try
+        {
+            DateOnly rangeFrom = from ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-30));
+            DateOnly rangeTo   = to   ?? DateOnly.FromDateTime(DateTime.Today);
+            return Ok(await _tasks.GetTaskHistoryAsync(GetHouseholdId(), rangeFrom, rangeTo, ct));
+        }
+        catch (InvalidOperationException) { return Unauthorized(); }
     }
 
     /// <summary>
@@ -51,8 +68,12 @@ public sealed class HouseholdTaskController : ControllerBase
         {
             return BadRequest(new { error = "Invalid action" });
         }
-        await _tasks.ActionTaskAsync(id, GetUserId(), req.ActionTaken, ct);
-        return NoContent();
+        try
+        {
+            await _tasks.ActionTaskAsync(id, GetUserId(), req.ActionTaken, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException) { return Unauthorized(); }
     }
 
     /// <summary>

@@ -32,12 +32,7 @@ public sealed class HouseholdMemberHttpQuery : IHouseholdMemberQuery
 
             if (members is null) { return new List<Guid>(); }
 
-            List<Guid> userIds = new();
-            foreach (HouseholdMemberSummary m in members)
-            {
-                if (m.IsActive) { userIds.Add(m.UserId); }
-            }
-            return userIds;
+            return members.Where(m => m.IsActive).Select(m => m.UserId).ToList();
         }
         catch (Exception ex)
         {

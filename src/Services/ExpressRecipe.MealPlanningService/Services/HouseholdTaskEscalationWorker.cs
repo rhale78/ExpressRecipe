@@ -23,7 +23,6 @@ public sealed class HouseholdTaskEscalationWorker : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
             try
             {
                 await EscalateOverdueTasksAsync(stoppingToken);
@@ -32,6 +31,7 @@ public sealed class HouseholdTaskEscalationWorker : BackgroundService
             {
                 _logger.LogError(ex, "HouseholdTaskEscalationWorker failed");
             }
+            await Task.Delay(TimeSpan.FromMinutes(15), stoppingToken);
         }
     }
 
