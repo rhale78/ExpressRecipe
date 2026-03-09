@@ -12,6 +12,7 @@ namespace ExpressRecipe.InventoryService.Tests.Controllers;
 public class InventoryControllerTests
 {
     private readonly Mock<IInventoryRepository> _mockRepository;
+    private readonly Mock<IInventorySaleRepository> _mockSaleRepository;
     private readonly Mock<ILogger<InventoryController>> _mockLogger;
     private readonly InventoryController _controller;
     private readonly Guid _testUserId;
@@ -19,8 +20,9 @@ public class InventoryControllerTests
     public InventoryControllerTests()
     {
         _mockRepository = new Mock<IInventoryRepository>();
+        _mockSaleRepository = new Mock<IInventorySaleRepository>();
         _mockLogger = new Mock<ILogger<InventoryController>>();
-        _controller = new InventoryController(_mockLogger.Object, _mockRepository.Object);
+        _controller = new InventoryController(_mockLogger.Object, _mockRepository.Object, _mockSaleRepository.Object);
         _testUserId = Guid.NewGuid();
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }

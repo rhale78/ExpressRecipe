@@ -40,6 +40,13 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 builder.Services.AddScoped<IInventoryRepository>(sp =>
     new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
 
+// Register livestock and sales repositories
+builder.Services.AddScoped<ILivestockRepository>(sp =>
+    new LivestockRepository(connectionString, sp.GetRequiredService<ILogger<LivestockRepository>>()));
+
+builder.Services.AddScoped<IInventorySaleRepository>(sp =>
+    new InventorySaleRepository(connectionString, sp.GetRequiredService<ILogger<InventorySaleRepository>>()));
+
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
