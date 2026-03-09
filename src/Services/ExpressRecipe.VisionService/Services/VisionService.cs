@@ -61,14 +61,14 @@ public class VisionService : IVisionService
 
         if (best.Success && best.Confidence >= options.MinConfidence)
         {
-            _logger.LogProviderChainResult("system", best.ProviderUsed ?? "none", best.Confidence, best.ProductName ?? "none");
+            _logger.LogProviderChainResult(best.ProviderUsed ?? "none", best.Confidence, best.ProductName ?? "none");
             return best;
         }
 
         // Fallback to Ollama
         if (options.AllowOllamaVision && _ollama.IsEnabled)
         {
-            _logger.LogConfidenceBelowThreshold("system", best.Confidence, options.MinConfidence);
+            _logger.LogConfidenceBelowThreshold(best.Confidence, options.MinConfidence);
             VisionResult ollamaResult = await _ollama.AnalyzeAsync(resized, ct);
             if (ollamaResult.Success && ollamaResult.Confidence >= options.MinConfidence)
             {
@@ -93,7 +93,7 @@ public class VisionService : IVisionService
             return best;
         }
 
-        _logger.LogAllProvidersDisabled("system");
+        _logger.LogAllProvidersDisabled();
         return new VisionResult
         {
             Success = false,

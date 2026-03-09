@@ -289,11 +289,9 @@ public class InventoryController : ControllerBase
         try
         {
             var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             await _repository.DeleteStorageLocationAsync(id);
-            if (userId != null)
-            {
-                _logger.LogStorageLocationDeleted(userId.Value, id);
-            }
+            _logger.LogStorageLocationDeleted(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)

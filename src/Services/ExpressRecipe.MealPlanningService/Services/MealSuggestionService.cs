@@ -392,6 +392,9 @@ public class MealSuggestionService : IMealSuggestionService
         if (_hybridCache != null)
         {
             string cacheKey = $"suggestions:{userId}:candidates:{mealType}";
+            // The factory delegate is only invoked on a true cache miss (L1 + L2 both absent).
+            // HybridCache guarantees the factory is called at most once per key per miss window,
+            // making the factoryInvoked flag a reliable miss indicator.
             bool factoryInvoked = false;
             List<RecipeCandidate> result = await _hybridCache.GetOrCreateAsync(
                 cacheKey,

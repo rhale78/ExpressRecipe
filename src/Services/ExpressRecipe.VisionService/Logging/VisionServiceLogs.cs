@@ -53,14 +53,14 @@ public static partial class VisionServiceLogs
     [LoggerMessage(
         EventId = 6008,
         Level = LogLevel.Warning,
-        Message = "[Vision] All vision providers disabled or unavailable for user {UserId}")]
-    public static partial void LogAllProvidersDisabled(this ILogger logger, string userId);
+        Message = "[Vision] All vision providers disabled or unavailable")]
+    public static partial void LogAllProvidersDisabled(this ILogger logger);
 
     [LoggerMessage(
         EventId = 6009,
         Level = LogLevel.Debug,
-        Message = "[Vision] Provider result confidence {Confidence:F3} below threshold {Threshold:F3} for user {UserId}, trying next provider")]
-    public static partial void LogConfidenceBelowThreshold(this ILogger logger, string userId, double confidence, double threshold);
+        Message = "[Vision] Provider result confidence {Confidence:F3} below threshold {Threshold:F3}, trying next provider")]
+    public static partial void LogConfidenceBelowThreshold(this ILogger logger, double confidence, double threshold);
 
     [LoggerMessage(
         EventId = 6010,
@@ -71,6 +71,6 @@ public static partial class VisionServiceLogs
     [LoggerMessage(
         EventId = 6011,
         Level = LogLevel.Debug,
-        Message = "[Vision] Provider chain result for user {UserId}: provider={ProviderUsed} confidence={Confidence:F3} product='{MatchedProduct}'")]
-    public static partial void LogProviderChainResult(this ILogger logger, string userId, string providerUsed, double confidence, string matchedProduct);
+        Message = "[Vision] Provider chain result: provider={ProviderUsed} confidence={Confidence:F3} product='{MatchedProduct}'")]
+    public static partial void LogProviderChainResult(this ILogger logger, string providerUsed, double confidence, string matchedProduct);
 }
