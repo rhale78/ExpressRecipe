@@ -1,7 +1,11 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
+using ExpressRecipe.MealPlanningService.Workers;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
+using Microsoft.Extensions.Caching.Hybrid;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,15 +38,35 @@ var connectionString = builder.Configuration.GetConnectionString("mealplandb")
 builder.Services.AddScoped<IMealPlanningRepository>(sp =>
     new MealPlanningRepository(connectionString, sp.GetRequiredService<ILogger<MealPlanningRepository>>()));
 
+// Register HTTP clients for external service calls
+builder.Services.AddHttpClient("RecipeService");
+builder.Services.AddHttpClient("InventoryService");
+builder.Services.AddHttpClient("SafeForkService");
+builder.Services.AddHttpClient("ShoppingService");
+builder.Services.AddHttpClient("NotificationService");
+builder.Services.AddHttpClient("MealPlanningService");
+
+// Register RabbitMQ messaging when connection string is configured
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+if (!string.IsNullOrWhiteSpace(messagingConnectionString))
+{
+    builder.AddRabbitMqMessaging("messaging");
+}
+
+// Register HybridCache for suggestion caching
+#pragma warning disable EXTEXP0018
+builder.Services.AddHybridCache();
+#pragma warning restore EXTEXP0018
+
+// Register suggestion service
+builder.Services.AddScoped<IMealSuggestionService, MealSuggestionService>();
+
+// Register background workers
+builder.Services.AddHostedService<RecipeCookedEventPublisherWorker>();
+builder.Services.AddHostedService<CookingRatingPromptWorker>();
+
 // Add controllers
 builder.Services.AddControllers();
-
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.MealPlanningService API", Version = "v1" });
-// });
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -64,12 +88,6 @@ await app.RunMigrationsAsync(connectionString, migrations);
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-if (app.Environment.IsDevelopment())
-{
-    // app.UseSwagger();
-    // app.UseSwaggerUI();
-}
 
 app.UseCors();
 app.UseAuthentication();

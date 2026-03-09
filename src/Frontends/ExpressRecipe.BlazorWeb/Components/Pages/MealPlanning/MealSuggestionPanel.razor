@@ -1,0 +1,155 @@
+@using System.Net.Http.Json
+
+<div class="suggestion-panel @(IsOpen ? "suggestion-panel--open" : "suggestion-panel--closed")">
+    <div class="suggestion-panel-header">
+        <h3 class="suggestion-panel-title">💡 Meal Suggestions</h3>
+        <button class="suggestion-panel-close" @onclick="OnClose">×</button>
+    </div>
+
+    <div class="suggestion-panel-filters">
+        <!-- Suggestion Mode -->
+        <div class="filter-group">
+            <label class="filter-label">Suggestion Mode</label>
+            <select class="form-select" @bind="_suggestionMode">
+                <option value="Balanced">⚖️ Balanced</option>
+                <option value="TriedAndTrue">🏆 Tried & True</option>
+                <option value="SomethingNew">✨ Something New</option>
+            </select>
+        </div>
+
+        <!-- Inventory Slider -->
+        <div class="filter-group">
+            <label class="filter-label">Ingredients</label>
+            <div class="slider-wrapper">
+                <span class="slider-label-left">🏠 Use What I Have</span>
+                <input type="range" min="0" max="100" step="10"
+                       class="form-range inventory-slider"
+                       @bind="_inventorySlider"
+                       @bind:event="oninput" />
+                <span class="slider-label-right">🛒 Shop Fresh</span>
+            </div>
+            <div class="slider-value-display">@_inventorySlider%</div>
+        </div>
+
+        <!-- Max Cook Time -->
+        <div class="filter-group">
+            <label class="filter-label">Max Cook Time</label>
+            <div class="radio-group">
+                @foreach ((int value, string label) in _timeOptions)
+                {
+                    int optValue = value;
+                    <label class="radio-label">
+                        <input type="radio" name="maxCookTime" value="@optValue"
+                               checked="@(_maxCookMinutes == optValue)"
+                               @onchange="() => _maxCookMinutes = optValue" />
+                        @label
+                    </label>
+                }
+            </div>
+        </div>
+
+        <button class="btn btn-primary" @onclick="LoadSuggestionsAsync" disabled="@_isLoading">
+            @if (_isLoading)
+            {
+                <span>Loading...</span>
+            }
+            else
+            {
+                <span>🔍 Get Suggestions</span>
+            }
+        </button>
+    </div>
+
+    <!-- Results -->
+    <div class="suggestion-panel-results">
+        @if (_errorMessage != null)
+        {
+            <div class="alert alert-warning">@_errorMessage</div>
+        }
+        else if (_suggestions.Count == 0 && !_isLoading)
+        {
+            <div class="suggestion-empty-state">
+                <p>Click "Get Suggestions" to find meals that match your pantry and preferences.</p>
+            </div>
+        }
+        else
+        {
+            @foreach (MealSuggestionResult suggestion in _suggestions)
+            {
+                <MealSuggestionCard Suggestion="suggestion"
+                                    OnAddToPlan="HandleAddToPlan" />
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string MealType { get; set; } = "Dinner";
+    [Parameter] public EventCallback<MealSuggestionResult> OnSuggestionAdded { get; set; }
+    [Inject] private HttpClient Http { get; set; } = default!;
+
+    private string _suggestionMode = "Balanced";
+    private int _inventorySlider = 50;
+    private int _maxCookMinutes;
+    private bool _isLoading;
+    private string? _errorMessage;
+    private List<MealSuggestionResult> _suggestions = new();
+
+    private readonly (int value, string label)[] _timeOptions = new[]
+    {
+        (0, "Any"),
+        (15, "15 min"),
+        (30, "30 min"),
+        (60, "1 hr")
+    };
+
+    private async Task LoadSuggestionsAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        _suggestions = new();
+
+        try
+        {
+            object requestBody = new
+            {
+                mealType        = MealType,
+                suggestionMode  = _suggestionMode,
+                inventorySlider = _inventorySlider,
+                maxCookMinutes  = _maxCookMinutes,
+                count           = 10,
+                excludeRecentDays = true,
+                recentDaysCutoff  = 14
+            };
+
+            HttpResponseMessage response = await Http.PostAsJsonAsync(
+                "/api/mealplanning/suggest", requestBody);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _suggestions = await response.Content
+                    .ReadFromJsonAsync<List<MealSuggestionResult>>() ?? new();
+            }
+            else
+            {
+                _errorMessage = "Could not load suggestions. Please try again.";
+            }
+        }
+        catch (Exception)
+        {
+            _errorMessage = "Could not connect to suggestion service. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleAddToPlan(MealSuggestionResult suggestion)
+    {
+        await OnSuggestionAdded.InvokeAsync(suggestion);
+        await OnClose.InvokeAsync();
+    }
+}

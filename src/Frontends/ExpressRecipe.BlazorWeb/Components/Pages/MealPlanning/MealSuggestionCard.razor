@@ -1,0 +1,92 @@
+@using System.Net.Http.Json
+
+<div class="suggestion-card @(IsSelected ? "suggestion-card--selected" : "")">
+    <div class="suggestion-card-header">
+        <span class="suggestion-recipe-name">@Suggestion.RecipeName</span>
+
+        @if (Suggestion.IsAllergenSafe)
+        {
+            <span class="allergen-safe-badge" title="Allergen safe for you">✅</span>
+        }
+    </div>
+
+    <div class="suggestion-card-meta">
+        @if (Suggestion.CookMinutes > 0)
+        {
+            <span class="suggestion-time-badge">⏱ @Suggestion.CookMinutes min</span>
+        }
+
+        <span class="suggestion-inventory-badge @GetInventoryBadgeClass(Suggestion.InventoryMatchPct)"
+              title="@Math.Round(Suggestion.InventoryMatchPct * 100)% ingredients on hand">
+            🏠 @Math.Round(Suggestion.InventoryMatchPct * 100)% on hand
+        </span>
+
+        @if (Suggestion.UserRating > 0)
+        {
+            <span class="suggestion-rating-badge">⭐ @Suggestion.UserRating.ToString("0.0")</span>
+        }
+    </div>
+
+    @if (Suggestion.Tags.Any())
+    {
+        <div class="suggestion-tags">
+            @foreach (string tag in Suggestion.Tags.Take(3))
+            {
+                <span class="suggestion-tag">@tag</span>
+            }
+        </div>
+    }
+
+    @if (Suggestion.MissingIngredients.Any())
+    {
+        <div class="suggestion-missing" title="@string.Join(", ", Suggestion.MissingIngredients)">
+            🛒 Missing: @string.Join(", ", Suggestion.MissingIngredients.Take(2))
+            @if (Suggestion.MissingIngredients.Count > 2)
+            {
+                <span>+@(Suggestion.MissingIngredients.Count - 2) more</span>
+            }
+        </div>
+    }
+
+    <div class="suggestion-card-footer">
+        <button class="btn btn-sm btn-primary" @onclick="OnAddToPlanClicked">
+            ➕ Add to Plan
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public required MealSuggestionResult Suggestion { get; set; }
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public EventCallback<MealSuggestionResult> OnAddToPlan { get; set; }
+
+    private async Task OnAddToPlanClicked()
+    {
+        await OnAddToPlan.InvokeAsync(Suggestion);
+    }
+
+    private static string GetInventoryBadgeClass(decimal matchPct) => matchPct switch
+    {
+        >= 0.8m => "inventory-badge--high",
+        >= 0.5m => "inventory-badge--medium",
+        _       => "inventory-badge--low"
+    };
+}
+
+/// <summary>
+/// Client-side model for a meal suggestion result from the API.
+/// </summary>
+public class MealSuggestionResult
+{
+    public Guid RecipeId { get; set; }
+    public string RecipeName { get; set; } = string.Empty;
+    public int CookMinutes { get; set; }
+    public decimal UserRating { get; set; }
+    public decimal GlobalRating { get; set; }
+    public int UserCookCount { get; set; }
+    public decimal InventoryMatchPct { get; set; }
+    public bool IsAllergenSafe { get; set; }
+    public decimal Score { get; set; }
+    public List<string> MissingIngredients { get; set; } = new();
+    public List<string> Tags { get; set; } = new();
+}

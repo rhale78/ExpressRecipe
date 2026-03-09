@@ -1,0 +1,74 @@
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+
+@if (Meal == null)
+{
+    <div class="planned-meal-cell planned-meal-cell--empty">
+        <button class="meal-add-btn" @onclick="OnAddClicked" title="Add meal">
+            <span class="meal-add-icon">+</span>
+        </button>
+    </div>
+}
+else
+{
+    <div class="planned-meal-cell planned-meal-cell--filled @(Meal.IsPrepared ? "planned-meal-cell--completed" : "")">
+        <div class="meal-cell-header">
+            <span class="meal-type-badge meal-type-@Meal.MealType.ToLower()">@GetMealTypeIcon(Meal.MealType)</span>
+        </div>
+
+        <div class="meal-cell-body">
+            <div class="meal-recipe-name" title="@Meal.RecipeName">@Meal.RecipeName</div>
+
+            @if (Meal.RecipePrepTime.HasValue || Meal.RecipeCookTime.HasValue)
+            {
+                <div class="meal-time-badge">
+                    ⏱ @((Meal.RecipePrepTime ?? 0) + (Meal.RecipeCookTime ?? 0)) min
+                </div>
+            }
+
+            @if (UserRating > 0)
+            {
+                <div class="meal-rating">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        int star = i;
+                        <span class="star @(star <= UserRating ? "star--filled" : "star--empty")">★</span>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="meal-cell-actions">
+            @if (!Meal.IsPrepared)
+            {
+                <button class="meal-complete-btn" @onclick="OnCompleteClicked" title="Mark as cooked">
+                    ✓
+                </button>
+            }
+            else
+            {
+                <span class="meal-completed-badge" title="Cooked!">✅</span>
+            }
+
+            <button class="meal-remove-btn" @onclick="OnRemoveClicked" title="Remove">
+                ×
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public MealPlanEntryDto? Meal { get; set; }
+    [Parameter] public int UserRating { get; set; }
+    [Parameter] public EventCallback OnAddClicked { get; set; }
+    [Parameter] public EventCallback OnCompleteClicked { get; set; }
+    [Parameter] public EventCallback OnRemoveClicked { get; set; }
+
+    private static string GetMealTypeIcon(string mealType) => mealType switch
+    {
+        "Breakfast" => "🍳",
+        "Lunch"     => "🥗",
+        "Dinner"    => "🍽️",
+        "Snack"     => "🍎",
+        _           => "🍴"
+    };
+}

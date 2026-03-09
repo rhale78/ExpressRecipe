@@ -9,6 +9,7 @@
     <PackageReference Include="Aspire.Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
     <PackageReference Include="Microsoft.OpenApi" />
   </ItemGroup>
   <ItemGroup>
@@ -16,6 +17,7 @@
     <ProjectReference Include="..\..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Client.Shared\ExpressRecipe.Client.Shared.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Data.Common\ExpressRecipe.Data.Common.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.RabbitMQ\ExpressRecipe.Messaging.RabbitMQ.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />
