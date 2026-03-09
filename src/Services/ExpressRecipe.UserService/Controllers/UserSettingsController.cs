@@ -67,7 +67,7 @@ public class UserSettingsController : ControllerBase
         {
             Guid userId = GetCurrentUserId();
             List<string> errors = await _settingsRepo.ValidateAsync(group, values, ct);
-            if (errors.Count > 0) { return BadRequest(errors); }
+            if (errors.Count > 0) { return BadRequest(new { errors }); }
             await _settingsRepo.UpsertAsync(userId, group, values, ct);
             return NoContent();
         }

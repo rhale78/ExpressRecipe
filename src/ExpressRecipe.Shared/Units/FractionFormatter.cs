@@ -57,6 +57,12 @@ public static class FractionFormatter
         return best;
     }
 
-    private static string FormatDecimal(decimal value) =>
-        value == Math.Floor(value) ? ((long)value).ToString() : value.ToString("G4");
+    private static string FormatDecimal(decimal value)
+    {
+        if (value == Math.Floor(value) && value >= long.MinValue && value <= long.MaxValue)
+        {
+            return ((long)value).ToString();
+        }
+        return value.ToString("G4");
+    }
 }

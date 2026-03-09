@@ -69,7 +69,7 @@ public sealed class UserSettingsRepository : SqlHelper, IUserSettingsRepository
         JsonObject groupObject = root[group] as JsonObject ?? new JsonObject();
         foreach ((string key, object? value) in values)
         {
-            groupObject[key] = value == null ? null : JsonValue.Create(value.ToString());
+            groupObject[key] = value == null ? null : JsonValue.Create(value.ToString()!);
         }
         root[group] = groupObject;
 

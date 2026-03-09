@@ -51,7 +51,7 @@
                                 else if (setting.Type == "toggle")
                                 {
                                     bool on = group.Values.TryGetValue(setting.Key, out object? tv) && bool.TryParse(tv?.ToString(), out bool b) && b;
-                                    <input type="checkbox" checked="@on" @onchange="e => OnChanged(group.Schema.Group, setting.Key, e.Value)" />
+                                    <input type="checkbox" checked="@on" @onchange="e => OnChanged(group.Schema.Group, setting.Key, e.Value?.ToString()?.ToLower())" />
                                 }
                             </div>
                         }
