@@ -26,7 +26,12 @@ builder.Services.AddScoped<IIngredientRepository>(sp => new IngredientRepository
 builder.Services.AddScoped<IIngredientMatchingRepository>(sp => new IngredientMatchingRepository(connectionString));
 
 // Matching service
-builder.Services.AddScoped<IIngredientMatchingService, IngredientMatchingService>();
+builder.Services.AddScoped<IIngredientMatchingService>(sp =>
+    new IngredientMatchingService(
+        sp.GetRequiredService<IIngredientMatchingRepository>(),
+        sp.GetRequiredService<IIngredientRepository>(),
+        sp.GetRequiredService<ExpressRecipe.Shared.Services.HybridCacheService>(),
+        sp.GetRequiredService<ILogger<IngredientMatchingService>>()));
 
 // Parsing Services
 builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>();

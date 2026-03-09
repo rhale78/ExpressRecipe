@@ -1,6 +1,6 @@
 namespace ExpressRecipe.Shared.Matching;
 
-public enum MatchStrategy { Exact, Alias, AlternativeNames, Normalized, TokenOverlap, EditDistance, Unresolved }
+public enum MatchStrategy { Exact, Alias, Normalized, TokenOverlap, EditDistance, Unresolved }
 
 public sealed record MatchResult
 {

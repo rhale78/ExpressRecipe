@@ -164,6 +164,35 @@ public class IngredientMatchingRepository : SqlHelper, IIngredientMatchingReposi
             new SqlParameter("@Offset", (page - 1) * pageSize),
             new SqlParameter("@PageSize", pageSize));
     }
+    public async Task<UnresolvedQueueItem?> GetQueueItemAsync(Guid id, CancellationToken ct)
+    {
+        const string sql = @"
+            SELECT Id, RawText, NormalizedText, SourceService, SourceEntityId,
+                   BestMatchId, BestMatchName, BestConfidence, BestStrategy,
+                   OccurrenceCount, CreatedAt, UpdatedAt
+            FROM UnresolvedIngredientQueue
+            WHERE Id = @Id";
+
+        List<UnresolvedQueueItem> results = await ExecuteReaderAsync(sql,
+            reader => new UnresolvedQueueItem
+            {
+                Id              = reader.GetGuid(0),
+                RawText         = reader.GetString(1),
+                NormalizedText  = reader.GetString(2),
+                SourceService   = reader.GetString(3),
+                SourceEntityId  = reader.IsDBNull(4) ? null : reader.GetGuid(4),
+                BestMatchId     = reader.IsDBNull(5) ? null : reader.GetGuid(5),
+                BestMatchName   = reader.IsDBNull(6) ? null : reader.GetString(6),
+                BestConfidence  = reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                BestStrategy    = reader.IsDBNull(8) ? null : reader.GetString(8),
+                OccurrenceCount = reader.GetInt32(9),
+                CreatedAt       = reader.GetDateTime(10),
+                UpdatedAt       = reader.IsDBNull(11) ? null : reader.GetDateTime(11)
+            },
+            new SqlParameter("@Id", id));
+
+        return results.Count > 0 ? results[0] : null;
+    }
 }
 
 public sealed class UnresolvedQueueItem
@@ -181,3 +210,4 @@ public sealed class UnresolvedQueueItem
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }
+

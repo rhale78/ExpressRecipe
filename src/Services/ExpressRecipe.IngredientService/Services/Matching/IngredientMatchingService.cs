@@ -1,4 +1,5 @@
 using ExpressRecipe.IngredientService.Data;
+using ExpressRecipe.Shared.DTOs.Product;
 using ExpressRecipe.Shared.Matching;
 using ExpressRecipe.Shared.Services;
 
@@ -6,17 +7,25 @@ namespace ExpressRecipe.IngredientService.Services.Matching;
 
 public interface IIngredientMatchingRepository
 {
-    Task<(Guid Id, string Name)?> ExactMatchAsync(string normalizedName, CancellationToken ct);
-    Task<(Guid Id, string Name)?> AliasMatchAsync(string normalizedAlias, CancellationToken ct);
+    Task<(Guid Id, string Name)?> ExactMatchAsync(string simpleLowerName, CancellationToken ct);
+    Task<(Guid Id, string Name)?> AliasMatchAsync(string simpleLowerAlias, CancellationToken ct);
     Task<List<(Guid Id, string Name, string AlternativeNames)>> GetAllForFuzzyAsync(CancellationToken ct);
     Task QueueUnresolvedAsync(string raw, string normalized, string sourceService,
         Guid? sourceEntityId, Guid? bestMatchId, string? bestMatchName,
         decimal? bestConfidence, string? bestStrategy, CancellationToken ct);
-    Task IncrementAliasMatchCountAsync(string normalizedAlias, CancellationToken ct);
+    Task IncrementAliasMatchCountAsync(string simpleLowerAlias, CancellationToken ct);
     Task<bool> CreateAliasAsync(Guid ingredientId, string aliasText, string source, CancellationToken ct);
     Task ResolveQueueItemAsync(Guid queueItemId, Guid? resolvedToId, string resolution, CancellationToken ct);
     Task<List<UnresolvedQueueItem>> GetUnresolvedQueueAsync(int page, int pageSize, int minOccurrences, CancellationToken ct);
+    Task<UnresolvedQueueItem?> GetQueueItemAsync(Guid id, CancellationToken ct);
 }
+
+/// <summary>
+/// Companion index built from the ingredient catalog for fast token-based and edit-distance matching.
+/// </summary>
+internal sealed record IngredientTokenIndex(
+    Dictionary<string, List<(Guid Id, string Name, string NormName)>> ByToken,
+    Dictionary<Guid, (string Name, string NormName)> ById);
 
 public sealed class IngredientMatchingService : IIngredientMatchingService
 {
@@ -32,13 +41,16 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
     private const string  ExactCachePrefix      = "ingredient:exact:";
 
     private readonly IIngredientMatchingRepository _repo;
+    private readonly IIngredientRepository _ingredientRepository;
     private readonly HybridCacheService _cache;
     private readonly ILogger<IngredientMatchingService> _logger;
 
     public IngredientMatchingService(IIngredientMatchingRepository repo,
+        IIngredientRepository ingredientRepository,
         HybridCacheService cache, ILogger<IngredientMatchingService> logger)
     {
         _repo = repo;
+        _ingredientRepository = ingredientRepository;
         _cache = cache;
         _logger = logger;
     }
@@ -58,35 +70,49 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         Dictionary<string, MatchResult> results = new(StringComparer.OrdinalIgnoreCase);
-        Dictionary<string, string> normalized = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string raw in inputs) { normalized[raw] = IngredientNormalizer.Normalize(raw); }
+
+        // Exact/Alias stages use SimpleLower (matches DB computed column LOWER(Name) and seeded aliases).
+        // Normalized/Fuzzy/Queue stages use the aggressive Normalize() form.
+        Dictionary<string, string> simpleNorms     = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, string> aggressiveNorms = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string raw in inputs)
+        {
+            simpleNorms[raw]     = IngredientNormalizer.SimpleLower(raw);
+            aggressiveNorms[raw] = IngredientNormalizer.Normalize(raw);
+        }
+
+        // Drop inputs whose aggressive normalisation produces an empty string (pure quantity/unit/modifier).
+        inputs = inputs.Where(raw => !string.IsNullOrEmpty(aggressiveNorms[raw])).ToList();
+        if (inputs.Count == 0) { return new(); }
 
         // Pipeline: Exact → Alias → Normalized → Fuzzy (Jaccard + EditDist) → Queue
-        List<string> remaining = await ResolveExactBatchAsync(normalized, results, ct);
-        if (remaining.Count > 0) { remaining = await ResolveAliasBatchAsync(normalized, remaining, results, ct); }
-        if (remaining.Count > 0) { remaining = await ResolveNormalizedBatchAsync(normalized, remaining, results, ct); }
-        if (remaining.Count > 0) { remaining = await ResolveFuzzyBatchAsync(normalized, remaining, results, ct); }
-        if (remaining.Count > 0) { await QueueUnresolvedBatchAsync(normalized, remaining, results, sourceService, sourceEntityId, ct); }
+        List<string> remaining = await ResolveExactBatchAsync(simpleNorms, aggressiveNorms, inputs, results, ct);
+        if (remaining.Count > 0) { remaining = await ResolveAliasBatchAsync(simpleNorms, aggressiveNorms, remaining, results, ct); }
+        if (remaining.Count > 0) { remaining = await ResolveNormalizedBatchAsync(simpleNorms, aggressiveNorms, remaining, results, ct); }
+        if (remaining.Count > 0) { remaining = await ResolveFuzzyBatchAsync(aggressiveNorms, remaining, results, sourceService, sourceEntityId, ct); }
+        if (remaining.Count > 0) { await QueueUnresolvedBatchAsync(aggressiveNorms, remaining, results, sourceService, sourceEntityId, ct); }
 
         return inputs.Select(raw => results.TryGetValue(raw, out MatchResult? r)
-            ? r : MatchResult.Unresolved(raw, normalized[raw])).ToList();
+            ? r : MatchResult.Unresolved(raw, aggressiveNorms[raw])).ToList();
     }
 
-    private async Task<List<string>> ResolveExactBatchAsync(Dictionary<string, string> normalized,
-        Dictionary<string, MatchResult> results, CancellationToken ct)
+    private async Task<List<string>> ResolveExactBatchAsync(
+        Dictionary<string, string> simpleNorms, Dictionary<string, string> aggressiveNorms,
+        List<string> candidates, Dictionary<string, MatchResult> results, CancellationToken ct)
     {
         List<string> remaining = new();
-        foreach ((string raw, string norm) in normalized)
+        foreach (string raw in candidates)
         {
+            string simple = simpleNorms[raw];
             (Guid Id, string Name)? hit = await _cache.GetOrSetAsync(
-                $"{ExactCachePrefix}{norm}",
-                innerCt => new ValueTask<(Guid, string)?>(_repo.ExactMatchAsync(norm, innerCt)),
+                $"{ExactCachePrefix}{simple}",
+                innerCt => new ValueTask<(Guid, string)?>(_repo.ExactMatchAsync(simple, innerCt)),
                 cancellationToken: ct);
             if (hit.HasValue)
             {
                 results[raw] = new MatchResult
                 {
-                    RawInput = raw, NormalizedInput = norm,
+                    RawInput = raw, NormalizedInput = aggressiveNorms[raw],
                     IngredientId = hit.Value.Id, IngredientName = hit.Value.Name,
                     Confidence = ExactConfidence, Strategy = MatchStrategy.Exact
                 };
@@ -96,46 +122,50 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
         return remaining;
     }
 
-    private async Task<List<string>> ResolveAliasBatchAsync(Dictionary<string, string> normalized,
+    private async Task<List<string>> ResolveAliasBatchAsync(
+        Dictionary<string, string> simpleNorms, Dictionary<string, string> aggressiveNorms,
         List<string> candidates, Dictionary<string, MatchResult> results, CancellationToken ct)
     {
         List<string> remaining = new();
         foreach (string raw in candidates)
         {
-            string norm = normalized[raw];
+            string simple = simpleNorms[raw];
             (Guid Id, string Name)? hit = await _cache.GetOrSetAsync(
-                $"{AliasCachePrefix}{norm}",
-                innerCt => new ValueTask<(Guid, string)?>(_repo.AliasMatchAsync(norm, innerCt)),
+                $"{AliasCachePrefix}{simple}",
+                innerCt => new ValueTask<(Guid, string)?>(_repo.AliasMatchAsync(simple, innerCt)),
                 cancellationToken: ct);
             if (hit.HasValue)
             {
                 results[raw] = new MatchResult
                 {
-                    RawInput = raw, NormalizedInput = norm,
+                    RawInput = raw, NormalizedInput = aggressiveNorms[raw],
                     IngredientId = hit.Value.Id, IngredientName = hit.Value.Name,
                     Confidence = AliasConfidence, Strategy = MatchStrategy.Alias
                 };
-                _ = _repo.IncrementAliasMatchCountAsync(norm, CancellationToken.None);
+                await _repo.IncrementAliasMatchCountAsync(simple, ct);
             }
             else { remaining.Add(raw); }
         }
         return remaining;
     }
 
-    private async Task<List<string>> ResolveNormalizedBatchAsync(Dictionary<string, string> normalized,
+    private async Task<List<string>> ResolveNormalizedBatchAsync(
+        Dictionary<string, string> simpleNorms, Dictionary<string, string> aggressiveNorms,
         List<string> candidates, Dictionary<string, MatchResult> results, CancellationToken ct)
     {
         List<string> remaining = new();
         foreach (string raw in candidates)
         {
-            string norm = normalized[raw];
-            if (norm == raw.ToLowerInvariant()) { remaining.Add(raw); continue; }
-            (Guid Id, string Name)? hit = await _repo.ExactMatchAsync(norm, ct);
+            string aggressive = aggressiveNorms[raw];
+            // Skip if aggressive normalisation produced the same key as the simple-lower form —
+            // the Exact stage already tried that lookup and failed.
+            if (aggressive == simpleNorms[raw]) { remaining.Add(raw); continue; }
+            (Guid Id, string Name)? hit = await _repo.ExactMatchAsync(aggressive, ct);
             if (hit.HasValue)
             {
                 results[raw] = new MatchResult
                 {
-                    RawInput = raw, NormalizedInput = norm,
+                    RawInput = raw, NormalizedInput = aggressive,
                     IngredientId = hit.Value.Id, IngredientName = hit.Value.Name,
                     Confidence = NormalizedConfidence, Strategy = MatchStrategy.Normalized
                 };
@@ -146,19 +176,21 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
         return remaining;
     }
 
-    private async Task<List<string>> ResolveFuzzyBatchAsync(Dictionary<string, string> normalized,
-        List<string> candidates, Dictionary<string, MatchResult> results, CancellationToken ct)
+    private async Task<List<string>> ResolveFuzzyBatchAsync(
+        Dictionary<string, string> aggressiveNorms, List<string> candidates,
+        Dictionary<string, MatchResult> results,
+        string sourceService, Guid? sourceEntityId, CancellationToken ct)
     {
-        Dictionary<string, List<(Guid Id, string Name, string NormName)>> tokenIndex =
+        IngredientTokenIndex tokenIndex =
             await _cache.GetOrSetAsync(
                 TokenIndexKey,
                 async innerCt => await BuildTokenIndexAsync(innerCt),
-                cancellationToken: ct) ?? new();
+                cancellationToken: ct) ?? new(new(), new());
 
         List<string> unresolved = new();
         foreach (string raw in candidates)
         {
-            string norm = normalized[raw];
+            string norm = aggressiveNorms[raw];
             HashSet<string> inputTokens = IngredientNormalizer.Tokenize(norm);
             MatchResult? best = null;
 
@@ -166,7 +198,7 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
             HashSet<Guid> candidateIds = new();
             foreach (string token in inputTokens)
             {
-                if (tokenIndex.TryGetValue(token, out List<(Guid, string, string)>? ids))
+                if (tokenIndex.ByToken.TryGetValue(token, out List<(Guid, string, string)>? ids))
                 {
                     foreach ((Guid id, string _, string _) in ids) { candidateIds.Add(id); }
                 }
@@ -175,10 +207,9 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
             // Jaccard over pre-filtered set
             foreach (Guid candidateId in candidateIds)
             {
-                (string? name, string? normName) = FindInIndex(tokenIndex, candidateId);
-                if (name is null) { continue; }
+                if (!tokenIndex.ById.TryGetValue(candidateId, out (string Name, string NormName) entry)) { continue; }
                 decimal jaccard = IngredientNormalizer.JaccardSimilarity(
-                    inputTokens, IngredientNormalizer.Tokenize(normName!));
+                    inputTokens, IngredientNormalizer.Tokenize(entry.NormName));
                 if (jaccard >= JaccardMinThreshold)
                 {
                     decimal conf = Math.Min(
@@ -189,7 +220,7 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
                         best = new MatchResult
                         {
                             RawInput = raw, NormalizedInput = norm, IngredientId = candidateId,
-                            IngredientName = name, Confidence = conf, Strategy = MatchStrategy.TokenOverlap
+                            IngredientName = entry.Name, Confidence = conf, Strategy = MatchStrategy.TokenOverlap
                         };
                     }
                 }
@@ -199,20 +230,26 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
             if (best is null && inputTokens.Count == 1 && norm.Length >= EditDistMinLength)
             {
                 string inputToken = inputTokens.First();
-                foreach ((string token, List<(Guid Id, string Name, string NormName)> entries) in tokenIndex)
+                foreach ((string token, List<(Guid Id, string Name, string NormName)> entries) in tokenIndex.ByToken)
                 {
                     if (token.Length < EditDistMinLength) { continue; }
                     int dist = IngredientNormalizer.EditDistance(inputToken, token);
                     int maxLen = Math.Max(inputToken.Length, token.Length);
                     decimal conf = maxLen == 0 ? 0m : Math.Min(1m - (decimal)dist / maxLen, 0.60m);
-                    if (conf >= EditDistMinThreshold && (best is null || conf > best.Confidence))
+                    if (conf >= EditDistMinThreshold)
                     {
-                        (Guid id, string name, string _) = entries[0];
-                        best = new MatchResult
+                        // Iterate all entries for the token to pick the best candidate
+                        foreach ((Guid id, string name, string _) in entries)
                         {
-                            RawInput = raw, NormalizedInput = norm, IngredientId = id,
-                            IngredientName = name, Confidence = conf, Strategy = MatchStrategy.EditDistance
-                        };
+                            if (best is null || conf > best.Confidence)
+                            {
+                                best = new MatchResult
+                                {
+                                    RawInput = raw, NormalizedInput = norm, IngredientId = id,
+                                    IngredientName = name, Confidence = conf, Strategy = MatchStrategy.EditDistance
+                                };
+                            }
+                        }
                     }
                 }
             }
@@ -224,54 +261,72 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
                 {
                     await _repo.CreateAliasAsync(best.IngredientId.Value, raw, "AutoAccepted", ct);
                 }
+                else
+                {
+                    // Low-confidence: surface the best guess to the caller AND queue for admin review.
+                    await _repo.QueueUnresolvedAsync(raw, norm, sourceService, sourceEntityId,
+                        best.IngredientId, best.IngredientName, best.Confidence,
+                        best.Strategy.ToString(), ct);
+                }
             }
             else { unresolved.Add(raw); }
         }
         return unresolved;
     }
 
-    private static (string? Name, string? NormName) FindInIndex(
-        Dictionary<string, List<(Guid Id, string Name, string NormName)>> index, Guid id)
-    {
-        foreach (List<(Guid Id, string Name, string NormName)> list in index.Values)
-        {
-            foreach ((Guid listId, string name, string normName) in list)
-            {
-                if (listId == id) { return (name, normName); }
-            }
-        }
-        return (null, null);
-    }
-
-    private async Task<Dictionary<string, List<(Guid, string, string)>>> BuildTokenIndexAsync(CancellationToken ct)
+    private async Task<IngredientTokenIndex> BuildTokenIndexAsync(CancellationToken ct)
     {
         List<(Guid Id, string Name, string AlternativeNames)> all = await _repo.GetAllForFuzzyAsync(ct);
-        Dictionary<string, List<(Guid, string, string)>> index = new(StringComparer.Ordinal);
-        foreach ((Guid id, string name, string _) in all)
+        Dictionary<string, List<(Guid, string, string)>> byToken = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<Guid, (string Name, string NormName)> byId   = new();
+
+        foreach ((Guid id, string name, string altNames) in all)
         {
             string normName = IngredientNormalizer.Normalize(name);
+            byId[id] = (name, normName);
+
+            // Index tokens from the canonical name
             foreach (string token in IngredientNormalizer.Tokenize(normName))
             {
-                if (!index.TryGetValue(token, out List<(Guid, string, string)>? list))
+                if (!byToken.TryGetValue(token, out List<(Guid, string, string)>? list))
                 {
                     list = new();
-                    index[token] = list;
+                    byToken[token] = list;
                 }
-                list.Add((id, name, normName));
+                if (!list.Any(e => e.Item1 == id)) { list.Add((id, name, normName)); }
+            }
+
+            // Also index tokens from each alternative name
+            if (!string.IsNullOrWhiteSpace(altNames))
+            {
+                foreach (string alt in altNames.Split(',', System.StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string normAlt = IngredientNormalizer.Normalize(alt);
+                    foreach (string token in IngredientNormalizer.Tokenize(normAlt))
+                    {
+                        if (!byToken.TryGetValue(token, out List<(Guid, string, string)>? list))
+                        {
+                            list = new();
+                            byToken[token] = list;
+                        }
+                        if (!list.Any(e => e.Item1 == id)) { list.Add((id, name, normName)); }
+                    }
+                }
             }
         }
-        return index;
+        return new IngredientTokenIndex(byToken, byId);
     }
 
-    private async Task QueueUnresolvedBatchAsync(Dictionary<string, string> normalized,
+    private async Task QueueUnresolvedBatchAsync(Dictionary<string, string> aggressiveNorms,
         List<string> unresolvedRaws, Dictionary<string, MatchResult> results,
         string sourceService, Guid? sourceEntityId, CancellationToken ct)
     {
         foreach (string raw in unresolvedRaws)
         {
-            await _repo.QueueUnresolvedAsync(raw, normalized[raw], sourceService, sourceEntityId,
+            string norm = aggressiveNorms[raw];
+            await _repo.QueueUnresolvedAsync(raw, norm, sourceService, sourceEntityId,
                 null, null, null, null, ct);
-            results[raw] = MatchResult.Unresolved(raw, normalized[raw]);
+            results[raw] = MatchResult.Unresolved(raw, norm);
         }
     }
 
@@ -279,17 +334,33 @@ public sealed class IngredientMatchingService : IIngredientMatchingService
         string resolvedBy, CancellationToken ct = default)
     {
         await _repo.ResolveQueueItemAsync(queueItemId, ingredientId, "AliasCreated", ct);
-        if (createAlias) { await _repo.CreateAliasAsync(ingredientId, resolvedBy, "UserConfirmed", ct); }
-        await _cache.RemoveAsync($"{AliasCachePrefix}{resolvedBy}", ct);
+        if (createAlias)
+        {
+            // Use the queue item's RawText as the alias, not the resolvedBy (user identifier).
+            UnresolvedQueueItem? item = await _repo.GetQueueItemAsync(queueItemId, ct);
+            if (item is not null)
+            {
+                await _repo.CreateAliasAsync(ingredientId, item.RawText, "UserConfirmed", ct);
+                await _cache.RemoveAsync($"{AliasCachePrefix}{item.NormalizedText}", ct);
+            }
+        }
     }
 
     public async Task CreateAndResolveAsync(Guid queueItemId, string newIngredientName,
         string category, CancellationToken ct = default)
     {
-        await _repo.ResolveQueueItemAsync(queueItemId, null, "NewIngredient", ct);
+        Guid newId = await _ingredientRepository.CreateIngredientAsync(
+            new CreateIngredientRequest { Name = newIngredientName, Category = category });
+        await _repo.ResolveQueueItemAsync(queueItemId, newId, "NewIngredient", ct);
         await _cache.RemoveAsync(TokenIndexKey, ct);
     }
 
-    public async Task RejectAsync(Guid queueItemId, string reason, CancellationToken ct = default) =>
-        await _repo.ResolveQueueItemAsync(queueItemId, null, "Rejected", ct);
+    public async Task RejectAsync(Guid queueItemId, string reason, CancellationToken ct = default)
+    {
+        string resolution = string.IsNullOrWhiteSpace(reason)
+            ? "Rejected"
+            : $"Rejected: {reason.Trim()}"[..Math.Min(50, 10 + reason.Trim().Length)];
+        await _repo.ResolveQueueItemAsync(queueItemId, null, resolution, ct);
+    }
 }
+

@@ -45,7 +45,14 @@ public static class IngredientNormalizer
     }
 
     public static HashSet<string> Tokenize(string normalized) =>
-        new(normalized.Split(' ', System.StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal);
+        new(normalized.Split(' ', System.StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Lightweight normalization that matches the DB computed column <c>NormalizedName AS LOWER(Name)</c>
+    /// and the seeded <c>NormalizedAlias = LOWER(LTRIM(RTRIM(...)))</c>.
+    /// Used for Exact and Alias stage lookups so the key aligns with what is stored in the database.
+    /// </summary>
+    public static string SimpleLower(string raw) => raw.Trim().ToLowerInvariant();
 
     public static decimal JaccardSimilarity(HashSet<string> a, HashSet<string> b)
     {

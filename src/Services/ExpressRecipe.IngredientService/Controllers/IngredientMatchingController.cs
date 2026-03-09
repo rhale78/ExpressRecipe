@@ -63,6 +63,10 @@ public class AdminIngredientController : ControllerBase
         [FromQuery] int minOccurrences = 1,
         CancellationToken ct = default)
     {
+        if (page < 1 || pageSize < 1 || pageSize > 200 || minOccurrences < 1)
+        {
+            return BadRequest("page and minOccurrences must be >= 1; pageSize must be between 1 and 200.");
+        }
         List<UnresolvedQueueItem> items = await _repo.GetUnresolvedQueueAsync(page, pageSize, minOccurrences, ct);
         return Ok(items);
     }
@@ -90,7 +94,7 @@ public class AdminIngredientController : ControllerBase
     /// <summary>
     /// Reject / dismiss a queue item.
     /// </summary>
-    [HttpDelete("unresolved/{id}")]
+    [HttpPost("unresolved/{id}/reject")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectQueueItemRequest request, CancellationToken ct)
     {
         await _matching.RejectAsync(id, request.Reason, ct);
