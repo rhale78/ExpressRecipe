@@ -109,9 +109,12 @@ public class MealPlanningController : ControllerBase
     [HttpPost("plans/{id}/print")]
     public async Task<IActionResult> PrintPlan(Guid id, [FromBody] MealPlanPrintOptions options, CancellationToken ct)
     {
-        byte[] pdf = await _pdfService.GeneratePdfAsync(options with { MealPlanId = id }, GetUserId(), ct);
-        MealPlanDto? plan = await _repository.GetMealPlanByIdAsync(id, ct);
-        string rawName = plan?.Name ?? "MealPlan";
+        Guid userId = GetUserId();
+        // Verify ownership and get plan name via the user-scoped lookup before generating the PDF
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId);
+        if (plan is null) { return NotFound(); }
+        byte[] pdf = await _pdfService.GeneratePdfAsync(options with { MealPlanId = id }, userId, ct);
+        string rawName = plan.Name ?? "MealPlan";
         string safeName = string.Concat(rawName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Replace(' ', '_');
         return File(pdf, "application/pdf", $"MealPlan_{safeName}_{DateTime.UtcNow:yyyyMMdd}.pdf");
     }
@@ -144,7 +147,7 @@ public class CreatePlanRequest
 
 public class AddMealRequest
 {
-    public Guid RecipeId { get; set; }
+    public Guid? RecipeId { get; set; }
     public DateTime PlannedFor { get; set; }
     public string MealType { get; set; } = "Dinner";
     public int Servings { get; set; } = 1;

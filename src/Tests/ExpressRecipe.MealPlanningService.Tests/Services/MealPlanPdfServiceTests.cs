@@ -14,12 +14,13 @@ namespace ExpressRecipe.MealPlanningService.Tests.Services;
 public class MealPlanPdfServiceTests
 {
     private static readonly Guid PlanId = Guid.NewGuid();
+    private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid RecipeId = Guid.NewGuid();
 
     private static MealPlanDto BuildPlan(DateOnly from, DateOnly to) => new()
     {
         Id = PlanId,
-        UserId = Guid.NewGuid(),
+        UserId = UserId,
         Name = "Test Plan",
         StartDate = from.ToDateTime(TimeOnly.MinValue),
         EndDate = to.ToDateTime(TimeOnly.MaxValue),
@@ -89,7 +90,7 @@ public class MealPlanPdfServiceTests
         IMealPlanPdfService svc = BuildService(repo);
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId };
 
-        byte[] pdf = await svc.GeneratePdfAsync(opts, Guid.NewGuid());
+        byte[] pdf = await svc.GeneratePdfAsync(opts, UserId);
 
         pdf.Should().NotBeEmpty();
         // PDF magic bytes %PDF
@@ -121,7 +122,7 @@ public class MealPlanPdfServiceTests
         IMealPlanPdfService svc = BuildService(repo, BuildHttpFactory(recipeServiceResponse: recipeJson));
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId, IncludeRecipes = true };
 
-        byte[] pdf = await svc.GeneratePdfAsync(opts, Guid.NewGuid());
+        byte[] pdf = await svc.GeneratePdfAsync(opts, UserId);
 
         pdf.Should().NotBeEmpty();
         Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
@@ -149,7 +150,7 @@ public class MealPlanPdfServiceTests
         IMealPlanPdfService svc = BuildService(repo);
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId, FromDate = from, ToDate = to };
 
-        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, Guid.NewGuid());
+        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, UserId);
 
         data.Days.Should().HaveCount(3); // from, middle day, to
         data.Days.Select(d => d.Date).Should().Contain(from).And.Contain(to);
@@ -171,7 +172,7 @@ public class MealPlanPdfServiceTests
         IMealPlanPdfService svc = BuildService(repo);
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId };
 
-        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, Guid.NewGuid());
+        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, UserId);
 
         data.Days.Should().ContainSingle(d => d.Date == christmas && d.HolidayLabel == "Christmas Day");
     }
@@ -194,7 +195,7 @@ public class MealPlanPdfServiceTests
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId, IncludeRecipes = true };
 
         // Should not throw
-        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, Guid.NewGuid());
+        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, UserId);
 
         PrintMeal meal = data.Days.SelectMany(d => d.Meals).Single();
         meal.RecipeData.Should().BeNull();
@@ -221,7 +222,7 @@ public class MealPlanPdfServiceTests
         IMealPlanPdfService svc = BuildService(repo, BuildHttpFactory(shoppingServiceResponse: shoppingJson));
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId, IncludeGroceryList = true };
 
-        byte[] pdf = await svc.GeneratePdfAsync(opts, Guid.NewGuid());
+        byte[] pdf = await svc.GeneratePdfAsync(opts, UserId);
 
         pdf.Should().NotBeEmpty();
     }
@@ -272,7 +273,7 @@ public class MealPlanPdfServiceTests
         IMealPlanPdfService svc = BuildService(repo, factory.Object);
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId, IncludeGroceryList = true, GroceryGrouping = GroceryListGrouping.Aggregated };
 
-        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, Guid.NewGuid());
+        MealPlanPrintData data = await svc.AssemblePrintDataAsync(opts, UserId);
 
         AggregatedIngredient? flour = data.Groceries.FirstOrDefault(g => g.Name.Equals("flour", StringComparison.OrdinalIgnoreCase));
         flour.Should().NotBeNull();
@@ -299,10 +300,42 @@ public class MealPlanPdfServiceTests
         IMealPlanPdfService svc = BuildService(repo, BuildHttpFactory(shoppingServiceResponse: shoppingJson));
         MealPlanPrintOptions opts = new() { MealPlanId = PlanId, IncludeGroceryList = true, GroceryGrouping = GroceryListGrouping.ByDay };
 
-        byte[] pdf = await svc.GeneratePdfAsync(opts, Guid.NewGuid());
+        byte[] pdf = await svc.GeneratePdfAsync(opts, UserId);
 
         pdf.Should().NotBeEmpty();
         Encoding.ASCII.GetString(pdf, 0, 4).Should().Be("%PDF");
+    }
+
+    // ── Security: wrong user cannot access another user's plan ───────────────
+
+    [Fact]
+    public async Task AssemblePrintDataAsync_WrongUserId_ThrowsKeyNotFoundException()
+    {
+        DateOnly day = new(2026, 3, 10);
+        Mock<IMealPlanningRepository> repo = new();
+        repo.Setup(r => r.GetMealPlanByIdAsync(PlanId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildPlan(day, day)); // plan.UserId = UserId
+
+        IMealPlanPdfService svc = BuildService(repo);
+        MealPlanPrintOptions opts = new() { MealPlanId = PlanId };
+
+        Guid differentUser = Guid.NewGuid();
+        Func<Task> act = () => svc.AssemblePrintDataAsync(opts, differentUser);
+
+        await act.Should().ThrowAsync<KeyNotFoundException>();
+    }
+
+    // ── HolidayService: cache returns null on repeat lookups for non-holidays ─
+
+    [Fact]
+    public void HolidayService_NonHoliday_CacheReturnsNullOnRepeatCall()
+    {
+        HolidayService svc = new();
+        DateOnly nonHoliday = new(2026, 3, 10);
+        string? first  = svc.GetHolidayLabel(nonHoliday);
+        string? second = svc.GetHolidayLabel(nonHoliday); // from cache
+        first.Should().BeNull();
+        second.Should().BeNull();
     }
 }
 

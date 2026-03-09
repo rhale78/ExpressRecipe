@@ -37,7 +37,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         const string sql = @"
             SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
-                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1) AS CompletedMeals
+                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1 AND IsDeleted = 0) AS CompletedMeals
             FROM MealPlan mp
             WHERE mp.UserId = @UserId AND mp.IsDeleted = 0
             ORDER BY mp.StartDate DESC";
@@ -73,7 +73,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         const string sql = @"
             SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
-                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1) AS CompletedMeals
+                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1 AND IsDeleted = 0) AS CompletedMeals
             FROM MealPlan mp
             WHERE mp.Id = @PlanId AND mp.UserId = @UserId AND mp.IsDeleted = 0";
 
@@ -108,7 +108,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         const string sql = @"
             SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
-                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1) AS CompletedMeals
+                   (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1 AND IsDeleted = 0) AS CompletedMeals
             FROM MealPlan mp
             WHERE mp.Id = @PlanId AND mp.IsDeleted = 0";
 
@@ -151,7 +151,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid recipeId, DateTime plannedFor, string mealType, int servings)
+    public async Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid? recipeId, DateTime plannedFor, string mealType, int servings)
     {
         const string sql = @"
             INSERT INTO PlannedMeal (MealPlanId, RecipeId, PlannedDate, MealType, Servings)
@@ -163,7 +163,7 @@ public class MealPlanningRepository : IMealPlanningRepository
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@MealPlanId", mealPlanId);
-        command.Parameters.AddWithValue("@RecipeId", recipeId == Guid.Empty ? (object)DBNull.Value : recipeId);
+        command.Parameters.AddWithValue("@RecipeId", recipeId.HasValue ? (object)recipeId.Value : DBNull.Value);
         command.Parameters.AddWithValue("@PlannedDate", plannedFor);
         command.Parameters.AddWithValue("@MealType", mealType);
         command.Parameters.AddWithValue("@Servings", servings);

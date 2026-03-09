@@ -51,7 +51,7 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
     public async Task<MealPlanPrintData> AssemblePrintDataAsync(MealPlanPrintOptions options, Guid userId, CancellationToken ct = default)
     {
         MealPlanDto? plan = await _plans.GetMealPlanByIdAsync(options.MealPlanId, ct);
-        if (plan is null) { throw new KeyNotFoundException("Plan not found"); }
+        if (plan is null || plan.UserId != userId) { throw new KeyNotFoundException("Plan not found"); }
 
         DateOnly from = options.FromDate ?? DateOnly.FromDateTime(plan.StartDate);
         DateOnly to   = options.ToDate   ?? DateOnly.FromDateTime(plan.EndDate);
@@ -64,6 +64,10 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
 
         Dictionary<Guid, RecipePrintData> recipeData = options.IncludeRecipes
             ? await FetchRecipeDataAsync(recipeIds, ct) : new();
+
+        // Always fetch recipe names so DisplayName is correct even when IncludeRecipes=false
+        Dictionary<Guid, RecipePrintData> namesOnly = !options.IncludeRecipes && recipeIds.Count > 0
+            ? await FetchRecipeDataAsync(recipeIds, ct) : recipeData;
 
         Dictionary<DateOnly, List<PlannedMealDto>> byDate = allMeals
             .GroupBy(m => DateOnly.FromDateTime(m.PlannedDate))
@@ -79,11 +83,11 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
                 HolidayLabel = _holidays.GetHolidayLabel(d),
                 Meals        = dayMeals.Select(m =>
                 {
-                    recipeData.TryGetValue(m.RecipeId ?? Guid.Empty, out RecipePrintData? recipe);
+                    namesOnly.TryGetValue(m.RecipeId ?? Guid.Empty, out RecipePrintData? recipe);
                     return new PrintMeal
                     {
                         MealType      = m.MealType,
-                        DisplayName   = m.RecipeName ?? m.CustomMealName ?? "Custom Meal",
+                        DisplayName   = recipe?.Name ?? m.CustomMealName ?? "Custom Meal",
                         Servings      = m.Servings,
                         EstimatedCost = m.RecipeId.HasValue && recipe is not null ? recipe.EstimatedCost : null,
                         RecipeData    = options.IncludeRecipes && m.RecipeId.HasValue ? recipe : null
@@ -155,17 +159,27 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
 
         foreach (PlannedMealDto meal in meals.Where(m => m.RecipeId.HasValue))
         {
-            List<ShoppingItemResponse>? items = await client.GetFromJsonAsync<List<ShoppingItemResponse>>(
-                $"/api/shopping/recipe-ingredients?recipeId={meal.RecipeId}&servings={meal.Servings}", ct);
+            List<ShoppingItemResponse>? items;
+            try
+            {
+                items = await client.GetFromJsonAsync<List<ShoppingItemResponse>>(
+                    $"/api/shopping/recipe-ingredients?recipeId={meal.RecipeId}&servings={meal.Servings}", ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not fetch shopping ingredients for recipe {RecipeId} — grocery list may be incomplete", meal.RecipeId);
+                continue;
+            }
             if (items is null) { continue; }
 
             string dateKey = DateOnly.FromDateTime(meal.PlannedDate).ToString("yyyy-MM-dd");
+            string mealLabel = $"{dateKey} {meal.MealType}";
             foreach (ShoppingItemResponse item in items)
             {
                 string key = grouping switch
                 {
                     GroceryListGrouping.ByDay  => $"{dateKey}|{item.IngredientName}",
-                    GroceryListGrouping.ByMeal => $"{meal.Id}|{item.IngredientName}",
+                    GroceryListGrouping.ByMeal => $"{mealLabel}|{item.IngredientName}",
                     _                          => item.IngredientName
                 };
                 if (tally.TryGetValue(key, out (decimal qty, string unit, string? date, string? mt) existing))
@@ -231,9 +245,11 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
     {
         return container => container.Column(col =>
         {
+            bool firstDay = true;
             foreach (PrintDay day in data.Days)
             {
-                col.Item().PageBreak();
+                if (!firstDay) { col.Item().PageBreak(); }
+                firstDay = false;
                 col.Item().PaddingTop(8).Text(txt =>
                 {
                     txt.Span(day.Date.ToString("dddd, MMMM dd, yyyy")).Bold().FontSize(14);
@@ -286,9 +302,12 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
             {
                 col.Item().PageBreak();
                 col.Item().Text("Grocery List").Bold().FontSize(16).FontColor(AccentHex);
-                IEnumerable<IGrouping<string, AggregatedIngredient>> groups = data.GroceryGrouping == GroceryListGrouping.ByDay
-                    ? data.Groceries.GroupBy(i => i.GroupDate ?? "Other")
-                    : data.Groceries.GroupBy(_ => "All Items");
+                IEnumerable<IGrouping<string, AggregatedIngredient>> groups = data.GroceryGrouping switch
+                {
+                    GroceryListGrouping.ByDay  => data.Groceries.GroupBy(i => i.GroupDate ?? "Other"),
+                    GroceryListGrouping.ByMeal => data.Groceries.GroupBy(i => i.GroupMeal != null && i.GroupDate != null ? $"{i.GroupDate} {i.GroupMeal}" : i.GroupDate ?? "Other"),
+                    _                          => data.Groceries.GroupBy(_ => "All Items")
+                };
 
                 foreach (IGrouping<string, AggregatedIngredient> group in groups)
                 {

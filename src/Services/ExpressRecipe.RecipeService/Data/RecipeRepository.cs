@@ -167,7 +167,12 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             SET EstimatedCostPerServing = @Cost, CostLastCalculatedAt = GETUTCDATE()
             WHERE Id = @RecipeId AND IsDeleted = 0";
 
-        await ExecuteNonQueryAsync(sql, new SqlParameter("@Cost", costPerServing), new SqlParameter("@RecipeId", recipeId));
+        await using SqlConnection connection = new(ConnectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new(sql, connection);
+        command.Parameters.Add(new SqlParameter("@Cost", costPerServing));
+        command.Parameters.Add(new SqlParameter("@RecipeId", recipeId));
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<Guid> CreateRecipeAsync(CreateRecipeRequest request, Guid createdBy)

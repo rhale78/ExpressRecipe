@@ -15,17 +15,17 @@ public interface IHolidayService
 /// </summary>
 public sealed class HolidayService : IHolidayService
 {
-    private readonly Dictionary<DateOnly, string> _cache = new();
+    private readonly Dictionary<DateOnly, string?> _cache = new();
 
     public string? GetHolidayLabel(DateOnly date)
     {
-        if (_cache.TryGetValue(date, out string? label))
+        if (_cache.TryGetValue(date, out string? cached))
         {
-            return label;
+            return cached;
         }
 
         string? result = ComputeHoliday(date);
-        _cache[date] = result ?? string.Empty;
+        _cache[date] = result;
         return result;
     }
 
