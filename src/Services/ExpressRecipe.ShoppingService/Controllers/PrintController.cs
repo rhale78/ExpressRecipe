@@ -160,11 +160,11 @@ public class PrintController : ControllerBase
 
                         foreach (OptimizedShoppingItem item in group.Items)
                         {
-                            table.Cell().Text("☐").FontSize(12);
+                            table.Cell().Text("\u2610").FontSize(12); // empty checkbox
                             string nameText = item.Name;
                             if (item.HasDeal && !string.IsNullOrEmpty(item.DealDescription))
                             {
-                                nameText += $" 🏷 {item.DealDescription}";
+                                nameText += $" [DEAL: {item.DealDescription}]";
                             }
                             table.Cell().Text(nameText).FontSize(11);
                             table.Cell().Text($"{item.Quantity} {item.Unit}".Trim()).FontSize(11);
@@ -205,9 +205,9 @@ public class PrintController : ControllerBase
             foreach (OptimizedShoppingItem item in group.Items)
             {
                 sb.AppendLine("<tr>");
-                sb.AppendLine("<td>☐</td>");
+                sb.AppendLine("<td>\u2610</td>"); // empty checkbox
                 string deal = item.HasDeal && !string.IsNullOrEmpty(item.DealDescription)
-                    ? $" <span class='deal'>🏷 {System.Net.WebUtility.HtmlEncode(item.DealDescription)}</span>"
+                    ? $" <span class='deal'>[DEAL: {System.Net.WebUtility.HtmlEncode(item.DealDescription)}]</span>"
                     : string.Empty;
                 sb.AppendLine($"<td>{System.Net.WebUtility.HtmlEncode(item.Name)}{deal}</td>");
                 sb.AppendLine($"<td>{item.Quantity} {System.Net.WebUtility.HtmlEncode(item.Unit ?? string.Empty)}</td>");

@@ -233,6 +233,8 @@ public class ShoppingOptimizationService : IShoppingOptimizationService
         List<ShoppingListItemDto> items,
         Dictionary<Guid, List<StorePriceEntry>> prices)
     {
+        // $2.50 per-store penalty discourages opening a new store unless savings exceed this amount.
+        // This approximates the value of time, travel, and effort for an extra store visit.
         const decimal NewStorePenalty = 2.50m;
         HashSet<Guid> openedStores = new();
         Dictionary<Guid, Guid> result = new();

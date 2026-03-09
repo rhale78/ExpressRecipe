@@ -34,34 +34,13 @@ public class ShoppingSessionService : IShoppingSessionService
     {
         ShoppingSessionSummaryDto summary = await _repository.CompleteShoppingSessionAsync(sessionId, ct);
 
-        // Get checked items to post inventory events
-        List<ShoppingListItemDto> items = new();
-        try
-        {
-            // Re-fetch the checked items from the list (session is already ended)
-            // We use a workaround: get all items and filter checked ones
-            // The session was for a specific list; we need the listId
-            // We don't have it directly, so we fetch it via GetActiveShoppingScanSessionAsync (which is gone)
-            // Instead, we rely on what we stored in summary — but we didn't persist listId there.
-            // Best approach: call GetListItemsAsync but we need listId. We'll get it via a raw query.
-            _logger.LogInformation("Session {SessionId} completed. Posting inventory events.", sessionId);
-
-            // Post inventory events for each checked item that has AddToInventoryOnPurchase=true
-            // The actual items are obtained through the CompleteShoppingSessionAsync impl which logs them
-            // Here we just increment the counter; the DB-level work is done in CompleteShoppingSessionAsync
-            summary = new ShoppingSessionSummaryDto
-            {
-                SessionId = summary.SessionId,
-                ItemsChecked = summary.ItemsChecked,
-                InventoryEventsPublished = 0,
-                TotalSpent = summary.TotalSpent,
-                CompletedAt = summary.CompletedAt
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to post inventory events for session {SessionId}", sessionId);
-        }
+        // Inventory event publishing requires the checked items from the completed session.
+        // The DB-level completion (marking session ended) is done in CompleteShoppingSessionAsync.
+        // Further inventory events can be dispatched asynchronously via a background job or messaging bus
+        // once that integration is wired up.
+        _logger.LogInformation(
+            "Session {SessionId} completed for user {UserId}. {Count} items checked.",
+            sessionId, userId, summary.ItemsChecked);
 
         return summary;
     }

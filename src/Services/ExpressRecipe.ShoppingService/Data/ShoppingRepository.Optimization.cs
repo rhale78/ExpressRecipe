@@ -216,19 +216,19 @@ public partial class ShoppingRepository
 
     public async Task<List<OptimizedShoppingItem>> GetItemsSortedByAisleAsync(Guid listId, Guid storeId, string sortMode, CancellationToken ct = default)
     {
-        // Load items with store layout data
+        // Load items with store layout data.
+        // Product names come from CustomName on the ShoppingListItem; cross-service product
+        // lookups (by ProductId) are handled at the application/service layer.
         const string sql = @"
             SELECT
-                i.Id, COALESCE(i.CustomName, p.Name, '') AS Name,
+                i.Id, COALESCE(i.CustomName, '') AS Name,
                 i.Quantity, i.Unit,
                 sl.Aisle, COALESCE(sl.OrderIndex, 9999) AS AisleOrder,
                 sl.ZoneType,
                 i.EstimatedPrice, i.HasDeal, i.DealDescription
             FROM ShoppingListItem i
-            LEFT JOIN Store s ON s.Id = @StoreId
             LEFT JOIN StoreLayout sl ON sl.StoreId = @StoreId
                 AND sl.CategoryName = i.Category
-            LEFT JOIN (SELECT Id, Name FROM ShoppingListItem WHERE 1=0) p ON p.Id = i.ProductId
             WHERE i.ShoppingListId = @ListId AND i.IsDeleted = 0 AND i.IsChecked = 0
             ORDER BY COALESCE(sl.OrderIndex, 9999) ASC, i.AddedAt ASC";
 
@@ -363,7 +363,7 @@ public partial class ShoppingRepository
 
     private static int CountStoreGroupsFromJson(string resultJson)
     {
-        // Quick count of StoreId occurrences without full deserialisation
+        // Quick count of StoreId occurrences without full deserialization
         int count = 0;
         int idx = 0;
         const string marker = "\"storeId\"";
