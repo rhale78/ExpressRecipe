@@ -1,0 +1,258 @@
+@page "/admin/vision-training"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@inject IScannerApiClient ScannerClient
+@inject IToastService ToastService
+@inject ILogger<VisionTraining> Logger
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Vision Training Queue - ExpressRecipe Admin</PageTitle>
+
+<AuthorizeView Roles="Admin">
+    <Authorized>
+        <div class="admin-container">
+            <div class="admin-header">
+                <button class="btn btn-outline" @onclick='() => Navigation.NavigateTo("/admin")'>← Admin</button>
+                <h1>🤖 Vision Training Queue</h1>
+            </div>
+            <p class="text-muted">Review AI correction reports and manage training data.</p>
+
+            <!-- Filter bar -->
+            <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn @(_statusFilter == null ? "btn-secondary" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync(null)'>All</button>
+                    <button class="btn @(_statusFilter == "Pending" ? "btn-warning" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Pending")'>Pending</button>
+                    <button class="btn @(_statusFilter == "Approved" ? "btn-success" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Approved")'>Approved</button>
+                    <button class="btn @(_statusFilter == "Rejected" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => LoadReportsAsync("Rejected")'>Rejected</button>
+                </div>
+                <button class="btn btn-outline-primary btn-sm ms-auto" @onclick="DownloadTrainingExportAsync"
+                        disabled="@_isExporting">
+                    @if (_isExporting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-download me-1"></i>
+                    }
+                    Export Training CSV
+                </button>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="text-center py-4"><div class="spinner-border"></div></div>
+            }
+            else if (_reports.Count == 0)
+            {
+                <div class="alert alert-info">No correction reports found for the selected filter.</div>
+            }
+            else
+            {
+                <p class="text-muted small">Showing @_reports.Count report(s)</p>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>AI Guess</th>
+                                <th>User Correction</th>
+                                <th>Note</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (CorrectionReportRow row in _reports)
+                            {
+                                <tr>
+                                    <td><small>@row.CreatedAt.ToString("MMM dd, HH:mm")</small></td>
+                                    <td>@(row.AiGuess ?? "—")</td>
+                                    <td><strong>@(row.UserCorrection ?? "—")</strong></td>
+                                    <td><small class="text-muted">@(row.UserNote ?? string.Empty)</small></td>
+                                    <td>
+                                        <span class="badge @GetStatusBadgeClass(row.Status)">@row.Status</span>
+                                    </td>
+                                    <td>
+                                        @if (row.Status == "Pending")
+                                        {
+                                            <div class="d-flex gap-1">
+                                                <button class="btn btn-success btn-sm" @onclick="@(() => ApproveAsync(row.Id))">✓ Approve</button>
+                                                <button class="btn btn-danger btn-sm" @onclick="@(() => RejectAsync(row.Id))">✗ Reject</button>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="container py-5 text-center">
+            <h4>Admin Access Required</h4>
+            <p>You do not have permission to view this page.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private class CorrectionReportRow
+    {
+        public Guid Id { get; set; }
+        public string? AiGuess { get; set; }
+        public string? UserCorrection { get; set; }
+        public string? UserNote { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+    }
+
+    private bool _isLoading = true;
+    private bool _isExporting = false;
+    private string? _statusFilter = "Pending";
+    private List<CorrectionReportRow> _reports = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportsAsync("Pending");
+    }
+
+    private async Task LoadReportsAsync(string? status)
+    {
+        _statusFilter = status;
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            List<CorrectionReportItem> items = await ScannerClient.GetAdminCorrectionReportsAsync(status, 200);
+            _reports = items.Select(i => new CorrectionReportRow
+            {
+                Id = i.Id,
+                AiGuess = i.AiGuess,
+                UserCorrection = i.UserCorrection,
+                UserNote = i.UserNote,
+                Status = i.Status,
+                CreatedAt = i.CreatedAt
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load correction reports");
+            ToastService.ShowError("Failed to load reports.", "Error");
+            _reports = new List<CorrectionReportRow>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ApproveAsync(Guid reportId)
+    {
+        await UpdateStatusAsync(reportId, "Approved");
+    }
+
+    private async Task RejectAsync(Guid reportId)
+    {
+        await UpdateStatusAsync(reportId, "Rejected");
+    }
+
+    private async Task UpdateStatusAsync(Guid reportId, string status)
+    {
+        try
+        {
+            bool success = await ScannerClient.UpdateAdminCorrectionStatusAsync(reportId, status);
+
+            if (success)
+            {
+                ToastService.ShowSuccess($"Report {status.ToLower()}.", status);
+                await LoadReportsAsync(_statusFilter);
+            }
+            else
+            {
+                ToastService.ShowError("Server rejected the update.", "Error");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update report {ReportId} to {Status}", reportId, status);
+            ToastService.ShowError("Failed to update report.", "Error");
+        }
+    }
+
+    private async Task DownloadTrainingExportAsync()
+    {
+        _isExporting = true;
+        StateHasChanged();
+
+        try
+        {
+            List<TrainingExportItem> rows = await ScannerClient.GetTrainingExportAsync();
+
+            if (rows.Count == 0)
+            {
+                ToastService.ShowInfo("No approved training data available yet.", "Export");
+                return;
+            }
+
+            string csv = BuildCsv(rows);
+            string fileName = $"vision-training-{DateTime.UtcNow:yyyyMMdd}.csv";
+            await JS.InvokeVoidAsync("downloadCsvBlob", fileName, csv);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export training data");
+            ToastService.ShowError("Failed to export training data.", "Error");
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private static string BuildCsv(List<TrainingExportItem> rows)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        sb.AppendLine("CaptureId,DetectedBarcode,DetectedProductName,DetectedBrand,ProviderUsed,Confidence,CorrectedProductName,CapturedAt");
+
+        foreach (TrainingExportItem row in rows)
+        {
+            sb.AppendLine(string.Join(",",
+                row.CaptureId,
+                Escape(row.DetectedBarcode),
+                Escape(row.DetectedProductName),
+                Escape(row.DetectedBrand),
+                Escape(row.ProviderUsed),
+                row.Confidence?.ToString("F4") ?? string.Empty,
+                Escape(row.CorrectedProductName),
+                row.CapturedAt.ToString("yyyy-MM-ddTHH:mm:ssZ")));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string Escape(string? value)
+    {
+        if (value == null) { return string.Empty; }
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+        return value;
+    }
+
+    private static string GetStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Approved" => "bg-success",
+            "Rejected" => "bg-danger",
+            _ => "bg-warning text-dark"
+        };
+    }
+}
