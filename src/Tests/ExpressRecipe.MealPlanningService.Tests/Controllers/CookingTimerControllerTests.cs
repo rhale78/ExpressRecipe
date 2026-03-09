@@ -65,7 +65,7 @@ public class CookingTimerControllerTests
     #region GetById
 
     [Fact]
-    public async Task GetById_ExistingTimer_ReturnsOk()
+    public async Task GetById_ExistingTimer_OwnedByUser_ReturnsOk()
     {
         Guid timerId = Guid.NewGuid();
         CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: _testUserId);
@@ -79,6 +79,21 @@ public class CookingTimerControllerTests
         result.Should().BeOfType<OkObjectResult>();
         OkObjectResult okResult = (OkObjectResult)result;
         okResult.Value.Should().BeEquivalentTo(timer);
+    }
+
+    [Fact]
+    public async Task GetById_TimerOwnedByOtherUser_ReturnsForbid()
+    {
+        Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: Guid.NewGuid());
+
+        _mockRepository
+            .Setup(r => r.GetByIdAsync(timerId, default))
+            .ReturnsAsync(timer);
+
+        IActionResult result = await _controller.GetById(timerId, default);
+
+        result.Should().BeOfType<ForbidResult>();
     }
 
     [Fact]
@@ -172,9 +187,11 @@ public class CookingTimerControllerTests
     #region State transitions
 
     [Fact]
-    public async Task Start_CallsRepositoryAndReturnsNoContent()
+    public async Task Start_OwnedByUser_CallsRepositoryAndReturnsNoContent()
     {
         Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: _testUserId, status: "Preset");
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
         _mockRepository.Setup(r => r.StartTimerAsync(timerId, default)).Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Start(timerId, default);
@@ -184,9 +201,34 @@ public class CookingTimerControllerTests
     }
 
     [Fact]
-    public async Task Pause_CallsRepositoryAndReturnsNoContent()
+    public async Task Start_OwnedByOtherUser_ReturnsForbid()
     {
         Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: Guid.NewGuid());
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
+
+        IActionResult result = await _controller.Start(timerId, default);
+
+        result.Should().BeOfType<ForbidResult>();
+        _mockRepository.Verify(r => r.StartTimerAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Start_NonExistingTimer_ReturnsNotFound()
+    {
+        _mockRepository.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((CookingTimerDto?)null);
+
+        IActionResult result = await _controller.Start(Guid.NewGuid(), default);
+
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task Pause_OwnedByUser_CallsRepositoryAndReturnsNoContent()
+    {
+        Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: _testUserId, status: "Running");
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
         _mockRepository.Setup(r => r.PauseTimerAsync(timerId, default)).Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Pause(timerId, default);
@@ -196,9 +238,24 @@ public class CookingTimerControllerTests
     }
 
     [Fact]
-    public async Task Resume_CallsRepositoryAndReturnsNoContent()
+    public async Task Pause_OwnedByOtherUser_ReturnsForbid()
     {
         Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: Guid.NewGuid());
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
+
+        IActionResult result = await _controller.Pause(timerId, default);
+
+        result.Should().BeOfType<ForbidResult>();
+        _mockRepository.Verify(r => r.PauseTimerAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Resume_OwnedByUser_CallsRepositoryAndReturnsNoContent()
+    {
+        Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: _testUserId, status: "Paused");
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
         _mockRepository.Setup(r => r.ResumeTimerAsync(timerId, default)).Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Resume(timerId, default);
@@ -208,9 +265,24 @@ public class CookingTimerControllerTests
     }
 
     [Fact]
-    public async Task Cancel_CallsRepositoryAndReturnsNoContent()
+    public async Task Resume_OwnedByOtherUser_ReturnsForbid()
     {
         Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: Guid.NewGuid());
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
+
+        IActionResult result = await _controller.Resume(timerId, default);
+
+        result.Should().BeOfType<ForbidResult>();
+        _mockRepository.Verify(r => r.ResumeTimerAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Cancel_OwnedByUser_CallsRepositoryAndReturnsNoContent()
+    {
+        Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: _testUserId, status: "Running");
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
         _mockRepository.Setup(r => r.CancelTimerAsync(timerId, default)).Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Cancel(timerId, default);
@@ -220,15 +292,43 @@ public class CookingTimerControllerTests
     }
 
     [Fact]
-    public async Task Acknowledge_CallsRepositoryAndReturnsNoContent()
+    public async Task Cancel_OwnedByOtherUser_ReturnsForbid()
     {
         Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: Guid.NewGuid());
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
+
+        IActionResult result = await _controller.Cancel(timerId, default);
+
+        result.Should().BeOfType<ForbidResult>();
+        _mockRepository.Verify(r => r.CancelTimerAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Acknowledge_OwnedByUser_CallsRepositoryAndReturnsNoContent()
+    {
+        Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: _testUserId, status: "Expired");
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
         _mockRepository.Setup(r => r.AcknowledgeTimerAsync(timerId, default)).Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Acknowledge(timerId, default);
 
         result.Should().BeOfType<NoContentResult>();
         _mockRepository.Verify(r => r.AcknowledgeTimerAsync(timerId, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task Acknowledge_OwnedByOtherUser_ReturnsForbid()
+    {
+        Guid timerId = Guid.NewGuid();
+        CookingTimerDto timer = TestDataFactory.CreateCookingTimerDto(id: timerId, userId: Guid.NewGuid());
+        _mockRepository.Setup(r => r.GetByIdAsync(timerId, default)).ReturnsAsync(timer);
+
+        IActionResult result = await _controller.Acknowledge(timerId, default);
+
+        result.Should().BeOfType<ForbidResult>();
+        _mockRepository.Verify(r => r.AcknowledgeTimerAsync(It.IsAny<Guid>(), default), Times.Never);
     }
 
     #endregion

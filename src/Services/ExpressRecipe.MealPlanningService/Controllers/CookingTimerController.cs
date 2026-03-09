@@ -27,7 +27,9 @@ public sealed class CookingTimerController : ControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         CookingTimerDto? timer = await _timers.GetByIdAsync(id, ct);
-        return timer is null ? NotFound() : Ok(timer);
+        if (timer is null) return NotFound();
+        if (timer.UserId != GetUserId()) return Forbid();
+        return Ok(timer);
     }
 
     [HttpPost]
@@ -43,6 +45,9 @@ public sealed class CookingTimerController : ControllerBase
     [HttpPost("{id}/start")]
     public async Task<IActionResult> Start(Guid id, CancellationToken ct)
     {
+        CookingTimerDto? timer = await _timers.GetByIdAsync(id, ct);
+        if (timer is null) return NotFound();
+        if (timer.UserId != GetUserId()) return Forbid();
         await _timers.StartTimerAsync(id, ct);
         return NoContent();
     }
@@ -50,6 +55,9 @@ public sealed class CookingTimerController : ControllerBase
     [HttpPost("{id}/pause")]
     public async Task<IActionResult> Pause(Guid id, CancellationToken ct)
     {
+        CookingTimerDto? timer = await _timers.GetByIdAsync(id, ct);
+        if (timer is null) return NotFound();
+        if (timer.UserId != GetUserId()) return Forbid();
         await _timers.PauseTimerAsync(id, ct);
         return NoContent();
     }
@@ -57,6 +65,9 @@ public sealed class CookingTimerController : ControllerBase
     [HttpPost("{id}/resume")]
     public async Task<IActionResult> Resume(Guid id, CancellationToken ct)
     {
+        CookingTimerDto? timer = await _timers.GetByIdAsync(id, ct);
+        if (timer is null) return NotFound();
+        if (timer.UserId != GetUserId()) return Forbid();
         await _timers.ResumeTimerAsync(id, ct);
         return NoContent();
     }
@@ -64,6 +75,9 @@ public sealed class CookingTimerController : ControllerBase
     [HttpPost("{id}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
     {
+        CookingTimerDto? timer = await _timers.GetByIdAsync(id, ct);
+        if (timer is null) return NotFound();
+        if (timer.UserId != GetUserId()) return Forbid();
         await _timers.CancelTimerAsync(id, ct);
         return NoContent();
     }
@@ -71,6 +85,9 @@ public sealed class CookingTimerController : ControllerBase
     [HttpPost("{id}/acknowledge")]
     public async Task<IActionResult> Acknowledge(Guid id, CancellationToken ct)
     {
+        CookingTimerDto? timer = await _timers.GetByIdAsync(id, ct);
+        if (timer is null) return NotFound();
+        if (timer.UserId != GetUserId()) return Forbid();
         await _timers.AcknowledgeTimerAsync(id, ct);
         return NoContent();
     }

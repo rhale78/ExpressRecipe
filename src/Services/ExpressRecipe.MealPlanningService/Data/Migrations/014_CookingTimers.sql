@@ -18,7 +18,9 @@ CREATE TABLE CookingTimer (
     PausedSeconds   INT NOT NULL DEFAULT 0,
     NotificationSent BIT NOT NULL DEFAULT 0,
     CreatedAt       DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    UpdatedAt       DATETIME2 NULL
+    UpdatedAt       DATETIME2 NULL,
+    IsDeleted       BIT NOT NULL DEFAULT 0,
+    DeletedAt       DATETIME2 NULL
 );
 CREATE INDEX IX_CookingTimer_UserId    ON CookingTimer(UserId, Status);
 CREATE INDEX IX_CookingTimer_ExpiresAt ON CookingTimer(ExpiresAt) WHERE Status='Running';

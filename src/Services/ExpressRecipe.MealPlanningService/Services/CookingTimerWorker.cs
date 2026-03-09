@@ -23,7 +23,10 @@ public sealed class CookingTimerWorker : BackgroundService
         {
             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
             try { await ProcessExpiredTimersAsync(stoppingToken); }
-            catch (Exception ex) { _logger.LogError(ex, "CookingTimerWorker failed"); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "CookingTimerWorker failed");
+            }
         }
     }
 
@@ -41,7 +44,7 @@ public sealed class CookingTimerWorker : BackgroundService
         {
             try
             {
-                await client.PostAsJsonAsync("/api/notifications/internal", new
+                HttpResponseMessage response = await client.PostAsJsonAsync("/api/Notification/internal", new
                 {
                     userId            = timer.UserId,
                     type              = "CookingTimer",
@@ -51,11 +54,19 @@ public sealed class CookingTimerWorker : BackgroundService
                     relatedEntityType = "CookingTimer",
                     relatedEntityId   = timer.Id
                 }, ct);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Notification service returned {StatusCode} for timer {Id}",
+                        (int)response.StatusCode, timer.Id);
+                    continue;
+                }
+
                 await timers.MarkNotificationSentAsync(timer.Id, ct);
                 _logger.LogInformation("Timer expired notification sent: {Label} for user {UserId}",
                     timer.Label, timer.UserId);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Failed to send timer notification for {Id}", timer.Id);
             }

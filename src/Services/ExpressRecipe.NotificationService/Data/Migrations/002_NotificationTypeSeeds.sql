@@ -1,6 +1,10 @@
 -- Migration: 002_NotificationTypeSeeds
 -- Description: Seed default NotificationPreference rows for all existing users for new notification types
 -- Date: 2026-03-09
+--
+-- NOTE: This migration seeds preferences only for users who already have at least one
+-- NotificationPreference row (i.e., users known to this service at migration time).
+-- New user registration flows must ensure these preference types are seeded at account creation.
 
 DECLARE @Types TABLE (NotificationType NVARCHAR(50), DefInApp BIT, DefEmail BIT, DefPush BIT, DefSms BIT);
 INSERT INTO @Types VALUES

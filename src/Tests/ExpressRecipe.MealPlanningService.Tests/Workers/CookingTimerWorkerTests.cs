@@ -158,6 +158,23 @@ public class CookingTimerWorkerTests
     }
 
     [Fact]
+    public async Task ProcessExpiredTimers_WhenNotificationReturnsErrorStatus_DoesNotMarkSent()
+    {
+        CookingTimerDto expiredTimer = TestDataFactory.CreateExpiredUnnotifiedTimer(_testUserId);
+
+        _mockRepository
+            .Setup(r => r.GetExpiredUnnotifiedTimersAsync(default))
+            .ReturnsAsync(new List<CookingTimerDto> { expiredTimer });
+
+        CookingTimerWorker worker = CreateWorker(new FakeHttpMessageHandler(HttpStatusCode.InternalServerError));
+
+        await InvokeProcessExpiredAsync(worker);
+
+        // Notification service returned 500 — must NOT mark as sent so it retries next poll
+        _mockRepository.Verify(r => r.MarkNotificationSentAsync(expiredTimer.Id, default), Times.Never);
+    }
+
+    [Fact]
     public async Task ProcessExpiredTimers_AlreadyNotified_NotProcessedAgain()
     {
         // A timer that was already processed (NotificationSent=true) should not appear in results

@@ -179,13 +179,27 @@ public class NotificationController : ControllerBase
     {
         try
         {
+            Dictionary<string, string>? metadata = null;
+            if (!string.IsNullOrEmpty(request.Priority)
+                || !string.IsNullOrEmpty(request.RelatedEntityType)
+                || request.RelatedEntityId.HasValue)
+            {
+                metadata = new Dictionary<string, string>();
+                if (!string.IsNullOrEmpty(request.Priority))
+                    metadata["priority"] = request.Priority;
+                if (!string.IsNullOrEmpty(request.RelatedEntityType))
+                    metadata["relatedEntityType"] = request.RelatedEntityType;
+                if (request.RelatedEntityId.HasValue)
+                    metadata["relatedEntityId"] = request.RelatedEntityId.Value.ToString();
+            }
+
             var id = await _repository.CreateNotificationAsync(
                 request.UserId,
                 request.Type,
                 request.Title,
                 request.Message,
                 request.ActionUrl,
-                null);
+                metadata);
             return Ok(new { id });
         }
         catch (Exception ex)
