@@ -68,20 +68,14 @@ public class ExpirationAlertWorker : BackgroundService
         IHttpClientFactory httpFactory,
         CancellationToken cancellationToken)
     {
-        // Get items expiring within 14 days (Warning threshold) and already expired
+        // Get all items expiring within 14 days (covers Warning + Critical + Expired)
         List<InventoryItemDto> expiringItems = await repository.GetExpiringItemsAsync(userId, 14);
-        List<InventoryItemDto> criticalItems = await repository.GetItemsAboutToExpireAsync(userId, 7);
 
-        // Combine and de-duplicate; items expiring within 7 days will appear in both
-        HashSet<Guid> processedItemIds = new HashSet<Guid>();
+        // Load active alerts once for this user to avoid O(n) DB calls per item
+        List<ExpirationAlertDto> existingAlerts = await repository.GetActiveAlertsAsync(userId);
 
         foreach (InventoryItemDto item in expiringItems)
         {
-            if (!processedItemIds.Add(item.Id))
-            {
-                continue;
-            }
-
             if (item.ExpirationDate == null)
             {
                 continue;
@@ -90,8 +84,7 @@ public class ExpirationAlertWorker : BackgroundService
             int daysUntilExpiration = (int)(item.ExpirationDate.Value - DateTime.UtcNow).TotalDays;
             string alertType = DetermineAlertType(daysUntilExpiration);
 
-            // Check if an alert for this item at this severity already exists
-            List<ExpirationAlertDto> existingAlerts = await repository.GetActiveAlertsAsync(userId);
+            // Skip if an alert for this item at this severity already exists (de-duplicate)
             bool alreadyExists = existingAlerts.Any(a =>
                 a.InventoryItemId == item.Id &&
                 a.AlertType == alertType &&
@@ -102,7 +95,8 @@ public class ExpirationAlertWorker : BackgroundService
                 continue;
             }
 
-            await repository.CreateExpirationAlertsAsync(userId);
+            // Insert a single alert row for this item at the determined severity
+            await repository.CreateSingleExpirationAlertAsync(userId, item.Id, alertType, daysUntilExpiration);
 
             // Publish notification event
             await PublishExpirationNotificationAsync(userId, item, alertType, daysUntilExpiration, httpFactory, cancellationToken);

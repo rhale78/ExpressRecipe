@@ -61,6 +61,7 @@ public interface IInventoryRepository
 
     // Expiration Alerts
     Task CreateExpirationAlertsAsync(Guid userId);
+    Task CreateSingleExpirationAlertAsync(Guid userId, Guid inventoryItemId, string alertType, int daysUntilExpiration);
     Task<List<ExpirationAlertDto>> GetActiveAlertsAsync(Guid userId);
     Task DismissAlertAsync(Guid alertId);
 
@@ -88,11 +89,11 @@ public interface IInventoryRepository
     Task<List<PriceWatchAlertDto>> GetActiveWatchAlertsByUserAsync(Guid userId, CancellationToken ct = default);
     Task UpdatePriceWatchDealFoundAsync(Guid alertId, Guid storeId, decimal dealPrice, DateTime dealEndsAt, CancellationToken ct = default);
     Task ResolvePriceWatchAlertAsync(Guid alertId, CancellationToken ct = default);
-    Task SetPriceWatchTargetPriceAsync(Guid alertId, decimal targetPrice, CancellationToken ct = default);
+    Task SetPriceWatchTargetPriceAsync(Guid userId, Guid alertId, decimal targetPrice, CancellationToken ct = default);
 
     // Abandoned Product Inquiry
     Task<Guid> CreateAbandonedInquiryAsync(Guid userId, Guid? productId, string? customName, CancellationToken ct = default);
-    Task RecordInquiryResponseAsync(Guid inquiryId, string response, string? note, CancellationToken ct = default);
+    Task RecordInquiryResponseAsync(Guid userId, Guid inquiryId, string response, string? note, CancellationToken ct = default);
     Task<List<AbandonedProductInquiryDto>> GetPendingInquiriesAsync(Guid userId, CancellationToken ct = default);
 
     // Waste Report

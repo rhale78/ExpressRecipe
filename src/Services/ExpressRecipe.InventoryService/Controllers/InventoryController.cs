@@ -498,7 +498,7 @@ public class InventoryController : ControllerBase
                 Source = request.Source ?? "ManualAdd"
             };
             Guid eventId = await _repository.RecordPurchaseEventAsync(record);
-            return CreatedAtAction(nameof(GetPurchaseHistory), null, new { id = eventId });
+            return Ok(new { id = eventId });
         }
         catch (Exception ex)
         {
@@ -625,7 +625,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
-            await _repository.SetPriceWatchTargetPriceAsync(id, request.TargetPrice);
+            await _repository.SetPriceWatchTargetPriceAsync(userId.Value, id, request.TargetPrice);
             return NoContent();
         }
         catch (Exception ex)
@@ -649,7 +649,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
-            await _repository.RecordInquiryResponseAsync(id, request.Response, request.Note);
+            await _repository.RecordInquiryResponseAsync(userId.Value, id, request.Response, request.Note);
             return NoContent();
         }
         catch (Exception ex)

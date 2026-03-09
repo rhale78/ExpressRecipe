@@ -41,7 +41,7 @@ CREATE TABLE ProductConsumptionPattern (
     IsAbandoned               BIT NOT NULL DEFAULT 0,
     AbandonedAfterCount       INT NULL,
     CalculatedAt              DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-    CONSTRAINT UQ_ConsumptionPattern UNIQUE (UserId, ProductId, IngredientId)
+    CONSTRAINT UQ_ConsumptionPattern UNIQUE (UserId, ProductId, IngredientId, CustomName)
 );
 CREATE INDEX IX_ConsumptionPattern_UserId ON ProductConsumptionPattern(UserId);
 GO

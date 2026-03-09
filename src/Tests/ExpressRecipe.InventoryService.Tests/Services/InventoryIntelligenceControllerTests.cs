@@ -105,7 +105,7 @@ public class InventoryIntelligenceControllerTests
     #region RecordPurchaseEvent
 
     [Fact]
-    public async Task RecordPurchaseEvent_WithValidRequest_ReturnsCreated()
+    public async Task RecordPurchaseEvent_WithValidRequest_ReturnsOkWithId()
     {
         // Arrange
         Guid eventId = Guid.NewGuid();
@@ -126,7 +126,7 @@ public class InventoryIntelligenceControllerTests
         IActionResult result = await _controller.RecordPurchaseEvent(request);
 
         // Assert
-        result.Should().BeOfType<CreatedAtActionResult>();
+        result.Should().BeOfType<OkObjectResult>();
         _mockRepository.Verify(r => r.RecordPurchaseEventAsync(
             It.Is<PurchaseEventRecord>(e =>
                 e.UserId == _testUserId &&
@@ -168,7 +168,7 @@ public class InventoryIntelligenceControllerTests
         Guid alertId = Guid.NewGuid();
         SetTargetPriceRequest request = new SetTargetPriceRequest { TargetPrice = 3.49m };
         _mockRepository
-            .Setup(r => r.SetPriceWatchTargetPriceAsync(alertId, request.TargetPrice, It.IsAny<CancellationToken>()))
+            .Setup(r => r.SetPriceWatchTargetPriceAsync(_testUserId, alertId, request.TargetPrice, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         // Act
@@ -176,7 +176,7 @@ public class InventoryIntelligenceControllerTests
 
         // Assert
         result.Should().BeOfType<NoContentResult>();
-        _mockRepository.Verify(r => r.SetPriceWatchTargetPriceAsync(alertId, 3.49m, It.IsAny<CancellationToken>()), Times.Once);
+        _mockRepository.Verify(r => r.SetPriceWatchTargetPriceAsync(_testUserId, alertId, 3.49m, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion
@@ -211,7 +211,7 @@ public class InventoryIntelligenceControllerTests
         Guid inquiryId = Guid.NewGuid();
         InquiryResponseRequest request = new InquiryResponseRequest { Response = "Allergy", Note = "Got rash" };
         _mockRepository
-            .Setup(r => r.RecordInquiryResponseAsync(inquiryId, "Allergy", "Got rash", It.IsAny<CancellationToken>()))
+            .Setup(r => r.RecordInquiryResponseAsync(_testUserId, inquiryId, "Allergy", "Got rash", It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         // Act
@@ -220,7 +220,7 @@ public class InventoryIntelligenceControllerTests
         // Assert
         result.Should().BeOfType<NoContentResult>();
         // IsActioned stays false — Blazor navigation handles the allergy route
-        _mockRepository.Verify(r => r.RecordInquiryResponseAsync(inquiryId, "Allergy", "Got rash", It.IsAny<CancellationToken>()), Times.Once);
+        _mockRepository.Verify(r => r.RecordInquiryResponseAsync(_testUserId, inquiryId, "Allergy", "Got rash", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     #endregion

@@ -99,10 +99,11 @@ public partial class InventoryRepository
     {
         const string sql = @"
             MERGE ProductConsumptionPattern AS target
-            USING (SELECT @UserId AS UserId, @ProductId AS ProductId, @IngredientId AS IngredientId) AS source
+            USING (SELECT @UserId AS UserId, @ProductId AS ProductId, @IngredientId AS IngredientId, @CustomName AS CustomName) AS source
             ON (target.UserId = source.UserId
                 AND (target.ProductId = source.ProductId OR (target.ProductId IS NULL AND source.ProductId IS NULL))
-                AND (target.IngredientId = source.IngredientId OR (target.IngredientId IS NULL AND source.IngredientId IS NULL)))
+                AND (target.IngredientId = source.IngredientId OR (target.IngredientId IS NULL AND source.IngredientId IS NULL))
+                AND (target.CustomName = source.CustomName OR (target.CustomName IS NULL AND source.CustomName IS NULL)))
             WHEN MATCHED THEN
                 UPDATE SET
                     HouseholdId               = @HouseholdId,
@@ -361,18 +362,19 @@ public partial class InventoryRepository
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task SetPriceWatchTargetPriceAsync(Guid alertId, decimal targetPrice, CancellationToken ct = default)
+    public async Task SetPriceWatchTargetPriceAsync(Guid userId, Guid alertId, decimal targetPrice, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE PriceWatchAlert
             SET TargetPrice = @TargetPrice
-            WHERE Id = @AlertId";
+            WHERE Id = @AlertId AND UserId = @UserId";
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@AlertId", alertId);
+        command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@TargetPrice", targetPrice);
 
         await command.ExecuteNonQueryAsync(ct);
@@ -402,18 +404,19 @@ public partial class InventoryRepository
         return id;
     }
 
-    public async Task RecordInquiryResponseAsync(Guid inquiryId, string response, string? note, CancellationToken ct = default)
+    public async Task RecordInquiryResponseAsync(Guid userId, Guid inquiryId, string response, string? note, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE AbandonedProductInquiry
             SET Response = @Response, ResponseNote = @Note, RespondedAt = GETUTCDATE()
-            WHERE Id = @InquiryId";
+            WHERE Id = @InquiryId AND UserId = @UserId";
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@InquiryId", inquiryId);
+        command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Response", response);
         command.Parameters.AddWithValue("@Note", note ?? (object)DBNull.Value);
 

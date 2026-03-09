@@ -46,7 +46,13 @@ public class PatternAnalysisWorker : BackgroundService
     private TimeSpan ComputeDelayUntilNextRun()
     {
         string timeStr = _configuration.GetValue<string>("InventoryIntelligence:PatternAnalysisTimeUtc", "02:00");
-        TimeSpan targetTime = TimeSpan.Parse(timeStr);
+        if (!TimeSpan.TryParse(timeStr, out TimeSpan targetTime))
+        {
+            _logger.LogWarning(
+                "Invalid InventoryIntelligence:PatternAnalysisTimeUtc value '{ConfiguredValue}'. Falling back to 02:00.",
+                timeStr);
+            targetTime = TimeSpan.FromHours(2);
+        }
 
         DateTime now = DateTime.UtcNow;
         DateTime nextRun = now.Date.Add(targetTime);

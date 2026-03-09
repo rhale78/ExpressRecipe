@@ -76,13 +76,9 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
                 if (match == null)
                 {
                     missingIngredients.Add(ingredient.Name);
-                    await repository.WriteInventoryHistoryDirectAsync(
-                        Guid.Empty, evt.UserId,
-                        "RecipeIngredientNotInInventory",
-                        -scaledQuantity, 0, 0,
-                        $"Recipe {evt.RecipeId}: {ingredient.Name} not in inventory",
-                        evt.RecipeId,
-                        cancellationToken);
+                    _logger.LogWarning(
+                        "Recipe {RecipeId} ingredient '{IngredientName}' not found in inventory for user {UserId}",
+                        evt.RecipeId, ingredient.Name, evt.UserId);
                     continue;
                 }
 
@@ -90,15 +86,7 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
                 decimal after = Math.Max(0, before - scaledQuantity);
 
                 await repository.UpdateInventoryQuantityAsync(
-                    match.Id, after, "UsedInRecipe", evt.UserId, $"Recipe {evt.RecipeId}");
-
-                await repository.WriteInventoryHistoryDirectAsync(
-                    match.Id, evt.UserId,
-                    "UsedInRecipe",
-                    -(before - after), before, after,
-                    $"Cooked recipe {evt.RecipeId} x{evt.Servings} servings",
-                    evt.RecipeId,
-                    cancellationToken);
+                    match.Id, after, "UsedInRecipe", evt.UserId, $"Cooked recipe {evt.RecipeId} x{evt.Servings} servings");
 
                 _logger.LogInformation(
                     "Deducted {Amount} {Unit} of {Name} from inventory item {ItemId} (was {Before}, now {After})",
@@ -169,7 +157,8 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
         }
     }
 
-    private static InventoryItemDto? FindMatchingInventoryItem(
+    // Internal for testing
+    internal static InventoryItemDto? FindMatchingInventoryItem(
         List<InventoryItemDto> inventory,
         RecipeIngredientResponse ingredient)
     {
@@ -222,7 +211,7 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
         }
     }
 
-    private sealed class RecipeIngredientResponse
+    internal sealed class RecipeIngredientResponse
     {
         [JsonPropertyName("productId")]
         public Guid? ProductId { get; set; }

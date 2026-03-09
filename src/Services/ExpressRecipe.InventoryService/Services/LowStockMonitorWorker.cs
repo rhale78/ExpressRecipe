@@ -88,6 +88,9 @@ public class LowStockMonitorWorker : BackgroundService
     {
         List<ProductConsumptionPatternDto> lowStockItems = await repository.GetLowStockByPredictionAsync(userId, daysAhead, cancellationToken);
 
+        // Load active alerts once per user to avoid O(patterns × alerts) DB calls
+        List<PriceWatchAlertDto> userAlerts = await repository.GetActiveWatchAlertsByUserAsync(userId, cancellationToken);
+
         foreach (ProductConsumptionPatternDto pattern in lowStockItems)
         {
             if (pattern.ProductId == null)
@@ -96,8 +99,7 @@ public class LowStockMonitorWorker : BackgroundService
             }
 
             // Ensure a price watch alert exists for this item
-            List<PriceWatchAlertDto> existingAlerts = await repository.GetActiveWatchAlertsByUserAsync(userId, cancellationToken);
-            bool hasAlert = existingAlerts.Any(a => a.ProductId == pattern.ProductId);
+            bool hasAlert = userAlerts.Any(a => a.ProductId == pattern.ProductId);
 
             if (!hasAlert)
             {
@@ -107,7 +109,9 @@ public class LowStockMonitorWorker : BackgroundService
                     HouseholdId = pattern.HouseholdId,
                     ProductId = pattern.ProductId
                 };
-                await repository.CreatePriceWatchAlertAsync(alertRecord, cancellationToken);
+                Guid newAlertId = await repository.CreatePriceWatchAlertAsync(alertRecord, cancellationToken);
+                // Add a minimal in-memory entry so subsequent patterns see it without another DB call
+                userAlerts.Add(new PriceWatchAlertDto { Id = newAlertId, UserId = userId, ProductId = pattern.ProductId, DealFound = false });
             }
 
             // Check PriceService for active deals
@@ -141,25 +145,27 @@ public class LowStockMonitorWorker : BackgroundService
 
             if (dealFound && dealStoreId.HasValue && dealPrice.HasValue && dealEndsAt.HasValue)
             {
-                // Update existing watch alert with deal info
-                List<PriceWatchAlertDto> alerts = await repository.GetActiveWatchAlertsByUserAsync(userId, cancellationToken);
-                PriceWatchAlertDto? matchingAlert = alerts.FirstOrDefault(a =>
+                // Only notify (and update the alert) when transitioning from no-deal to deal-found
+                PriceWatchAlertDto? matchingAlert = userAlerts.FirstOrDefault(a =>
                     a.ProductId == pattern.ProductId && !a.DealFound);
 
                 if (matchingAlert != null)
                 {
                     await repository.UpdatePriceWatchDealFoundAsync(
                         matchingAlert.Id, dealStoreId.Value, dealPrice.Value, dealEndsAt.Value, cancellationToken);
-                }
 
-                await SendNotificationAsync(httpFactory, userId, "LowStockWithDeal", "High", new
-                {
-                    UserId = userId,
-                    ProductId = pattern.ProductId,
-                    CustomName = pattern.CustomName,
-                    DealPrice = dealPrice,
-                    DealStoreId = dealStoreId
-                }, cancellationToken);
+                    // Update in-memory state to prevent re-notification this cycle
+                    matchingAlert.DealFound = true;
+
+                    await SendNotificationAsync(httpFactory, userId, "LowStockWithDeal", "High", new
+                    {
+                        UserId = userId,
+                        ProductId = pattern.ProductId,
+                        CustomName = pattern.CustomName,
+                        DealPrice = dealPrice,
+                        DealStoreId = dealStoreId
+                    }, cancellationToken);
+                }
             }
             else
             {
@@ -204,6 +210,13 @@ public class LowStockMonitorWorker : BackgroundService
                     ActiveDealResponse? deal = await response.Content.ReadFromJsonAsync<ActiveDealResponse>(cancellationToken: cancellationToken);
                     if (deal != null && deal.HasDeal && deal.StoreId.HasValue && deal.Price.HasValue && deal.EndsAt.HasValue)
                     {
+                        // Respect TargetPrice: only trigger when deal is at or below the target
+                        bool meetsTarget = alert.TargetPrice == null || deal.Price.Value <= alert.TargetPrice.Value;
+                        if (!meetsTarget)
+                        {
+                            continue;
+                        }
+
                         await repository.UpdatePriceWatchDealFoundAsync(
                             alert.Id, deal.StoreId.Value, deal.Price.Value, deal.EndsAt.Value, cancellationToken);
 
