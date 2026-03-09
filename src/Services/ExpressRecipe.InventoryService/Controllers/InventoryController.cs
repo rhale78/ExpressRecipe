@@ -517,7 +517,7 @@ public class InventoryController : ControllerBase
 
             return Ok(new { id = saleId });
         }
-        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Insufficient quantity"))
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Insufficient quantity") || ex.Message.StartsWith("Insufficient quantity or item not found"))
         {
             return UnprocessableEntity(new { message = ex.Message });
         }
@@ -555,7 +555,7 @@ public class InventoryController : ControllerBase
 
             if (itemId.HasValue)
             {
-                var salesByItem = await _saleRepository.GetSalesByItemAsync(itemId.Value);
+                var salesByItem = await _saleRepository.GetSalesByItemAsync(householdId, itemId.Value);
                 return Ok(salesByItem);
             }
 

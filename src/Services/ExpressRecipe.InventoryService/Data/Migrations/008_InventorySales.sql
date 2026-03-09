@@ -7,7 +7,7 @@ CREATE TABLE InventorySale (
     HouseholdId     UNIQUEIDENTIFIER NOT NULL,
     InventoryItemId UNIQUEIDENTIFIER NULL,       -- NULL if item was fully consumed/removed
     ProductName     NVARCHAR(200) NOT NULL,       -- denormalized for history after item deletion
-    Quantity        DECIMAL(10, 3) NOT NULL,
+    Quantity        DECIMAL(10, 2) NOT NULL,
     Unit            NVARCHAR(50) NOT NULL,
     SaleDate        DATE NOT NULL DEFAULT CAST(GETUTCDATE() AS DATE),
     Buyer           NVARCHAR(200) NULL,           -- optional: "Neighbor", "Farmers Market", etc.

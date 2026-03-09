@@ -199,6 +199,7 @@ public class LivestockController : ControllerBase
 
             Guid productionId = await _livestock.LogProductionAsync(
                 id,
+                userId.Value,
                 request.ProductionDate,
                 request.ProductType,
                 request.Quantity,
@@ -313,6 +314,7 @@ public class LivestockController : ControllerBase
 
             Guid harvestId = await _livestock.RecordHarvestAsync(
                 id,
+                userId.Value,
                 request.HarvestDate,
                 request.CountHarvested,
                 request.LiveWeightLbs,

@@ -142,7 +142,7 @@ public class LivestockRepository : ILivestockRepository
     // Production Logging
     // ─────────────────────────────────────────────────────────────────────────
 
-    public async Task<Guid> LogProductionAsync(Guid animalId, DateOnly productionDate, string productType,
+    public async Task<Guid> LogProductionAsync(Guid animalId, Guid userId, DateOnly productionDate, string productType,
         decimal quantity, string unit, bool addToInventory, string? storageLocationId, string? notes)
     {
         await using SqlConnection connection = new SqlConnection(_connectionString);
@@ -164,7 +164,7 @@ public class LivestockRepository : ILivestockRepository
 
                 inventoryItemId = await UpsertProductionInventoryItemAsync(
                     animal, productType, quantity, unit, productionDate,
-                    storageLocationId, connection, tx);
+                    storageLocationId, userId, connection, tx);
             }
 
             // MERGE on unique key (AnimalId, ProductionDate, ProductType) — upsert same-day entry
@@ -279,7 +279,7 @@ public class LivestockRepository : ILivestockRepository
     // Harvest / Processing
     // ─────────────────────────────────────────────────────────────────────────
 
-    public async Task<Guid> RecordHarvestAsync(Guid animalId, DateOnly harvestDate, int countHarvested,
+    public async Task<Guid> RecordHarvestAsync(Guid animalId, Guid userId, DateOnly harvestDate, int countHarvested,
         decimal? liveWeightLbs, decimal? processedWeightLbs, string? processedBy,
         bool addToInventory, List<HarvestYieldItem> yieldItems, string? storageLocationId, string? notes)
     {
@@ -305,7 +305,7 @@ public class LivestockRepository : ILivestockRepository
                 foreach (HarvestYieldItem item in yieldItems)
                 {
                     Guid invItemId = await CreateHarvestInventoryItemAsync(
-                        animal, item, harvestDate, storLocId, connection, tx);
+                        animal, item, harvestDate, storLocId, userId, connection, tx);
 
                     enrichedYieldItems.Add(new HarvestYieldItem
                     {
@@ -432,21 +432,25 @@ public class LivestockRepository : ILivestockRepository
 
     /// <summary>
     /// Finds or creates an InventoryItem for a daily production log.
+    /// Scopes the search to the same household and unit to avoid cross-household collisions.
     /// If a non-expired homestead item already exists for the animal+product, increments its quantity.
     /// </summary>
     private async Task<Guid> UpsertProductionInventoryItemAsync(
         LivestockAnimalDto animal, string productType, decimal quantity, string unit,
-        DateOnly productionDate, string? storageLocationId,
+        DateOnly productionDate, string? storageLocationId, Guid userId,
         SqlConnection connection, SqlTransaction tx)
     {
         string itemName = $"{animal.Name} {productType}";
         DateTime? expirationDate = ComputeProductionExpiration(productType, productionDate);
 
-        // Try to find an existing non-expired homestead item for this animal+product
+        // Try to find an existing non-expired homestead item for this animal+product,
+        // scoped to the same household and unit to prevent cross-household or cross-unit matches.
         const string findSql = @"
             SELECT TOP 1 Id, Quantity
             FROM InventoryItem
             WHERE CustomName = @Name
+              AND HouseholdId = @HouseholdId
+              AND Unit = @Unit
               AND Source = 'Homestead'
               AND IsDeleted = 0
               AND (ExpirationDate IS NULL OR ExpirationDate > GETUTCDATE())
@@ -455,6 +459,8 @@ public class LivestockRepository : ILivestockRepository
         await using (SqlCommand findCmd = new SqlCommand(findSql, connection, tx))
         {
             findCmd.Parameters.AddWithValue("@Name", itemName);
+            findCmd.Parameters.AddWithValue("@HouseholdId", animal.HouseholdId);
+            findCmd.Parameters.AddWithValue("@Unit", unit);
             await using SqlDataReader reader = await findCmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
@@ -481,7 +487,7 @@ public class LivestockRepository : ILivestockRepository
         Guid? storLocId = Guid.TryParse(storageLocationId, out Guid parsedLocId)
             ? parsedLocId : (Guid?)null;
 
-        return await CreateInventoryItemAsync(itemName, animal.HouseholdId, quantity, unit,
+        return await CreateInventoryItemAsync(itemName, animal.HouseholdId, userId, quantity, unit,
             expirationDate, storLocId, storageMethod: null, connection, tx);
     }
 
@@ -497,7 +503,7 @@ public class LivestockRepository : ILivestockRepository
 
     private async Task<Guid> CreateHarvestInventoryItemAsync(
         LivestockAnimalDto animal, HarvestYieldItem yieldItem,
-        DateOnly harvestDate, Guid? storageLocationId,
+        DateOnly harvestDate, Guid? storageLocationId, Guid userId,
         SqlConnection connection, SqlTransaction tx)
     {
         string itemName = $"{animal.Name} {yieldItem.Cut}";
@@ -507,12 +513,12 @@ public class LivestockRepository : ILivestockRepository
             .AddMonths(6);
 
         return await CreateInventoryItemAsync(
-            itemName, animal.HouseholdId, yieldItem.WeightLbs, yieldItem.Unit,
+            itemName, animal.HouseholdId, userId, yieldItem.WeightLbs, yieldItem.Unit,
             expirationDate, storageLocationId, storageMethod: "FrozenMeal", connection, tx);
     }
 
     private static async Task<Guid> CreateInventoryItemAsync(
-        string customName, Guid householdId, decimal quantity, string unit,
+        string customName, Guid householdId, Guid userId, decimal quantity, string unit,
         DateTime? expirationDate, Guid? storageLocationId, string? storageMethod,
         SqlConnection connection, SqlTransaction tx)
     {
@@ -531,16 +537,17 @@ public class LivestockRepository : ILivestockRepository
 
         const string insertSql = @"
             INSERT INTO InventoryItem
-                (HouseholdId, CustomName, StorageLocationId, Quantity, Unit,
+                (UserId, HouseholdId, CustomName, StorageLocationId, Quantity, Unit,
                  ExpirationDate, Source, StorageMethod, IsLongTermStorage,
-                 IsDeleted, CreatedAt)
+                 AddedBy, IsDeleted, CreatedAt)
             OUTPUT INSERTED.Id
             VALUES
-                (@HouseholdId, @CustomName, @StorageLocationId, @Quantity, @Unit,
+                (@UserId, @HouseholdId, @CustomName, @StorageLocationId, @Quantity, @Unit,
                  @ExpirationDate, 'Homestead', @StorageMethod, @IsLongTermStorage,
-                 0, GETUTCDATE())";
+                 @UserId, 0, GETUTCDATE())";
 
         await using SqlCommand cmd = new SqlCommand(insertSql, connection, tx);
+        cmd.Parameters.AddWithValue("@UserId", userId);
         cmd.Parameters.AddWithValue("@HouseholdId", householdId);
         cmd.Parameters.AddWithValue("@CustomName", customName);
         cmd.Parameters.AddWithValue("@StorageLocationId", resolvedLocId);

@@ -112,7 +112,7 @@ public class InventorySaleControllerTests
                 It.IsAny<Guid>(), It.IsAny<Guid?>(),
                 It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<string>(),
                 It.IsAny<DateOnly>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>()))
-            .ThrowsAsync(new InvalidOperationException("Insufficient quantity. Available: 1, requested: 5."));
+            .ThrowsAsync(new InvalidOperationException("Insufficient quantity or item not found. Requested: 5. Ensure the item exists, belongs to this household, and has enough stock."));
 
         // Act
         IActionResult result = await _controller.SellItem(itemId, request);
@@ -216,7 +216,7 @@ public class InventorySaleControllerTests
             .ReturnsAsync(true);
 
         _mockSaleRepository
-            .Setup(r => r.GetSalesByItemAsync(itemId))
+            .Setup(r => r.GetSalesByItemAsync(_testHouseholdId, itemId))
             .ReturnsAsync(sales);
 
         // Act
@@ -224,7 +224,7 @@ public class InventorySaleControllerTests
 
         // Assert
         result.Should().BeOfType<OkObjectResult>();
-        _mockSaleRepository.Verify(r => r.GetSalesByItemAsync(itemId), Times.Once);
+        _mockSaleRepository.Verify(r => r.GetSalesByItemAsync(_testHouseholdId, itemId), Times.Once);
     }
 
     [Fact]

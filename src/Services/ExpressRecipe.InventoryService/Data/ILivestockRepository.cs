@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace ExpressRecipe.InventoryService.Data;
 
 public interface ILivestockRepository
@@ -13,13 +11,13 @@ public interface ILivestockRepository
     Task SoftDeleteAnimalAsync(Guid animalId);
 
     // Production Logging
-    Task<Guid> LogProductionAsync(Guid animalId, DateOnly productionDate, string productType,
+    Task<Guid> LogProductionAsync(Guid animalId, Guid userId, DateOnly productionDate, string productType,
         decimal quantity, string unit, bool addToInventory, string? storageLocationId, string? notes);
     Task<List<LivestockProductionDto>> GetProductionAsync(Guid animalId, DateOnly from, DateOnly to);
     Task<List<LivestockProductionSummaryDto>> GetProductionSummaryAsync(Guid householdId, DateOnly from, DateOnly to);
 
     // Harvest / Processing
-    Task<Guid> RecordHarvestAsync(Guid animalId, DateOnly harvestDate, int countHarvested,
+    Task<Guid> RecordHarvestAsync(Guid animalId, Guid userId, DateOnly harvestDate, int countHarvested,
         decimal? liveWeightLbs, decimal? processedWeightLbs, string? processedBy,
         bool addToInventory, List<HarvestYieldItem> yieldItems, string? storageLocationId, string? notes);
     Task<List<LivestockHarvestDto>> GetHarvestsAsync(Guid animalId);
@@ -32,7 +30,7 @@ public interface IInventorySaleRepository
         decimal quantity, string unit, DateOnly saleDate, string? buyer, string? notes,
         bool autoRemoveOnZero = true);
     Task<List<InventorySaleDto>> GetSalesAsync(Guid householdId, DateOnly from, DateOnly to);
-    Task<List<InventorySaleDto>> GetSalesByItemAsync(Guid inventoryItemId);
+    Task<List<InventorySaleDto>> GetSalesByItemAsync(Guid householdId, Guid inventoryItemId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -237,7 +237,7 @@ public class LivestockControllerTests
             .Setup(r => r.IsUserMemberOfHouseholdAsync(animal.HouseholdId, _testUserId))
             .ReturnsAsync(true);
         _mockLivestock
-            .Setup(r => r.LogProductionAsync(animalId, request.ProductionDate, request.ProductType,
+            .Setup(r => r.LogProductionAsync(animalId, _testUserId, request.ProductionDate, request.ProductType,
                 request.Quantity, request.Unit, request.AddToInventory,
                 request.StorageLocationId.HasValue ? request.StorageLocationId.Value.ToString() : null,
                 request.Notes))
@@ -320,7 +320,7 @@ public class LivestockControllerTests
             .ReturnsAsync(true);
         _mockLivestock
             .Setup(r => r.RecordHarvestAsync(
-                animalId, request.HarvestDate, request.CountHarvested,
+                animalId, _testUserId, request.HarvestDate, request.CountHarvested,
                 request.LiveWeightLbs, request.ProcessedWeightLbs,
                 request.ProcessedBy, request.AddToInventory,
                 request.YieldItems,
