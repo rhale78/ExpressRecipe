@@ -375,18 +375,19 @@ public class MealPlanningRepository : IMealPlanningRepository
         return (Guid)(await command.ExecuteScalarAsync(ct))!;
     }
 
-    public async Task UpdateCookingRatingAsync(Guid historyId, byte rating, bool? wouldCookAgain, string? notes, CancellationToken ct = default)
+    public async Task UpdateCookingRatingAsync(Guid historyId, Guid userId, byte rating, bool? wouldCookAgain, string? notes, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE CookingHistory
             SET Rating = @Rating, WouldCookAgain = @WouldCookAgain, Notes = @Notes
-            WHERE Id = @HistoryId";
+            WHERE Id = @HistoryId AND UserId = @UserId";
 
         await using SqlConnection connection = new(_connectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new(sql, connection);
         command.Parameters.AddWithValue("@HistoryId", historyId);
+        command.Parameters.AddWithValue("@UserId", userId);
         command.Parameters.AddWithValue("@Rating", rating);
         command.Parameters.AddWithValue("@WouldCookAgain", wouldCookAgain ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("@Notes", notes ?? (object)DBNull.Value);
@@ -533,6 +534,47 @@ public class MealPlanningRepository : IMealPlanningRepository
         await using SqlCommand command = new(sql, connection);
         command.Parameters.AddWithValue("@HistoryId", historyId);
 
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<List<RatingPromptRow>> GetUnratedCookingHistoryAsync(CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT Id, UserId, RecipeName
+            FROM CookingHistory
+            WHERE Rating IS NULL
+              AND CookedAt < DATEADD(minute, -30, GETUTCDATE())
+              AND RatingPromptSent = 0";
+
+        await using SqlConnection connection = new(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new(sql, connection);
+
+        List<RatingPromptRow> rows = new();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            rows.Add(new RatingPromptRow
+            {
+                Id = reader.GetGuid(0),
+                UserId = reader.GetGuid(1),
+                RecipeName = reader.GetString(2)
+            });
+        }
+
+        return rows;
+    }
+
+    public async Task MarkRatingPromptSentAsync(Guid historyId, CancellationToken ct = default)
+    {
+        const string sql = "UPDATE CookingHistory SET RatingPromptSent = 1 WHERE Id = @HistoryId";
+
+        await using SqlConnection connection = new(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new(sql, connection);
+        command.Parameters.AddWithValue("@HistoryId", historyId);
         await command.ExecuteNonQueryAsync(ct);
     }
 

@@ -174,7 +174,8 @@ public class MealPlanningController : ControllerBase
     [HttpPut("history/{id}/rating")]
     public async Task<IActionResult> UpdateCookingRating(Guid id, [FromBody] UpdateRatingRequest request)
     {
-        await _repository.UpdateCookingRatingAsync(id, request.Rating, request.WouldCookAgain, request.Notes);
+        Guid userId = GetUserId();
+        await _repository.UpdateCookingRatingAsync(id, userId, request.Rating, request.WouldCookAgain, request.Notes);
         return NoContent();
     }
 

@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using ExpressRecipe.MealPlanningService.Data;
-using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.MealPlanningService.Workers;
 
@@ -47,14 +46,13 @@ public class CookingRatingPromptWorker : BackgroundService
     private async Task ProcessRatingPromptsAsync(CancellationToken ct)
     {
         using IServiceScope scope = _serviceProvider.CreateScope();
+        IMealPlanningRepository repository = scope.ServiceProvider.GetRequiredService<IMealPlanningRepository>();
         IConfiguration config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-        string connectionString = config.GetConnectionString("mealplandb")
-            ?? throw new InvalidOperationException("Database connection string 'mealplandb' not found");
-
         IHttpClientFactory factory = scope.ServiceProvider.GetRequiredService<IHttpClientFactory>();
+
         string notificationUrl = config["Services:NotificationService"] ?? "http://notificationservice";
 
-        List<RatingPromptRow> rows = await GetUnratedCookingHistoryAsync(connectionString, ct);
+        List<RatingPromptRow> rows = await repository.GetUnratedCookingHistoryAsync(ct);
 
         if (rows.Count == 0)
         {
@@ -85,7 +83,7 @@ public class CookingRatingPromptWorker : BackgroundService
 
                 if (response.IsSuccessStatusCode)
                 {
-                    await MarkRatingPromptSentAsync(connectionString, row.Id, ct);
+                    await repository.MarkRatingPromptSentAsync(row.Id, ct);
                     _logger.LogDebug("Sent rating prompt for history {HistoryId}", row.Id);
                 }
                 else
@@ -102,49 +100,6 @@ public class CookingRatingPromptWorker : BackgroundService
             }
         }
     }
-
-    private static async Task<List<RatingPromptRow>> GetUnratedCookingHistoryAsync(
-        string connectionString, CancellationToken ct)
-    {
-        const string sql = @"
-            SELECT Id, UserId, RecipeName
-            FROM CookingHistory
-            WHERE Rating IS NULL
-              AND CookedAt < DATEADD(minute, -30, GETUTCDATE())
-              AND RatingPromptSent = 0";
-
-        await using SqlConnection connection = new(connectionString);
-        await connection.OpenAsync(ct);
-
-        await using SqlCommand command = new(sql, connection);
-
-        List<RatingPromptRow> rows = new();
-        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
-        {
-            rows.Add(new RatingPromptRow(
-                reader.GetGuid(0),
-                reader.GetGuid(1),
-                reader.GetString(2)));
-        }
-
-        return rows;
-    }
-
-    private static async Task MarkRatingPromptSentAsync(
-        string connectionString, Guid historyId, CancellationToken ct)
-    {
-        const string sql = "UPDATE CookingHistory SET RatingPromptSent = 1 WHERE Id = @HistoryId";
-
-        await using SqlConnection connection = new(connectionString);
-        await connection.OpenAsync(ct);
-
-        await using SqlCommand command = new(sql, connection);
-        command.Parameters.AddWithValue("@HistoryId", historyId);
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
-    private record RatingPromptRow(Guid Id, Guid UserId, string RecipeName);
 
     private class NotificationPayload
     {

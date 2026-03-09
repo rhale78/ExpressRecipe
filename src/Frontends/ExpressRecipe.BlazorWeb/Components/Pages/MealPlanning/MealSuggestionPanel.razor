@@ -137,9 +137,9 @@
                 _errorMessage = "Could not load suggestions. Please try again.";
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            _errorMessage = "Could not connect to suggestion service. Please try again.";
+            _errorMessage = $"Could not connect to suggestion service: {ex.Message}";
         }
         finally
         {

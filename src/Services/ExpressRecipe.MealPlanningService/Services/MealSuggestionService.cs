@@ -147,8 +147,9 @@ public class MealSuggestionService : IMealSuggestionService
             // Compute inventory match
             (decimal matchPct, List<string> missing) = ComputeInventoryMatch(candidate.Ingredients, inventory);
 
-            // Base score components
-            // In SomethingNew mode the user has no rating for untried recipes, so user-rating weight is zeroed
+            // Base score components.
+            // In SomethingNew mode the user has no rating for untried recipes (CookCount=0 means no experience),
+            // so the user-rating weight is zeroed out to prevent rated-but-overused recipes from dominating.
             decimal effectiveUserRatingWeight = request.SuggestionMode == SuggestionModes.SomethingNew
                 ? 0m
                 : ScoringWeights.UserRatingWeight;
