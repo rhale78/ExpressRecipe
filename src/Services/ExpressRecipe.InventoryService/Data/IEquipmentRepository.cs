@@ -121,14 +121,17 @@ public sealed class EquipmentRepository : IEquipmentRepository
     public async Task<List<EquipmentInstanceDto>> GetInstancesByCapabilityAsync(
         Guid householdId, string capability, CancellationToken ct = default)
     {
+        // Use EXISTS to filter instances that own the required capability;
+        // the LEFT JOIN on c returns all capabilities for each matching instance.
         const string sql = @"SELECT ei.Id,ei.HouseholdId,ei.AddressId,ei.TemplateId,t.Name AS TemplateName,
                    ei.CustomName,ei.Brand,ei.ModelNumber,ei.SizeValue,ei.SizeUnit,ei.Notes,ei.IsActive,
                    c.Capability
             FROM EquipmentInstance ei
-            JOIN EquipmentInstanceCapability cap ON cap.InstanceId=ei.Id AND cap.Capability=@Cap
             LEFT JOIN EquipmentTemplate t ON t.Id=ei.TemplateId
             LEFT JOIN EquipmentInstanceCapability c ON c.InstanceId=ei.Id
-            WHERE ei.HouseholdId=@HouseholdId AND ei.IsActive=1";
+            WHERE ei.HouseholdId=@HouseholdId AND ei.IsActive=1
+              AND EXISTS (SELECT 1 FROM EquipmentInstanceCapability
+                          WHERE InstanceId=ei.Id AND Capability=@Cap)";
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);
