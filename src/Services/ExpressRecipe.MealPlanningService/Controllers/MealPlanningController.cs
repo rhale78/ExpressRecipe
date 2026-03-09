@@ -79,7 +79,7 @@ public class MealPlanningController : ControllerBase
     {
         Guid userId = GetUserId();
         Guid mealId = await _repository.AddPlannedMealAsync(
-            id, userId, request.RecipeId, request.PlannedFor, request.MealType, request.Servings, ct);
+            id, userId, request.RecipeId, request.PlannedDate, request.MealType, request.Servings, ct);
         return Ok(new { id = mealId });
     }
 
@@ -115,7 +115,10 @@ public class MealPlanningController : ControllerBase
     [HttpPost("meals/{id}/courses")]
     public async Task<IActionResult> AddCourse(Guid id, [FromBody] AddCourseRequest req, CancellationToken ct)
     {
-        Guid courseId = await _courseRepo.AddCourseAsync(id, req.CourseType, req.RecipeId, req.CustomName, req.Servings, 999, ct);
+        // Use max existing sort order + 1 so new courses naturally append to the end
+        List<MealCourseDto> existing = await _courseRepo.GetCoursesAsync(id, ct);
+        int nextSortOrder = existing.Count > 0 ? existing.Max(c => c.SortOrder) + 1 : 0;
+        Guid courseId = await _courseRepo.AddCourseAsync(id, req.CourseType, req.RecipeId, req.CustomName, req.Servings, nextSortOrder, ct);
         return Ok(new { id = courseId });
     }
 
@@ -251,7 +254,7 @@ public class CreatePlanRequest
 public class AddMealRequest
 {
     public Guid? RecipeId { get; set; }
-    public DateTime PlannedFor { get; set; }
+    public DateTime PlannedDate { get; set; }
     public string MealType { get; set; } = "Dinner";
     public int Servings { get; set; } = 1;
 }

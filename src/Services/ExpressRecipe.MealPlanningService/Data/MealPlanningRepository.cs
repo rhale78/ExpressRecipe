@@ -478,8 +478,8 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public Task<Guid> ApplyTemplateAsync(Guid templateId, Guid userId, DateTime startDate, CancellationToken ct = default)
     {
-        // Stub — full implementation is in MealPlanTemplateService
-        return Task.FromResult(Guid.NewGuid());
+        // Full implementation is in MealPlanTemplateService. Do not call this repository method directly.
+        throw new NotSupportedException("ApplyTemplateAsync is not supported on MealPlanningRepository. Use MealPlanTemplateService instead.");
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────

@@ -127,11 +127,16 @@ public class MealCourseRepository : IMealCourseRepository
 
         try
         {
+            await using SqlCommand command = new SqlCommand(sql, connection, tx);
+            Microsoft.Data.SqlClient.SqlParameter idParam = command.Parameters.Add(
+                "@Id", System.Data.SqlDbType.UniqueIdentifier);
+            Microsoft.Data.SqlClient.SqlParameter sortOrderParam = command.Parameters.Add(
+                "@SortOrder", System.Data.SqlDbType.Int);
+
             foreach ((Guid courseId, int sortOrder) in ordering)
             {
-                await using SqlCommand command = new SqlCommand(sql, connection, tx);
-                command.Parameters.AddWithValue("@Id", courseId);
-                command.Parameters.AddWithValue("@SortOrder", sortOrder);
+                idParam.Value = courseId;
+                sortOrderParam.Value = sortOrder;
                 await command.ExecuteNonQueryAsync(ct);
             }
 

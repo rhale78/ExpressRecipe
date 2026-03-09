@@ -25,8 +25,16 @@ public sealed class MealPlanCopyService : IMealPlanCopyService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Clones a single meal to a different date/type. If <paramref name="targetPlanId"/> is provided,
+    /// the clone is inserted into that plan; otherwise the source meal's own plan is used (same-plan copy).
+    /// </summary>
     public async Task<Guid> CloneMealAsync(Guid mealId, DateOnly targetDate,
         string targetMealType, CancellationToken ct = default)
+        => await CloneMealInternalAsync(mealId, targetDate, targetMealType, targetPlanId: null, ct);
+
+    private async Task<Guid> CloneMealInternalAsync(Guid mealId, DateOnly targetDate,
+        string targetMealType, Guid? targetPlanId, CancellationToken ct)
     {
         PlannedMealDto? source = await _plans.GetPlannedMealByIdAsync(mealId, ct);
         if (source is null)
@@ -34,7 +42,8 @@ public sealed class MealPlanCopyService : IMealPlanCopyService
             throw new KeyNotFoundException($"Meal {mealId} not found");
         }
 
-        Guid newMealId = await _plans.AddPlannedMealAsync(source.MealPlanId, source.UserId,
+        Guid destinationPlanId = targetPlanId ?? source.MealPlanId;
+        Guid newMealId = await _plans.AddPlannedMealAsync(destinationPlanId, source.UserId,
             source.RecipeId, targetDate.ToDateTime(TimeOnly.MinValue), targetMealType, source.Servings, ct);
 
         List<MealCourseDto> courses = await _courses.GetCoursesAsync(mealId, ct);
@@ -44,7 +53,8 @@ public sealed class MealPlanCopyService : IMealPlanCopyService
                 course.CustomName, course.Servings, course.SortOrder, ct);
         }
 
-        _logger.LogInformation("Cloned meal {SourceMealId} to {NewMealId} on {TargetDate}", mealId, newMealId, targetDate);
+        _logger.LogInformation("Cloned meal {SourceMealId} to {NewMealId} on {TargetDate} in plan {PlanId}",
+            mealId, newMealId, targetDate, destinationPlanId);
         return newMealId;
     }
 
@@ -53,7 +63,7 @@ public sealed class MealPlanCopyService : IMealPlanCopyService
         List<PlannedMealDto> meals = await _plans.GetMealsByDateAsync(planId, sourceDate, ct);
         foreach (PlannedMealDto meal in meals)
         {
-            await CloneMealAsync(meal.Id, targetDate, meal.MealType, ct);
+            await CloneMealInternalAsync(meal.Id, targetDate, meal.MealType, targetPlanId: null, ct);
         }
     }
 
@@ -97,10 +107,12 @@ public sealed class MealPlanCopyService : IMealPlanCopyService
         foreach (PlannedMealDto meal in allMeals)
         {
             int offset = (DateOnly.FromDateTime(meal.PlannedDate).DayNumber - DateOnly.FromDateTime(source.StartDate).DayNumber);
-            await CloneMealAsync(meal.Id, newStartDate.AddDays(offset), meal.MealType, ct);
+            // Pass newPlanId so the clone is inserted into the new plan, not the source plan
+            await CloneMealInternalAsync(meal.Id, newStartDate.AddDays(offset), meal.MealType, targetPlanId: newPlanId, ct);
         }
 
         _logger.LogInformation("Copied plan {SourcePlanId} to new plan {NewPlanId}", planId, newPlanId);
         return newPlanId;
     }
 }
+

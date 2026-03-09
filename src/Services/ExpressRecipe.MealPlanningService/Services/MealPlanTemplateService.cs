@@ -17,6 +17,16 @@ public sealed class MealPlanTemplateService : IMealPlanTemplateService
     private readonly IMealPlanningRepository _plans;
     private readonly IMealCourseRepository _courses;
 
+    private static readonly System.Text.Json.JsonSerializerOptions JsonWriteOptions = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+    };
+
+    private static readonly System.Text.Json.JsonSerializerOptions JsonReadOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     public MealPlanTemplateService(IMealPlanningRepository plans, IMealCourseRepository courses)
     {
         _plans = plans;
@@ -28,14 +38,26 @@ public sealed class MealPlanTemplateService : IMealPlanTemplateService
         CancellationToken ct = default)
     {
         List<PlannedMealDto> meals = await _plans.GetPlannedMealsAsync(planId, null, null, ct);
-        List<TemplateMealEntry> entries = new();
 
-        foreach (PlannedMealDto meal in meals.Where(m =>
-            DateOnly.FromDateTime(m.PlannedDate) >= fromDate &&
-            DateOnly.FromDateTime(m.PlannedDate) <= toDate))
+        // Filter meals in the requested date range once
+        List<PlannedMealDto> filteredMeals = meals
+            .Where(m =>
+                DateOnly.FromDateTime(m.PlannedDate) >= fromDate &&
+                DateOnly.FromDateTime(m.PlannedDate) <= toDate)
+            .ToList();
+
+        // Kick off all course fetches in parallel to avoid sequential N+1 latency
+        Dictionary<Guid, Task<List<MealCourseDto>>> courseTasks = filteredMeals.ToDictionary(
+            meal => meal.Id,
+            meal => _courses.GetCoursesAsync(meal.Id, ct));
+
+        await Task.WhenAll(courseTasks.Values);
+
+        List<TemplateMealEntry> entries = new();
+        foreach (PlannedMealDto meal in filteredMeals)
         {
             int dayOffset = (DateOnly.FromDateTime(meal.PlannedDate).DayNumber - fromDate.DayNumber);
-            List<MealCourseDto> courses = await _courses.GetCoursesAsync(meal.Id, ct);
+            List<MealCourseDto> courses = courseTasks[meal.Id].Result;
             entries.Add(new TemplateMealEntry
             {
                 DayOffset = dayOffset,
@@ -54,7 +76,7 @@ public sealed class MealPlanTemplateService : IMealPlanTemplateService
             });
         }
 
-        string templateJson = System.Text.Json.JsonSerializer.Serialize(new { meals = entries });
+        string templateJson = System.Text.Json.JsonSerializer.Serialize(new { meals = entries }, JsonWriteOptions);
         int spanDays = (toDate.DayNumber - fromDate.DayNumber) + 1;
         return await _plans.SavePlanTemplateAsync(userId, name, description,
             new List<TemplateMealDto>(), templateJson, category, isPublic, spanDays, ct);
@@ -82,26 +104,33 @@ public sealed class MealPlanTemplateService : IMealPlanTemplateService
         using (doc)
         foreach (System.Text.Json.JsonElement mealEl in doc.RootElement.GetProperty("meals").EnumerateArray())
         {
-            int dayOffset = mealEl.GetProperty("dayOffset").GetInt32();
-            string mealType = mealEl.GetProperty("mealType").GetString() ?? "Dinner";
-            Guid? recipeId = mealEl.TryGetProperty("recipeId", out System.Text.Json.JsonElement rid)
-                && rid.ValueKind != System.Text.Json.JsonValueKind.Null ? rid.GetGuid() : null;
-            decimal servings = mealEl.GetProperty("servings").GetDecimal();
+            TemplateMealEntry? meal;
+            try
+            {
+                meal = System.Text.Json.JsonSerializer.Deserialize<TemplateMealEntry>(mealEl.GetRawText(), JsonReadOptions);
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                throw new InvalidOperationException("Failed to deserialize meal entry from template JSON.", ex);
+            }
 
-            Guid newMealId = await _plans.AddPlannedMealAsync(targetPlanId, userId, recipeId,
-                startDate.AddDays(dayOffset).ToDateTime(TimeOnly.MinValue), mealType, (int)servings, ct);
+            if (meal is null)
+            {
+                throw new InvalidOperationException("Deserialized meal entry from template JSON was null.");
+            }
 
-            if (mealEl.TryGetProperty("courses", out System.Text.Json.JsonElement coursesEl))
+            string mealType = string.IsNullOrWhiteSpace(meal.MealType) ? "Dinner" : meal.MealType;
+            Guid newMealId = await _plans.AddPlannedMealAsync(targetPlanId, userId, meal.RecipeId,
+                startDate.AddDays(meal.DayOffset).ToDateTime(TimeOnly.MinValue), mealType, meal.Servings, ct);
+
+            if (meal.Courses is { Count: > 0 })
             {
                 int sort = 0;
-                foreach (System.Text.Json.JsonElement c in coursesEl.EnumerateArray())
+                foreach (TemplateCourseEntry c in meal.Courses)
                 {
-                    await _courses.AddCourseAsync(newMealId,
-                        c.GetProperty("courseType").GetString() ?? "Main",
-                        c.TryGetProperty("recipeId", out System.Text.Json.JsonElement crid)
-                            && crid.ValueKind != System.Text.Json.JsonValueKind.Null ? crid.GetGuid() : null,
-                        c.TryGetProperty("customName", out System.Text.Json.JsonElement cn) ? cn.GetString() : null,
-                        c.GetProperty("servings").GetDecimal(), sort++, ct);
+                    string courseType = string.IsNullOrWhiteSpace(c.CourseType) ? "Main" : c.CourseType;
+                    await _courses.AddCourseAsync(newMealId, courseType, c.RecipeId,
+                        c.CustomName, c.Servings, sort++, ct);
                 }
             }
         }
@@ -137,3 +166,4 @@ internal sealed record TemplateCourseEntry
     public decimal Servings { get; init; }
     public int SortOrder { get; init; }
 }
+
