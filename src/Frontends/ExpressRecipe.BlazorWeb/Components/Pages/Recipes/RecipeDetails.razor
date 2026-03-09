@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Models.Product
 @using System.Security.Claims
 @using ExpressRecipe.BlazorWeb.Services
 @inject IRecipeApiClient RecipeApi
@@ -118,6 +119,12 @@
                     <button class="btn btn-outline" @onclick="AddToMealPlan">
                         📅 Add to Meal Plan
                     </button>
+                    <a href="/api/recipes/@RecipeId/print?format=pdf" target="_blank" class="btn btn-outline">
+                        🖨️ Print PDF
+                    </a>
+                    <button class="btn btn-outline" @onclick="() => _showShareModal = true">
+                        🔗 Share
+                    </button>
                 </div>
 
                 @if (!string.IsNullOrEmpty(_recipe.Source))
@@ -175,6 +182,9 @@
                                 <li class="ingredient-item @(ingredient.IsOptional ? "optional" : "")">
                                     <span class="ingredient-quantity">@ingredient.Quantity @ingredient.Unit</span>
                                     <span class="ingredient-name">@ingredient.Name</span>
+                                    <button class="btn btn-sm btn-link p-0 ms-1 text-muted"
+                                            title="Find substitutes"
+                                            @onclick="() => ShowSubstitutes(ingredient.Id, ingredient.Name)">≡</button>
                                     @if (ingredient.IsOptional)
                                     {
                                         <span class="ingredient-optional-label">(optional)</span>
@@ -197,6 +207,9 @@
                             <li class="ingredient-item @(ingredient.IsOptional ? "optional" : "")">
                                 <span class="ingredient-quantity">@ingredient.Quantity @ingredient.Unit</span>
                                 <span class="ingredient-name">@ingredient.Name</span>
+                                <button class="btn btn-sm btn-link p-0 ms-1 text-muted"
+                                        title="Find substitutes"
+                                        @onclick="() => ShowSubstitutes(ingredient.Id, ingredient.Name)">≡</button>
                                 @if (ingredient.IsOptional)
                                 {
                                     <span class="ingredient-optional-label">(optional)</span>
@@ -301,6 +314,18 @@
         </div>
     }
 </div>
+
+<SubstituteSheet IngredientId="_substituteIngredientId"
+                 IngredientName="@_substituteIngredientName"
+                 RecipeId="RecipeId"
+                 IsOpen="_showSubstituteSheet"
+                 OnClose="() => _showSubstituteSheet = false" />
+
+<RecipeShareModal RecipeId="RecipeId"
+                  RecipeTitle="@(_recipe?.Title ?? string.Empty)"
+                  IsOpen="_showShareModal"
+                  OnClose="() => _showShareModal = false" />
+
     </Authorized>
     <NotAuthorized>
         <div class="unauthorized-container">
@@ -320,6 +345,21 @@
     private bool _isOwner = false;
     private string? _errorMessage;
     private Guid _currentUserId;
+
+    // Substitute sheet state
+    private bool _showSubstituteSheet;
+    private Guid? _substituteIngredientId;
+    private string _substituteIngredientName = string.Empty;
+
+    // Share modal state
+    private bool _showShareModal;
+
+    private void ShowSubstitutes(Guid ingredientId, string ingredientName)
+    {
+        _substituteIngredientId = ingredientId;
+        _substituteIngredientName = ingredientName;
+        _showSubstituteSheet = true;
+    }
 
     protected override async Task OnInitializedAsync()
     {

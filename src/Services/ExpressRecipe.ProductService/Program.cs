@@ -77,6 +77,11 @@ builder.Services.AddScoped<IProductStagingRepository>(sp =>
     new ProductStagingRepository(connectionString, sp.GetRequiredService<ILogger<ProductStagingRepository>>()));
 builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(connectionString));
 
+// Register food catalog repository and substitution service
+builder.Services.AddScoped<IFoodCatalogRepository>(sp => new FoodCatalogRepository(connectionString));
+builder.Services.AddScoped<IFoodSubstitutionService, FoodSubstitutionService>();
+builder.Services.AddScoped<CatalogSeedService>();
+
 // Register OpenFoodFacts import service
 builder.Services.AddHttpClient<OpenFoodFactsImportService>();
 builder.Services.AddScoped<OpenFoodFactsImportService>(sp => 
@@ -161,6 +166,13 @@ if (!Directory.Exists(migrationsPath))
 }
 var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
 await app.RunMigrationsAsync(connectionString, migrations);
+
+// Seed food group catalog data if the table is empty
+using (IServiceScope seedScope = app.Services.CreateScope())
+{
+    CatalogSeedService seedService = seedScope.ServiceProvider.GetRequiredService<CatalogSeedService>();
+    await seedService.SeedIfEmptyAsync();
+}
 
 // Configure the HTTP request pipeline
 app.MapDefaultEndpoints();

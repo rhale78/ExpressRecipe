@@ -787,4 +787,192 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
 
         return recipes.FirstOrDefault();
     }
+
+    // -----------------------------------------------------------------------
+    // Share Tokens
+    // -----------------------------------------------------------------------
+
+    public async Task<string> GenerateShareTokenAsync(Guid recipeId, Guid createdBy, int expiryDays, CancellationToken ct = default)
+    {
+        string token = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48))
+            .Replace("+", "-").Replace("/", "_").Replace("=", "")[..64];
+
+        const string sql = @"
+            INSERT INTO RecipeShareToken (RecipeId, Token, CreatedBy, ExpiresAt)
+            VALUES (@RecipeId, @Token, @CreatedBy, @ExpiresAt)";
+
+        await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@RecipeId", recipeId),
+            new SqlParameter("@Token", token),
+            new SqlParameter("@CreatedBy", createdBy),
+            new SqlParameter("@ExpiresAt", DateTime.UtcNow.AddDays(expiryDays)));
+
+        return token;
+    }
+
+    public async Task<RecipeShareTokenDto?> GetByShareTokenAsync(string token, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT
+                st.Id, st.RecipeId, st.Token, st.CreatedBy, st.CreatedAt,
+                st.ExpiresAt, st.ViewCount, st.MaxViews,
+                r.Id AS R_Id, r.Name AS R_Name, r.Description AS R_Description,
+                r.Category AS R_Category, r.Cuisine AS R_Cuisine,
+                r.DifficultyLevel AS R_DifficultyLevel,
+                r.PrepTimeMinutes AS R_PrepTimeMinutes,
+                r.CookTimeMinutes AS R_CookTimeMinutes,
+                r.TotalTimeMinutes AS R_TotalTimeMinutes,
+                r.Servings AS R_Servings,
+                r.ImageUrl AS R_ImageUrl,
+                r.AuthorId AS R_AuthorId,
+                r.IsPublic AS R_IsPublic,
+                r.IsApproved AS R_IsApproved,
+                r.CreatedAt AS R_CreatedAt
+            FROM RecipeShareToken st
+            INNER JOIN Recipe r ON r.Id = st.RecipeId AND r.IsDeleted = 0
+            WHERE st.Token = @Token
+              AND st.ExpiresAt > GETUTCDATE()
+              AND (st.MaxViews IS NULL OR st.ViewCount < st.MaxViews)";
+
+        List<RecipeShareTokenDto> results = await ExecuteReaderAsync(sql, reader =>
+        {
+            int viewCount = reader.IsDBNull(reader.GetOrdinal("ViewCount")) ? 0 : reader.GetInt32(reader.GetOrdinal("ViewCount"));
+            int? maxViews = reader.IsDBNull(reader.GetOrdinal("MaxViews")) ? null : reader.GetInt32(reader.GetOrdinal("MaxViews"));
+
+            RecipeDto recipe = new RecipeDto
+            {
+                Id = reader.GetGuid(reader.GetOrdinal("R_Id")),
+                Name = reader.GetString(reader.GetOrdinal("R_Name")),
+                Description = reader.IsDBNull(reader.GetOrdinal("R_Description")) ? null : reader.GetString(reader.GetOrdinal("R_Description")),
+                Category = reader.IsDBNull(reader.GetOrdinal("R_Category")) ? null : reader.GetString(reader.GetOrdinal("R_Category")),
+                Cuisine = reader.IsDBNull(reader.GetOrdinal("R_Cuisine")) ? null : reader.GetString(reader.GetOrdinal("R_Cuisine")),
+                DifficultyLevel = reader.IsDBNull(reader.GetOrdinal("R_DifficultyLevel")) ? null : reader.GetString(reader.GetOrdinal("R_DifficultyLevel")),
+                PrepTimeMinutes = reader.IsDBNull(reader.GetOrdinal("R_PrepTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("R_PrepTimeMinutes")),
+                CookTimeMinutes = reader.IsDBNull(reader.GetOrdinal("R_CookTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("R_CookTimeMinutes")),
+                TotalTimeMinutes = reader.IsDBNull(reader.GetOrdinal("R_TotalTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("R_TotalTimeMinutes")),
+                Servings = reader.IsDBNull(reader.GetOrdinal("R_Servings")) ? null : reader.GetInt32(reader.GetOrdinal("R_Servings")),
+                ImageUrl = reader.IsDBNull(reader.GetOrdinal("R_ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("R_ImageUrl")),
+                AuthorId = reader.GetGuid(reader.GetOrdinal("R_AuthorId")),
+                IsPublic = reader.GetBoolean(reader.GetOrdinal("R_IsPublic")),
+                IsApproved = reader.GetBoolean(reader.GetOrdinal("R_IsApproved")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("R_CreatedAt"))
+            };
+
+            return new RecipeShareTokenDto
+            {
+                Id = reader.GetGuid(reader.GetOrdinal("Id")),
+                RecipeId = reader.GetGuid(reader.GetOrdinal("RecipeId")),
+                Token = reader.GetString(reader.GetOrdinal("Token")),
+                CreatedBy = reader.GetGuid(reader.GetOrdinal("CreatedBy")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                ExpiresAt = reader.GetDateTime(reader.GetOrdinal("ExpiresAt")),
+                ViewCount = viewCount,
+                MaxViews = maxViews,
+                Recipe = recipe
+            };
+        }, new SqlParameter("@Token", token));
+
+        return results.FirstOrDefault();
+    }
+
+    public async Task IncrementTokenViewCountAsync(string token, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE RecipeShareToken
+            SET ViewCount = ViewCount + 1
+            WHERE Token = @Token";
+
+        await ExecuteNonQueryAsync(sql, new SqlParameter("@Token", token));
+    }
+
+    public async Task<bool> ExpireShareTokenAsync(string token, Guid requestedBy, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE RecipeShareToken
+            SET ExpiresAt = GETUTCDATE()
+            WHERE Token = @Token AND CreatedBy = @RequestedBy";
+
+        int affected = await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@Token", token),
+            new SqlParameter("@RequestedBy", requestedBy));
+
+        return affected > 0;
+    }
+
+    // -----------------------------------------------------------------------
+    // Household Favorites
+    // -----------------------------------------------------------------------
+
+    public async Task SetFavoriteHouseholdShareAsync(Guid favoriteId, Guid userId, bool shared, Guid? householdId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE UserFavoriteRecipe
+            SET IsSharedWithHousehold = @Shared,
+                HouseholdId = @HouseholdId
+            WHERE Id = @FavoriteId AND UserId = @UserId";
+
+        await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@FavoriteId", favoriteId),
+            new SqlParameter("@UserId", userId),
+            new SqlParameter("@Shared", shared),
+            new SqlParameter("@HouseholdId", (object?)householdId ?? DBNull.Value));
+    }
+
+    public async Task<List<RecipeDto>> GetHouseholdSharedFavoritesAsync(Guid householdId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT DISTINCT
+                r.Id, r.Name, r.Description, r.Category, r.Cuisine,
+                r.DifficultyLevel, r.PrepTimeMinutes, r.CookTimeMinutes,
+                r.TotalTimeMinutes, r.Servings, r.ImageUrl, r.VideoUrl,
+                r.Instructions, r.Notes, r.IsPublic, r.IsApproved,
+                r.SourceUrl, r.AuthorId, r.CreatedAt, r.UpdatedAt
+            FROM UserFavoriteRecipe uf
+            INNER JOIN Recipe r ON r.Id = uf.RecipeId AND r.IsDeleted = 0
+            WHERE uf.HouseholdId = @HouseholdId
+              AND uf.IsSharedWithHousehold = 1
+            ORDER BY r.Name";
+
+        return await ExecuteReaderAsync(sql, reader =>
+        {
+            int descOrd = reader.GetOrdinal("Description");
+            int catOrd = reader.GetOrdinal("Category");
+            int cuisOrd = reader.GetOrdinal("Cuisine");
+            int diffOrd = reader.GetOrdinal("DifficultyLevel");
+            int prepOrd = reader.GetOrdinal("PrepTimeMinutes");
+            int cookOrd = reader.GetOrdinal("CookTimeMinutes");
+            int totalOrd = reader.GetOrdinal("TotalTimeMinutes");
+            int servOrd = reader.GetOrdinal("Servings");
+            int imgOrd = reader.GetOrdinal("ImageUrl");
+            int vidOrd = reader.GetOrdinal("VideoUrl");
+            int instrOrd = reader.GetOrdinal("Instructions");
+            int notesOrd = reader.GetOrdinal("Notes");
+            int srcOrd = reader.GetOrdinal("SourceUrl");
+            int updOrd = reader.GetOrdinal("UpdatedAt");
+
+            return new RecipeDto
+            {
+                Id = reader.GetGuid(reader.GetOrdinal("Id")),
+                Name = reader.GetString(reader.GetOrdinal("Name")),
+                Description = reader.IsDBNull(descOrd) ? null : reader.GetString(descOrd),
+                Category = reader.IsDBNull(catOrd) ? null : reader.GetString(catOrd),
+                Cuisine = reader.IsDBNull(cuisOrd) ? null : reader.GetString(cuisOrd),
+                DifficultyLevel = reader.IsDBNull(diffOrd) ? null : reader.GetString(diffOrd),
+                PrepTimeMinutes = reader.IsDBNull(prepOrd) ? null : reader.GetInt32(prepOrd),
+                CookTimeMinutes = reader.IsDBNull(cookOrd) ? null : reader.GetInt32(cookOrd),
+                TotalTimeMinutes = reader.IsDBNull(totalOrd) ? null : reader.GetInt32(totalOrd),
+                Servings = reader.IsDBNull(servOrd) ? null : reader.GetInt32(servOrd),
+                ImageUrl = reader.IsDBNull(imgOrd) ? null : reader.GetString(imgOrd),
+                VideoUrl = reader.IsDBNull(vidOrd) ? null : reader.GetString(vidOrd),
+                Instructions = reader.IsDBNull(instrOrd) ? null : reader.GetString(instrOrd),
+                Notes = reader.IsDBNull(notesOrd) ? null : reader.GetString(notesOrd),
+                IsPublic = reader.GetBoolean(reader.GetOrdinal("IsPublic")),
+                IsApproved = reader.GetBoolean(reader.GetOrdinal("IsApproved")),
+                SourceUrl = reader.IsDBNull(srcOrd) ? null : reader.GetString(srcOrd),
+                AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                UpdatedAt = reader.IsDBNull(updOrd) ? null : reader.GetDateTime(updOrd)
+            };
+        }, new SqlParameter("@HouseholdId", householdId));
+    }
 }
