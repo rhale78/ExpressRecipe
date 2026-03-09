@@ -163,7 +163,7 @@ public class PatternAnalysisWorker : BackgroundService
         double daysSinceLast = (DateTime.UtcNow - lastPurchased).TotalDays;
 
         bool isAbandoned = false;
-        if (purchases.Count >= 1 && avgDays.HasValue)
+        if (purchases.Count > 1 && avgDays.HasValue)
         {
             isAbandoned = daysSinceLast > Math.Max(avgDays.Value * 3.0, 90);
         }

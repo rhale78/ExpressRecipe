@@ -51,13 +51,17 @@ public class LowStockMonitorWorker : BackgroundService
 
         _logger.LogInformation("Processing low stock predictions...");
 
+        // Read configuration once outside the per-user loop
+        int daysAhead = _configuration.GetValue<int>("InventoryIntelligence:LowStockDaysAhead", 3);
+        bool autoAdd = _configuration.GetValue<bool>("InventoryIntelligence:AutoAddLowStockToList", false);
+
         List<Guid> userIds = await repository.GetDistinctUserIdsWithPurchaseHistoryAsync(cancellationToken);
 
         foreach (Guid userId in userIds)
         {
             try
             {
-                await ProcessUserLowStockAsync(userId, repository, httpFactory, cancellationToken);
+                await ProcessUserLowStockAsync(userId, daysAhead, autoAdd, repository, httpFactory, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -76,13 +80,12 @@ public class LowStockMonitorWorker : BackgroundService
 
     private async Task ProcessUserLowStockAsync(
         Guid userId,
+        int daysAhead,
+        bool autoAdd,
         IInventoryRepository repository,
         IHttpClientFactory httpFactory,
         CancellationToken cancellationToken)
     {
-        int daysAhead = _configuration.GetValue<int>("InventoryIntelligence:LowStockDaysAhead", 3);
-        bool autoAdd = _configuration.GetValue<bool>("InventoryIntelligence:AutoAddLowStockToList", false);
-
         List<ProductConsumptionPatternDto> lowStockItems = await repository.GetLowStockByPredictionAsync(userId, daysAhead, cancellationToken);
 
         foreach (ProductConsumptionPatternDto pattern in lowStockItems)

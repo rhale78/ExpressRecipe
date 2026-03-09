@@ -66,7 +66,8 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
 
             foreach (RecipeIngredientResponse ingredient in ingredients)
             {
-                // Scale quantity by servings ratio (recipe definition is for 1 serving by default)
+                // Scale quantity proportionally. The ingredient.Quantity from RecipeService
+                // is defined per serving; multiply by the number of servings cooked.
                 decimal scaledQuantity = ingredient.Quantity * evt.Servings;
 
                 // Match inventory: ProductId → IngredientId → name
@@ -183,7 +184,10 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
             }
         }
 
-        // Priority 2: IngredientId match (stored as ProductId for ingredients)
+        // Priority 2: IngredientId match — InventoryItemDto does not currently project IngredientId,
+        // so this falls through to name matching. When IngredientId is added to InventoryItemDto
+        // this should be implemented here before the name-based fallback.
+
         // Priority 3: Name match (case-insensitive)
         return inventory.FirstOrDefault(i =>
             string.Equals(
