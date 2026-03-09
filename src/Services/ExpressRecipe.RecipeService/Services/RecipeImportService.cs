@@ -1,6 +1,7 @@
 using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.Parsers;
 using ExpressRecipe.Shared.DTOs.Recipe;
+using ExpressRecipe.Shared.Units;
 
 namespace ExpressRecipe.RecipeService.Services;
 
@@ -15,6 +16,7 @@ public class RecipeImportService
     private readonly NutritionExtractionService _nutritionService;
     private readonly AllergenDetectionService _allergenService;
     private readonly ImageDownloadService _imageService;
+    private readonly IUnitConversionService _unitConversionService;
     private readonly ILogger<RecipeImportService> _logger;
 
     public RecipeImportService(
@@ -23,6 +25,7 @@ public class RecipeImportService
         NutritionExtractionService nutritionService,
         AllergenDetectionService allergenService,
         ImageDownloadService imageService,
+        IUnitConversionService unitConversionService,
         ILogger<RecipeImportService> logger)
     {
         _importRepository = importRepository;
@@ -30,6 +33,7 @@ public class RecipeImportService
         _nutritionService = nutritionService;
         _allergenService = allergenService;
         _imageService = imageService;
+        _unitConversionService = unitConversionService;
         _parserFactory = new RecipeParserFactory();
         _logger = logger;
     }
@@ -150,6 +154,33 @@ public class RecipeImportService
                             IsOptional = i.IsOptional,
                             SubstituteNotes = i.SubstituteNotes
                         }).ToList();
+
+                        // Normalize each ingredient to canonical units
+                        foreach (RecipeIngredientDto ing in ingredients)
+                        {
+                            string rawUnit = $"{ing.Quantity?.ToString("G") ?? ""} {ing.Unit}".Trim();
+                            (decimal amount, UnitCode unitCode) = UnitParser.Parse(rawUnit.Length > 0 ? rawUnit : ing.Unit);
+                            if (unitCode == UnitCode.Unknown)
+                            {
+                                ing.CanonicalAmount = null;
+                                ing.CanonicalUnit = null;
+                                continue;
+                            }
+
+                            ConversionResult convResult = await _unitConversionService.ToCanonicalAsync(
+                                amount, unitCode, null, ing.IngredientName);
+
+                            if (convResult.Success)
+                            {
+                                ing.CanonicalAmount = convResult.Value;
+                                ing.CanonicalUnit = convResult.Unit?.ToString()?.ToLowerInvariant();
+                            }
+                            else if (convResult.FailureReason == ConversionFailureReason.Uncountable)
+                            {
+                                ing.CanonicalAmount = null;
+                                ing.CanonicalUnit = null;
+                            }
+                        }
 
                         await _recipeRepository.AddRecipeIngredientsAsync(recipeId, ingredients, userId);
                         _logger.LogDebug("Added {Count} ingredients to recipe {RecipeId}", ingredients.Count, recipeId);

@@ -6,6 +6,7 @@ using ExpressRecipe.ProductService.Saga;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
+using ExpressRecipe.Shared.Units;
 using ExpressRecipe.Client.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -93,6 +94,23 @@ builder.Services.AddScoped<OpenFoodFactsImportService>(sp =>
     return new OpenFoodFactsImportService(httpClient, productRepo, stagingRepo, imageRepo, logger, ingredientClient, configuration);
 });
 builder.Services.AddScoped<USDAFoodDataImportService>();
+
+// Register unit conversion services
+builder.Services.AddScoped<IngredientDensityResolver>(sp => new IngredientDensityResolver(
+    connectionString,
+    sp.GetRequiredService<HybridCacheService>(),
+    sp.GetRequiredService<ILogger<IngredientDensityResolver>>()));
+builder.Services.AddScoped<IIngredientDensityResolver>(sp =>
+    sp.GetRequiredService<IngredientDensityResolver>());
+builder.Services.AddScoped<IUnitConversionService>(sp =>
+    new UnitConversionService(sp.GetRequiredService<IIngredientDensityResolver>()));
+
+// Register USDA portion import service and hosted worker
+builder.Services.AddScoped<UsdaPortionImportService>(sp => new UsdaPortionImportService(
+    connectionString,
+    sp.GetRequiredService<IConfiguration>(),
+    sp.GetRequiredService<ILogger<UsdaPortionImportService>>()));
+builder.Services.AddHostedService<UsdaPortionImportWorker>();
 
 // Register background workers
 builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductDataImportWorker>();

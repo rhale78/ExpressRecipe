@@ -57,6 +57,8 @@ public class RecipeIngredientDto
     public string? SubstituteNotes { get; set; }
     public string? GroupName { get; set; }
     public string? OriginalText { get; set; }
+    public decimal? CanonicalAmount { get; set; }
+    public string? CanonicalUnit { get; set; }
 }
 
 public class RecipeNutritionDto
