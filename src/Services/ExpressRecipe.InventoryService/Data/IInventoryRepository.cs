@@ -71,6 +71,11 @@ public interface IInventoryRepository
     // Reports
     Task<InventoryReportDto> GetInventoryReportAsync(Guid userId, Guid? householdId);
     Task<List<InventoryItemDto>> GetItemsAboutToExpireAsync(Guid userId, int daysAhead = 3);
+
+    // Garden & Long-Term Storage
+    Task<Guid> CreateFromGardenHarvestAsync(Guid userId, Guid householdId, string plantName, decimal quantity, string unit, int freshnessDays, CancellationToken ct = default);
+    Task<Guid> AddItemAsync(AddItemRequest request, CancellationToken ct = default);
+    Task<List<InventoryItemDto>> GetItemsAsync(Guid householdId, bool isLongTermOnly = false, string? storageMethod = null, CancellationToken ct = default);
 }
 
 public class HouseholdDto
@@ -159,6 +164,13 @@ public class InventoryItemDto
     public Guid? AddedBy { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    // Long-term storage fields (added by migration 006)
+    public string? StorageMethod { get; set; }
+    public bool IsLongTermStorage { get; set; }
+    public string? StorageCapacityUnit { get; set; }
+    public string? BatchLabel { get; set; }
+    public string? Source { get; set; }
+    public string? Temperature { get; set; }
 }
 
 public class ExpirationAlertDto
@@ -248,4 +260,21 @@ public class UsagePredictionDto
     public decimal? SuggestedQuantity { get; set; }
     public int BasedOnDays { get; set; }
     public DateTime CalculatedAt { get; set; }
+}
+
+public class AddItemRequest
+{
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string? Name { get; set; }
+    public decimal Quantity { get; set; }
+    public string? Unit { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? StorageMethod { get; set; }
+    public bool IsLongTermStorage { get; set; }
+    public string? StorageCapacityUnit { get; set; }
+    public string? BatchLabel { get; set; }
+    public string? Source { get; set; }
+    public string? Temperature { get; set; }
 }

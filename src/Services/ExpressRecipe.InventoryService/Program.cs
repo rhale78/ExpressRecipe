@@ -40,6 +40,18 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 builder.Services.AddScoped<IInventoryRepository>(sp =>
     new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
 
+builder.Services.AddScoped<IGardenRepository>(_ => new GardenRepository(connectionString));
+
+// Register seasonal produce service (singleton - pure in-memory calendar)
+builder.Services.AddSingleton<ExpressRecipe.MealPlanningService.Services.ISeasonalProduceService,
+    ExpressRecipe.MealPlanningService.Services.SeasonalProduceService>();
+
+// Register HTTP client factory for worker notifications
+builder.Services.AddHttpClient("NotificationService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:NotificationService"] ?? "http://notificationservice");
+});
+
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
@@ -57,6 +69,7 @@ builder.Services.AddSingleton<EventPublisher>();
 
 // Register background workers
 builder.Services.AddHostedService<ExpirationAlertWorker>();
+builder.Services.AddHostedService<GardenRipeCheckWorker>();
 
 // Add controllers
 builder.Services.AddControllers();
