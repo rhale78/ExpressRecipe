@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.ShoppingService.Data;
+using ExpressRecipe.ShoppingService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
 
@@ -33,6 +34,27 @@ var connectionString = builder.Configuration.GetConnectionString("shoppingdb")
 // Register repositories
 builder.Services.AddScoped<IShoppingRepository>(sp =>
     new ShoppingRepository(connectionString, sp.GetRequiredService<ILogger<ShoppingRepository>>()));
+
+// Register HTTP clients for external service integration
+builder.Services.AddHttpClient("PriceService", client =>
+{
+    string baseUrl = builder.Configuration["Services:PriceService"] ?? "http://priceservice";
+    client.BaseAddress = new Uri(baseUrl);
+});
+builder.Services.AddHttpClient("InventoryService", client =>
+{
+    string baseUrl = builder.Configuration["Services:InventoryService"] ?? "http://inventoryservice";
+    client.BaseAddress = new Uri(baseUrl);
+});
+builder.Services.AddHttpClient("RecipeService", client =>
+{
+    string baseUrl = builder.Configuration["Services:RecipeService"] ?? "http://recipeservice";
+    client.BaseAddress = new Uri(baseUrl);
+});
+
+// Register optimization and session services
+builder.Services.AddScoped<IShoppingOptimizationService, ShoppingOptimizationService>();
+builder.Services.AddScoped<IShoppingSessionService, ShoppingSessionService>();
 
 // Add controllers
 builder.Services.AddControllers();
