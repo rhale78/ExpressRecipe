@@ -88,6 +88,9 @@ public class RecipeHandoffMapperTests
     [InlineData("1", 1.0)]
     [InlineData("0.5", 0.5)]
     [InlineData("3", 3.0)]
+    [InlineData("\u00BD", 0.5)]       // ½
+    [InlineData("\u00BE", 0.75)]      // ¾
+    [InlineData("&frac34;", 0.75)]    // HTML entity
     public void ParseQuantity_VariousFormats(string input, double expected)
         => RecipeHandoffMapper.ParseQuantity(input).Should().BeApproximately((decimal)expected, 0.001m);
 

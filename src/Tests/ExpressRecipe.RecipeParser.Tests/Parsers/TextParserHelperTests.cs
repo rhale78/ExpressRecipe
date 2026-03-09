@@ -69,4 +69,18 @@ public class TextParserHelperTests
         lines[0].Should().Be("line1");
         lines[2].Should().Be("line3");
     }
+
+    [Theory]
+    [InlineData("1\u00BD cups butter", "1 1/2", "cups", "butter")]   // 1½ cups butter
+    [InlineData("\u00BC tsp salt", "1/4", "tsp", "salt")]             // ¼ tsp salt
+    [InlineData("\u00BE cup milk", "3/4", "cup", "milk")]             // ¾ cup milk
+    [InlineData("1 \u00BD cups flour", "1 1/2", "cups", "flour")]     // 1 ½ cups flour
+    public void ParseIngredientLine_UnicodeFractions_ReturnsNormalizedQuantity(
+        string line, string expectedQty, string expectedUnit, string expectedName)
+    {
+        var (qty, unit, name) = TextParserHelper.ParseIngredientLine(line);
+        qty.Should().Be(expectedQty);
+        unit.Should().Be(expectedUnit);
+        name.Should().Be(expectedName);
+    }
 }

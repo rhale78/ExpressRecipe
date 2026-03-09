@@ -1,0 +1,117 @@
+@page "/settings/display"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.User
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IUserSettingsApiClient UserApi
+@inject NavigationManager Navigation
+
+<PageTitle>Display Settings - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo("/settings"))">
+                    ← Back to Settings
+                </button>
+                <h1>Display Settings</h1>
+            </div>
+
+            @if (_loading)
+            {
+                <p>Loading...</p>
+            }
+            else
+            {
+                @foreach (UserSettingsDto group in _groups)
+                {
+                    <section class="settings-section">
+                        <h3>@group.Schema.Label</h3>
+                        @foreach (SettingDefinition setting in group.Schema.Settings)
+                        {
+                            @* Skip settings with unmet dependsOn *@
+                            @if (setting.DependsOn is not null)
+                            {
+                                string? depVal = group.Values.TryGetValue(setting.DependsOn.Key, out object? dv) ? dv?.ToString() : null;
+                                if (depVal != setting.DependsOn.Value) { continue; }
+                            }
+                            <div class="setting-row">
+                                <label>@setting.Label</label>
+                                @if (setting.Type == "select" && setting.Options is not null)
+                                {
+                                    string cur = group.Values.TryGetValue(setting.Key, out object? cv) ? cv?.ToString() ?? "" : (setting.Default ?? "");
+                                    <select value="@cur" @onchange="e => OnChanged(group.Schema.Group, setting.Key, e.Value)">
+                                        @foreach (SettingOption opt in setting.Options)
+                                        {
+                                            <option value="@opt.Value" selected="@(opt.Value == cur)">@opt.Label</option>
+                                        }
+                                    </select>
+                                }
+                                else if (setting.Type == "toggle")
+                                {
+                                    bool on = group.Values.TryGetValue(setting.Key, out object? tv) && bool.TryParse(tv?.ToString(), out bool b) && b;
+                                    <input type="checkbox" checked="@on" @onchange="e => OnChanged(group.Schema.Group, setting.Key, e.Value)" />
+                                }
+                            </div>
+                        }
+                    </section>
+                }
+
+                @if (_saveError is not null)
+                {
+                    <div class="alert alert-danger">@_saveError</div>
+                }
+                @if (_saveSuccess)
+                {
+                    <div class="alert alert-success">Settings saved successfully.</div>
+                }
+
+                <button class="btn btn-primary" @onclick="SaveAll">Save Settings</button>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <p>Please <a href="/login">sign in</a> to manage your settings.</p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<UserSettingsDto> _groups = [];
+    private bool _loading = true;
+    private string? _saveError;
+    private bool _saveSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _groups = await UserApi.GetUserSettingsAsync();
+        _loading = false;
+    }
+
+    private void OnChanged(string group, string key, object? value)
+    {
+        UserSettingsDto? groupDto = _groups.FirstOrDefault(g => g.Schema.Group == group);
+        if (groupDto is not null)
+        {
+            groupDto.Values[key] = value?.ToString();
+        }
+        _saveSuccess = false;
+        _saveError = null;
+    }
+
+    private async Task SaveAll()
+    {
+        _saveError = null;
+        _saveSuccess = false;
+        foreach (UserSettingsDto group in _groups)
+        {
+            bool ok = await UserApi.UpdateUserSettingsAsync(group.Schema.Group, group.Values);
+            if (!ok)
+            {
+                _saveError = $"Failed to save settings for '{group.Schema.Label}'.";
+                return;
+            }
+        }
+        _saveSuccess = true;
+    }
+}
