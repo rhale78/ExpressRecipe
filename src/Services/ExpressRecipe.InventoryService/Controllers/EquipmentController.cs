@@ -17,8 +17,12 @@ public sealed class EquipmentController : ControllerBase
     public EquipmentController(IEquipmentRepository equipment, IEquipmentCapabilityResolver resolver)
     { _equipment = equipment; _resolver = resolver; }
 
-    private Guid GetHouseholdId()
-        => Guid.Parse(User.FindFirstValue("household_id") ?? Guid.Empty.ToString());
+    private Guid? GetHouseholdId()
+    {
+        string? claim = User.FindFirstValue("household_id");
+        if (claim is null || !Guid.TryParse(claim, out Guid id)) { return null; }
+        return id;
+    }
 
     [HttpGet("templates")]
     public async Task<IActionResult> GetTemplates(CancellationToken ct)
@@ -27,13 +31,20 @@ public sealed class EquipmentController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetInstances(
         [FromQuery] Guid? addressId, [FromQuery] bool activeOnly = true, CancellationToken ct = default)
-        => Ok(await _equipment.GetInstancesAsync(GetHouseholdId(), addressId, activeOnly, ct));
+    {
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) { return Unauthorized(); }
+        return Ok(await _equipment.GetInstancesAsync(householdId.Value, addressId, activeOnly, ct));
+    }
 
     [HttpPost]
     public async Task<IActionResult> AddInstance(
         [FromBody] AddEquipmentRequest req, CancellationToken ct)
     {
-        Guid id = await _equipment.AddInstanceAsync(GetHouseholdId(), req.AddressId, req.TemplateId,
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) { return Unauthorized(); }
+
+        Guid id = await _equipment.AddInstanceAsync(householdId.Value, req.AddressId, req.TemplateId,
             req.CustomName, req.Brand, req.ModelNumber, req.SizeValue, req.SizeUnit, req.Notes, ct);
 
         // If template selected and no capabilities provided, copy template defaults
@@ -53,20 +64,42 @@ public sealed class EquipmentController : ControllerBase
     [HttpPut("{id}/capabilities")]
     public async Task<IActionResult> SetCapabilities(Guid id,
         [FromBody] SetCapabilitiesRequest req, CancellationToken ct)
-    { await _equipment.SetCapabilitiesAsync(id, req.Capabilities, ct); return NoContent(); }
+    {
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) { return Unauthorized(); }
+        EquipmentInstanceDto? instance = await _equipment.GetInstanceByIdAsync(id, ct);
+        if (instance is null) { return NotFound(); }
+        if (instance.HouseholdId != householdId.Value) { return Forbid(); }
+        await _equipment.SetCapabilitiesAsync(id, req.Capabilities, ct);
+        return NoContent();
+    }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Deactivate(Guid id, CancellationToken ct)
-    { await _equipment.UpdateInstanceAsync(id, null, null, null, null, null, null, false, ct); return NoContent(); }
+    {
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) { return Unauthorized(); }
+        EquipmentInstanceDto? instance = await _equipment.GetInstanceByIdAsync(id, ct);
+        if (instance is null) { return NotFound(); }
+        if (instance.HouseholdId != householdId.Value) { return Forbid(); }
+        await _equipment.UpdateInstanceAsync(id, null, null, null, null, null, null, false, ct);
+        return NoContent();
+    }
 
     [HttpGet("resolve/{capability}")]
     public async Task<IActionResult> Resolve(string capability, CancellationToken ct)
-        => Ok(await _resolver.ResolveAsync(GetHouseholdId(), capability, ct));
+    {
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) { return Unauthorized(); }
+        return Ok(await _resolver.ResolveAsync(householdId.Value, capability, ct));
+    }
 
     [HttpGet("substitute")]
     public async Task<IActionResult> Substitute([FromQuery] string equipmentName, CancellationToken ct)
     {
-        string? message = await _resolver.GetSubstituteMessageAsync(GetHouseholdId(), equipmentName, ct);
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) { return Unauthorized(); }
+        string? message = await _resolver.GetSubstituteMessageAsync(householdId.Value, equipmentName, ct);
         return Ok(new { message, found = message is not null });
     }
 }

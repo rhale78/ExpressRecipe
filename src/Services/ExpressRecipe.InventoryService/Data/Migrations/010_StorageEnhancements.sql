@@ -5,6 +5,8 @@
 ALTER TABLE StorageLocation ADD StorageType         NVARCHAR(50) NULL;
     -- Pantry|Freezer|Refrigerator|RootCellar|Cabinet|Counter|Basement|Garage|Cellar|ColdRoom|Other
 ALTER TABLE StorageLocation ADD EquipmentInstanceId UNIQUEIDENTIFIER NULL;
+ALTER TABLE StorageLocation ADD CONSTRAINT FK_StorageLocation_EquipmentInstance
+    FOREIGN KEY (EquipmentInstanceId) REFERENCES EquipmentInstance(Id) ON DELETE SET NULL;
 ALTER TABLE StorageLocation ADD OutageActive        BIT NOT NULL DEFAULT 0;
 ALTER TABLE StorageLocation ADD OutageStartedAt     DATETIME2 NULL;
 ALTER TABLE StorageLocation ADD OutageType          NVARCHAR(50) NULL;

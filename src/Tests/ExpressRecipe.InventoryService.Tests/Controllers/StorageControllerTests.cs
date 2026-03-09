@@ -38,14 +38,20 @@ public class StorageControllerTests
         return new ControllerContext { HttpContext = httpContext };
     }
 
-    private static StorageLocationExtendedDto CreateLocation(
+    private static ControllerContext CreateUnauthenticatedContext()
+    {
+        DefaultHttpContext httpContext = new() { User = new ClaimsPrincipal() };
+        return new ControllerContext { HttpContext = httpContext };
+    }
+
+    private StorageLocationExtendedDto CreateLocation(
         Guid? id = null, Guid? householdId = null, string name = "Pantry",
         string? storageType = null, bool outageActive = false)
     {
         return new StorageLocationExtendedDto
         {
             Id = id ?? Guid.NewGuid(),
-            HouseholdId = householdId ?? Guid.NewGuid(),
+            HouseholdId = householdId ?? _householdId,
             Name = name,
             StorageType = storageType,
             OutageActive = outageActive,
@@ -54,6 +60,19 @@ public class StorageControllerTests
     }
 
     #region GetLocations Tests
+
+    [Fact]
+    public async Task GetLocations_MissingHouseholdClaim_ReturnsUnauthorized()
+    {
+        // Arrange
+        _controller.ControllerContext = CreateUnauthenticatedContext();
+
+        // Act
+        IActionResult result = await _controller.GetLocations(null, default);
+
+        // Assert
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
 
     [Fact]
     public async Task GetLocations_NoStorageAreas_ReturnsEmptyList()
@@ -95,12 +114,42 @@ public class StorageControllerTests
     #region SetStorageType Tests
 
     [Fact]
+    public async Task SetStorageType_LocationNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync((StorageLocationExtendedDto?)null);
+
+        // Act
+        IActionResult result = await _controller.SetStorageType(locationId, new SetStorageTypeRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task SetStorageType_WrongHousehold_ReturnsForbid()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default))
+                    .ReturnsAsync(CreateLocation(id: locationId, householdId: Guid.NewGuid()));
+
+        // Act
+        IActionResult result = await _controller.SetStorageType(locationId, new SetStorageTypeRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
     public async Task SetStorageType_UpdatesTypeAndEquipment_ReturnsNoContent()
     {
         // Arrange
         Guid locationId = Guid.NewGuid();
         Guid equipmentId = Guid.NewGuid();
         SetStorageTypeRequest req = new() { StorageType = "Freezer", EquipmentInstanceId = equipmentId };
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync(CreateLocation(id: locationId));
         _mockStorage.Setup(r => r.UpdateStorageTypeAsync(locationId, "Freezer", equipmentId, default))
                     .Returns(Task.CompletedTask);
 
@@ -117,11 +166,41 @@ public class StorageControllerTests
     #region SetFoodCategories Tests
 
     [Fact]
-    public async Task SetFoodCategories_SetThree_ThenSetTwo_ReplacesPrevious()
+    public async Task SetFoodCategories_LocationNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync((StorageLocationExtendedDto?)null);
+
+        // Act
+        IActionResult result = await _controller.SetFoodCategories(locationId, new SetFoodCategoriesRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task SetFoodCategories_WrongHousehold_ReturnsForbid()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default))
+                    .ReturnsAsync(CreateLocation(id: locationId, householdId: Guid.NewGuid()));
+
+        // Act
+        IActionResult result = await _controller.SetFoodCategories(locationId, new SetFoodCategoriesRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task SetFoodCategories_ValidOwnership_ReturnsNoContent()
     {
         // Arrange
         Guid locationId = Guid.NewGuid();
         SetFoodCategoriesRequest req = new() { Categories = new List<string> { "Meat", "Dairy" } };
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync(CreateLocation(id: locationId));
         _mockStorage.Setup(r => r.SetFoodCategoriesAsync(locationId, req.Categories, default))
                     .Returns(Task.CompletedTask);
 
@@ -136,6 +215,19 @@ public class StorageControllerTests
     #endregion
 
     #region SuggestLocations Tests
+
+    [Fact]
+    public async Task Suggest_MissingHouseholdClaim_ReturnsUnauthorized()
+    {
+        // Arrange
+        _controller.ControllerContext = CreateUnauthenticatedContext();
+
+        // Act
+        IActionResult result = await _controller.Suggest("Meat", default);
+
+        // Assert
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
 
     [Fact]
     public async Task Suggest_ForMeat_FreezerFirstPantrySecond()
@@ -184,11 +276,41 @@ public class StorageControllerTests
     #region Outage Tests
 
     [Fact]
+    public async Task SetOutage_LocationNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync((StorageLocationExtendedDto?)null);
+
+        // Act
+        IActionResult result = await _controller.SetOutage(locationId, new SetOutageRequest { OutageType = "PowerOutage" }, default);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task SetOutage_WrongHousehold_ReturnsForbid()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default))
+                    .ReturnsAsync(CreateLocation(id: locationId, householdId: Guid.NewGuid()));
+
+        // Act
+        IActionResult result = await _controller.SetOutage(locationId, new SetOutageRequest { OutageType = "PowerOutage" }, default);
+
+        // Assert
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
     public async Task SetOutage_SetsOutageFields_ReturnsNoContent()
     {
         // Arrange
         Guid locationId = Guid.NewGuid();
         SetOutageRequest req = new() { OutageType = "PowerOutage", Notes = "Storm damage" };
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync(CreateLocation(id: locationId));
         _mockStorage.Setup(r => r.SetOutageAsync(locationId, "PowerOutage", "Storm damage", default))
                     .Returns(Task.CompletedTask);
 
@@ -201,10 +323,40 @@ public class StorageControllerTests
     }
 
     [Fact]
-    public async Task ClearOutage_ClearsAllOutageFields_ReturnsNoContent()
+    public async Task ClearOutage_LocationNotFound_ReturnsNotFound()
     {
         // Arrange
         Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync((StorageLocationExtendedDto?)null);
+
+        // Act
+        IActionResult result = await _controller.ClearOutage(locationId, default);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task ClearOutage_WrongHousehold_ReturnsForbid()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default))
+                    .ReturnsAsync(CreateLocation(id: locationId, householdId: Guid.NewGuid()));
+
+        // Act
+        IActionResult result = await _controller.ClearOutage(locationId, default);
+
+        // Assert
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task ClearOutage_ValidOwnership_ReturnsNoContent()
+    {
+        // Arrange
+        Guid locationId = Guid.NewGuid();
+        _mockStorage.Setup(r => r.GetLocationByIdAsync(locationId, default)).ReturnsAsync(CreateLocation(id: locationId));
         _mockStorage.Setup(r => r.ClearOutageAsync(locationId, default)).Returns(Task.CompletedTask);
 
         // Act

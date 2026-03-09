@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using ExpressRecipe.InventoryService.Controllers;
 using ExpressRecipe.InventoryService.Data;
 using ExpressRecipe.InventoryService.Services;
-using ExpressRecipe.InventoryService.Tests.Helpers;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 
@@ -40,6 +39,15 @@ public class EquipmentControllerTests
         return new ControllerContext { HttpContext = httpContext };
     }
 
+    private static ControllerContext CreateUnauthenticatedContext()
+    {
+        DefaultHttpContext httpContext = new() { User = new ClaimsPrincipal() };
+        return new ControllerContext { HttpContext = httpContext };
+    }
+
+    private EquipmentInstanceDto CreateInstance(Guid? id = null, Guid? householdId = null)
+        => new() { Id = id ?? Guid.NewGuid(), HouseholdId = householdId ?? _householdId, TemplateName = "Instant Pot", IsActive = true };
+
     [Fact]
     public async Task GetTemplates_ReturnsOkWithTemplates()
     {
@@ -59,16 +67,25 @@ public class EquipmentControllerTests
     }
 
     [Fact]
+    public async Task GetInstances_MissingHouseholdClaim_ReturnsUnauthorized()
+    {
+        // Arrange
+        _controller.ControllerContext = CreateUnauthenticatedContext();
+
+        // Act
+        IActionResult result = await _controller.GetInstances(null, true, default);
+
+        // Assert
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Fact]
     public async Task GetInstances_ReturnsOkWithInstances()
     {
         // Arrange
         List<EquipmentInstanceDto> instances = new()
         {
-            new EquipmentInstanceDto
-            {
-                Id = Guid.NewGuid(), HouseholdId = _householdId,
-                TemplateName = "Instant Pot", IsActive = true
-            }
+            new EquipmentInstanceDto { Id = Guid.NewGuid(), HouseholdId = _householdId, TemplateName = "Instant Pot", IsActive = true }
         };
         _mockEquipment.Setup(r => r.GetInstancesAsync(_householdId, null, true, default)).ReturnsAsync(instances);
 
@@ -78,6 +95,19 @@ public class EquipmentControllerTests
         // Assert
         result.Should().BeOfType<OkObjectResult>();
         ((OkObjectResult)result).Value.Should().BeEquivalentTo(instances);
+    }
+
+    [Fact]
+    public async Task AddInstance_MissingHouseholdClaim_ReturnsUnauthorized()
+    {
+        // Arrange
+        _controller.ControllerContext = CreateUnauthenticatedContext();
+
+        // Act
+        IActionResult result = await _controller.AddInstance(new AddEquipmentRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<UnauthorizedResult>();
     }
 
     [Fact]
@@ -135,11 +165,54 @@ public class EquipmentControllerTests
     }
 
     [Fact]
-    public async Task SetCapabilities_ReturnsNoContent()
+    public async Task SetCapabilities_MissingHouseholdClaim_ReturnsUnauthorized()
+    {
+        // Arrange
+        _controller.ControllerContext = CreateUnauthenticatedContext();
+
+        // Act
+        IActionResult result = await _controller.SetCapabilities(Guid.NewGuid(), new SetCapabilitiesRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
+    [Fact]
+    public async Task SetCapabilities_InstanceNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        Guid id = Guid.NewGuid();
+        _mockEquipment.Setup(r => r.GetInstanceByIdAsync(id, default)).ReturnsAsync((EquipmentInstanceDto?)null);
+
+        // Act
+        IActionResult result = await _controller.SetCapabilities(id, new SetCapabilitiesRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task SetCapabilities_WrongHousehold_ReturnsForbid()
+    {
+        // Arrange
+        Guid id = Guid.NewGuid();
+        _mockEquipment.Setup(r => r.GetInstanceByIdAsync(id, default))
+                      .ReturnsAsync(CreateInstance(id: id, householdId: Guid.NewGuid()));
+
+        // Act
+        IActionResult result = await _controller.SetCapabilities(id, new SetCapabilitiesRequest(), default);
+
+        // Assert
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task SetCapabilities_ValidOwnership_ReturnsNoContent()
     {
         // Arrange
         Guid id = Guid.NewGuid();
         SetCapabilitiesRequest req = new() { Capabilities = new List<string> { "SlowCook" } };
+        _mockEquipment.Setup(r => r.GetInstanceByIdAsync(id, default)).ReturnsAsync(CreateInstance(id: id));
         _mockEquipment.Setup(r => r.SetCapabilitiesAsync(id, req.Capabilities, default)).Returns(Task.CompletedTask);
 
         // Act
@@ -151,10 +224,40 @@ public class EquipmentControllerTests
     }
 
     [Fact]
-    public async Task Deactivate_ReturnsNoContent()
+    public async Task Deactivate_InstanceNotFound_ReturnsNotFound()
     {
         // Arrange
         Guid id = Guid.NewGuid();
+        _mockEquipment.Setup(r => r.GetInstanceByIdAsync(id, default)).ReturnsAsync((EquipmentInstanceDto?)null);
+
+        // Act
+        IActionResult result = await _controller.Deactivate(id, default);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
+    }
+
+    [Fact]
+    public async Task Deactivate_WrongHousehold_ReturnsForbid()
+    {
+        // Arrange
+        Guid id = Guid.NewGuid();
+        _mockEquipment.Setup(r => r.GetInstanceByIdAsync(id, default))
+                      .ReturnsAsync(CreateInstance(id: id, householdId: Guid.NewGuid()));
+
+        // Act
+        IActionResult result = await _controller.Deactivate(id, default);
+
+        // Assert
+        result.Should().BeOfType<ForbidResult>();
+    }
+
+    [Fact]
+    public async Task Deactivate_ValidOwnership_ReturnsNoContent()
+    {
+        // Arrange
+        Guid id = Guid.NewGuid();
+        _mockEquipment.Setup(r => r.GetInstanceByIdAsync(id, default)).ReturnsAsync(CreateInstance(id: id));
         _mockEquipment.Setup(r => r.UpdateInstanceAsync(id, null, null, null, null, null, null, false, default))
                       .Returns(Task.CompletedTask);
 
@@ -163,6 +266,19 @@ public class EquipmentControllerTests
 
         // Assert
         result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact]
+    public async Task Resolve_MissingHouseholdClaim_ReturnsUnauthorized()
+    {
+        // Arrange
+        _controller.ControllerContext = CreateUnauthenticatedContext();
+
+        // Act
+        IActionResult result = await _controller.Resolve("SlowCook", default);
+
+        // Assert
+        result.Should().BeOfType<UnauthorizedResult>();
     }
 
     [Fact]

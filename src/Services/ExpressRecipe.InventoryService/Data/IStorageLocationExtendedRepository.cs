@@ -141,19 +141,36 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
     public async Task SetFoodCategoriesAsync(Guid locationId, IEnumerable<string> categories,
         CancellationToken ct = default)
     {
+        // Deduplicate preserving order, then replace atomically inside a transaction
+        List<string> deduped = categories.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
-        await using SqlCommand del = new(
-            "DELETE FROM StorageLocationFoodCategory WHERE StorageLocationId=@Id", conn);
-        del.Parameters.AddWithValue("@Id", locationId);
-        await del.ExecuteNonQueryAsync(ct);
-        foreach (string cat in categories)
+        await using SqlTransaction tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
         {
-            await using SqlCommand ins = new(
-                "INSERT INTO StorageLocationFoodCategory (Id,StorageLocationId,FoodCategory) VALUES (NEWID(),@Id,@Cat)", conn);
-            ins.Parameters.AddWithValue("@Id", locationId);
-            ins.Parameters.AddWithValue("@Cat", cat);
-            await ins.ExecuteNonQueryAsync(ct);
+            await using SqlCommand del = new(
+                "DELETE FROM StorageLocationFoodCategory WHERE StorageLocationId=@Id", conn, tx);
+            del.Parameters.AddWithValue("@Id", locationId);
+            await del.ExecuteNonQueryAsync(ct);
+            if (deduped.Count > 0)
+            {
+                await using SqlCommand ins = new(
+                    "INSERT INTO StorageLocationFoodCategory (Id,StorageLocationId,FoodCategory) VALUES (NEWID(),@Id,@Cat)",
+                    conn, tx);
+                ins.Parameters.AddWithValue("@Id", locationId);
+                ins.Parameters.Add("@Cat", System.Data.SqlDbType.NVarChar, 50);
+                foreach (string cat in deduped)
+                {
+                    ins.Parameters["@Cat"].Value = cat;
+                    await ins.ExecuteNonQueryAsync(ct);
+                }
+            }
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
         }
     }
 

@@ -123,7 +123,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
     {
         const string sql = @"SELECT ei.Id,ei.HouseholdId,ei.AddressId,ei.TemplateId,t.Name AS TemplateName,
                    ei.CustomName,ei.Brand,ei.ModelNumber,ei.SizeValue,ei.SizeUnit,ei.Notes,ei.IsActive,
-                   cap.Capability
+                   c.Capability
             FROM EquipmentInstance ei
             JOIN EquipmentInstanceCapability cap ON cap.InstanceId=ei.Id AND cap.Capability=@Cap
             LEFT JOIN EquipmentTemplate t ON t.Id=ei.TemplateId
