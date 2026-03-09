@@ -169,6 +169,31 @@ public class NotificationController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while saving the preference" });
         }
     }
+
+    /// <summary>
+    /// Internal endpoint for service-to-service notification creation (no user auth required).
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("internal")]
+    public async Task<IActionResult> CreateInternal([FromBody] InternalNotificationRequest request)
+    {
+        try
+        {
+            var id = await _repository.CreateNotificationAsync(
+                request.UserId,
+                request.Type,
+                request.Title,
+                request.Message,
+                request.ActionUrl,
+                null);
+            return Ok(new { id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating internal notification for user {UserId}", request.UserId);
+            return StatusCode(500, new { message = "An error occurred while creating the notification" });
+        }
+    }
 }
 
 public class SavePreferenceRequest
@@ -178,4 +203,16 @@ public class SavePreferenceRequest
     public bool PushEnabled { get; set; }
     public bool SmsEnabled { get; set; }
     public bool InAppEnabled { get; set; }
+}
+
+public class InternalNotificationRequest
+{
+    public Guid UserId { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Priority { get; set; } = "Normal";
+    public string Title { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string? ActionUrl { get; set; }
+    public string? RelatedEntityType { get; set; }
+    public Guid? RelatedEntityId { get; set; }
 }
