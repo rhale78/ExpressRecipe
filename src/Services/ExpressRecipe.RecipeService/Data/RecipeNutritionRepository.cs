@@ -33,15 +33,19 @@ public sealed class RecipeNutritionRepository : SqlHelper, IRecipeNutritionRepos
 
         List<RecipeNutritionRow> rows = await ExecuteReaderAsync(
             sql,
-            reader => new RecipeNutritionRow(
-                RecipeId: recipeId,
-                BaseServings: reader.IsDBNull(6) || (int?)reader[6] is null or 0 ? 1m : (decimal)(int)reader[6],
-                Calories: reader.IsDBNull(0) ? 0m : (decimal)reader[0],
-                Protein: reader.IsDBNull(1) ? 0m : (decimal)reader[1],
-                TotalCarbohydrates: reader.IsDBNull(2) ? 0m : (decimal)reader[2],
-                TotalFat: reader.IsDBNull(3) ? 0m : (decimal)reader[3],
-                DietaryFiber: reader.IsDBNull(4) ? 0m : (decimal)reader[4],
-                Sodium: reader.IsDBNull(5) ? 0m : (decimal)reader[5]),
+            reader =>
+            {
+                decimal baseServings = (!reader.IsDBNull(6) && (int)reader[6] > 0) ? (decimal)(int)reader[6] : 1m;
+                return new RecipeNutritionRow(
+                    RecipeId: recipeId,
+                    BaseServings: baseServings,
+                    Calories: reader.IsDBNull(0) ? 0m : (decimal)reader[0],
+                    Protein: reader.IsDBNull(1) ? 0m : (decimal)reader[1],
+                    TotalCarbohydrates: reader.IsDBNull(2) ? 0m : (decimal)reader[2],
+                    TotalFat: reader.IsDBNull(3) ? 0m : (decimal)reader[3],
+                    DietaryFiber: reader.IsDBNull(4) ? 0m : (decimal)reader[4],
+                    Sodium: reader.IsDBNull(5) ? 0m : (decimal)reader[5]);
+            },
             new SqlParameter("@RecipeId", recipeId));
 
         return rows.FirstOrDefault();

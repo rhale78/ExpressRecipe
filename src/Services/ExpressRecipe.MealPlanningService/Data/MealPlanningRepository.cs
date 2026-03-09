@@ -187,6 +187,8 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid plannedMealId)
     {
+        // RecipeName is returned as empty string; the caller (CompleteMeal endpoint)
+        // supplies the recipe name through the request body (CompleteMealRequest.RecipeName).
         const string sql = @"
             SELECT pm.Id, pm.MealPlanId, pm.RecipeId, '' AS RecipeName, pm.PlannedFor, pm.MealType, pm.Servings, pm.IsCompleted, pm.CompletedAt
             FROM PlannedMeal pm
