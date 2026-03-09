@@ -101,11 +101,15 @@ public sealed class CookingTimerRepository : ICookingTimerRepository
         cmd.Parameters.AddWithValue("@UserId",      userId);
         cmd.Parameters.AddWithValue("@HouseholdId", householdId);
         cmd.Parameters.AddWithValue("@Label",       label);
-        cmd.Parameters.AddWithValue("@RecipeId",    recipeId.HasValue ? recipeId.Value : DBNull.Value);
-        cmd.Parameters.AddWithValue("@MealId",      plannedMealId.HasValue ? plannedMealId.Value : DBNull.Value);
+        cmd.Parameters.Add(new SqlParameter("@RecipeId", System.Data.SqlDbType.UniqueIdentifier)
+            { Value = recipeId.HasValue ? recipeId.Value : DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@MealId", System.Data.SqlDbType.UniqueIdentifier)
+            { Value = plannedMealId.HasValue ? plannedMealId.Value : DBNull.Value });
         cmd.Parameters.AddWithValue("@Duration",    durationSeconds);
-        cmd.Parameters.AddWithValue("@StartedAt",   startedAt.HasValue ? (object)startedAt.Value : DBNull.Value);
-        cmd.Parameters.AddWithValue("@ExpiresAt",   expiresAt.HasValue ? (object)expiresAt.Value : DBNull.Value);
+        cmd.Parameters.Add(new SqlParameter("@StartedAt", System.Data.SqlDbType.DateTime2)
+            { Value = startedAt.HasValue ? (object)startedAt.Value : DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@ExpiresAt", System.Data.SqlDbType.DateTime2)
+            { Value = expiresAt.HasValue ? (object)expiresAt.Value : DBNull.Value });
         cmd.Parameters.AddWithValue("@Status",      status);
         return (Guid)(await cmd.ExecuteScalarAsync(ct))!;
     }
