@@ -73,7 +73,7 @@ window.scannerInterop = (function () {
             const reader = getReader();
             if (reader) {
                 try {
-                    const result = reader.decodeFromCanvas(_canvasEl);
+                    const result = await reader.decodeFromCanvas(_canvasEl);
                     if (result) {
                         _lastDecodeTime = now;
                         const captureBase64 = _canvasEl.toDataURL('image/jpeg', 0.7).split(',')[1];
@@ -85,8 +85,10 @@ window.scannerInterop = (function () {
                         }
                     }
                 } catch (decodeError) {
-                    // ZXing throws when no barcode found — this is normal, not an error
-                    void decodeError;
+                    // ZXing throws NotFoundException when no barcode is found — this is normal
+                    if (decodeError && decodeError.name !== 'NotFoundException') {
+                        console.warn('scanner.js: unexpected decode error', decodeError);
+                    }
                 }
             }
         }

@@ -140,6 +140,8 @@ public class ExpirationAlertWorker : BackgroundService
         try
         {
             HttpClient notificationClient = httpFactory.CreateClient("notificationservice");
+            Uri baseAddress = notificationClient.BaseAddress ?? new Uri("http://notificationservice");
+            Uri requestUri = new Uri(baseAddress, "/api/notifications/internal");
             object payload = new
             {
                 UserId = userId,
@@ -150,7 +152,7 @@ public class ExpirationAlertWorker : BackgroundService
                 AlertType = alertType,
                 DaysUntilExpiration = daysUntilExpiration
             };
-            await notificationClient.PostAsJsonAsync("/api/notifications/internal", payload, cancellationToken);
+            await notificationClient.PostAsJsonAsync(requestUri, payload, cancellationToken);
         }
         catch (Exception ex)
         {

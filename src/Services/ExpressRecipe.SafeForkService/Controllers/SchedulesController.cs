@@ -44,6 +44,9 @@ public class SchedulesController : ControllerBase
             request.ConfigJson,
             ct);
 
+        _logger.LogInformation("[Schedules] Temporary schedule {ScheduleId} ({ScheduleType}) added for member {MemberId}",
+            scheduleId, request.ScheduleType, memberId);
+
         return CreatedAtAction(nameof(GetActiveSchedules), new { memberId }, new { scheduleId });
     }
 
@@ -55,6 +58,9 @@ public class SchedulesController : ControllerBase
         {
             return NotFound();
         }
+
+        _logger.LogInformation("[Schedules] Temporary schedule {ScheduleId} deleted for member {MemberId}",
+            scheduleId, memberId);
 
         return NoContent();
     }

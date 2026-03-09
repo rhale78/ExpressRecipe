@@ -32,6 +32,7 @@ public class AdaptationOverrideRepository : SqlHelper, IAdaptationOverrideReposi
                 CreatedBy = GetGuidNullable(reader, "CreatedBy"),
                 UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
+            ct,
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@RecipeInstanceId", recipeInstanceId),
             CreateParameter("@MemberId", memberId));
@@ -49,6 +50,7 @@ public class AdaptationOverrideRepository : SqlHelper, IAdaptationOverrideReposi
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", newId),
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@RecipeInstanceId", recipeInstanceId),

@@ -43,6 +43,17 @@ public abstract class SqlHelper
     }
 
     /// <summary>
+    /// Executes a query and returns a single scalar value with cancellation support.
+    /// </summary>
+    protected async Task<T?> ExecuteScalarAsync<T>(
+        string sql,
+        CancellationToken cancellationToken,
+        params DbParameter[] parameters)
+    {
+        return await ExecuteScalarAsync<T>(sql, timeoutSeconds: 30, cancellationToken, parameters);
+    }
+
+    /// <summary>
     /// Executes a query and returns a single scalar value with custom timeout.
     /// </summary>
     protected async Task<T?> ExecuteScalarAsync<T>(
@@ -50,12 +61,24 @@ public abstract class SqlHelper
         int timeoutSeconds,
         params DbParameter[] parameters)
     {
+        return await ExecuteScalarAsync<T>(sql, timeoutSeconds, CancellationToken.None, parameters);
+    }
+
+    /// <summary>
+    /// Executes a query and returns a single scalar value with custom timeout and cancellation support.
+    /// </summary>
+    protected async Task<T?> ExecuteScalarAsync<T>(
+        string sql,
+        int timeoutSeconds,
+        CancellationToken cancellationToken,
+        params DbParameter[] parameters)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
         return await ExecuteWithDeadlockRetryAsync(async () =>
         {
             await using var connection = new SqlConnection(ConnectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync(cancellationToken);
 
             await using var command = new SqlCommand(sql, connection);
             command.CommandTimeout = timeoutSeconds;
@@ -68,7 +91,7 @@ public abstract class SqlHelper
                 }
             }
 
-            var result = await command.ExecuteScalarAsync();
+            var result = await command.ExecuteScalarAsync(cancellationToken);
             return result == DBNull.Value || result == null ? default : (T?)result;
         });
     }
@@ -81,7 +104,19 @@ public abstract class SqlHelper
         string sql,
         params DbParameter[] parameters)
     {
-        return await ExecuteNonQueryAsync(sql, timeoutSeconds: 30, parameters);
+        return await ExecuteNonQueryAsync(sql, timeoutSeconds: 30, CancellationToken.None, parameters);
+    }
+
+    /// <summary>
+    /// Executes a command that doesn't return data with cancellation support.
+    /// Returns the number of rows affected.
+    /// </summary>
+    protected async Task<int> ExecuteNonQueryAsync(
+        string sql,
+        CancellationToken cancellationToken,
+        params DbParameter[] parameters)
+    {
+        return await ExecuteNonQueryAsync(sql, timeoutSeconds: 30, cancellationToken, parameters);
     }
 
     /// <summary>
@@ -93,12 +128,25 @@ public abstract class SqlHelper
         int timeoutSeconds,
         params DbParameter[] parameters)
     {
+        return await ExecuteNonQueryAsync(sql, timeoutSeconds, CancellationToken.None, parameters);
+    }
+
+    /// <summary>
+    /// Executes a command that doesn't return data with custom timeout and cancellation support.
+    /// Returns the number of rows affected.
+    /// </summary>
+    protected async Task<int> ExecuteNonQueryAsync(
+        string sql,
+        int timeoutSeconds,
+        CancellationToken cancellationToken,
+        params DbParameter[] parameters)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
         return await ExecuteWithDeadlockRetryAsync(async () =>
         {
             await using var connection = new SqlConnection(ConnectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync(cancellationToken);
 
             await using var command = new SqlCommand(sql, connection);
             command.CommandTimeout = timeoutSeconds;
@@ -111,7 +159,7 @@ public abstract class SqlHelper
                 }
             }
 
-            return await command.ExecuteNonQueryAsync();
+            return await command.ExecuteNonQueryAsync(cancellationToken);
         });
     }
 
@@ -123,7 +171,19 @@ public abstract class SqlHelper
         Func<IDataRecord, T> mapper,
         params DbParameter[] parameters)
     {
-        return await ExecuteReaderAsync(sql, mapper, timeoutSeconds: 30, parameters);
+        return await ExecuteReaderAsync(sql, mapper, timeoutSeconds: 30, CancellationToken.None, parameters);
+    }
+
+    /// <summary>
+    /// Executes a query and maps results with cancellation support.
+    /// </summary>
+    protected async Task<List<T>> ExecuteReaderAsync<T>(
+        string sql,
+        Func<IDataRecord, T> mapper,
+        CancellationToken cancellationToken,
+        params DbParameter[] parameters)
+    {
+        return await ExecuteReaderAsync(sql, mapper, timeoutSeconds: 30, cancellationToken, parameters);
     }
 
     /// <summary>
@@ -135,13 +195,26 @@ public abstract class SqlHelper
         int timeoutSeconds,
         params DbParameter[] parameters)
     {
+        return await ExecuteReaderAsync(sql, mapper, timeoutSeconds, CancellationToken.None, parameters);
+    }
+
+    /// <summary>
+    /// Executes a query and maps results using the provided mapper function with custom timeout and cancellation support.
+    /// </summary>
+    protected async Task<List<T>> ExecuteReaderAsync<T>(
+        string sql,
+        Func<IDataRecord, T> mapper,
+        int timeoutSeconds,
+        CancellationToken cancellationToken,
+        params DbParameter[] parameters)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(mapper);
 
         return await ExecuteWithDeadlockRetryAsync(async () =>
         {
             await using var connection = new SqlConnection(ConnectionString);
-            await connection.OpenAsync();
+            await connection.OpenAsync(cancellationToken);
 
             await using var command = new SqlCommand(sql, connection);
             command.CommandTimeout = timeoutSeconds;
@@ -155,9 +228,9 @@ public abstract class SqlHelper
             }
 
             var results = new List<T>();
-            await using var reader = await command.ExecuteReaderAsync();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-            while (await reader.ReadAsync())
+            while (await reader.ReadAsync(cancellationToken))
             {
                 // SqlDataReader implements IDataRecord, so this is safe
                 results.Add(mapper(reader));

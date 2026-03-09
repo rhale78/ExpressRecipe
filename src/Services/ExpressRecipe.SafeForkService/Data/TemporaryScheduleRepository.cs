@@ -31,6 +31,7 @@ public class TemporaryScheduleRepository : SqlHelper, ITemporaryScheduleReposito
                 ActiveUntil = new DateTimeOffset(GetDateTime(reader, "ActiveUntil"), TimeSpan.Zero),
                 ConfigJson = GetString(reader, "ConfigJson")
             },
+            ct,
             CreateParameter("@MemberId", memberId));
     }
 
@@ -46,6 +47,7 @@ public class TemporaryScheduleRepository : SqlHelper, ITemporaryScheduleReposito
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", newId),
             CreateParameter("@MemberId", memberId),
             CreateParameter("@ScheduleType", request.ScheduleType),
@@ -65,6 +67,7 @@ public class TemporaryScheduleRepository : SqlHelper, ITemporaryScheduleReposito
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", scheduleId));
 
         return rowsAffected > 0;
@@ -79,6 +82,7 @@ public class TemporaryScheduleRepository : SqlHelper, ITemporaryScheduleReposito
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", scheduleId),
             CreateParameter("@MemberId", memberId));
 

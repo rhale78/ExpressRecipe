@@ -49,7 +49,10 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
 
         try
         {
-            var products = await SearchProductsAsync(name, ct: ct);
+            // Google Shopping API does not support strict zip-code filters, but including the zip code
+            // in the free-text query can help bias results toward that location.
+            var query = !string.IsNullOrWhiteSpace(zipCode) ? $"{name} {zipCode}" : name;
+            var products = await SearchProductsAsync(query, ct: ct);
             return products.Select(p =>
             {
                 var offer = p.PageMap?.Offers?.FirstOrDefault();

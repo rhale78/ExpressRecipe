@@ -330,7 +330,7 @@ public partial class InventoryRepository : IInventoryRepository
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
+        command.Parameters.Add(new SqlParameter("@UserId", System.Data.SqlDbType.UniqueIdentifier) { Value = userId });
 
         var count = await command.ExecuteNonQueryAsync();
         _logger.LogInformation("Created {Count} expiration alerts for user {UserId}", count, userId);
@@ -346,10 +346,10 @@ public partial class InventoryRepository : IInventoryRepository
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@InventoryItemId", inventoryItemId);
-        command.Parameters.AddWithValue("@AlertType", alertType);
-        command.Parameters.AddWithValue("@DaysUntilExpiration", daysUntilExpiration);
+        command.Parameters.Add(new SqlParameter("@UserId", System.Data.SqlDbType.UniqueIdentifier) { Value = userId });
+        command.Parameters.Add(new SqlParameter("@InventoryItemId", System.Data.SqlDbType.UniqueIdentifier) { Value = inventoryItemId });
+        command.Parameters.Add(new SqlParameter("@AlertType", System.Data.SqlDbType.NVarChar, 50) { Value = alertType });
+        command.Parameters.Add(new SqlParameter("@DaysUntilExpiration", System.Data.SqlDbType.Int) { Value = daysUntilExpiration });
 
         await command.ExecuteNonQueryAsync();
         _logger.LogDebug("Created {AlertType} expiration alert for item {ItemId}", alertType, inventoryItemId);
