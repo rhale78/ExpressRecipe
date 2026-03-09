@@ -275,6 +275,106 @@ public partial class InventoryRepository
 
     #endregion
 
+    #region Thaw Task Support
+
+    public async Task<List<FrozenIngredientResult>> GetFrozenIngredientsForRecipeAsync(
+        Guid householdId, Guid recipeId, CancellationToken ct = default)
+    {
+        // Step 1: Fetch recipe ingredient names from RecipeService
+        List<string> ingredientNames = await FetchRecipeIngredientNamesAsync(recipeId, ct);
+
+        if (ingredientNames.Count == 0) { return new List<FrozenIngredientResult>(); }
+
+        // Step 2: Find all non-deleted items in freezer storage for this household
+        const string sql = @"
+            SELECT i.Id, ISNULL(i.CustomName, '') AS ItemName, i.StorageLocationId,
+                   s.Name AS StorageName, s.Temperature
+            FROM InventoryItem i
+            INNER JOIN StorageLocation s ON i.StorageLocationId = s.Id
+            WHERE i.HouseholdId = @HouseholdId
+              AND i.IsDeleted   = 0
+              AND (UPPER(s.Temperature) = 'FROZEN' OR UPPER(s.Name) LIKE '%FREEZER%')";
+
+        await using SqlConnection conn = new(_connectionString);
+        await conn.OpenAsync(ct);
+        await using SqlCommand cmd = new(sql, conn);
+        cmd.Parameters.AddWithValue("@HouseholdId", householdId);
+
+        List<(string itemName, Guid storageLocationId)> freezerItems = new();
+        await using (SqlDataReader r = await cmd.ExecuteReaderAsync(ct))
+        {
+            while (await r.ReadAsync(ct))
+            {
+                freezerItems.Add((r.GetString(1), r.GetGuid(2)));
+            }
+        }
+
+        // Step 3: Match freezer items to recipe ingredient names (case-insensitive substring match)
+        List<FrozenIngredientResult> matched = new();
+        foreach ((string itemName, Guid storageLocationId) in freezerItems)
+        {
+            foreach (string ingredient in ingredientNames)
+            {
+                if (itemName.Contains(ingredient, StringComparison.OrdinalIgnoreCase) ||
+                    ingredient.Contains(itemName,  StringComparison.OrdinalIgnoreCase))
+                {
+                    matched.Add(new FrozenIngredientResult
+                    {
+                        ItemName          = itemName,
+                        FoodCategory      = "Frozen",
+                        StorageLocationId = storageLocationId
+                    });
+                    break;
+                }
+            }
+        }
+
+        return matched;
+    }
+
+    private async Task<List<string>> FetchRecipeIngredientNamesAsync(Guid recipeId, CancellationToken ct)
+    {
+        if (_httpClientFactory is null) { return new List<string>(); }
+
+        try
+        {
+            HttpClient client = _httpClientFactory.CreateClient("RecipeService");
+            RecipeIngredientsResponse? recipe =
+                await client.GetFromJsonAsync<RecipeIngredientsResponse>(
+                    $"/api/Recipes/{recipeId}", ct);
+
+            if (recipe?.Ingredients is null) { return new List<string>(); }
+
+            List<string> names = new();
+            foreach (RecipeIngredientSummary ing in recipe.Ingredients)
+            {
+                if (!string.IsNullOrWhiteSpace(ing.IngredientName))
+                {
+                    names.Add(ing.IngredientName);
+                }
+            }
+            return names;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not fetch ingredients for recipe {RecipeId}", recipeId);
+            return new List<string>();
+        }
+    }
+
+    // Minimal projections for JSON deserialization from RecipeService
+    private sealed class RecipeIngredientsResponse
+    {
+        public List<RecipeIngredientSummary>? Ingredients { get; set; }
+    }
+
+    private sealed class RecipeIngredientSummary
+    {
+        public string? IngredientName { get; set; }
+    }
+
+    #endregion
+
     #region Reports
 
     public async Task<InventoryReportDto> GetInventoryReportAsync(Guid userId, Guid? householdId)

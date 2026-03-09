@@ -446,6 +446,29 @@ public class InventoryController : ControllerBase
     }
 
     /// <summary>
+    /// Get frozen inventory items matching a recipe's ingredients (used by ThawTaskGeneratorService).
+    /// </summary>
+    [HttpGet("frozen-for-recipe/{householdId}/{recipeId}")]
+    public async Task<IActionResult> GetFrozenIngredientsForRecipe(
+        Guid householdId, Guid recipeId, CancellationToken ct)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "Getting frozen ingredients for household {HouseholdId} recipe {RecipeId}",
+                householdId, recipeId);
+            List<FrozenIngredientResult> items =
+                await _repository.GetFrozenIngredientsForRecipeAsync(householdId, recipeId, ct);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting frozen ingredients for recipe {RecipeId}", recipeId);
+            return StatusCode(500, new { message = "An error occurred while retrieving frozen ingredients" });
+        }
+    }
+
+    /// <summary>
     /// Get usage history for item
     /// </summary>
     [HttpGet("{id}/history")]

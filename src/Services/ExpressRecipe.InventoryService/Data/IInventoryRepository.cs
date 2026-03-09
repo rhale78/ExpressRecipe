@@ -71,6 +71,16 @@ public interface IInventoryRepository
     // Reports
     Task<InventoryReportDto> GetInventoryReportAsync(Guid userId, Guid? householdId);
     Task<List<InventoryItemDto>> GetItemsAboutToExpireAsync(Guid userId, int daysAhead = 3);
+
+    // Thaw task support
+    Task<List<FrozenIngredientResult>> GetFrozenIngredientsForRecipeAsync(Guid householdId, Guid recipeId, CancellationToken ct = default);
+}
+
+public class FrozenIngredientResult
+{
+    public string ItemName { get; set; } = string.Empty;
+    public string FoodCategory { get; set; } = string.Empty;
+    public Guid StorageLocationId { get; set; }
 }
 
 public class HouseholdDto

@@ -169,6 +169,45 @@ public class NotificationController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while saving the preference" });
         }
     }
+
+    /// <summary>
+    /// Service-to-service endpoint for creating in-app notifications from other microservices.
+    /// Does not require end-user authentication.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpPost("internal")]
+    public async Task<IActionResult> CreateInternal([FromBody] InternalNotificationRequest request)
+    {
+        try
+        {
+            if (request.UserId == Guid.Empty)
+                return BadRequest(new { error = "UserId is required" });
+
+            string? actionUrl = request.RelatedEntityId.HasValue
+                ? $"/{request.RelatedEntityType?.ToLowerInvariant()}/{request.RelatedEntityId}"
+                : null;
+
+            Dictionary<string, string>? metadata = null;
+            if (request.RelatedEntityType is not null && request.RelatedEntityId.HasValue)
+            {
+                metadata = new Dictionary<string, string>
+                {
+                    ["relatedEntityType"] = request.RelatedEntityType,
+                    ["relatedEntityId"]   = request.RelatedEntityId.Value.ToString()
+                };
+            }
+
+            Guid notificationId = await _repository.CreateNotificationAsync(
+                request.UserId, request.Type, request.Title, request.Message, actionUrl, metadata);
+
+            return Ok(new { id = notificationId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating internal notification for user {UserId}", request.UserId);
+            return StatusCode(500, new { message = "An error occurred while creating the notification" });
+        }
+    }
 }
 
 public class SavePreferenceRequest
@@ -178,4 +217,15 @@ public class SavePreferenceRequest
     public bool PushEnabled { get; set; }
     public bool SmsEnabled { get; set; }
     public bool InAppEnabled { get; set; }
+}
+
+/// <summary>Request body for the service-to-service internal notification endpoint.</summary>
+public class InternalNotificationRequest
+{
+    public Guid UserId { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string? RelatedEntityType { get; set; }
+    public Guid? RelatedEntityId { get; set; }
 }

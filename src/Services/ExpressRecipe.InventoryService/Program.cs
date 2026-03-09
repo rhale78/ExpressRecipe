@@ -38,7 +38,14 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 
 // Register repositories
 builder.Services.AddScoped<IInventoryRepository>(sp =>
-    new InventoryRepository(connectionString, sp.GetRequiredService<ILogger<InventoryRepository>>()));
+    new InventoryRepository(connectionString,
+        sp.GetRequiredService<ILogger<InventoryRepository>>(),
+        sp.GetRequiredService<IHttpClientFactory>()));
+
+// Register HTTP clients for inter-service calls
+builder.Services.AddHttpClient("RecipeService", client =>
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:RecipeService"] ?? "http://localhost:5102"));
 
 // Register RabbitMQ for event publishing
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
