@@ -541,7 +541,7 @@ public class LivestockRepository : ILivestockRepository
                  0, GETUTCDATE())";
 
         await using SqlCommand cmd = new SqlCommand(insertSql, connection, tx);
-        cmd.Parameters.AddWithValue("@HouseholdId", (object?)householdId);
+        cmd.Parameters.AddWithValue("@HouseholdId", householdId);
         cmd.Parameters.AddWithValue("@CustomName", customName);
         cmd.Parameters.AddWithValue("@StorageLocationId", resolvedLocId);
         cmd.Parameters.AddWithValue("@Quantity", quantity);
