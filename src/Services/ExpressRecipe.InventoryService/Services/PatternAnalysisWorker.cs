@@ -1,4 +1,5 @@
 using ExpressRecipe.InventoryService.Data;
+using ExpressRecipe.InventoryService.Logging;
 using System.Net.Http.Json;
 
 namespace ExpressRecipe.InventoryService.Services;
@@ -123,9 +124,18 @@ public class PatternAnalysisWorker : BackgroundService
 
             await repository.UpsertConsumptionPatternAsync(pattern, cancellationToken);
 
+            if (pattern.AvgDaysBetweenPurchases.HasValue)
+            {
+                _logger.LogPurchasePatternUpdated(userId, pattern.ProductId, (double)pattern.AvgDaysBetweenPurchases.Value);
+            }
+
             // If newly abandoned, create inquiry and notify
             if (pattern.IsAbandoned && !wasAbandoned)
             {
+                double daysSince = pattern.LastPurchasedAt.HasValue
+                    ? (DateTime.UtcNow - pattern.LastPurchasedAt.Value).TotalDays
+                    : 0.0;
+                _logger.LogAbandonedProductFound(userId, pattern.ProductId, daysSince);
                 PurchaseEventDto representative = purchases.Last();
                 Guid inquiryId = await repository.CreateAbandonedInquiryAsync(
                     userId, representative.ProductId, representative.CustomName, cancellationToken);

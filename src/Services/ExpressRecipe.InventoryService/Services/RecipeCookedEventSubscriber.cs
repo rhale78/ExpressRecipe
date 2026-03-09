@@ -1,4 +1,5 @@
 using ExpressRecipe.InventoryService.Data;
+using ExpressRecipe.InventoryService.Logging;
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.Core.Messages;
 using ExpressRecipe.Messaging.Core.Options;
@@ -56,6 +57,7 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
             if (ingredients.Count == 0)
             {
                 _logger.LogWarning("No ingredients found for recipe {RecipeId}", evt.RecipeId);
+                _logger.LogRecipeCookedSkipped(evt.UserId, evt.RecipeId, "no ingredients found");
                 return;
             }
 
@@ -79,6 +81,7 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
                     _logger.LogWarning(
                         "Recipe {RecipeId} ingredient '{IngredientName}' not found in inventory for user {UserId}",
                         evt.RecipeId, ingredient.Name, evt.UserId);
+                    _logger.LogRecipeCookedSkipped(evt.UserId, evt.RecipeId, $"ingredient '{ingredient.Name}' not in inventory");
                     continue;
                 }
 
@@ -88,6 +91,7 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
                 await repository.UpdateInventoryQuantityAsync(
                     match.Id, after, "UsedInRecipe", evt.UserId, $"Cooked recipe {evt.RecipeId} x{evt.Servings} servings");
 
+                _logger.LogRecipeCookedDeduction(evt.UserId, match.Id, after);
                 _logger.LogInformation(
                     "Deducted {Amount} {Unit} of {Name} from inventory item {ItemId} (was {Before}, now {After})",
                     scaledQuantity, ingredient.Unit, ingredient.Name, match.Id, before, after);

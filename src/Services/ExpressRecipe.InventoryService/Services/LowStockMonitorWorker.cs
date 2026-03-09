@@ -1,4 +1,5 @@
 using ExpressRecipe.InventoryService.Data;
+using ExpressRecipe.InventoryService.Logging;
 using System.Net.Http.Json;
 
 namespace ExpressRecipe.InventoryService.Services;
@@ -169,6 +170,7 @@ public class LowStockMonitorWorker : BackgroundService
             }
             else
             {
+                _logger.LogLowStockAlertCreated(userId, pattern.ProductId, 0m);
                 await SendNotificationAsync(httpFactory, userId, "LowStock", "Normal", new
                 {
                     UserId = userId,
@@ -220,6 +222,7 @@ public class LowStockMonitorWorker : BackgroundService
                         await repository.UpdatePriceWatchDealFoundAsync(
                             alert.Id, deal.StoreId.Value, deal.Price.Value, deal.EndsAt.Value, cancellationToken);
 
+                        _logger.LogPriceDropAlertCreated(alert.UserId, alert.ProductId, alert.TargetPrice ?? deal.Price.Value, deal.Price.Value);
                         await SendNotificationAsync(httpFactory, alert.UserId, "PriceWatchHit", "High", new
                         {
                             UserId = alert.UserId,

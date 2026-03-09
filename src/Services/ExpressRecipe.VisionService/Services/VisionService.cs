@@ -1,3 +1,4 @@
+using ExpressRecipe.VisionService.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 
@@ -60,14 +61,14 @@ public class VisionService : IVisionService
 
         if (best.Success && best.Confidence >= options.MinConfidence)
         {
-            _logger.LogDebug("Vision result from parallel providers: {Provider} confidence {Confidence}", best.ProviderUsed, best.Confidence);
+            _logger.LogProviderChainResult("system", best.ProviderUsed ?? "none", best.Confidence, best.ProductName ?? "none");
             return best;
         }
 
         // Fallback to Ollama
         if (options.AllowOllamaVision && _ollama.IsEnabled)
         {
-            _logger.LogDebug("Parallel providers below MinConfidence ({Min}), trying Ollama", options.MinConfidence);
+            _logger.LogConfidenceBelowThreshold("system", best.Confidence, options.MinConfidence);
             VisionResult ollamaResult = await _ollama.AnalyzeAsync(resized, ct);
             if (ollamaResult.Success && ollamaResult.Confidence >= options.MinConfidence)
             {
@@ -87,7 +88,13 @@ public class VisionService : IVisionService
         }
 
         // Return best even if below threshold
-        return best.Success ? best : new VisionResult
+        if (best.Success)
+        {
+            return best;
+        }
+
+        _logger.LogAllProvidersDisabled("system");
+        return new VisionResult
         {
             Success = false,
             ProviderUsed = "none",

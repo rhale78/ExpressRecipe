@@ -1,6 +1,8 @@
+using ExpressRecipe.VisionService.Logging;
 using ExpressRecipe.VisionService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace ExpressRecipe.VisionService.Controllers;
 
@@ -18,6 +20,8 @@ public class VisionController : ControllerBase
         _logger = logger;
     }
 
+    private string GetUserId() => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous";
+
     /// <summary>
     /// Analyze an image using the vision provider chain.
     /// Accepts multipart/form-data (field: "image") OR JSON body { base64Image, options }.
@@ -29,14 +33,18 @@ public class VisionController : ControllerBase
 
         if (imageBytes == null || imageBytes.Length == 0)
         {
+            _logger.LogNoImageProvided(GetUserId());
             return BadRequest(new { error = "No image data provided. Send multipart/form-data with field 'image' or JSON { base64Image }." });
         }
 
         VisionOptions options = bodyOptions ?? new VisionOptions();
 
-        _logger.LogInformation("Vision analyze request: {Size} bytes", imageBytes.Length);
+        _logger.LogAnalyzeRequest(GetUserId(), imageBytes.Length);
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         VisionResult result = await _visionService.AnalyzeAsync(imageBytes, options, ct);
+        sw.Stop();
+        _logger.LogAnalyzeComplete(GetUserId(), result.ProviderUsed ?? "none", result.Confidence, sw.ElapsedMilliseconds);
         return Ok(result);
     }
 
@@ -47,14 +55,21 @@ public class VisionController : ControllerBase
     [HttpPost("ocr")]
     public async Task<IActionResult> ExtractText(CancellationToken ct)
     {
+        var userId = GetUserId();
         byte[]? imageBytes = await TryReadImageBytesAsync(ct);
 
         if (imageBytes == null || imageBytes.Length == 0)
         {
+            _logger.LogNoImageProvided(userId);
             return BadRequest(new { error = "No image data provided." });
         }
 
+        _logger.LogOcrRequest(userId, imageBytes.Length);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         VisionResult result = await _visionService.ExtractTextAsync(imageBytes, ct);
+        sw.Stop();
+        var textCount = result.DetectedText?.Length ?? 0;
+        _logger.LogOcrComplete(userId, textCount, sw.ElapsedMilliseconds);
         return Ok(result);
     }
 
@@ -65,6 +80,7 @@ public class VisionController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Health(CancellationToken ct)
     {
+        _logger.LogHealthCheck();
         VisionHealthStatus status = await _visionService.GetHealthAsync(ct);
         return Ok(status);
     }

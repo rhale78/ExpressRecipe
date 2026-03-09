@@ -1,3 +1,4 @@
+using ExpressRecipe.VisionService.Logging;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using SixLabors.ImageSharp;
@@ -53,6 +54,7 @@ public class OnnxVisionProvider : IVisionProvider, IDisposable
             _session = new InferenceSession(_options.ModelPath);
             TryLoadLabels();
             _logger.LogInformation("ONNX model loaded from {ModelPath}", _options.ModelPath);
+            _logger.LogOnnxProviderEnabled();
         }
         catch (Exception ex)
         {

@@ -1,3 +1,4 @@
+using ExpressRecipe.InventoryService.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -35,7 +36,7 @@ public class InventoryController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
-            _logger.LogInformation("Getting inventory for user {UserId}", userId);
+            _logger.LogGettingInventory(userId.Value);
             var items = await _repository.GetUserInventoryAsync(userId.Value);
             return Ok(items);
         }
@@ -71,6 +72,7 @@ public class InventoryController : ControllerBase
                 request.PreferredStore,
                 request.StoreLocation);
             var item = await _repository.GetInventoryItemAsync(itemId, userId.Value);
+            _logger.LogInventoryItemAdded(userId.Value, itemId);
             return CreatedAtAction(nameof(GetItem), new { id = itemId }, item);
         }
         catch (Exception ex)
@@ -137,6 +139,7 @@ public class InventoryController : ControllerBase
             if (userId == null) return Unauthorized();
             _logger.LogInformation("Deleting inventory item {ItemId}", id);
             await _repository.DeleteInventoryItemAsync(id, userId.Value);
+            _logger.LogInventoryItemDeleted(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -156,7 +159,7 @@ public class InventoryController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
-            _logger.LogInformation("Getting expiring items for user {UserId}", userId);
+            _logger.LogGettingExpiringItems(userId.Value, daysAhead);
             var items = await _repository.GetExpiringItemsAsync(userId.Value, daysAhead);
             return Ok(items);
         }
@@ -201,6 +204,7 @@ public class InventoryController : ControllerBase
             _logger.LogInformation("Creating storage location for user {UserId}", userId);
             var locationId = await _repository.CreateStorageLocationAsync(userId.Value, request.HouseholdId, request.AddressId, request.Name, request.Description, request.Temperature);
             var locations = await _repository.GetStorageLocationsAsync(userId.Value);
+            _logger.LogStorageLocationCreated(userId.Value, locationId);
             return CreatedAtAction(nameof(GetStorageLocations), new { id = locationId }, locations.First(l => l.Id == locationId));
         }
         catch (Exception ex)
@@ -284,7 +288,12 @@ public class InventoryController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
             await _repository.DeleteStorageLocationAsync(id);
+            if (userId != null)
+            {
+                _logger.LogStorageLocationDeleted(userId.Value, id);
+            }
             return NoContent();
         }
         catch (Exception ex)
@@ -498,6 +507,7 @@ public class InventoryController : ControllerBase
                 Source = request.Source ?? "ManualAdd"
             };
             Guid eventId = await _repository.RecordPurchaseEventAsync(record);
+            _logger.LogPurchaseEventRecorded(userId.Value, record.ProductId, record.HouseholdId);
             return Ok(new { id = eventId });
         }
         catch (Exception ex)
@@ -541,6 +551,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingPatterns(userId.Value, null);
             List<ProductConsumptionPatternDto> patterns = await _repository.GetConsumptionPatternsAsync(userId.Value);
             return Ok(patterns);
         }
@@ -561,6 +572,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingAbandonedProducts(userId.Value, null);
             List<ProductConsumptionPatternDto> abandoned = await _repository.GetAbandonedProductsAsync(userId.Value);
             return Ok(abandoned);
         }
@@ -581,6 +593,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingLowStockPredictions(userId.Value, null);
             List<ProductConsumptionPatternDto> lowStock = await _repository.GetLowStockByPredictionAsync(userId.Value, daysAhead);
             return Ok(lowStock);
         }
@@ -605,6 +618,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingPriceWatchAlerts(userId.Value, null);
             List<PriceWatchAlertDto> alerts = await _repository.GetActiveWatchAlertsByUserAsync(userId.Value);
             return Ok(alerts);
         }
@@ -626,6 +640,7 @@ public class InventoryController : ControllerBase
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
             await _repository.SetPriceWatchTargetPriceAsync(userId.Value, id, request.TargetPrice);
+            _logger.LogPriceWatchAlertSet(userId.Value, id, request.TargetPrice);
             return NoContent();
         }
         catch (Exception ex)
@@ -650,6 +665,7 @@ public class InventoryController : ControllerBase
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
             await _repository.RecordInquiryResponseAsync(userId.Value, id, request.Response, request.Note);
+            _logger.LogInquiryResponseRecorded(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -669,6 +685,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
+            _logger.LogGettingPendingInquiries(userId.Value);
             List<AbandonedProductInquiryDto> inquiries = await _repository.GetPendingInquiriesAsync(userId.Value);
             return Ok(inquiries);
         }
@@ -693,7 +710,7 @@ public class InventoryController : ControllerBase
         {
             Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
-            _logger.LogInformation("Getting waste report for user {UserId}", userId);
+            _logger.LogGettingWasteReport(userId.Value, householdId);
             List<WasteReportMonthDto> report = await _repository.GetWasteReportAsync(userId.Value, householdId);
             return Ok(report);
         }
