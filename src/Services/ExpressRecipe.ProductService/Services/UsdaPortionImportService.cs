@@ -46,6 +46,7 @@ public sealed class UsdaPortionImportService : SqlHelper
 
         _logger.LogInformation("Starting USDA portion import from {Path}", csvPath);
         int upserted = 0;
+        int processed = 0;
 
         CsvConfiguration config = new(CultureInfo.InvariantCulture)
         {
@@ -60,25 +61,21 @@ public sealed class UsdaPortionImportService : SqlHelper
         await csv.ReadAsync();
         csv.ReadHeader();
 
-        List<PortionRow> rows = new();
+        // Stream rows one-by-one to avoid loading entire file into memory
         while (await csv.ReadAsync())
         {
-            PortionRow row = new()
-            {
-                FdcId        = csv.GetField<int>("fdc_id"),
-                Amount       = csv.GetField<decimal>("amount"),
-                Description  = csv.GetField<string?>("measure_description") ?? string.Empty,
-                GramWeight   = csv.GetField<decimal>("gram_weight")
-            };
-            rows.Add(row);
-        }
-
-        foreach (PortionRow row in rows)
-        {
             ct.ThrowIfCancellationRequested();
-            if (row.GramWeight <= 0m) { continue; }
 
-            (decimal amount, UnitCode unitCode) = UnitParser.Parse($"{row.Amount} {row.Description}");
+            decimal gramWeight = csv.GetField<decimal>("gram_weight");
+            if (gramWeight <= 0m) { continue; }
+
+            decimal rowAmount = csv.GetField<decimal>("amount");
+            string description = csv.GetField<string?>("measure_description") ?? string.Empty;
+            int fdcId = csv.GetField<int>("fdc_id");
+
+            // Format amount with invariant culture so UnitParser receives "." decimal separator
+            string parseInput = $"{rowAmount.ToString(CultureInfo.InvariantCulture)} {description}";
+            (decimal amount, UnitCode unitCode) = UnitParser.Parse(parseInput);
             if (unitCode == UnitCode.Unknown || unitCode == UnitCode.ToTaste
                 || UnitParser.GetDimension(unitCode) != UnitDimension.Volume)
             {
@@ -96,22 +93,27 @@ public sealed class UsdaPortionImportService : SqlHelper
             }
 
             if (ml <= 0m) { continue; }
-            decimal gramsPerMl = row.GramWeight / ml;
+            decimal gramsPerMl = gramWeight / ml;
 
-            // UPSERT by UsdaFdcId + measure_description
-            string ingredientName = $"USDA:{row.FdcId}";
-            string? prepNote = row.Description.Length > 100
-                ? row.Description[..100]
-                : (string.IsNullOrWhiteSpace(row.Description) ? null : row.Description);
+            string ingredientName = $"USDA:{fdcId}";
+            string? prepNote = description.Length > 100
+                ? description[..100]
+                : (string.IsNullOrWhiteSpace(description) ? null : description);
 
             try
             {
-                await UpsertDensityAsync(ingredientName, prepNote, gramsPerMl, row.FdcId);
+                await UpsertDensityAsync(ingredientName, prepNote, gramsPerMl, fdcId);
                 upserted++;
             }
             catch (SqlException ex)
             {
-                _logger.LogWarning(ex, "Skipping density row for FDC {FdcId}: {Description}", row.FdcId, row.Description);
+                _logger.LogWarning(ex, "Skipping density row for FDC {FdcId}: {Description}", fdcId, description);
+            }
+
+            processed++;
+            if (processed % 1000 == 0)
+            {
+                _logger.LogDebug("USDA portion import progress: {Processed} processed, {Upserted} upserted", processed, upserted);
             }
         }
 
@@ -143,18 +145,11 @@ public sealed class UsdaPortionImportService : SqlHelper
             CreateParameter("@GramsPerMl", gramsPerMl),
             CreateParameter("@UsdaFdcId", usdaFdcId));
     }
-
-    private sealed class PortionRow
-    {
-        public int FdcId { get; set; }
-        public decimal Amount { get; set; }
-        public string Description { get; set; } = string.Empty;
-        public decimal GramWeight { get; set; }
-    }
 }
 
 /// <summary>
 /// Hosted service that triggers USDA import on startup if the density table is empty.
+/// Migrations always complete before hosted services start, so no delay is needed.
 /// </summary>
 public sealed class UsdaPortionImportWorker : BackgroundService
 {
@@ -169,8 +164,6 @@ public sealed class UsdaPortionImportWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken); // Wait for migrations
-
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         UsdaPortionImportService svc = scope.ServiceProvider.GetRequiredService<UsdaPortionImportService>();
 

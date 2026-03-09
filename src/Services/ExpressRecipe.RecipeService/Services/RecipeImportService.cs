@@ -158,7 +158,7 @@ public class RecipeImportService
                         // Normalize each ingredient to canonical units
                         foreach (RecipeIngredientDto ing in ingredients)
                         {
-                            string rawUnit = $"{ing.Quantity?.ToString("G") ?? ""} {ing.Unit}".Trim();
+                            string rawUnit = $"{ing.Quantity?.ToString("G", System.Globalization.CultureInfo.InvariantCulture) ?? ""} {ing.Unit}".Trim();
                             (decimal amount, UnitCode unitCode) = UnitParser.Parse(rawUnit.Length > 0 ? rawUnit : ing.Unit);
                             if (unitCode == UnitCode.Unknown)
                             {
@@ -173,7 +173,10 @@ public class RecipeImportService
                             if (convResult.Success)
                             {
                                 ing.CanonicalAmount = convResult.Value;
-                                ing.CanonicalUnit = convResult.Unit?.ToString()?.ToLowerInvariant();
+                                // Use short stable code (e.g. "g", "ml", "ea") — fits NVARCHAR(20)
+                                ing.CanonicalUnit = convResult.Unit.HasValue
+                                    ? UnitConverter.ToShortCode(convResult.Unit.Value)
+                                    : null;
                             }
                             else if (convResult.FailureReason == ConversionFailureReason.Uncountable)
                             {

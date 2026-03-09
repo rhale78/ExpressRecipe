@@ -4,6 +4,6 @@
 
 ALTER TABLE RecipeIngredient
     ADD CanonicalAmount  DECIMAL(18,6) NULL,
-        CanonicalUnit    NVARCHAR(5)   NULL,
+        CanonicalUnit    NVARCHAR(20)   NULL,
         SourceUnitSystem NVARCHAR(10)  NULL;
 GO

@@ -11,8 +11,8 @@ public enum UnitCode
     // Temperature — canonical: Celsius
     Celsius, Fahrenheit, GasMark,
     // Count
-    Each,
+    Each, Clove, Slice, Bunch,
     // Uncountable
-    Pinch, Dash, Smidgen, ToTaste, Handful, Sprig, Clove, Slice, Bunch,
+    Pinch, Dash, Smidgen, ToTaste, Handful, Sprig,
     Unknown
 }

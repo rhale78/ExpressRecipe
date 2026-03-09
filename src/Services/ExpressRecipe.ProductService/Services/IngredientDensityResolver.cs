@@ -1,7 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.Services;
 using ExpressRecipe.Shared.Units;
-using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.ProductService.Services;
 
@@ -13,16 +12,13 @@ namespace ExpressRecipe.ProductService.Services;
 public sealed class IngredientDensityResolver : SqlHelper, IIngredientDensityResolver
 {
     private readonly HybridCacheService _cache;
-    private readonly ILogger<IngredientDensityResolver> _logger;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(60);
 
     public IngredientDensityResolver(
         string connectionString,
-        HybridCacheService cache,
-        ILogger<IngredientDensityResolver> logger) : base(connectionString)
+        HybridCacheService cache) : base(connectionString)
     {
         _cache = cache;
-        _logger = logger;
     }
 
     public async Task<decimal?> GetDensityAsync(
@@ -83,14 +79,17 @@ public sealed class IngredientDensityResolver : SqlHelper, IIngredientDensityRes
 
     private async Task<decimal?> QueryDensityByNameAsync(string normalizedName)
     {
-        // Exact match first, then StartsWith
+        // Match on IngredientName (case-insensitive collation handles lower), preferring
+        // rows with no preparation note (the "plain" density), then verified rows first.
+        // Avoids LOWER() so the IX_IngredientDensity_Name index remains sargable.
         const string sql = @"
             SELECT TOP 1 GramsPerMl
             FROM IngredientUnitDensity
-            WHERE LOWER(IngredientName) = @ExactName
-               OR LOWER(IngredientName) LIKE @StartsWithName
+            WHERE IngredientName = @ExactName
+               OR IngredientName LIKE @StartsWithName
             ORDER BY
-                CASE WHEN LOWER(IngredientName) = @ExactName THEN 0 ELSE 1 END,
+                CASE WHEN IngredientName = @ExactName THEN 0 ELSE 1 END,
+                CASE WHEN PreparationNote IS NULL THEN 0 ELSE 1 END,
                 IsVerified DESC,
                 CreatedAt DESC";
 

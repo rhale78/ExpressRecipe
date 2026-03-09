@@ -13,6 +13,13 @@ CREATE TABLE UnitDefinition (
     UsSystem        BIT NOT NULL DEFAULT 0,
     MetricSystem    BIT NOT NULL DEFAULT 0,
     UkSystem        BIT NOT NULL DEFAULT 0,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy       UNIQUEIDENTIFIER NULL,
+    UpdatedAt       DATETIME2 NULL,
+    UpdatedBy       UNIQUEIDENTIFIER NULL,
+    IsDeleted       BIT NOT NULL DEFAULT 0,
+    DeletedAt       DATETIME2 NULL,
+    RowVersion      ROWVERSION,
     CONSTRAINT UQ_UnitDefinition_Code UNIQUE (Code)
 );
 GO
@@ -27,9 +34,19 @@ CREATE TABLE IngredientUnitDensity (
     UsdaFdcId       INT NULL,
     IsVerified      BIT NOT NULL DEFAULT 0,
     CreatedAt       DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy       UNIQUEIDENTIFIER NULL,
     UpdatedAt       DATETIME2 NULL,
-    CONSTRAINT UQ_IngredientDensity UNIQUE (IngredientId, PreparationNote)
+    UpdatedBy       UNIQUEIDENTIFIER NULL,
+    IsDeleted       BIT NOT NULL DEFAULT 0,
+    DeletedAt       DATETIME2 NULL,
+    RowVersion      ROWVERSION,
+    -- Unique on (IngredientId, PreparationNote) when IngredientId is not null (by-ID rows)
+    CONSTRAINT UQ_IngredientDensity_ById UNIQUE (IngredientId, PreparationNote)
 );
+-- Unique index for by-name rows (IngredientId IS NULL): prevents duplicate name+prep combinations
+CREATE UNIQUE INDEX UIX_IngredientDensity_ByName
+    ON IngredientUnitDensity(IngredientName, PreparationNote)
+    WHERE IngredientId IS NULL;
 CREATE INDEX IX_IngredientDensity_Name         ON IngredientUnitDensity(IngredientName);
 CREATE INDEX IX_IngredientDensity_IngredientId ON IngredientUnitDensity(IngredientId);
 GO

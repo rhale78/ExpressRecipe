@@ -93,10 +93,11 @@ public class UnitConverterTests
     }
 
     [Fact]
-    public void FromCanonical_IncompatibleDimensions_ReturnsFailure()
+    public void FromCanonical_IncompatibleDimensions_ReturnsIncompatibleDimensionsReason()
     {
         ConversionResult result = UnitConverter.FromCanonical(100m, UnitCode.Gram, UnitCode.Milliliter);
         result.Success.Should().BeFalse();
+        result.FailureReason.Should().Be(ConversionFailureReason.IncompatibleDimensions);
     }
 
     [Fact]

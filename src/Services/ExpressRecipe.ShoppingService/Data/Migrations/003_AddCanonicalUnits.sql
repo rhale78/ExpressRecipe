@@ -4,5 +4,5 @@
 
 ALTER TABLE ShoppingListItem
     ADD CanonicalQuantity DECIMAL(18,6) NULL,
-        CanonicalUnit     NVARCHAR(5)   NULL;
+        CanonicalUnit     NVARCHAR(20)   NULL;
 GO

@@ -22,7 +22,7 @@ public static class UnitConverter
 
         if (fromDim != toDim && toDim != UnitDimension.Unknown)
         {
-            return ConversionResult.BadUnit($"Cannot convert {canonicalUnit} to {toUnit}: incompatible dimensions");
+            return ConversionResult.IncompatibleDimensions(canonicalUnit, toUnit);
         }
 
         try
@@ -145,4 +145,48 @@ public static class UnitConverter
         }
         return bestGm;
     }
+
+    /// <summary>
+    /// Returns a short, stable string code for a <see cref="UnitCode"/> suitable for database storage
+    /// (always ≤ 20 characters). These codes match the <c>UnitDefinition.Code</c> seed values.
+    /// </summary>
+    public static string ToShortCode(UnitCode unit) => unit switch
+    {
+        UnitCode.Gram         => "g",
+        UnitCode.Kilogram     => "kg",
+        UnitCode.Milligram    => "mg",
+        UnitCode.Ounce        => "oz",
+        UnitCode.Pound        => "lb",
+        UnitCode.Milliliter   => "ml",
+        UnitCode.Liter        => "L",
+        UnitCode.Teaspoon     => "tsp",
+        UnitCode.UkTeaspoon   => "uktsp",
+        UnitCode.Tablespoon   => "tbsp",
+        UnitCode.UkTablespoon => "uktbsp",
+        UnitCode.FluidOunce   => "floz",
+        UnitCode.UkFluidOunce => "ukfloz",
+        UnitCode.Cup          => "cup",
+        UnitCode.UkCup        => "ukcup",
+        UnitCode.MetricCup    => "mcup",
+        UnitCode.UsPint       => "pt",
+        UnitCode.UkPint       => "ukpt",
+        UnitCode.UsQuart      => "qt",
+        UnitCode.UkQuart      => "ukqt",
+        UnitCode.UsGallon     => "gal",
+        UnitCode.UkGallon     => "ukgal",
+        UnitCode.Celsius      => "C",
+        UnitCode.Fahrenheit   => "F",
+        UnitCode.GasMark      => "GM",
+        UnitCode.Each         => "ea",
+        UnitCode.Clove        => "clove",
+        UnitCode.Slice        => "slice",
+        UnitCode.Bunch        => "bunch",
+        UnitCode.Pinch        => "pinch",
+        UnitCode.Dash         => "dash",
+        UnitCode.Smidgen      => "smidgen",
+        UnitCode.ToTaste      => "totaste",
+        UnitCode.Handful      => "handful",
+        UnitCode.Sprig        => "sprig",
+        _                     => unit.ToString().ToLowerInvariant()
+    };
 }

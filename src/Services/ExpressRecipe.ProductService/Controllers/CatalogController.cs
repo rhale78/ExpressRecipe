@@ -1,7 +1,5 @@
-using ExpressRecipe.Data.Common;
 using ExpressRecipe.ProductService.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.ProductService.Controllers;
 

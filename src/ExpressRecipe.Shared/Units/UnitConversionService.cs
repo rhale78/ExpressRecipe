@@ -31,7 +31,8 @@ public sealed class UnitConversionService : IUnitConversionService
     {
         UnitCode displayUnit = forceUnit ?? ChooseDisplayUnit(canonicalUnit, canonicalAmount, preference);
         ConversionResult result = UnitConverter.FromCanonical(canonicalAmount, canonicalUnit, displayUnit);
-        string display = FormatWithFractions(result.Value ?? 0, displayUnit);
+        if (!result.Success) { return result; }
+        string display = FormatWithFractions(result.Value!.Value, displayUnit);
         return result with { DisplayString = display };
     }
 

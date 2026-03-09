@@ -74,6 +74,17 @@ public class UnitConversionServiceTests
     }
 
     [Fact]
+    public void ToDisplay_WhenFromCanonicalFails_ReturnsFailureWithoutDisplayString()
+    {
+        IUnitConversionService svc = CreateService();
+        // Force incompatible: canonical is Gram but forceUnit is Milliliter
+        ConversionResult result = svc.ToDisplay(125m, UnitCode.Gram, UnitSystemPreference.Metric, UnitCode.Milliliter);
+        result.Success.Should().BeFalse();
+        result.FailureReason.Should().Be(ConversionFailureReason.IncompatibleDimensions);
+        result.DisplayString.Should().BeNull();
+    }
+
+    [Fact]
     public async Task CompareAsync_SameUnit_ReturnsComparison()
     {
         IUnitConversionService svc = CreateService();

@@ -19,5 +19,8 @@ public sealed record ConversionResult
     public static ConversionResult Uncountable(UnitCode code) =>
         new() { Success = false, FailureReason = ConversionFailureReason.Uncountable,
                 FailureDetail = $"{code} cannot be converted" };
+    public static ConversionResult IncompatibleDimensions(UnitCode from, UnitCode to) =>
+        new() { Success = false, FailureReason = ConversionFailureReason.IncompatibleDimensions,
+                FailureDetail = $"Cannot convert {from} to {to}: incompatible dimensions" };
 }
 public enum ConversionFailureReason { RequiresDensity, UnknownUnit, Uncountable, DensityNotFound, IncompatibleDimensions }

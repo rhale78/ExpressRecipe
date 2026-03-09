@@ -98,8 +98,7 @@ builder.Services.AddScoped<USDAFoodDataImportService>();
 // Register unit conversion services
 builder.Services.AddScoped<IngredientDensityResolver>(sp => new IngredientDensityResolver(
     connectionString,
-    sp.GetRequiredService<HybridCacheService>(),
-    sp.GetRequiredService<ILogger<IngredientDensityResolver>>()));
+    sp.GetRequiredService<HybridCacheService>()));
 builder.Services.AddScoped<IIngredientDensityResolver>(sp =>
     sp.GetRequiredService<IngredientDensityResolver>());
 builder.Services.AddScoped<IUnitConversionService>(sp =>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace ExpressRecipe.Shared.Units;
@@ -12,10 +13,6 @@ public static class UnitParser
         ('⅓', ".3333"), ('⅔', ".6667"),
         ('⅛', ".125"), ('⅜', ".375"), ('⅝', ".625"), ('⅞', ".875"),
     ];
-
-    // Matches: optional integer, then unicode fraction, then optional unit  e.g. "2½ cups" or "½ cup"
-    private static readonly Regex _unicodeFractionPattern =
-        new(@"^(\d*)([\u00bc-\u00be\u2150-\u215e])\s*(.*)?$", RegexOptions.Compiled);
 
     // Mixed number: "2 1/2 cups"
     private static readonly Regex _mixedPattern =
@@ -43,7 +40,7 @@ public static class UnitParser
         Match gasMatch = _gasMarkPattern.Match(s);
         if (gasMatch.Success)
         {
-            return (decimal.Parse(gasMatch.Groups[1].Value), UnitCode.GasMark);
+            return (decimal.Parse(gasMatch.Groups[1].Value, CultureInfo.InvariantCulture), UnitCode.GasMark);
         }
 
         string normalized = s.ToLowerInvariant();
@@ -79,9 +76,9 @@ public static class UnitParser
         Match mixedMatch = _mixedPattern.Match(replaced);
         if (mixedMatch.Success)
         {
-            decimal whole = decimal.Parse(mixedMatch.Groups[1].Value);
-            decimal num = decimal.Parse(mixedMatch.Groups[2].Value);
-            decimal den = decimal.Parse(mixedMatch.Groups[3].Value);
+            decimal whole = decimal.Parse(mixedMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            decimal num = decimal.Parse(mixedMatch.Groups[2].Value, CultureInfo.InvariantCulture);
+            decimal den = decimal.Parse(mixedMatch.Groups[3].Value, CultureInfo.InvariantCulture);
             decimal amount = den == 0m ? whole : whole + num / den;
             string unitStr = mixedMatch.Groups[4].Value.Trim();
             return (amount, LookupUnit(unitStr));
@@ -91,8 +88,8 @@ public static class UnitParser
         Match fracMatch = _fractionPattern.Match(replaced);
         if (fracMatch.Success)
         {
-            decimal num = decimal.Parse(fracMatch.Groups[1].Value);
-            decimal den = decimal.Parse(fracMatch.Groups[2].Value);
+            decimal num = decimal.Parse(fracMatch.Groups[1].Value, CultureInfo.InvariantCulture);
+            decimal den = decimal.Parse(fracMatch.Groups[2].Value, CultureInfo.InvariantCulture);
             decimal amount = den == 0m ? 0m : num / den;
             string unitStr = fracMatch.Groups[3].Value.Trim();
             return (amount, LookupUnit(unitStr));
@@ -102,7 +99,7 @@ public static class UnitParser
         Match amountMatch = _amountUnitPattern.Match(replaced);
         if (amountMatch.Success)
         {
-            decimal amount = decimal.Parse(amountMatch.Groups[1].Value);
+            decimal amount = decimal.Parse(amountMatch.Groups[1].Value, CultureInfo.InvariantCulture);
             string unitStr = amountMatch.Groups[2].Value.Trim();
             return (amount, LookupUnit(unitStr));
         }
