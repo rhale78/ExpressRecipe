@@ -62,6 +62,11 @@ public class SearchRecipesQueryHandler : IQueryHandler<SearchRecipesQuery, Searc
             filtered = filtered.Where(r => r.TotalTimeMinutes <= query.MaxTotalTime.Value);
         }
 
+        if (query.MaxCostPerServing.HasValue)
+        {
+            filtered = filtered.Where(r => r.EstimatedCostPerServing.HasValue && r.EstimatedCostPerServing.Value <= query.MaxCostPerServing.Value);
+        }
+
         // Filter by categories and tags (if needed, fetch from repository)
         var filteredList = filtered.ToList();
 
@@ -89,6 +94,7 @@ public class SearchRecipesQueryHandler : IQueryHandler<SearchRecipesQuery, Searc
             "name" => query.SortDescending
                 ? recipesWithRatings.OrderByDescending(r => r.recipe.Name)
                 : recipesWithRatings.OrderBy(r => r.recipe.Name),
+            "cost" => recipesWithRatings.OrderBy(r => r.recipe.EstimatedCostPerServing),
             _ => query.SortDescending
                 ? recipesWithRatings.OrderByDescending(r => r.recipe.CreatedAt)
                 : recipesWithRatings.OrderBy(r => r.recipe.CreatedAt)

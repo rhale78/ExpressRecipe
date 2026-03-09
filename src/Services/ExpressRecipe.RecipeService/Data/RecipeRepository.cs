@@ -46,7 +46,8 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         var sql = @"
             SELECT Id, Name, Description, Category, Cuisine, DifficultyLevel,
                    PrepTimeMinutes, CookTimeMinutes, TotalTimeMinutes, Servings,
-                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt
+                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt,
+                   EstimatedCostPerServing, CostLastCalculatedAt
             FROM Recipe
             WHERE IsDeleted = 0 AND (Name LIKE @Term OR Description LIKE @Term)
             ORDER BY CreatedAt DESC
@@ -75,7 +76,9 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
             AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            EstimatedCostPerServing = reader.IsDBNull(reader.GetOrdinal("EstimatedCostPerServing")) ? null : reader.GetDecimal(reader.GetOrdinal("EstimatedCostPerServing")),
+            CostLastCalculatedAt = reader.IsDBNull(reader.GetOrdinal("CostLastCalculatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CostLastCalculatedAt"))
         }, new SqlParameter("@Term", term), new SqlParameter("@Limit", limit), new SqlParameter("@Offset", offset));
     }
 
@@ -84,7 +87,8 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         var sql = @"
             SELECT Id, Name, Description, Category, Cuisine, DifficultyLevel,
                    PrepTimeMinutes, CookTimeMinutes, TotalTimeMinutes, Servings,
-                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt
+                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt,
+                   EstimatedCostPerServing, CostLastCalculatedAt
             FROM Recipe
             WHERE IsDeleted = 0
             ORDER BY CreatedAt DESC
@@ -111,7 +115,9 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
             AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            EstimatedCostPerServing = reader.IsDBNull(reader.GetOrdinal("EstimatedCostPerServing")) ? null : reader.GetDecimal(reader.GetOrdinal("EstimatedCostPerServing")),
+            CostLastCalculatedAt = reader.IsDBNull(reader.GetOrdinal("CostLastCalculatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CostLastCalculatedAt"))
         }, new SqlParameter("@Limit", limit), new SqlParameter("@Offset", offset));
     }
 
@@ -120,7 +126,8 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         var sql = @"
             SELECT Id, Name, Description, Category, Cuisine, DifficultyLevel,
                    PrepTimeMinutes, CookTimeMinutes, TotalTimeMinutes, Servings,
-                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt
+                   ImageUrl, VideoUrl, Instructions, Notes, IsPublic, IsApproved, SourceUrl, AuthorId, CreatedAt, UpdatedAt,
+                   EstimatedCostPerServing, CostLastCalculatedAt
             FROM Recipe
             WHERE Id = @Id AND IsDeleted = 0";
 
@@ -145,10 +152,22 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
             AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt"))
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            EstimatedCostPerServing = reader.IsDBNull(reader.GetOrdinal("EstimatedCostPerServing")) ? null : reader.GetDecimal(reader.GetOrdinal("EstimatedCostPerServing")),
+            CostLastCalculatedAt = reader.IsDBNull(reader.GetOrdinal("CostLastCalculatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CostLastCalculatedAt"))
         }, new SqlParameter("@Id", id));
 
         return recipes.FirstOrDefault();
+    }
+
+    public async Task UpdateEstimatedCostAsync(Guid recipeId, decimal costPerServing, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE Recipe
+            SET EstimatedCostPerServing = @Cost, CostLastCalculatedAt = GETUTCDATE()
+            WHERE Id = @RecipeId AND IsDeleted = 0";
+
+        await ExecuteNonQueryAsync(sql, new SqlParameter("@Cost", costPerServing), new SqlParameter("@RecipeId", recipeId));
     }
 
     public async Task<Guid> CreateRecipeAsync(CreateRecipeRequest request, Guid createdBy)

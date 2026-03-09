@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services.Printing;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
 
@@ -12,11 +13,13 @@ public class MealPlanningController : ControllerBase
 {
     private readonly ILogger<MealPlanningController> _logger;
     private readonly IMealPlanningRepository _repository;
+    private readonly IMealPlanPdfService _pdfService;
 
-    public MealPlanningController(ILogger<MealPlanningController> logger, IMealPlanningRepository repository)
+    public MealPlanningController(ILogger<MealPlanningController> logger, IMealPlanningRepository repository, IMealPlanPdfService pdfService)
     {
         _logger = logger;
         _repository = repository;
+        _pdfService = pdfService;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -101,6 +104,33 @@ public class MealPlanningController : ControllerBase
         var userId = GetUserId();
         var summary = await _repository.GetNutritionSummaryAsync(userId, date);
         return Ok(summary);
+    }
+
+    [HttpPost("plans/{id}/print")]
+    public async Task<IActionResult> PrintPlan(Guid id, [FromBody] MealPlanPrintOptions options, CancellationToken ct)
+    {
+        byte[] pdf = await _pdfService.GeneratePdfAsync(options with { MealPlanId = id }, GetUserId(), ct);
+        MealPlanDto? plan = await _repository.GetMealPlanByIdAsync(id, ct);
+        string planName = plan?.Name ?? "MealPlan";
+        return File(pdf, "application/pdf", $"MealPlan_{planName.Replace(" ", "_")}_{DateTime.UtcNow:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet("plans/{id}/print/preview")]
+    public async Task<IActionResult> PrintPreview(Guid id,
+        [FromQuery] DateOnly? fromDate, [FromQuery] DateOnly? toDate,
+        [FromQuery] bool includeRecipes = false, [FromQuery] bool includeGrocery = false,
+        [FromQuery] GroceryListGrouping grouping = GroceryListGrouping.Aggregated, CancellationToken ct = default)
+    {
+        MealPlanPrintOptions options = new()
+        {
+            MealPlanId = id,
+            FromDate = fromDate,
+            ToDate = toDate,
+            IncludeRecipes = includeRecipes,
+            IncludeGroceryList = includeGrocery,
+            GroceryGrouping = grouping
+        };
+        return Ok(await _pdfService.AssemblePrintDataAsync(options, GetUserId(), ct));
     }
 }
 

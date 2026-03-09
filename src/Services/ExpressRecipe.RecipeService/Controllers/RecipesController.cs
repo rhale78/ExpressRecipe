@@ -61,6 +61,7 @@ public class RecipesController : ControllerBase
         [FromQuery] string? difficulty = null,
         [FromQuery] int? maxPrepTime = null,
         [FromQuery] int? maxCookTime = null,
+        [FromQuery] decimal? maxCostPerServing = null,
         [FromQuery] string? sortBy = "CreatedAt",
         [FromQuery] bool sortDescending = true,
         [FromQuery] int page = 1,
@@ -112,6 +113,11 @@ public class RecipesController : ControllerBase
                 recipes = recipes.Where(r => r.CookTimeMinutes <= maxCookTime.Value).ToList();
             }
 
+            if (maxCostPerServing.HasValue)
+            {
+                recipes = recipes.Where(r => r.EstimatedCostPerServing.HasValue && r.EstimatedCostPerServing.Value <= maxCostPerServing.Value).ToList();
+            }
+
             // Apply sorting
             recipes = sortBy?.ToLower() switch
             {
@@ -119,6 +125,7 @@ public class RecipesController : ControllerBase
                 "preptime" => sortDescending ? recipes.OrderByDescending(r => r.PrepTimeMinutes).ToList() : recipes.OrderBy(r => r.PrepTimeMinutes).ToList(),
                 "cooktime" => sortDescending ? recipes.OrderByDescending(r => r.CookTimeMinutes).ToList() : recipes.OrderBy(r => r.CookTimeMinutes).ToList(),
                 "difficulty" => sortDescending ? recipes.OrderByDescending(r => r.DifficultyLevel).ToList() : recipes.OrderBy(r => r.DifficultyLevel).ToList(),
+                "cost" => recipes.OrderBy(r => r.EstimatedCostPerServing).ToList(),
                 _ => sortDescending ? recipes.OrderByDescending(r => r.CreatedAt).ToList() : recipes.OrderBy(r => r.CreatedAt).ToList()
             };
 

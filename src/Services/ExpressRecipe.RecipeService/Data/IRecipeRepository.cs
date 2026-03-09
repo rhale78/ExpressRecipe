@@ -56,4 +56,5 @@ public interface IRecipeRepository
     Task<List<string>> GetAllCategoriesAsync();
     Task<List<string>> GetAllCuisinesAsync();
     Task<object?> GetByExactTitleAsync(string title);
+    Task UpdateEstimatedCostAsync(Guid recipeId, decimal costPerServing, CancellationToken ct = default);
 }

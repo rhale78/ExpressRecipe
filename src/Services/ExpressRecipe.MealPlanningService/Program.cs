@@ -1,5 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
+using ExpressRecipe.MealPlanningService.Services.Printing;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
 
@@ -33,6 +35,20 @@ var connectionString = builder.Configuration.GetConnectionString("mealplandb")
 // Register repositories
 builder.Services.AddScoped<IMealPlanningRepository>(sp =>
     new MealPlanningRepository(connectionString, sp.GetRequiredService<ILogger<MealPlanningRepository>>()));
+
+// Register services
+builder.Services.AddSingleton<IHolidayService, HolidayService>();
+builder.Services.AddScoped<IMealPlanPdfService, MealPlanPdfService>();
+
+// HTTP clients for inter-service communication
+builder.Services.AddHttpClient("RecipeService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["services:recipeservice:https:0"] ?? builder.Configuration["services:recipeservice:http:0"] ?? "http://recipeservice");
+});
+builder.Services.AddHttpClient("ShoppingService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["services:shoppingservice:https:0"] ?? builder.Configuration["services:shoppingservice:http:0"] ?? "http://shoppingservice");
+});
 
 // Add controllers
 builder.Services.AddControllers();
