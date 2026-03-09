@@ -185,20 +185,23 @@ public class MealPlanningRepository : IMealPlanningRepository
         return meals;
     }
 
-    public async Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid plannedMealId)
+    public async Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid plannedMealId, Guid userId)
     {
         // RecipeName is returned as empty string; the caller (CompleteMeal endpoint)
         // supplies the recipe name through the request body (CompleteMealRequest.RecipeName).
+        // UserId scope prevents cross-user access; IsDeleted filter skips soft-deleted meals.
         const string sql = @"
-            SELECT pm.Id, pm.MealPlanId, pm.RecipeId, '' AS RecipeName, pm.PlannedFor, pm.MealType, pm.Servings, pm.IsCompleted, pm.CompletedAt
+            SELECT pm.Id, pm.MealPlanId, pm.RecipeId, '' AS RecipeName, pm.PlannedDate, pm.MealType, pm.Servings, pm.IsCompleted, pm.CompletedAt
             FROM PlannedMeal pm
-            WHERE pm.Id = @PlannedMealId";
+            JOIN MealPlan mp ON mp.Id = pm.MealPlanId
+            WHERE pm.Id = @PlannedMealId AND mp.UserId = @UserId AND pm.IsDeleted = 0 AND mp.IsDeleted = 0";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@PlannedMealId", plannedMealId);
+        command.Parameters.AddWithValue("@UserId",        userId);
 
         await using var reader = await command.ExecuteReaderAsync();
         if (await reader.ReadAsync())

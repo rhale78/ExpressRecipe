@@ -60,7 +60,7 @@ public interface INutritionLogRepository
     Task<List<DailyNutritionLogRow>> GetDayDetailAsync(Guid userId, DateOnly date, CancellationToken ct);
     Task<NutritionalGoalRow?> GetActiveGoalAsync(Guid userId, CancellationToken ct);
     Task<Guid> UpsertGoalAsync(Guid userId, NutritionalGoalRow goal, CancellationToken ct);
-    Task EndGoalAsync(Guid goalId, CancellationToken ct);
+    Task EndGoalAsync(Guid goalId, Guid userId, CancellationToken ct);
     Task<List<NutritionalGoalRow>> GetGoalHistoryAsync(Guid userId, CancellationToken ct);
 }
 
@@ -138,7 +138,7 @@ public sealed class NutritionLogRepository : SqlHelper, INutritionLogRepository
                    0                              AS MealsWithoutNutrition
             FROM DailyNutritionLog
             WHERE UserId = @UserId
-              AND LogDate >= CAST(DATEADD(day, -@Days, GETUTCDATE()) AS DATE)
+              AND LogDate >= CAST(DATEADD(day, -(@Days - 1), GETUTCDATE()) AS DATE)
             GROUP BY LogDate
             ORDER BY LogDate ASC";
 
@@ -172,8 +172,8 @@ public sealed class NutritionLogRepository : SqlHelper, INutritionLogRepository
                          TargetCarbs, TargetFat, TargetFiber, TargetSodium, Notes
             FROM NutritionalGoal
             WHERE UserId = @UserId
-              AND StartDate <= GETUTCDATE()
-              AND (EndDate IS NULL OR EndDate >= GETUTCDATE())
+              AND StartDate <= CAST(GETUTCDATE() AS DATE)
+              AND (EndDate IS NULL OR EndDate >= CAST(GETUTCDATE() AS DATE))
             ORDER BY StartDate DESC";
 
         List<NutritionalGoalRow> rows = await ExecuteReaderAsync(
@@ -219,10 +219,11 @@ public sealed class NutritionLogRepository : SqlHelper, INutritionLogRepository
         return id;
     }
 
-    public async Task EndGoalAsync(Guid goalId, CancellationToken ct) =>
+    public async Task EndGoalAsync(Guid goalId, Guid userId, CancellationToken ct) =>
         await ExecuteNonQueryAsync(
-            "UPDATE NutritionalGoal SET EndDate = CAST(GETUTCDATE() AS DATE) WHERE Id = @Id",
-            new SqlParameter("@Id", goalId));
+            "UPDATE NutritionalGoal SET EndDate = CAST(GETUTCDATE() AS DATE) WHERE Id = @Id AND UserId = @UserId",
+            new SqlParameter("@Id",     goalId),
+            new SqlParameter("@UserId", userId));
 
     public async Task<List<NutritionalGoalRow>> GetGoalHistoryAsync(Guid userId, CancellationToken ct)
     {

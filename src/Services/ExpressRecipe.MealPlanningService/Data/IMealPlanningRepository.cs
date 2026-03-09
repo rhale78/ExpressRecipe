@@ -11,7 +11,7 @@ public interface IMealPlanningRepository
     // Planned Meals
     Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid recipeId, DateTime plannedFor, string mealType, int servings);
     Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate);
-    Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid plannedMealId);
+    Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid plannedMealId, Guid userId);
     Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedFor, string mealType, int servings);
     Task RemovePlannedMealAsync(Guid plannedMealId);
     Task MarkMealAsCompletedAsync(Guid plannedMealId);

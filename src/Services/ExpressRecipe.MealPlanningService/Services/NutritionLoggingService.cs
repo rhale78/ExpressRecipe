@@ -11,7 +11,7 @@ public interface INutritionLoggingService
         CancellationToken ct = default);
 
     Task LogManualEntryAsync(Guid userId, string recipeName, string? mealType,
-        decimal servingsEaten, decimal? calories, decimal? protein, decimal? carbs,
+        decimal servingsEaten, DateOnly? date, decimal? calories, decimal? protein, decimal? carbs,
         decimal? fat, decimal? fiber, decimal? sodium, CancellationToken ct = default);
 }
 
@@ -48,16 +48,13 @@ public sealed class NutritionLoggingService : INutritionLoggingService
         decimal? calories = null, protein = null, carbs = null, fat = null, fiber = null, sodium = null;
         if (nutrition is { HasData: true })
         {
-            decimal ratio = nutrition.BaseServings > 0
-                ? servingsEaten / nutrition.BaseServings
-                : servingsEaten;
-
-            calories = nutrition.CaloriesPerServing * ratio;
-            protein  = nutrition.ProteinPerServing  * ratio;
-            carbs    = nutrition.CarbsPerServing    * ratio;
-            fat      = nutrition.FatPerServing      * ratio;
-            fiber    = nutrition.FiberPerServing    * ratio;
-            sodium   = nutrition.SodiumPerServing   * ratio;
+            // CaloriesPerServing etc. are already per-serving; total = per-serving × servings eaten
+            calories = nutrition.CaloriesPerServing * servingsEaten;
+            protein  = nutrition.ProteinPerServing  * servingsEaten;
+            carbs    = nutrition.CarbsPerServing    * servingsEaten;
+            fat      = nutrition.FatPerServing      * servingsEaten;
+            fiber    = nutrition.FiberPerServing    * servingsEaten;
+            sodium   = nutrition.SodiumPerServing   * servingsEaten;
         }
 
         await _logRepo.InsertLogAsync(new DailyNutritionLogRow
@@ -86,14 +83,14 @@ public sealed class NutritionLoggingService : INutritionLoggingService
     }
 
     public async Task LogManualEntryAsync(Guid userId, string recipeName, string? mealType,
-        decimal servingsEaten, decimal? calories, decimal? protein, decimal? carbs,
+        decimal servingsEaten, DateOnly? date, decimal? calories, decimal? protein, decimal? carbs,
         decimal? fat, decimal? fiber, decimal? sodium, CancellationToken ct = default)
     {
         await _logRepo.InsertLogAsync(new DailyNutritionLogRow
         {
             Id            = Guid.NewGuid(),
             UserId        = userId,
-            LogDate       = DateOnly.FromDateTime(DateTime.UtcNow),
+            LogDate       = date ?? DateOnly.FromDateTime(DateTime.UtcNow),
             MealType      = mealType,
             RecipeName    = recipeName,
             ServingsEaten = servingsEaten,

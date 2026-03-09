@@ -87,11 +87,13 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> CompleteMeal(Guid id, [FromBody] CompleteMealRequest? request = null)
     {
         Guid userId = GetUserId();
-        PlannedMealDto? plannedMeal = await _repository.GetPlannedMealByIdAsync(id);
+        PlannedMealDto? plannedMeal = await _repository.GetPlannedMealByIdAsync(id, userId);
+
+        if (plannedMeal is null) { return NotFound(); }
 
         await _repository.MarkMealAsCompletedAsync(id);
 
-        if (plannedMeal?.RecipeId.HasValue == true)
+        if (plannedMeal.RecipeId.HasValue)
         {
             decimal servingsEaten = request?.ServingsEaten ?? (decimal)(plannedMeal.Servings ?? 1);
             Guid historyId = await _cookingHistoryRepo.CreateAsync(new CookingHistoryRow
@@ -105,15 +107,20 @@ public class MealPlanningController : ControllerBase
                 ServingsEaten  = servingsEaten
             });
 
+            // Fire-and-forget with exception logging so failures are visible
             _ = _nutritionLoggingService.LogCookingEventAsync(
-                userId,
-                plannedMeal.RecipeId.Value,
-                request?.RecipeName ?? string.Empty,
-                plannedMeal.MealType,
-                servingsEaten,
-                historyId,
-                plannedMeal.Id,
-                CancellationToken.None);
+                    userId,
+                    plannedMeal.RecipeId.Value,
+                    request?.RecipeName ?? string.Empty,
+                    plannedMeal.MealType,
+                    servingsEaten,
+                    historyId,
+                    plannedMeal.Id,
+                    CancellationToken.None)
+                .ContinueWith(
+                    t => _logger.LogError(t.Exception,
+                        "Failed to log nutrition for CookingHistoryId={HistoryId}", historyId),
+                    TaskContinuationOptions.OnlyOnFaulted);
         }
 
         return NoContent();
@@ -158,8 +165,9 @@ public class MealPlanningController : ControllerBase
     [HttpPost("/api/nutrition/log")]
     public async Task<IActionResult> LogManual([FromBody] ManualNutritionLogRequest req, CancellationToken ct = default)
     {
+        DateOnly? date = req.Date.HasValue ? DateOnly.FromDateTime(req.Date.Value) : null;
         await _nutritionLoggingService.LogManualEntryAsync(GetUserId(), req.RecipeName, req.MealType,
-            req.ServingsEaten, req.Calories, req.Protein, req.Carbohydrates, req.Fat, req.Fiber, req.Sodium, ct);
+            req.ServingsEaten, date, req.Calories, req.Protein, req.Carbohydrates, req.Fat, req.Fiber, req.Sodium, ct);
         return NoContent();
     }
 
@@ -208,7 +216,7 @@ public class MealPlanningController : ControllerBase
     [HttpDelete("/api/nutrition/goals/{id}")]
     public async Task<IActionResult> EndGoal(Guid id, CancellationToken ct = default)
     {
-        await _nutritionLogRepo.EndGoalAsync(id, ct);
+        await _nutritionLogRepo.EndGoalAsync(id, GetUserId(), ct);
         return NoContent();
     }
 }
@@ -248,6 +256,8 @@ public sealed record ManualNutritionLogRequest
     public string RecipeName { get; init; } = string.Empty;
     public string? MealType { get; init; }
     public decimal ServingsEaten { get; init; } = 1m;
+    /// <summary>Date to log against. Defaults to today (UTC) when omitted, allowing backfill.</summary>
+    public DateTime? Date { get; init; }
     public decimal? Calories { get; init; }
     public decimal? Protein { get; init; }
     public decimal? Carbohydrates { get; init; }

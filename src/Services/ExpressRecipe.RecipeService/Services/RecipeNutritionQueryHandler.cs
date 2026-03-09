@@ -35,24 +35,21 @@ public sealed class RecipeNutritionQueryHandler : IRequestHandler<RequestRecipeN
         {
             return new RecipeNutritionResponse
             {
-                CorrelationId = request.CorrelationId,
                 RecipeId = request.RecipeId,
-                HasData = false
+                HasData  = false
             };
         }
 
         return new RecipeNutritionResponse
         {
-            CorrelationId = request.CorrelationId,
-            RecipeId = request.RecipeId,
-            HasData = true,
-            BaseServings = row.BaseServings,
+            RecipeId           = request.RecipeId,
+            HasData            = true,
             CaloriesPerServing = row.Calories,
-            ProteinPerServing = row.Protein,
-            CarbsPerServing = row.TotalCarbohydrates,
-            FatPerServing = row.TotalFat,
-            FiberPerServing = row.DietaryFiber,
-            SodiumPerServing = row.Sodium
+            ProteinPerServing  = row.Protein,
+            CarbsPerServing    = row.TotalCarbohydrates,
+            FatPerServing      = row.TotalFat,
+            FiberPerServing    = row.DietaryFiber,
+            SodiumPerServing   = row.Sodium
         };
     }
 }
