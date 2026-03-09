@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using ExpressRecipe.NotificationService.Data;
 
 namespace ExpressRecipe.NotificationService.Controllers;
@@ -13,10 +15,14 @@ public class NotificationController : ControllerBase
     private readonly ILogger<NotificationController> _logger;
     private readonly INotificationRepository _repository;
 
-    public NotificationController(ILogger<NotificationController> logger, INotificationRepository repository)
+    private readonly IConfiguration _configuration;
+
+    public NotificationController(ILogger<NotificationController> logger, INotificationRepository repository,
+        IConfiguration configuration)
     {
-        _logger = logger;
-        _repository = repository;
+        _logger        = logger;
+        _repository    = repository;
+        _configuration = configuration;
     }
 
     private Guid? GetUserId()
@@ -170,27 +176,45 @@ public class NotificationController : ControllerBase
         }
     }
 
+    // Allowlist of valid entity types for action URL construction.
+    private static readonly HashSet<string> AllowedEntityTypes =
+        new(StringComparer.OrdinalIgnoreCase) { "PlannedMeal", "InventoryItem", "Recipe" };
+
     /// <summary>
     /// Service-to-service endpoint for creating in-app notifications from other microservices.
-    /// Does not require end-user authentication.
+    /// Protected by an API key header (X-Internal-Api-Key) when InternalApi:Key is configured.
     /// </summary>
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("internal")]
     public async Task<IActionResult> CreateInternal([FromBody] InternalNotificationRequest request)
     {
+        // Validate service-to-service API key when one is configured.
+        string? configuredKey = _configuration["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
         try
         {
             if (request.UserId == Guid.Empty)
                 return BadRequest(new { error = "UserId is required" });
 
-            string? actionUrl = request.RelatedEntityId.HasValue
-                ? $"/{request.RelatedEntityType?.ToLowerInvariant()}/{request.RelatedEntityId}"
-                : null;
-
+            // Require both a validated entity type and an entity ID to build a well-formed action URL.
+            string? actionUrl = null;
             Dictionary<string, string>? metadata = null;
-            if (request.RelatedEntityType is not null && request.RelatedEntityId.HasValue)
+
+            if (!string.IsNullOrEmpty(request.RelatedEntityType) && request.RelatedEntityId.HasValue)
             {
-                metadata = new Dictionary<string, string>
+                if (!AllowedEntityTypes.Contains(request.RelatedEntityType))
+                    return BadRequest(new { error = "Invalid RelatedEntityType" });
+
+                actionUrl = $"/{request.RelatedEntityType.ToLowerInvariant()}/{request.RelatedEntityId}";
+                metadata  = new Dictionary<string, string>
                 {
                     ["relatedEntityType"] = request.RelatedEntityType,
                     ["relatedEntityId"]   = request.RelatedEntityId.Value.ToString()
@@ -207,6 +231,22 @@ public class NotificationController : ControllerBase
             _logger.LogError(ex, "Error creating internal notification for user {UserId}", request.UserId);
             return StatusCode(500, new { message = "An error occurred while creating the notification" });
         }
+    }
+
+    // Constant-time comparison to guard against timing attacks when comparing API keys.
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) { return false; }
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        // Pad the shorter array so both buffers are equal length before comparing.
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 }
 

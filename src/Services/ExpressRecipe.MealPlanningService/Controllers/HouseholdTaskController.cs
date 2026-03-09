@@ -70,7 +70,8 @@ public sealed class HouseholdTaskController : ControllerBase
         }
         try
         {
-            await _tasks.ActionTaskAsync(id, GetUserId(), req.ActionTaken, ct);
+            bool updated = await _tasks.ActionTaskAsync(id, GetHouseholdId(), GetUserId(), req.ActionTaken, ct);
+            if (!updated) { return NotFound(); }
             return NoContent();
         }
         catch (InvalidOperationException) { return Unauthorized(); }
@@ -82,8 +83,13 @@ public sealed class HouseholdTaskController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Dismiss(Guid id, CancellationToken ct)
     {
-        await _tasks.DismissTaskAsync(id, ct);
-        return NoContent();
+        try
+        {
+            bool updated = await _tasks.DismissTaskAsync(id, GetHouseholdId(), ct);
+            if (!updated) { return NotFound(); }
+            return NoContent();
+        }
+        catch (InvalidOperationException) { return Unauthorized(); }
     }
 }
 

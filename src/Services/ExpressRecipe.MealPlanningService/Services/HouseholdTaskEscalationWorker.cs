@@ -41,18 +41,27 @@ public sealed class HouseholdTaskEscalationWorker : BackgroundService
         IHouseholdTaskRepository tasks   = scope.ServiceProvider.GetRequiredService<IHouseholdTaskRepository>();
         IHouseholdMemberQuery    members = scope.ServiceProvider.GetRequiredService<IHouseholdMemberQuery>();
 
-        List<HouseholdTaskDto> due = await tasks.GetEscalationDueTasksAsync(ct);
+        // Atomically claim all due tasks; no other worker instance can claim the same tasks.
+        List<HouseholdTaskDto> claimed = await tasks.ClaimEscalationBatchAsync(ct);
         HttpClient client = _http.CreateClient("NotificationService");
 
-        foreach (HouseholdTaskDto task in due)
+        foreach (HouseholdTaskDto task in claimed)
         {
-            // Notify all active household members
             List<Guid> userIds = await members.GetActiveMemberUserIdsAsync(task.HouseholdId, ct);
+            if (userIds.Count == 0)
+            {
+                _logger.LogWarning(
+                    "No active members found for household {HouseholdId}; task {TaskId} escalation skipped",
+                    task.HouseholdId, task.Id);
+                continue;
+            }
+
+            int successCount = 0;
             foreach (Guid userId in userIds)
             {
                 try
                 {
-                    await client.PostAsJsonAsync("/api/Notification/internal", new
+                    HttpResponseMessage response = await client.PostAsJsonAsync("/api/Notification/internal", new
                     {
                         userId,
                         type              = "ThawEscalation",
@@ -61,6 +70,17 @@ public sealed class HouseholdTaskEscalationWorker : BackgroundService
                         relatedEntityType = task.RelatedEntityType,
                         relatedEntityId   = task.RelatedEntityId
                     }, ct);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        successCount++;
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "NotificationService returned {StatusCode} for task {TaskId} user {UserId}",
+                            (int)response.StatusCode, task.Id, userId);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -68,7 +88,15 @@ public sealed class HouseholdTaskEscalationWorker : BackgroundService
                         "Failed escalation notification for task {TaskId} user {UserId}", task.Id, userId);
                 }
             }
-            await tasks.MarkEscalationSentAsync(task.Id, ct);
+
+            if (successCount == 0)
+            {
+                _logger.LogError(
+                    "All escalation notifications failed for task {TaskId} (household {HouseholdId}). " +
+                    "Task is already marked Escalated and will not be retried. " +
+                    "Check NotificationService health and member configuration.",
+                    task.Id, task.HouseholdId);
+            }
         }
     }
 }

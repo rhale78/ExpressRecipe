@@ -79,6 +79,8 @@ public class HouseholdTaskControllerTests
         // Arrange
         Guid taskId = Guid.NewGuid();
         TaskActionRequest req = new() { ActionTaken = "Moved" };
+        _mockTasks.Setup(r => r.ActionTaskAsync(taskId, _householdId, _userId, "Moved", It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(true);
 
         // Act
         IActionResult result = await _controller.TakeAction(taskId, req, CancellationToken.None);
@@ -86,7 +88,23 @@ public class HouseholdTaskControllerTests
         // Assert
         result.Should().BeOfType<NoContentResult>();
         _mockTasks.Verify(r => r.ActionTaskAsync(
-            taskId, _userId, "Moved", It.IsAny<CancellationToken>()), Times.Once);
+            taskId, _householdId, _userId, "Moved", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TakeAction_WhenTaskNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        TaskActionRequest req = new() { ActionTaken = "Moved" };
+        _mockTasks.Setup(r => r.ActionTaskAsync(
+                    It.IsAny<Guid>(), _householdId, _userId, "Moved", It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(false);
+
+        // Act
+        IActionResult result = await _controller.TakeAction(Guid.NewGuid(), req, CancellationToken.None);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
     }
 
     [Fact]
@@ -101,7 +119,7 @@ public class HouseholdTaskControllerTests
         // Assert
         result.Should().BeOfType<BadRequestObjectResult>();
         _mockTasks.Verify(r => r.ActionTaskAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -114,6 +132,9 @@ public class HouseholdTaskControllerTests
         // Arrange
         Guid taskId = Guid.NewGuid();
         TaskActionRequest req = new() { ActionTaken = action };
+        _mockTasks.Setup(r => r.ActionTaskAsync(
+                    taskId, _householdId, _userId, action, It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(true);
 
         // Act
         IActionResult result = await _controller.TakeAction(taskId, req, CancellationToken.None);
@@ -123,16 +144,32 @@ public class HouseholdTaskControllerTests
     }
 
     [Fact]
-    public async Task Dismiss_CallsRepositoryAndReturnsNoContent()
+    public async Task Dismiss_WhenTaskExists_ReturnsNoContent()
     {
         // Arrange
         Guid taskId = Guid.NewGuid();
+        _mockTasks.Setup(r => r.DismissTaskAsync(taskId, _householdId, It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(true);
 
         // Act
         IActionResult result = await _controller.Dismiss(taskId, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<NoContentResult>();
-        _mockTasks.Verify(r => r.DismissTaskAsync(taskId, It.IsAny<CancellationToken>()), Times.Once);
+        _mockTasks.Verify(r => r.DismissTaskAsync(taskId, _householdId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Dismiss_WhenTaskNotFound_ReturnsNotFound()
+    {
+        // Arrange
+        _mockTasks.Setup(r => r.DismissTaskAsync(It.IsAny<Guid>(), _householdId, It.IsAny<CancellationToken>()))
+                  .ReturnsAsync(false);
+
+        // Act
+        IActionResult result = await _controller.Dismiss(Guid.NewGuid(), CancellationToken.None);
+
+        // Assert
+        result.Should().BeOfType<NotFoundResult>();
     }
 }

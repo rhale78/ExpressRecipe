@@ -309,23 +309,36 @@ public partial class InventoryRepository
             }
         }
 
-        // Step 3: Match freezer items to recipe ingredient names (case-insensitive substring match)
+        // Step 3: Match freezer items to recipe ingredient names using pre-normalized lowercase sets
+        // to avoid repeated per-pair .ToLower() allocations.
+        List<string> normalizedIngredients = ingredientNames
+            .Select(n => n.ToLowerInvariant())
+            .Where(n => n.Length > 0)
+            .ToList();
+
         List<FrozenIngredientResult> matched = new();
         foreach ((string itemName, Guid storageLocationId) in freezerItems)
         {
-            foreach (string ingredient in ingredientNames)
+            string normalizedItem = itemName.ToLowerInvariant();
+            bool isMatch = false;
+            foreach (string ingredient in normalizedIngredients)
             {
-                if (itemName.Contains(ingredient, StringComparison.OrdinalIgnoreCase) ||
-                    ingredient.Contains(itemName,  StringComparison.OrdinalIgnoreCase))
+                if (normalizedItem.Contains(ingredient, StringComparison.Ordinal) ||
+                    ingredient.Contains(normalizedItem,  StringComparison.Ordinal))
                 {
-                    matched.Add(new FrozenIngredientResult
-                    {
-                        ItemName          = itemName,
-                        FoodCategory      = InferFoodCategory(itemName),
-                        StorageLocationId = storageLocationId
-                    });
+                    isMatch = true;
                     break;
                 }
+            }
+
+            if (isMatch)
+            {
+                matched.Add(new FrozenIngredientResult
+                {
+                    ItemName          = itemName,
+                    FoodCategory      = InferFoodCategory(itemName),
+                    StorageLocationId = storageLocationId
+                });
             }
         }
 

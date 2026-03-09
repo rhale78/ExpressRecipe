@@ -12,11 +12,15 @@ public interface IHouseholdTaskRepository
         int escalateAfterMins, CancellationToken ct = default);
     Task UpsertThawTaskAsync(Guid householdId, Guid plannedMealId, string title,
         string? description, DateTime dueAt, CancellationToken ct = default);
-    Task ActionTaskAsync(Guid taskId, Guid actionedBy, string actionTaken, CancellationToken ct = default);
-    Task DismissTaskAsync(Guid taskId, CancellationToken ct = default);
+    Task<bool> ActionTaskAsync(Guid taskId, Guid householdId, Guid actionedBy, string actionTaken, CancellationToken ct = default);
+    Task<bool> DismissTaskAsync(Guid taskId, Guid householdId, CancellationToken ct = default);
     Task DeleteTasksByRelatedEntityAsync(Guid relatedEntityId, CancellationToken ct = default);
     Task<List<HouseholdTaskDto>> GetEscalationDueTasksAsync(CancellationToken ct = default);
-    Task MarkEscalationSentAsync(Guid taskId, CancellationToken ct = default);
+    /// <summary>
+    /// Atomically claims all escalation-due tasks by setting EscalationSent=1 and Status='Escalated'
+    /// in a single UPDATE…OUTPUT statement, preventing duplicate sends across concurrent instances.
+    /// </summary>
+    Task<List<HouseholdTaskDto>> ClaimEscalationBatchAsync(CancellationToken ct = default);
     Task MarkReminderSentAsync(Guid taskId, CancellationToken ct = default);
 }
 
@@ -51,6 +55,12 @@ public sealed class HouseholdTaskRepository : IHouseholdTaskRepository
         RelatedEntityType, RelatedEntityId, Status, ActionTaken,
         ActionedBy, ActionedAt, ReminderSent, EscalationSent,
         EscalateAfterMins, CreatedAt";
+
+    private const string InsertedColumns = @"
+        INSERTED.Id, INSERTED.HouseholdId, INSERTED.TaskType, INSERTED.Title, INSERTED.Description, INSERTED.DueAt,
+        INSERTED.RelatedEntityType, INSERTED.RelatedEntityId, INSERTED.Status, INSERTED.ActionTaken,
+        INSERTED.ActionedBy, INSERTED.ActionedAt, INSERTED.ReminderSent, INSERTED.EscalationSent,
+        INSERTED.EscalateAfterMins, INSERTED.CreatedAt";
 
     public async Task<List<HouseholdTaskDto>> GetActiveTasksAsync(Guid householdId, CancellationToken ct = default)
     {
@@ -158,7 +168,7 @@ public sealed class HouseholdTaskRepository : IHouseholdTaskRepository
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task ActionTaskAsync(Guid taskId, Guid actionedBy, string actionTaken, CancellationToken ct = default)
+    public async Task<bool> ActionTaskAsync(Guid taskId, Guid householdId, Guid actionedBy, string actionTaken, CancellationToken ct = default)
     {
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
@@ -166,29 +176,34 @@ public sealed class HouseholdTaskRepository : IHouseholdTaskRepository
             UPDATE HouseholdTask
             SET Status='Actioned', ActionTaken=@Action, ActionedBy=@By,
                 ActionedAt=GETUTCDATE(), UpdatedAt=GETUTCDATE()
-            WHERE Id=@Id", conn);
-        cmd.Parameters.AddWithValue("@Action", actionTaken);
-        cmd.Parameters.AddWithValue("@By",     actionedBy);
-        cmd.Parameters.AddWithValue("@Id",     taskId);
-        await cmd.ExecuteNonQueryAsync(ct);
+            WHERE Id=@Id AND HouseholdId=@HouseholdId", conn);
+        cmd.Parameters.AddWithValue("@Action",      actionTaken);
+        cmd.Parameters.AddWithValue("@By",          actionedBy);
+        cmd.Parameters.AddWithValue("@Id",          taskId);
+        cmd.Parameters.AddWithValue("@HouseholdId", householdId);
+        int rows = await cmd.ExecuteNonQueryAsync(ct);
+        return rows > 0;
     }
 
-    public async Task DismissTaskAsync(Guid taskId, CancellationToken ct = default)
+    public async Task<bool> DismissTaskAsync(Guid taskId, Guid householdId, CancellationToken ct = default)
     {
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(
-            "UPDATE HouseholdTask SET Status='Dismissed', UpdatedAt=GETUTCDATE() WHERE Id=@Id", conn);
-        cmd.Parameters.AddWithValue("@Id", taskId);
-        await cmd.ExecuteNonQueryAsync(ct);
+            "UPDATE HouseholdTask SET Status='Dismissed', UpdatedAt=GETUTCDATE() WHERE Id=@Id AND HouseholdId=@HouseholdId", conn);
+        cmd.Parameters.AddWithValue("@Id",          taskId);
+        cmd.Parameters.AddWithValue("@HouseholdId", householdId);
+        int rows = await cmd.ExecuteNonQueryAsync(ct);
+        return rows > 0;
     }
 
+    // Soft-delete: set Status='Dismissed' so task history remains queryable.
     public async Task DeleteTasksByRelatedEntityAsync(Guid relatedEntityId, CancellationToken ct = default)
     {
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(
-            "DELETE FROM HouseholdTask WHERE RelatedEntityId=@Id AND Status='Pending'", conn);
+            "UPDATE HouseholdTask SET Status='Dismissed', UpdatedAt=GETUTCDATE() WHERE RelatedEntityId=@Id AND Status='Pending'", conn);
         cmd.Parameters.AddWithValue("@Id", relatedEntityId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -208,14 +223,21 @@ public sealed class HouseholdTaskRepository : IHouseholdTaskRepository
         return await ReadTasksAsync(cmd, ct);
     }
 
-    public async Task MarkEscalationSentAsync(Guid taskId, CancellationToken ct = default)
+    public async Task<List<HouseholdTaskDto>> ClaimEscalationBatchAsync(CancellationToken ct = default)
     {
+        // Atomically marks tasks as Escalated and returns them so concurrent instances cannot
+        // double-escalate the same task.
+        string sql = $@"
+            UPDATE HouseholdTask
+            SET EscalationSent=1, Status='Escalated', UpdatedAt=GETUTCDATE()
+            OUTPUT {InsertedColumns}
+            WHERE Status='Pending' AND EscalationSent=0
+              AND DATEADD(minute, EscalateAfterMins, DueAt) <= GETUTCDATE()";
+
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
-        await using SqlCommand cmd = new(
-            "UPDATE HouseholdTask SET EscalationSent=1, Status='Escalated', UpdatedAt=GETUTCDATE() WHERE Id=@Id", conn);
-        cmd.Parameters.AddWithValue("@Id", taskId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        await using SqlCommand cmd = new(sql, conn);
+        return await ReadTasksAsync(cmd, ct);
     }
 
     public async Task MarkReminderSentAsync(Guid taskId, CancellationToken ct = default)

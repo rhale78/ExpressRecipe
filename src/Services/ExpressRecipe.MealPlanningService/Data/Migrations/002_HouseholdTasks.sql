@@ -15,7 +15,7 @@ CREATE TABLE HouseholdTask (
     Status            NVARCHAR(30)     NOT NULL DEFAULT 'Pending',
         -- Pending|Actioned|Dismissed|Escalated
     ActionTaken       NVARCHAR(50)     NULL,
-        -- Moved|AlreadyMoved|DelayMeal|Ignored
+        -- Moved|AlreadyMoved|Ignored
     ActionedBy        UNIQUEIDENTIFIER NULL,
     ActionedAt        DATETIME2        NULL,
     ReminderSent      BIT              NOT NULL DEFAULT 0,
