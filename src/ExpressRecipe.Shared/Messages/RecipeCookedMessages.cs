@@ -11,11 +11,13 @@ public static class RecipeCookedEventKeys
 }
 
 /// <summary>
-/// Published when a user cooks a recipe, allowing inventory to be decremented.
+/// Published when a user cooks a recipe, allowing inventory to be decremented
+/// and cooking history to be correlated.
 /// </summary>
 public record RecipeCookedEvent(
     Guid RecipeId,
     Guid UserId,
     Guid? HouseholdId,
-    decimal Servings,
-    DateTimeOffset CookedAt) : IMessage;
+    int Servings,
+    DateTimeOffset CookedAt,
+    Guid CookingHistoryId) : IMessage;
