@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
+using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
 
@@ -12,11 +14,22 @@ public class MealPlanningController : ControllerBase
 {
     private readonly ILogger<MealPlanningController> _logger;
     private readonly IMealPlanningRepository _repository;
+    private readonly IMealScheduleConfigRepository _scheduleRepo;
+    private readonly IGoogleCalendarService _googleCal;
+    private readonly IHolidayService _holidays;
 
-    public MealPlanningController(ILogger<MealPlanningController> logger, IMealPlanningRepository repository)
+    public MealPlanningController(
+        ILogger<MealPlanningController> logger,
+        IMealPlanningRepository repository,
+        IMealScheduleConfigRepository scheduleRepo,
+        IGoogleCalendarService googleCal,
+        IHolidayService holidays)
     {
-        _logger = logger;
-        _repository = repository;
+        _logger       = logger;
+        _repository   = repository;
+        _scheduleRepo = scheduleRepo;
+        _googleCal    = googleCal;
+        _holidays     = holidays;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -102,6 +115,52 @@ public class MealPlanningController : ControllerBase
         var summary = await _repository.GetNutritionSummaryAsync(userId, date);
         return Ok(summary);
     }
+
+    // ── Schedule config ───────────────────────────────────────────────────────
+
+    [HttpGet("schedule-config")]
+    public async Task<IActionResult> GetScheduleConfig(CancellationToken ct)
+        => Ok(await _scheduleRepo.GetConfigsAsync(GetUserId(), ct));
+
+    [HttpPut("schedule-config")]
+    public async Task<IActionResult> SetScheduleConfig([FromBody] List<MealScheduleConfigDto> configs, CancellationToken ct)
+    {
+        await _scheduleRepo.SetConfigsAsync(GetUserId(), configs, ct);
+        return NoContent();
+    }
+
+    // ── Google Calendar ───────────────────────────────────────────────────────
+
+    [HttpGet("calendar/status")]
+    public async Task<IActionResult> GetCalendarStatus(CancellationToken ct)
+        => Ok(new { connected = await _googleCal.IsConnectedAsync(GetUserId(), ct) });
+
+    [HttpGet("calendar/events")]
+    public async Task<IActionResult> GetCalendarEvents([FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
+        => Ok(await _googleCal.GetEventsAsync(GetUserId(), from, to, ct));
+
+    // ── Holidays ─────────────────────────────────────────────────────────────
+
+    [HttpGet("holidays")]
+    public IActionResult GetHolidays([FromQuery] int year, [FromQuery] int month, [FromQuery] string? categories)
+    {
+        IReadOnlyList<string> cats = categories?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            ?? Array.Empty<string>();
+        return Ok(_holidays.GetHolidaysForMonth(year, month, cats));
+    }
+
+    // ── Auto-fill ─────────────────────────────────────────────────────────────
+
+    [HttpPost("plans/{id}/auto-fill")]
+    public async Task<IActionResult> AutoFill(Guid id, [FromBody] AutoFillRequest request, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        List<CalendarEventDto> calEvents = request.RespectCalendar
+            ? await _googleCal.GetEventsAsync(userId, request.FromDate, request.ToDate, ct)
+            : new();
+        // Auto-fill logic placeholder — returns calendar events that affect the plan window
+        return Ok(new { planId = id, busyDates = calEvents.Where(e => e.IsBusy).Select(e => e.Date).Distinct() });
+    }
 }
 
 public class CreatePlanRequest
@@ -126,4 +185,11 @@ public class SetGoalRequest
     public string? Unit { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
+}
+
+public sealed class AutoFillRequest
+{
+    public DateOnly FromDate       { get; set; }
+    public DateOnly ToDate         { get; set; }
+    public bool     RespectCalendar { get; set; } = true;
 }

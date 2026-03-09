@@ -1,5 +1,8 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
+using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
+using ExpressRecipe.MealPlanningService.Workers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
 
@@ -27,22 +30,45 @@ builder.Services.AddAuthentication("Bearer")
 builder.Services.AddAuthorization();
 
 // Register database connection
-var connectionString = builder.Configuration.GetConnectionString("mealplandb")
+string connectionString = builder.Configuration.GetConnectionString("mealplandb")
     ?? throw new InvalidOperationException("Database connection string 'mealplandb' not found");
 
 // Register repositories
 builder.Services.AddScoped<IMealPlanningRepository>(sp =>
     new MealPlanningRepository(connectionString, sp.GetRequiredService<ILogger<MealPlanningRepository>>()));
 
+builder.Services.AddScoped<IMealScheduleConfigRepository>(_ =>
+    new MealScheduleConfigRepository(connectionString));
+
+// Google Calendar token repository uses AuthService DB when configured; falls back to mealplandb
+string calendarTokenConnectionString = builder.Configuration.GetConnectionString("authdb") ?? connectionString;
+builder.Services.AddScoped<IGoogleCalendarTokenRepository>(_ =>
+    new GoogleCalendarTokenRepository(calendarTokenConnectionString));
+
+// Register Google Calendar service
+builder.Services.AddScoped<IGoogleCalendarService, GoogleCalendarService>();
+
+// Register Holiday service (singleton — purely in-memory)
+builder.Services.AddSingleton<IHolidayService, HolidayService>();
+
+// HTTP clients
+builder.Services.AddHttpClient("GoogleCalendar");
+builder.Services.AddHttpClient("NotificationService", client =>
+{
+    string notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
+    client.BaseAddress = new Uri(notificationServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Background worker for meal cook notifications
+builder.Services.AddHostedService(sp =>
+    new MealCookNotificationWorker(
+        connectionString,
+        sp.GetRequiredService<IHttpClientFactory>(),
+        sp.GetRequiredService<ILogger<MealCookNotificationWorker>>()));
+
 // Add controllers
 builder.Services.AddControllers();
-
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.MealPlanningService API", Version = "v1" });
-// });
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -53,7 +79,7 @@ var app = builder.Build();
 await app.RunDatabaseManagementAsync("MealPlanningService", "mealplandb");
 
 // Run migrations using shared MigrationRunner
-var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+string migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
 if (!Directory.Exists(migrationsPath))
 {
     migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
@@ -64,12 +90,6 @@ await app.RunMigrationsAsync(connectionString, migrations);
 // Configure middleware pipeline
 app.MapDefaultEndpoints(); // Aspire health checks
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-if (app.Environment.IsDevelopment())
-{
-    // app.UseSwagger();
-    // app.UseSwaggerUI();
-}
 
 app.UseCors();
 app.UseAuthentication();
