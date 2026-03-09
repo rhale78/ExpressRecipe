@@ -137,22 +137,22 @@ public class MealPlanningRepository : IMealPlanningRepository
         return (Guid)await command.ExecuteScalarAsync()!;
     }
 
-    public async Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate)
+    public async Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate, CancellationToken ct = default)
     {
         var sql = @"
-            SELECT pm.Id, pm.MealPlanId, pm.RecipeId, '' AS RecipeName, pm.PlannedFor, pm.MealType, pm.Servings, pm.IsCompleted, pm.CompletedAt
+            SELECT pm.Id, pm.MealPlanId, pm.RecipeId, '' AS RecipeName, pm.PlannedDate, pm.MealType, pm.Servings, pm.IsCompleted, pm.CompletedAt
             FROM PlannedMeal pm
             WHERE pm.MealPlanId = @MealPlanId AND pm.IsDeleted = 0";
 
         if (startDate.HasValue)
-            sql += " AND pm.PlannedFor >= @StartDate";
+            sql += " AND pm.PlannedDate >= @StartDate";
         if (endDate.HasValue)
-            sql += " AND pm.PlannedFor <= @EndDate";
+            sql += " AND pm.PlannedDate <= @EndDate";
 
-        sql += " ORDER BY pm.PlannedFor, pm.MealType";
+        sql += " ORDER BY pm.PlannedDate, pm.MealType";
 
         await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(ct);
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@MealPlanId", mealPlanId);
@@ -162,8 +162,8 @@ public class MealPlanningRepository : IMealPlanningRepository
             command.Parameters.AddWithValue("@EndDate", endDate.Value);
 
         var meals = new List<PlannedMealDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
         {
             meals.Add(new PlannedMealDto
             {
@@ -180,6 +180,11 @@ public class MealPlanningRepository : IMealPlanningRepository
         }
 
         return meals;
+    }
+
+    public async Task<List<PlannedMealDto>> GetMealsByDateAsync(Guid mealPlanId, DateOnly date, CancellationToken ct = default)
+    {
+        return await GetPlannedMealsAsync(mealPlanId, date.ToDateTime(TimeOnly.MinValue), date.ToDateTime(TimeOnly.MaxValue), ct);
     }
 
     public async Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedFor, string mealType, int servings)

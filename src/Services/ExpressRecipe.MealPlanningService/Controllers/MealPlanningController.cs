@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
 
@@ -12,11 +14,16 @@ public class MealPlanningController : ControllerBase
 {
     private readonly ILogger<MealPlanningController> _logger;
     private readonly IMealPlanningRepository _repository;
+    private readonly IMealPlanHistoryService _history;
+    private readonly IMealVotingRepository _voting;
 
-    public MealPlanningController(ILogger<MealPlanningController> logger, IMealPlanningRepository repository)
+    public MealPlanningController(ILogger<MealPlanningController> logger, IMealPlanningRepository repository,
+        IMealPlanHistoryService history, IMealVotingRepository voting)
     {
         _logger = logger;
         _repository = repository;
+        _history = history;
+        _voting = voting;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -102,6 +109,65 @@ public class MealPlanningController : ControllerBase
         var summary = await _repository.GetNutritionSummaryAsync(userId, date);
         return Ok(summary);
     }
+
+    // ── Snapshots / History ───────────────────────────────────────────────────────
+
+    [HttpGet("plans/{id}/history")]
+    public async Task<IActionResult> GetPlanHistory(Guid id, [FromQuery] string? scope, CancellationToken ct)
+        => Ok(await _history.GetSnapshotsAsync(id, scope, ct));
+
+    [HttpPost("plans/{id}/snapshot")]
+    public async Task<IActionResult> TakeSnapshot(Guid id, [FromBody] TakeSnapshotRequest request, CancellationToken ct)
+        => Ok(new { id = await _history.TakePlanSnapshotAsync(id, GetUserId(), "Manual", request.Label, ct) });
+
+    [HttpPost("snapshots/{id}/restore")]
+    public async Task<IActionResult> RestoreSnapshot(Guid id, CancellationToken ct)
+    {
+        await _history.RestoreSnapshotAsync(id, GetUserId(), ct);
+        return NoContent();
+    }
+
+    [HttpGet("meals/{id}/history")]
+    public async Task<IActionResult> GetMealHistory(Guid id, CancellationToken ct)
+        => Ok(await _history.GetMealHistoryAsync(id, ct));
+
+    // ── Voting ────────────────────────────────────────────────────────────────────
+
+    [HttpPost("meals/{id}/vote")]
+    public async Task<IActionResult> Vote(Guid id, [FromBody] VoteRequest request, CancellationToken ct)
+    {
+        await _voting.UpsertVoteAsync(id, GetUserId(), request.Reaction, request.Comment, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("meals/{id}/vote")]
+    public async Task<IActionResult> RemoveVote(Guid id, CancellationToken ct)
+    {
+        await _voting.DeleteVoteAsync(id, GetUserId(), ct);
+        return NoContent();
+    }
+
+    [HttpGet("meals/{id}/votes")]
+    public async Task<IActionResult> GetVotes(Guid id, CancellationToken ct)
+        => Ok(await _voting.GetVoteSummaryAsync(id, ct));
+
+    [HttpPost("meals/{id}/review")]
+    public async Task<IActionResult> PostReview(Guid id, [FromBody] PostMealReviewRequest request, CancellationToken ct)
+    {
+        await _voting.UpsertPostMealReviewAsync(id, GetUserId(), request.MealRating, request.Comment, request.WouldHaveAgain, ct);
+        return NoContent();
+    }
+
+    [HttpPost("meals/{id}/course-reviews")]
+    public async Task<IActionResult> PostCourseReviews(Guid id, [FromBody] List<CourseReviewRequest> reviews, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        foreach (CourseReviewRequest r in reviews)
+        {
+            await _voting.UpsertCourseReviewAsync(id, r.RecipeId, r.CourseType, userId, r.Rating, r.Comment, ct);
+        }
+        return NoContent();
+    }
 }
 
 public class CreatePlanRequest
@@ -126,4 +192,39 @@ public class SetGoalRequest
     public string? Unit { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }
+}
+
+public class TakeSnapshotRequest
+{
+    public string? Label { get; set; }
+}
+
+public class VoteRequest
+{
+    [Required]
+    [RegularExpression("^(Love|Like|Neutral|Dislike|Veto)$", ErrorMessage = "Reaction must be one of: Love, Like, Neutral, Dislike, Veto")]
+    public string Reaction { get; set; } = string.Empty;
+    [MaxLength(300)]
+    public string? Comment { get; set; }
+}
+
+public class PostMealReviewRequest
+{
+    [Range(1, 5)]
+    public byte MealRating { get; set; }
+    [MaxLength(500)]
+    public string? Comment { get; set; }
+    public bool? WouldHaveAgain { get; set; }
+}
+
+public class CourseReviewRequest
+{
+    [Required]
+    public Guid RecipeId { get; set; }
+    [MaxLength(50)]
+    public string? CourseType { get; set; }
+    [Range(1, 5)]
+    public byte Rating { get; set; }
+    [MaxLength(500)]
+    public string? Comment { get; set; }
 }

@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
 
@@ -33,6 +34,14 @@ var connectionString = builder.Configuration.GetConnectionString("mealplandb")
 // Register repositories
 builder.Services.AddScoped<IMealPlanningRepository>(sp =>
     new MealPlanningRepository(connectionString, sp.GetRequiredService<ILogger<MealPlanningRepository>>()));
+
+builder.Services.AddSingleton<IMealVotingRepository>(new MealVotingRepository(connectionString));
+
+builder.Services.AddScoped<IMealPlanHistoryService>(sp =>
+    new MealPlanHistoryService(connectionString, sp.GetRequiredService<IMealPlanningRepository>()));
+
+builder.Services.AddHostedService(sp =>
+    new MealPlanSnapshotPruningWorker(connectionString, sp.GetRequiredService<ILogger<MealPlanSnapshotPruningWorker>>()));
 
 // Add controllers
 builder.Services.AddControllers();
