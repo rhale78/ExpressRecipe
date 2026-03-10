@@ -53,6 +53,6 @@ public sealed class EquipmentCapabilityResolver : IEquipmentCapabilityResolver
             !string.Equals(e.CustomName,   requiredEquipmentName, StringComparison.OrdinalIgnoreCase));
 
         if (substitute is null) { return null; }
-        return $"Your '{substitute.DisplayName}' can substitute — it supports {capability}.";
+        return $"Your '{substitute.CustomName ?? substitute.TemplateName}' can substitute — it supports {capability}.";
     }
 }

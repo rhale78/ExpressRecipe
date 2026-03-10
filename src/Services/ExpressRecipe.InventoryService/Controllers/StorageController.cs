@@ -10,37 +10,54 @@ namespace ExpressRecipe.InventoryService.Controllers;
 public class StorageController : ControllerBase
 {
     private readonly IStorageLocationExtendedRepository _repository;
-    private readonly ILogger<StorageController> _logger;
+    private readonly IInventoryRepository _inventoryRepository;
 
     public StorageController(
         IStorageLocationExtendedRepository repository,
-        ILogger<StorageController> logger)
+        IInventoryRepository inventoryRepository)
     {
-        _repository = repository;
-        _logger = logger;
+        _repository          = repository;
+        _inventoryRepository = inventoryRepository;
+    }
+
+    /// <summary>GET /api/storage — list storage locations for the authenticated household</summary>
+    [HttpGet]
+    public async Task<IActionResult> GetLocations([FromQuery] Guid? addressId, CancellationToken ct)
+    {
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null)
+            return Unauthorized();
+
+        try
+        {
+            List<StorageLocationExtendedDto> locations =
+                await _repository.GetLocationsAsync(householdId.Value, addressId, ct);
+            return Ok(locations);
+        }
+        catch (Exception ex)
+        {
+            // log error
+            return StatusCode(500, "Failed to retrieve storage locations");
+        }
     }
 
     /// <summary>GET /api/storage/suggest?foodCategory=Meat — suggest storage locations</summary>
     [HttpGet("suggest")]
-    public async Task<IActionResult> SuggestLocations([FromQuery] string foodCategory, CancellationToken ct)
+    public async Task<IActionResult> Suggest([FromQuery] string foodCategory, CancellationToken ct)
     {
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null)
+            return Unauthorized();
+
         try
         {
-            Guid? householdId = GetHouseholdId();
-            if (householdId is null)
-            {
-                return BadRequest("HouseholdId claim required");
-            }
-
-            string storageType = MapFoodCategoryToStorageType(foodCategory);
-
             List<StorageLocationSuggestionDto> suggestions =
-                await _repository.SuggestLocationsAsync(householdId.Value, storageType, ct);
+                await _repository.SuggestLocationsAsync(householdId.Value, foodCategory, ct);
             return Ok(suggestions);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error suggesting storage locations for foodCategory {FoodCategory}", foodCategory);
+            // log error
             return StatusCode(500, "Failed to suggest storage locations");
         }
     }
@@ -49,37 +66,85 @@ public class StorageController : ControllerBase
     [HttpGet("outages")]
     public async Task<IActionResult> GetOutages(CancellationToken ct)
     {
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null)
+            return Unauthorized();
+
         try
         {
-            Guid? householdId = GetHouseholdId();
-            if (householdId is null)
-            {
-                return BadRequest("HouseholdId claim required");
-            }
-
             List<StorageLocationDto> outages =
                 await _repository.GetLocationsWithOutageAsync(householdId.Value, ct);
             return Ok(outages);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving active outages");
+            // log error
             return StatusCode(500, "Failed to retrieve active outages");
+        }
+    }
+
+    /// <summary>PUT /api/storage/{locationId}/storage-type — update the storage type and linked equipment</summary>
+    [HttpPut("{locationId:guid}/storage-type")]
+    public async Task<IActionResult> SetStorageType(Guid locationId, [FromBody] SetStorageTypeRequest request, CancellationToken ct)
+    {
+        try
+        {
+            StorageLocationExtendedDto? location = await _repository.GetLocationByIdAsync(locationId, ct);
+            if (location is null) return NotFound();
+
+            Guid? householdId = GetHouseholdId();
+            if (householdId is null || location.HouseholdId != householdId.Value) return Forbid();
+
+            await _repository.UpdateStorageTypeAsync(locationId, request.StorageType ?? string.Empty, request.EquipmentInstanceId, ct);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            // log error
+            return StatusCode(500, "Failed to update storage type");
+        }
+    }
+
+    /// <summary>PUT /api/storage/{locationId}/food-categories — set food categories for a storage location</summary>
+    [HttpPut("{locationId:guid}/food-categories")]
+    public async Task<IActionResult> SetFoodCategories(Guid locationId, [FromBody] SetFoodCategoriesRequest request, CancellationToken ct)
+    {
+        try
+        {
+            StorageLocationExtendedDto? location = await _repository.GetLocationByIdAsync(locationId, ct);
+            if (location is null) return NotFound();
+
+            Guid? householdId = GetHouseholdId();
+            if (householdId is null || location.HouseholdId != householdId.Value) return Forbid();
+
+            await _repository.SetFoodCategoriesAsync(locationId, request.Categories ?? new List<string>(), ct);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            // log error
+            return StatusCode(500, "Failed to set food categories");
         }
     }
 
     /// <summary>POST /api/storage/{locationId}/outage — mark an outage</summary>
     [HttpPost("{locationId:guid}/outage")]
-    public async Task<IActionResult> MarkOutage(Guid locationId, [FromBody] MarkOutageRequest request, CancellationToken ct)
+    public async Task<IActionResult> SetOutage(Guid locationId, [FromBody] SetOutageRequest request, CancellationToken ct)
     {
         try
         {
-            await _repository.MarkOutageAsync(locationId, request.OutageType, request.Notes, ct);
+            StorageLocationExtendedDto? location = await _repository.GetLocationByIdAsync(locationId, ct);
+            if (location is null) return NotFound();
+
+            Guid? householdId = GetHouseholdId();
+            if (householdId is null || location.HouseholdId != householdId.Value) return Forbid();
+
+            await _repository.SetOutageAsync(locationId, request.OutageType, request.Notes, ct);
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error marking outage for location {LocationId}", locationId);
+            // log error
             return StatusCode(500, "Failed to mark outage");
         }
     }
@@ -90,13 +155,36 @@ public class StorageController : ControllerBase
     {
         try
         {
+            StorageLocationExtendedDto? location = await _repository.GetLocationByIdAsync(locationId, ct);
+            if (location is null) return NotFound();
+
+            Guid? householdId = GetHouseholdId();
+            if (householdId is null || location.HouseholdId != householdId.Value) return Forbid();
+
             await _repository.ClearOutageAsync(locationId, ct);
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error clearing outage for location {LocationId}", locationId);
+            // log error
             return StatusCode(500, "Failed to clear outage");
+        }
+    }
+
+    /// <summary>GET /api/storage/{locationId}/items — get inventory items in a storage location</summary>
+    [HttpGet("{locationId:guid}/items")]
+    public async Task<IActionResult> GetItemsInStorage(Guid locationId, CancellationToken ct)
+    {
+        try
+        {
+            List<InventoryItemDto> items =
+                await _inventoryRepository.GetInventoryByStorageLocationAsync(locationId);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            // log error
+            return StatusCode(500, "Failed to retrieve storage items");
         }
     }
 
@@ -127,8 +215,19 @@ public class StorageController : ControllerBase
     }
 }
 
-public sealed class MarkOutageRequest
+public sealed class SetOutageRequest
 {
     public string OutageType { get; set; } = string.Empty; // PowerOutage|EquipmentFailure|MaintenanceDown
     public string? Notes { get; set; }
+}
+
+public sealed class SetStorageTypeRequest
+{
+    public string? StorageType { get; set; }
+    public Guid? EquipmentInstanceId { get; set; }
+}
+
+public sealed class SetFoodCategoriesRequest
+{
+    public List<string>? Categories { get; set; }
 }

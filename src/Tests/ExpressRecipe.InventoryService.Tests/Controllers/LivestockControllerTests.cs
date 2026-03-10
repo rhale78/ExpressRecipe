@@ -302,7 +302,7 @@ public class LivestockControllerTests
         Guid harvestId = Guid.NewGuid();
         LivestockAnimalDto animal = CreateAnimalDto("Meat Rabbits", "Rabbit", "Meat", id: animalId);
 
-        RecordHarvestRequest request = new RecordHarvestRequest
+        RecordLivestockHarvestRequest request = new RecordLivestockHarvestRequest
         {
             HarvestDate    = DateOnly.FromDateTime(DateTime.UtcNow),
             CountHarvested = 2,

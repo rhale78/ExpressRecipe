@@ -298,7 +298,7 @@ public partial class InventoryRepository
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);
-        cmd.Parameters.AddWithValue("@HouseholdId", householdId);
+        cmd.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
 
         List<(string itemName, Guid storageLocationId)> freezerItems = new();
         await using (SqlDataReader r = await cmd.ExecuteReaderAsync(ct))

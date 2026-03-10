@@ -75,7 +75,7 @@ public class MealDelayStorageSubscriberTests
         storage.Setup(s => s.SuggestLocationsAsync(householdId, "Frozen", It.IsAny<CancellationToken>()))
                .ReturnsAsync(new List<StorageLocationSuggestionDto>
                {
-                   new StorageLocationSuggestionDto { Id = Guid.NewGuid(), Name = "Chest Freezer", StorageType = "Freezer", Score = 100 }
+                   new StorageLocationSuggestionDto { StorageLocationId = Guid.NewGuid(), Name = "Chest Freezer", StorageType = "Freezer", MatchScore = 100 }
                });
 
         FakeHttpMessageHandler handler = new FakeHttpMessageHandler(HttpStatusCode.OK);

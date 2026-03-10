@@ -155,7 +155,11 @@ public class UsdaSnapImportService
                     var includeConvenience = _configuration.GetValue<bool>("StoreLocationImport:IncludeConvenienceStores", false);
                     if (!string.IsNullOrWhiteSpace(storeType) && !IncludedStoreTypes.Contains(storeType))
                     {
-                        if (!includeConvenience) continue;
+                        // When IncludeConvenienceStores is true, only allow store types that explicitly
+                        // indicate convenience stores; otherwise skip the record entirely.
+                        bool isConvenienceStore = includeConvenience &&
+                            storeType.Contains("CONVENIENCE", StringComparison.OrdinalIgnoreCase);
+                        if (!isConvenienceStore) continue;
                     }
 
                     var address = csv.GetField("Address")?.Trim() ?? string.Empty;

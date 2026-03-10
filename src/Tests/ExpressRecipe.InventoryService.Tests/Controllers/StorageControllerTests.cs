@@ -238,7 +238,7 @@ public class StorageControllerTests
             new StorageLocationSuggestionDto { StorageLocationId = Guid.NewGuid(), Name = "Chest Freezer", StorageType = "Freezer", MatchScore = 1 },
             new StorageLocationSuggestionDto { StorageLocationId = Guid.NewGuid(), Name = "Main Pantry", StorageType = "Pantry", MatchScore = 0 }
         };
-        _mockStorage.Setup(r => r.SuggestLocationsAsync(_householdId, "Meat", default))
+        _mockStorage.Setup(r => r.SuggestLocationsAsync(_householdId, "Meat", It.IsAny<CancellationToken>()))
                     .ReturnsAsync(suggestions);
 
         // Act
@@ -259,7 +259,7 @@ public class StorageControllerTests
         {
             new StorageLocationSuggestionDto { StorageLocationId = Guid.NewGuid(), Name = "Chest Freezer", StorageType = "Freezer", MatchScore = 2 }
         };
-        _mockStorage.Setup(r => r.SuggestLocationsAsync(_householdId, "Meat", default))
+        _mockStorage.Setup(r => r.SuggestLocationsAsync(_householdId, "Meat", It.IsAny<CancellationToken>()))
                     .ReturnsAsync(suggestions);
 
         // Act

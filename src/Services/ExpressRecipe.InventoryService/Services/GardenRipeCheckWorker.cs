@@ -32,7 +32,7 @@ public sealed class GardenRipeCheckWorker : BackgroundService
     private async Task SendRipeCheckNotificationsAsync(CancellationToken ct)
     {
         List<GardenPlantingDto> due = await _garden.GetRipeCheckDuePlantingsAsync(3, ct);
-        HttpClient client = _http.CreateClient("NotificationService");
+        HttpClient client = _http.CreateClient("notificationservice");
         DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         foreach (IGrouping<Guid, GardenPlantingDto> group in due.GroupBy(p => p.HouseholdId))

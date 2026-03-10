@@ -297,7 +297,7 @@ public class LivestockController : ControllerBase
 
     /// <summary>Record a slaughter or processing event.</summary>
     [HttpPost("{id:guid}/harvest")]
-    public async Task<IActionResult> RecordHarvest(Guid id, [FromBody] RecordHarvestRequest request)
+    public async Task<IActionResult> RecordHarvest(Guid id, [FromBody] RecordLivestockHarvestRequest request)
     {
         try
         {
@@ -403,7 +403,7 @@ public class LogProductionRequest
     public string? Notes { get; set; }
 }
 
-public class RecordHarvestRequest
+public class RecordLivestockHarvestRequest
 {
     public DateOnly HarvestDate { get; set; }
     public int CountHarvested { get; set; } = 1;

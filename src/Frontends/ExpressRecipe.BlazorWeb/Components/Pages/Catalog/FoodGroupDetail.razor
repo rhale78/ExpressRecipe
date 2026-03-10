@@ -71,7 +71,7 @@
                                     {
                                         @foreach (string allergen in member.AllergenFree)
                                         {
-                                            <span class="badge bg-success me-1">@allergen-free</span>
+                                            <span class="badge bg-success me-1">@($"{allergen}-free")</span>
                                         }
                                     }
                                     else

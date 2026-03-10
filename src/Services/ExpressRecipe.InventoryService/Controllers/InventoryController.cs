@@ -20,12 +20,12 @@ public class InventoryController : ControllerBase
     private readonly IConfiguration _configuration;
 
     public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository,
-        IInventorySaleRepository saleRepository, IConfiguration configuration)
+        IInventorySaleRepository? saleRepository = null, IConfiguration? configuration = null)
     {
         _logger         = logger;
         _repository     = repository;
-        _saleRepository = saleRepository;
-        _configuration  = configuration;
+        _saleRepository = saleRepository!;
+        _configuration  = configuration!;
     }
 
     private Guid? GetUserId()

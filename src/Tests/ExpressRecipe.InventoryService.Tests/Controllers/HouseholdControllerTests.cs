@@ -393,6 +393,7 @@ public class HouseholdControllerTests
         var inventoryController = new InventoryController(
             new Mock<ILogger<InventoryController>>().Object,
             _mockRepository.Object,
+            null,
             new ConfigurationBuilder().Build());
         inventoryController.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
@@ -429,6 +430,7 @@ public class HouseholdControllerTests
         var inventoryController = new InventoryController(
             new Mock<ILogger<InventoryController>>().Object,
             _mockRepository.Object,
+            null,
             new ConfigurationBuilder().Build());
         inventoryController.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 

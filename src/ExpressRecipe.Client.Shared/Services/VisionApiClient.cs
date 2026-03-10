@@ -55,17 +55,17 @@ public class VisionApiClient : ApiClientBase, IVisionApiClient
             options
         };
 
-        return await PostAsync<object, VisionAnalyzeResponse>("/api/vision/analyze", requestBody);
+        return await PostAsync<object, VisionAnalyzeResponse>("/api/vision/analyze", requestBody, ct);
     }
 
     public async Task<VisionAnalyzeResponse?> ExtractTextAsync(string base64Image, CancellationToken ct = default)
     {
         object requestBody = new { base64Image };
-        return await PostAsync<object, VisionAnalyzeResponse>("/api/vision/ocr", requestBody);
+        return await PostAsync<object, VisionAnalyzeResponse>("/api/vision/ocr", requestBody, ct);
     }
 
     public async Task<VisionHealthResponse?> GetHealthAsync(CancellationToken ct = default)
     {
-        return await GetAsync<VisionHealthResponse>("/api/vision/health");
+        return await GetAsync<VisionHealthResponse>("/api/vision/health", ct);
     }
 }

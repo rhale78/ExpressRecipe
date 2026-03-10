@@ -22,7 +22,7 @@ public class InventoryControllerTests
         _mockRepository = new Mock<IInventoryRepository>();
         _mockLogger = new Mock<ILogger<InventoryController>>();
         IConfiguration config = new ConfigurationBuilder().Build();
-        _controller = new InventoryController(_mockLogger.Object, _mockRepository.Object, config);
+        _controller = new InventoryController(_mockLogger.Object, _mockRepository.Object, null, config);
         _testUserId = Guid.NewGuid();
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }

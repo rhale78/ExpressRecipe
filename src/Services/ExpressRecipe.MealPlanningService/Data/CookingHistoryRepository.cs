@@ -39,7 +39,7 @@ public sealed class CookingHistoryRepository : SqlHelper, ICookingHistoryReposit
                 (@Id, @UserId, @RecipeId, @PlannedMealId, @CookedAt, @ServingsCooked, @ServingsEaten,
                  @UserRating, @Notes, @WasSubstituted, @InventoryUpdated, @NutritionLogged, GETUTCDATE())";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             new SqlParameter("@Id",               row.Id),
             new SqlParameter("@UserId",           row.UserId),
             new SqlParameter("@RecipeId",         row.RecipeId),

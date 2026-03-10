@@ -246,8 +246,139 @@ public sealed class EquipmentRepository : IEquipmentRepository
         return results;
     }
 
-    private static async Task<List<EquipmentInstanceDto>> ReadInstancesAsync(SqlCommand command, CancellationToken ct)
+    public async Task<List<EquipmentInstanceDto>> GetInstancesAsync(
+        Guid householdId, Guid? addressId, bool? activeOnly, CancellationToken ct = default)
     {
+        string whereExtra = "";
+        if (addressId.HasValue)  whereExtra += " AND i.AddressId = @AddressId";
+        if (activeOnly == true)  whereExtra += " AND i.IsActive = 1";
+        if (activeOnly == false) whereExtra += " AND i.IsActive = 0";
+
+        string sql = $@"
+            SELECT i.Id, i.HouseholdId, i.AddressId, i.TemplateId, t.Name AS TemplateName,
+                   i.CustomName, i.Brand, i.ModelNumber, i.SizeValue, i.SizeUnit,
+                   i.Notes, i.IsActive, i.CreatedAt, c.CapabilityName
+            FROM EquipmentInstance i
+            INNER JOIN EquipmentTemplate t ON t.Id = i.TemplateId
+            LEFT JOIN EquipmentInstanceCapability c ON c.InstanceId = i.Id
+            WHERE i.HouseholdId = @HouseholdId{whereExtra}
+            ORDER BY i.CreatedAt DESC, c.CapabilityName";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
+        if (addressId.HasValue)
+            command.Parameters.Add(new SqlParameter("@AddressId", SqlDbType.UniqueIdentifier) { Value = addressId.Value });
+        return await ReadInstancesAsync(command, ct);
+    }
+
+    public async Task<EquipmentInstanceDto?> GetInstanceByIdAsync(Guid instanceId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT i.Id, i.HouseholdId, i.AddressId, i.TemplateId, t.Name AS TemplateName,
+                   i.CustomName, i.Brand, i.ModelNumber, i.SizeValue, i.SizeUnit,
+                   i.Notes, i.IsActive, i.CreatedAt, c.CapabilityName
+            FROM EquipmentInstance i
+            INNER JOIN EquipmentTemplate t ON t.Id = i.TemplateId
+            LEFT JOIN EquipmentInstanceCapability c ON c.InstanceId = i.Id
+            WHERE i.Id = @Id";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = instanceId });
+        List<EquipmentInstanceDto> results = await ReadInstancesAsync(command, ct);
+        return results.FirstOrDefault();
+    }
+
+    public async Task<List<EquipmentInstanceDto>> GetInstancesByCapabilityAsync(
+        Guid householdId, string capability, CancellationToken ct = default)
+        => await ResolveByCapabilityAsync(householdId, capability, ct);
+
+    public async Task<Guid> AddInstanceAsync(
+        Guid householdId, Guid? addressId, Guid? templateId,
+        string? customName, string? brand, string? modelNumber,
+        decimal? sizeValue, string? sizeUnit, string? notes,
+        CancellationToken ct = default)
+    {
+        const string sql = @"
+            INSERT INTO EquipmentInstance
+                (HouseholdId, AddressId, TemplateId, CustomName, Brand, ModelNumber,
+                 SizeValue, SizeUnit, Notes, IsActive, CreatedAt)
+            OUTPUT INSERTED.Id
+            VALUES
+                (@HouseholdId, @AddressId, @TemplateId, @CustomName, @Brand, @ModelNumber,
+                 @SizeValue, @SizeUnit, @Notes, 1, GETUTCDATE())";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand cmd = new SqlCommand(sql, connection);
+        cmd.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
+        cmd.Parameters.Add(new SqlParameter("@AddressId", SqlDbType.UniqueIdentifier) { Value = addressId.HasValue ? addressId.Value : DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@TemplateId", SqlDbType.UniqueIdentifier) { Value = templateId.HasValue ? templateId.Value : DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@CustomName", SqlDbType.NVarChar, 200) { Value = customName ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@Brand", SqlDbType.NVarChar, 200) { Value = brand ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@ModelNumber", SqlDbType.NVarChar, 100) { Value = modelNumber ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@SizeValue", SqlDbType.Decimal) { Value = sizeValue.HasValue ? sizeValue.Value : DBNull.Value, Precision = 10, Scale = 2 });
+        cmd.Parameters.Add(new SqlParameter("@SizeUnit", SqlDbType.NVarChar, 50) { Value = sizeUnit ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@Notes", SqlDbType.NVarChar) { Value = notes ?? (object)DBNull.Value });
+        object? result = await cmd.ExecuteScalarAsync(ct);
+        return (Guid)result!;
+    }
+
+    public async Task SetCapabilitiesAsync(Guid instanceId, IEnumerable<string> capabilities, CancellationToken ct = default)
+    {
+        const string deleteSql = "DELETE FROM EquipmentInstanceCapability WHERE InstanceId = @InstanceId";
+        const string insertSql = "INSERT INTO EquipmentInstanceCapability (InstanceId, CapabilityName) VALUES (@InstanceId, @Cap)";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlTransaction tx = (SqlTransaction)await connection.BeginTransactionAsync(ct);
+        try
+        {
+            await using (SqlCommand del = new SqlCommand(deleteSql, connection, tx))
+            {
+                del.Parameters.Add(new SqlParameter("@InstanceId", SqlDbType.UniqueIdentifier) { Value = instanceId });
+                await del.ExecuteNonQueryAsync(ct);
+            }
+            foreach (string cap in capabilities)
+            {
+                await using SqlCommand ins = new SqlCommand(insertSql, connection, tx);
+                ins.Parameters.Add(new SqlParameter("@InstanceId", SqlDbType.UniqueIdentifier) { Value = instanceId });
+                ins.Parameters.Add(new SqlParameter("@Cap", SqlDbType.NVarChar, 100) { Value = cap });
+                await ins.ExecuteNonQueryAsync(ct);
+            }
+            await tx.CommitAsync(ct);
+        }
+        catch { await tx.RollbackAsync(ct); throw; }
+    }
+
+    public async Task UpdateInstanceAsync(Guid instanceId, string? customName, string? brand, string? modelNumber,
+        decimal? sizeValue, string? sizeUnit, string? notes, bool isActive, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE EquipmentInstance
+            SET CustomName = @CustomName, Brand = @Brand, ModelNumber = @ModelNumber,
+                SizeValue = @SizeValue, SizeUnit = @SizeUnit, Notes = @Notes,
+                IsActive = @IsActive, UpdatedAt = GETUTCDATE()
+            WHERE Id = @Id";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand cmd = new SqlCommand(sql, connection);
+        cmd.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = instanceId });
+        cmd.Parameters.Add(new SqlParameter("@CustomName", SqlDbType.NVarChar, 200) { Value = customName ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@Brand", SqlDbType.NVarChar, 200) { Value = brand ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@ModelNumber", SqlDbType.NVarChar, 100) { Value = modelNumber ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@SizeValue", SqlDbType.Decimal) { Value = sizeValue.HasValue ? sizeValue.Value : DBNull.Value, Precision = 10, Scale = 2 });
+        cmd.Parameters.Add(new SqlParameter("@SizeUnit", SqlDbType.NVarChar, 50) { Value = sizeUnit ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@Notes", SqlDbType.NVarChar) { Value = notes ?? (object)DBNull.Value });
+        cmd.Parameters.Add(new SqlParameter("@IsActive", SqlDbType.Bit) { Value = isActive });
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<List<EquipmentInstanceDto>> ReadInstancesAsync(SqlCommand command, CancellationToken ct)    {
         Dictionary<Guid, EquipmentInstanceDto> map = new Dictionary<Guid, EquipmentInstanceDto>();
         await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
