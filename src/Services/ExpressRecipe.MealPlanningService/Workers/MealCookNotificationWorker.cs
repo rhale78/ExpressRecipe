@@ -120,7 +120,14 @@ public sealed class MealCookNotificationWorker : BackgroundService
     private async Task SendNotificationAsync(Guid userId, string type, string title, string message, CancellationToken ct)
     {
         HttpResponseMessage response = await _http.CreateClient("NotificationService")
-            .PostAsJsonAsync("/api/notifications/internal/create", new { userId, type, title, message }, ct);
+            .PostAsJsonAsync("/api/Notification/internal", new
+            {
+                UserId = userId,
+                Type = type,
+                Title = title,
+                Message = message,
+                Priority = "Normal"
+            }, ct);
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogWarning("NotificationService returned {StatusCode} for user {UserId} type {Type}",

@@ -238,11 +238,10 @@ public class PatternAnalysisWorker : BackgroundService
                 UserId = userId,
                 Type = "AbandonedProductInquiry",
                 Priority = "Normal",
-                InquiryId = inquiryId,
-                ProductId = representative.ProductId,
-                ProductName = representative.CustomName
+                Title = "Still using this product?",
+                Message = $"You haven't purchased \"{representative.CustomName}\" in a while. Do you still need it on your shopping list?"
             };
-            await notificationClient.PostAsJsonAsync("/api/notifications/internal", payload, cancellationToken);
+            await notificationClient.PostAsJsonAsync("/api/Notification/internal", payload, cancellationToken);
         }
         catch (Exception ex)
         {

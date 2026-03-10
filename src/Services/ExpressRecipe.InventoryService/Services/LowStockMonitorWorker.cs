@@ -279,14 +279,32 @@ public class LowStockMonitorWorker : BackgroundService
         try
         {
             HttpClient notificationClient = httpFactory.CreateClient("notificationservice");
+
+            // Map type to a human-readable title and message
+            string title = type switch
+            {
+                "LowStockWithDeal" => "Low Stock Alert — Deal Available",
+                "LowStock" => "Low Stock Alert",
+                "PriceWatchHit" => "Price Watch Alert",
+                _ => type
+            };
+            string message = type switch
+            {
+                "LowStockWithDeal" => "An item you track is running low and has a deal available now.",
+                "LowStock" => "An item you track is running low.",
+                "PriceWatchHit" => "A price you are watching has dropped to your target.",
+                _ => $"Notification type: {type}"
+            };
+
             object body = new
             {
                 UserId = userId,
                 Type = type,
                 Priority = priority,
-                Data = payload
+                Title = title,
+                Message = message
             };
-            await notificationClient.PostAsJsonAsync("/api/notifications/internal", body, cancellationToken);
+            await notificationClient.PostAsJsonAsync("/api/Notification/internal", body, cancellationToken);
         }
         catch (Exception ex)
         {

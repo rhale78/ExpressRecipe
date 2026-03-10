@@ -141,7 +141,7 @@ public class ExpirationAlertWorker : BackgroundService
         {
             HttpClient notificationClient = httpFactory.CreateClient("notificationservice");
             Uri baseAddress = notificationClient.BaseAddress ?? new Uri("http://notificationservice");
-            Uri requestUri = new Uri(baseAddress, "/api/notifications/internal");
+            Uri requestUri = new Uri(baseAddress, "/api/Notification/internal");
             object payload = new
             {
                 UserId = userId,

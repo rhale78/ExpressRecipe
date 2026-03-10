@@ -174,8 +174,9 @@ public class MealPlanningController : ControllerBase
         Guid userId = GetUserId();
         MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
         if (plan == null) return NotFound();
-        // Full update not yet wired to repository; returns current plan until migration adds UPDATE support.
-        return Ok(plan);
+        // Full update requires a database migration to add the UPDATE statement.
+        // Return 501 until the repository method is implemented.
+        return StatusCode(501, new { message = "Meal plan update is not yet implemented. Use the plan's sub-resources to modify meals." });
     }
 
     [HttpGet("{id}/calendar")]
@@ -241,8 +242,9 @@ public class MealPlanningController : ControllerBase
         Guid userId = GetUserId();
         MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
         if (plan == null) return NotFound();
-        // Status update not yet in repository - returns 200 to unblock UI.
-        return Ok(new { id, status = "Completed" });
+        // Status persistence requires a database migration. Return 202 Accepted to acknowledge
+        // the intent and unblock UI without silently discarding the request.
+        return Accepted(new { id, status = "Completed", message = "Status update acknowledged; persistence requires a schema migration." });
     }
 
     [HttpPost("{id}/archive")]
@@ -251,8 +253,8 @@ public class MealPlanningController : ControllerBase
         Guid userId = GetUserId();
         MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
         if (plan == null) return NotFound();
-        // Status update not yet in repository - returns 200 to unblock UI.
-        return Ok(new { id, status = "Archived" });
+        // Status persistence requires a database migration. Return 202 Accepted.
+        return Accepted(new { id, status = "Archived", message = "Status update acknowledged; persistence requires a schema migration." });
     }
 
     // ── Planned Meals ──────────────────────────────────────────────────────────
