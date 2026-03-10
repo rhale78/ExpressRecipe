@@ -85,7 +85,11 @@
                         <!-- Day Header -->
                         <div class="day-header">
                             <div class="day-name">@day.Date.ToString("ddd")</div>
-                            <div class="day-date">@day.Date.ToString("MMM dd")</div>
+                            <div class="day-date">
+                                <a class="day-date-link" href="/meal-planning/day/@day.Date.ToString("yyyy-MM-dd")">
+                                    @day.Date.ToString("MMM dd")
+                                </a>
+                            </div>
                             @if (day.IsComplete && day.TotalMeals > 0)
                             {
                                 <div class="day-complete-badge">✓</div>
@@ -144,6 +148,13 @@
                                             }
                                         </div>
 
+                                        <div class="meal-card-actions" @onclick:stopPropagation="true">
+                                            <button class="btn-icon" title="Clone meal"
+                                                    @onclick="() => ShowCloneMealModal(meal, day.Date)">
+                                                📋
+                                            </button>
+                                        </div>
+
                                         @if (meal.IsPrepared)
                                         {
                                             <div class="prepared-checkmark">✓</div>
@@ -176,6 +187,15 @@
                     </button>
                     <button class="btn btn-secondary" @onclick="ViewNutritionSummary">
                         📊 Nutrition Summary
+                    </button>
+                    <button class="btn btn-secondary" @onclick="() => ShowCopyDayModal()">
+                        📋 Copy Day
+                    </button>
+                    <button class="btn btn-secondary" @onclick="() => ShowCopyWeekModal()">
+                        📅 Copy Week
+                    </button>
+                    <button class="btn btn-secondary" @onclick="() => ShowSaveTemplateModal()">
+                        💾 Save as Template
                     </button>
                 </div>
             }
@@ -272,6 +292,229 @@
     </div>
 }
 
+<!-- Nutrition Summary Modal -->
+@if (_showNutritionModal)
+{
+    <div class="modal-overlay" @onclick="() => _showNutritionModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>📊 Nutrition Summary</h2>
+                <button class="modal-close" @onclick="() => _showNutritionModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                @if (_nutritionLoading)
+                {
+                    <div class="loading-state"><div class="spinner"></div><p>Loading...</p></div>
+                }
+                else if (_nutritionSummary == null)
+                {
+                    <p class="text-muted">No nutrition data available for this plan.</p>
+                }
+                else
+                {
+                    <div class="nutrition-grid">
+                        <div class="nutrition-card">
+                            <div class="nutrition-label">Total Calories</div>
+                            <div class="nutrition-value">@_nutritionSummary.TotalCalories</div>
+                            <div class="nutrition-avg">~@((int)_nutritionSummary.AvgDailyCalories)/day</div>
+                        </div>
+                        <div class="nutrition-card">
+                            <div class="nutrition-label">Protein</div>
+                            <div class="nutrition-value">@_nutritionSummary.TotalProtein g</div>
+                            <div class="nutrition-avg">~@((int)_nutritionSummary.AvgDailyProtein) g/day</div>
+                        </div>
+                        <div class="nutrition-card">
+                            <div class="nutrition-label">Carbohydrates</div>
+                            <div class="nutrition-value">@_nutritionSummary.TotalCarbohydrates g</div>
+                            <div class="nutrition-avg">~@((int)_nutritionSummary.AvgDailyCarbs) g/day</div>
+                        </div>
+                        <div class="nutrition-card">
+                            <div class="nutrition-label">Fat</div>
+                            <div class="nutrition-value">@_nutritionSummary.TotalFat g</div>
+                            <div class="nutrition-avg">~@((int)_nutritionSummary.AvgDailyFat) g/day</div>
+                        </div>
+                    </div>
+                    <p class="nutrition-note text-muted">Over @_nutritionSummary.DaysInPlan days</p>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showNutritionModal = false">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Clone Meal Modal -->
+@if (_showCloneMealModal && _cloneMealSource != null)
+{
+    <div class="modal-overlay" @onclick="CloseCloneMealModal">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>📋 Clone Meal</h2>
+                <button class="modal-close" @onclick="CloseCloneMealModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p>Clone <strong>@(_cloneMealSource.RecipeName ?? _cloneMealSource.CustomMealName)</strong> to another date.</p>
+                <div class="form-group">
+                    <label>Target Date</label>
+                    <input type="date" class="form-control"
+                           value="@_cloneTargetDate.ToString("yyyy-MM-dd")"
+                           @onchange="e => _cloneTargetDate = DateTime.Parse(e.Value!.ToString()!)" />
+                </div>
+                <div class="form-group">
+                    <label>Meal Type</label>
+                    <select class="form-control" @bind="_cloneTargetMealType">
+                        <option value="Breakfast">🍳 Breakfast</option>
+                        <option value="Lunch">🥗 Lunch</option>
+                        <option value="Dinner">🍽️ Dinner</option>
+                        <option value="Snack">🍿 Snack</option>
+                    </select>
+                </div>
+                @if (!string.IsNullOrEmpty(_cloneMealError))
+                {
+                    <div class="alert alert-error">@_cloneMealError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="CloseCloneMealModal">Cancel</button>
+                <button class="btn btn-primary" @onclick="ExecuteCloneMeal">📋 Clone</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Copy Day Modal -->
+@if (_showCopyDayModal)
+{
+    <div class="modal-overlay" @onclick="() => _showCopyDayModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>📋 Copy Day</h2>
+                <button class="modal-close" @onclick="() => _showCopyDayModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Source Date (copy from)</label>
+                    <input type="date" class="form-control"
+                           value="@_copyDaySource.ToString("yyyy-MM-dd")"
+                           @onchange="e => _copyDaySource = DateTime.Parse(e.Value!.ToString()!)" />
+                </div>
+                <div class="form-group">
+                    <label>Target Date (paste to)</label>
+                    <input type="date" class="form-control"
+                           value="@_copyDayTarget.ToString("yyyy-MM-dd")"
+                           @onchange="e => _copyDayTarget = DateTime.Parse(e.Value!.ToString()!)" />
+                </div>
+                @if (!string.IsNullOrEmpty(_copyDayError))
+                {
+                    <div class="alert alert-error">@_copyDayError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showCopyDayModal = false">Cancel</button>
+                <button class="btn btn-primary" @onclick="ExecuteCopyDay">📋 Copy</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Copy Week Modal -->
+@if (_showCopyWeekModal)
+{
+    <div class="modal-overlay" @onclick="() => _showCopyWeekModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>📅 Copy Week</h2>
+                <button class="modal-close" @onclick="() => _showCopyWeekModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Source Week Start (Sunday)</label>
+                    <input type="date" class="form-control"
+                           value="@_copyWeekSource.ToString("yyyy-MM-dd")"
+                           @onchange="e => _copyWeekSource = DateTime.Parse(e.Value!.ToString()!)" />
+                </div>
+                <div class="form-group">
+                    <label>Target Week Start (Sunday)</label>
+                    <input type="date" class="form-control"
+                           value="@_copyWeekTarget.ToString("yyyy-MM-dd")"
+                           @onchange="e => _copyWeekTarget = DateTime.Parse(e.Value!.ToString()!)" />
+                </div>
+                @if (!string.IsNullOrEmpty(_copyWeekError))
+                {
+                    <div class="alert alert-error">@_copyWeekError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showCopyWeekModal = false">Cancel</button>
+                <button class="btn btn-primary" @onclick="ExecuteCopyWeek">📅 Copy Week</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Save as Template Modal -->
+@if (_showSaveTemplateModal && _currentActivePlan != null)
+{
+    <div class="modal-overlay" @onclick="() => _showSaveTemplateModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>💾 Save as Template</h2>
+                <button class="modal-close" @onclick="() => _showSaveTemplateModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Template Name *</label>
+                    <input type="text" class="form-control" @bind="_templateName"
+                           placeholder="e.g., Family Weeknight Dinners" />
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea class="form-control" rows="2" @bind="_templateDescription"
+                              placeholder="Brief description of this template"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" class="form-control" @bind="_templateCategory"
+                           placeholder="e.g., Quick Weeknights, Healthy, Budget" />
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>From Date</label>
+                        <input type="date" class="form-control"
+                               value="@_templateFromDate.ToString("yyyy-MM-dd")"
+                               @onchange="e => _templateFromDate = DateTime.Parse(e.Value!.ToString()!)" />
+                    </div>
+                    <div class="form-group">
+                        <label>To Date</label>
+                        <input type="date" class="form-control"
+                               value="@_templateToDate.ToString("yyyy-MM-dd")"
+                               @onchange="e => _templateToDate = DateTime.Parse(e.Value!.ToString()!)" />
+                    </div>
+                </div>
+                <div class="form-group form-check-group">
+                    <label class="form-check-label">
+                        <input type="checkbox" class="form-check-input" @bind="_templateIsPublic" />
+                        Share publicly with community
+                    </label>
+                </div>
+                @if (!string.IsNullOrEmpty(_saveTemplateError))
+                {
+                    <div class="alert alert-error">@_saveTemplateError</div>
+                }
+                @if (!string.IsNullOrEmpty(_saveTemplateSuccess))
+                {
+                    <div class="alert alert-success">@_saveTemplateSuccess</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showSaveTemplateModal = false">Cancel</button>
+                <button class="btn btn-primary" @onclick="ExecuteSaveTemplate">💾 Save Template</button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private bool _isLoading = true;
     private MealPlanSummaryDto? _summary;
@@ -290,6 +533,41 @@
     // Drag-and-drop state
     private MealPlanEntryDto? _draggingMeal;
     private string? _dragOverDate;
+
+    // Nutrition summary modal
+    private bool _showNutritionModal = false;
+    private bool _nutritionLoading = false;
+    private MealPlanNutritionSummaryDto? _nutritionSummary;
+
+    // Clone meal modal
+    private bool _showCloneMealModal = false;
+    private MealPlanEntryDto? _cloneMealSource;
+    private DateTime _cloneTargetDate = DateTime.Today.AddDays(1);
+    private string _cloneTargetMealType = "Dinner";
+    private string _cloneMealError = string.Empty;
+
+    // Copy day modal
+    private bool _showCopyDayModal = false;
+    private DateTime _copyDaySource = DateTime.Today;
+    private DateTime _copyDayTarget = DateTime.Today.AddDays(1);
+    private string _copyDayError = string.Empty;
+
+    // Copy week modal
+    private bool _showCopyWeekModal = false;
+    private DateTime _copyWeekSource = DateTime.Today;
+    private DateTime _copyWeekTarget = DateTime.Today.AddDays(7);
+    private string _copyWeekError = string.Empty;
+
+    // Save template modal
+    private bool _showSaveTemplateModal = false;
+    private string _templateName = string.Empty;
+    private string? _templateDescription;
+    private string? _templateCategory;
+    private DateTime _templateFromDate = DateTime.Today;
+    private DateTime _templateToDate = DateTime.Today.AddDays(6);
+    private bool _templateIsPublic = false;
+    private string _saveTemplateError = string.Empty;
+    private string _saveTemplateSuccess = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -508,9 +786,180 @@
         }
     }
 
-    private void ViewNutritionSummary()
+    private async Task ViewNutritionSummary()
     {
-        // TODO: Implement nutrition summary modal
+        if (_currentActivePlan == null)
+            return;
+
+        _showNutritionModal = true;
+        _nutritionLoading = true;
+        _nutritionSummary = null;
+        StateHasChanged();
+
+        _nutritionSummary = await MealPlanApi.GetNutritionSummaryAsync(_currentActivePlan.Id);
+        _nutritionLoading = false;
+        StateHasChanged();
+    }
+
+    // ── Clone Meal ─────────────────────────────────────────────────────────────
+
+    private void ShowCloneMealModal(MealPlanEntryDto meal, DateTime sourceDate)
+    {
+        _cloneMealSource = meal;
+        _cloneTargetDate = sourceDate.AddDays(1);
+        _cloneTargetMealType = meal.MealType;
+        _cloneMealError = string.Empty;
+        _showCloneMealModal = true;
+    }
+
+    private void CloseCloneMealModal()
+    {
+        _showCloneMealModal = false;
+        _cloneMealSource = null;
+    }
+
+    private async Task ExecuteCloneMeal()
+    {
+        if (_cloneMealSource == null)
+            return;
+
+        _cloneMealError = string.Empty;
+        CloneMealRequest request = new()
+        {
+            TargetDate = DateOnly.FromDateTime(_cloneTargetDate),
+            TargetMealType = _cloneTargetMealType
+        };
+
+        Guid? newId = await MealPlanApi.CloneMealAsync(_cloneMealSource.Id, request);
+        if (newId.HasValue)
+        {
+            CloseCloneMealModal();
+            await LoadWeekView();
+        }
+        else
+        {
+            _cloneMealError = "Failed to clone meal. Please try again.";
+        }
+    }
+
+    // ── Copy Day ───────────────────────────────────────────────────────────────
+
+    private void ShowCopyDayModal()
+    {
+        _copyDaySource = _currentWeekStart;
+        _copyDayTarget = _currentWeekStart.AddDays(1);
+        _copyDayError = string.Empty;
+        _showCopyDayModal = true;
+    }
+
+    private async Task ExecuteCopyDay()
+    {
+        if (_currentActivePlan == null)
+            return;
+
+        _copyDayError = string.Empty;
+        CopyDayRequest request = new()
+        {
+            SourceDate = DateOnly.FromDateTime(_copyDaySource),
+            TargetDate = DateOnly.FromDateTime(_copyDayTarget)
+        };
+
+        bool success = await MealPlanApi.CopyDayAsync(_currentActivePlan.Id, request);
+        if (success)
+        {
+            _showCopyDayModal = false;
+            await LoadWeekView();
+        }
+        else
+        {
+            _copyDayError = "Failed to copy day. Please try again.";
+        }
+    }
+
+    // ── Copy Week ──────────────────────────────────────────────────────────────
+
+    private void ShowCopyWeekModal()
+    {
+        _copyWeekSource = _currentWeekStart;
+        _copyWeekTarget = _currentWeekStart.AddDays(7);
+        _copyWeekError = string.Empty;
+        _showCopyWeekModal = true;
+    }
+
+    private async Task ExecuteCopyWeek()
+    {
+        if (_currentActivePlan == null)
+            return;
+
+        _copyWeekError = string.Empty;
+        CopyWeekRequest request = new()
+        {
+            SourceWeekStart = DateOnly.FromDateTime(_copyWeekSource),
+            TargetWeekStart = DateOnly.FromDateTime(_copyWeekTarget)
+        };
+
+        bool success = await MealPlanApi.CopyWeekAsync(_currentActivePlan.Id, request);
+        if (success)
+        {
+            _showCopyWeekModal = false;
+            await LoadWeekView();
+        }
+        else
+        {
+            _copyWeekError = "Failed to copy week. Please try again.";
+        }
+    }
+
+    // ── Save Template ──────────────────────────────────────────────────────────
+
+    private void ShowSaveTemplateModal()
+    {
+        if (_currentActivePlan == null)
+            return;
+
+        _templateName = _currentActivePlan.Name;
+        _templateDescription = null;
+        _templateCategory = null;
+        _templateFromDate = _currentActivePlan.StartDate;
+        _templateToDate = _currentActivePlan.EndDate;
+        _templateIsPublic = false;
+        _saveTemplateError = string.Empty;
+        _saveTemplateSuccess = string.Empty;
+        _showSaveTemplateModal = true;
+    }
+
+    private async Task ExecuteSaveTemplate()
+    {
+        if (_currentActivePlan == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(_templateName))
+        {
+            _saveTemplateError = "Template name is required.";
+            return;
+        }
+
+        _saveTemplateError = string.Empty;
+        SaveTemplateRequest request = new()
+        {
+            PlanId = _currentActivePlan.Id,
+            Name = _templateName,
+            Description = _templateDescription,
+            Category = _templateCategory,
+            FromDate = DateOnly.FromDateTime(_templateFromDate),
+            ToDate = DateOnly.FromDateTime(_templateToDate),
+            IsPublic = _templateIsPublic
+        };
+
+        Guid? templateId = await MealPlanApi.SaveAsTemplateAsync(request);
+        if (templateId.HasValue)
+        {
+            _saveTemplateSuccess = "Template saved successfully!";
+        }
+        else
+        {
+            _saveTemplateError = "Failed to save template. Please try again.";
+        }
     }
 
     private int GetMealTypeOrder(string mealType) => mealType switch

@@ -1,0 +1,373 @@
+/* ==========================================
+   MEAL PLAN ENHANCEMENTS
+   ========================================== */
+
+/* ── Day-date link in week calendar ── */
+.day-date-link {
+    color: inherit;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.day-date-link:hover {
+    color: #6f42c1;
+    text-decoration: underline;
+}
+
+/* ── Meal card actions overlay ── */
+.meal-card-actions {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    display: none;
+    gap: 0.25rem;
+}
+
+.meal-card:hover .meal-card-actions {
+    display: flex;
+}
+
+.btn-icon {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: background 0.15s;
+}
+
+.btn-icon:hover {
+    background: white;
+    border-color: #6f42c1;
+}
+
+.btn-icon.danger:hover {
+    background: #fff5f5;
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+/* ── Plan action buttons ── */
+.plan-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding: 1rem 1.5rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Nutrition summary modal grid ── */
+.nutrition-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.nutrition-card {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    border: 1px solid #e9ecef;
+}
+
+.nutrition-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.4rem;
+}
+
+.nutrition-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1a1a1a;
+}
+
+.nutrition-avg {
+    font-size: 0.8rem;
+    color: #6f42c1;
+    margin-top: 0.2rem;
+}
+
+.nutrition-note {
+    text-align: center;
+    font-size: 0.85rem;
+}
+
+/* ── Day view page ── */
+.day-view-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.day-view-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.day-view-header h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+    flex: 1;
+    text-align: center;
+}
+
+/* ── Day meal cards ── */
+.day-meals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.day-meal-card {
+    background: white;
+    border-radius: 14px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.07);
+    border-left: 4px solid #dee2e6;
+    transition: box-shadow 0.2s;
+}
+
+.day-meal-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.day-meal-card.breakfast { border-left-color: #ffc107; }
+.day-meal-card.lunch     { border-left-color: #28a745; }
+.day-meal-card.dinner    { border-left-color: #6f42c1; }
+.day-meal-card.snack     { border-left-color: #fd7e14; }
+.day-meal-card.prepared  { opacity: 0.75; }
+
+.day-meal-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.meal-type-info {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.meal-type-icon { font-size: 1.3rem; }
+
+.meal-type-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.day-meal-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+    flex: 1;
+}
+
+.day-meal-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-left: auto;
+}
+
+.day-meal-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.meta-chip {
+    background: #f1f3f5;
+    border-radius: 20px;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.8rem;
+    color: #495057;
+}
+
+.day-meal-notes {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-bottom: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+}
+
+/* ── Courses panel ── */
+.courses-panel,
+.attendees-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.panel-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.panel-section-header h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #495057;
+    margin: 0;
+}
+
+.courses-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.course-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.course-type-badge {
+    background: #e9ecef;
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.course-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.course-servings {
+    font-size: 0.8rem;
+}
+
+/* ── Attendees panel ── */
+.attendees-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.attendee-chip {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 20px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* ── Spinner small ── */
+.spinner-sm {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e9ecef;
+    border-top-color: #6f42c1;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin: 0.5rem 0;
+}
+
+/* ── Day add meal button ── */
+.day-add-meal {
+    text-align: center;
+    padding: 1rem 0;
+}
+
+/* ── Alert success ── */
+.alert-success {
+    background: #d1f0d8;
+    color: #1a5c2a;
+    border: 1px solid #a3d9b0;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* ── Form check group ── */
+.form-check-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.form-check-group .form-check-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+/* ── Badge ── */
+.badge {
+    border-radius: 20px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-success {
+    background: #d1f0d8;
+    color: #1a5c2a;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+    .nutrition-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .day-view-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .day-view-header h1 {
+        text-align: left;
+    }
+
+    .day-meal-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .day-meal-actions {
+        margin-left: 0;
+    }
+}
