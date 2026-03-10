@@ -140,12 +140,13 @@ public class ScannerController : ControllerBase
     [HttpPost("vision/capture")]
     public async Task<IActionResult> SaveVisionCapture([FromBody] SaveVisionCaptureRequest request, CancellationToken ct)
     {
-        Guid userId = GetUserId();
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         _logger.LogInformation("User {UserId} saving vision capture", userId);
 
         VisionCaptureRecord capture = new VisionCaptureRecord
         {
-            UserId = userId,
+            UserId = userId.Value,
             ScanHistoryId = request.ScanHistoryId,
             CaptureImageJpeg = request.CaptureImageJpeg,
             DetectedBarcode = request.DetectedBarcode,
@@ -166,13 +167,14 @@ public class ScannerController : ControllerBase
     [HttpPost("correction")]
     public async Task<IActionResult> CreateCorrectionReport([FromBody] CreateCorrectionReportRequest request, CancellationToken ct)
     {
-        Guid userId = GetUserId();
+        var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         _logger.LogInformation("User {UserId} creating correction report for capture {CaptureId}", userId, request.VisionCaptureId);
 
         CorrectionReportRecord report = new CorrectionReportRecord
         {
             VisionCaptureId = request.VisionCaptureId,
-            UserId = userId,
+            UserId = userId.Value,
             AiGuess = request.AiGuess,
             UserCorrection = request.UserCorrection,
             UserNote = request.UserNote
@@ -249,7 +251,11 @@ public class ScannerAdminController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Get correction reports, optionally filtered by status
@@ -267,10 +273,11 @@ public class ScannerAdminController : ControllerBase
     [HttpPut("corrections/{id}")]
     public async Task<IActionResult> UpdateCorrectionStatus(Guid id, [FromBody] UpdateCorrectionStatusRequest request, CancellationToken ct)
     {
-        Guid reviewerId = GetUserId();
-        _logger.LogInformation("Admin {ReviewerId} updating correction {ReportId} to {Status}", reviewerId, id, request.Status);
+        var reviewerId = GetUserId();
+        if (reviewerId == null) return Unauthorized();
+        _logger.LogInformation("Admin {ReviewerId} updating correction {ReportId} to {Status}", reviewerId.Value, id, request.Status);
 
-        await _repository.UpdateCorrectionStatusAsync(id, request.Status, reviewerId, ct);
+        await _repository.UpdateCorrectionStatusAsync(id, request.Status, reviewerId.Value, ct);
         return NoContent();
     }
 

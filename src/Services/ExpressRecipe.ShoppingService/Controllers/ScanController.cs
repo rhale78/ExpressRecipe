@@ -131,8 +131,9 @@ public class ScanController : ControllerBase
     {
         try
         {
-            Guid userId = GetUserId();
-            ShoppingSessionSummaryDto summary = await _sessionService.CompleteSessionAsync(sessionId, userId, ct);
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            ShoppingSessionSummaryDto summary = await _sessionService.CompleteSessionAsync(sessionId, userId.Value, ct);
             _logger.LogInformation("User {UserId} completed shopping session {SessionId}", userId, sessionId);
             return Ok(summary);
         }

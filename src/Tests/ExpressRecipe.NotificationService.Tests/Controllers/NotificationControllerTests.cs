@@ -1,6 +1,7 @@
 using Moq;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using ExpressRecipe.NotificationService.Controllers;
 using ExpressRecipe.NotificationService.Data;
@@ -19,7 +20,8 @@ public class NotificationControllerTests
     {
         _mockRepository = new Mock<INotificationRepository>();
         _mockLogger = new Mock<ILogger<NotificationController>>();
-        _controller = new NotificationController(_mockLogger.Object, _mockRepository.Object);
+        var mockConfig = new Mock<IConfiguration>();
+        _controller = new NotificationController(_mockLogger.Object, _mockRepository.Object, mockConfig.Object);
         _testUserId = Guid.NewGuid();
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }

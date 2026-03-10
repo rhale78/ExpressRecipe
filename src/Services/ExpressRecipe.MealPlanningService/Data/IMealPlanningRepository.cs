@@ -2,35 +2,25 @@ namespace ExpressRecipe.MealPlanningService.Data;
 
 public interface IMealPlanningRepository
 {
-    // Meal Plans (CT versions with ct = default satisfy both CT and non-CT callers)
+    // Meal Plans
     Task<Guid> CreateMealPlanAsync(Guid userId, DateTime startDate, DateTime endDate, string? name, CancellationToken ct = default);
     Task<List<MealPlanDto>> GetUserMealPlansAsync(Guid userId, CancellationToken ct = default);
     Task<MealPlanDto?> GetMealPlanAsync(Guid planId, Guid userId, CancellationToken ct = default);
     Task<MealPlanDto?> GetMealPlanByIdAsync(Guid planId, CancellationToken ct = default);
-    Task UpdateMealPlanAsync(Guid planId, Guid userId, string name, DateTime startDate, DateTime endDate, string status);
     Task DeleteMealPlanAsync(Guid planId, Guid userId, CancellationToken ct = default);
-    Task SetMealPlanStatusAsync(Guid planId, Guid userId, string status);
 
     // Planned Meals
-    Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid? recipeId, DateTime plannedFor, string mealType, int servings, string? customMealName = null, string? notes = null);
     Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid? recipeId, DateTime plannedDate, string mealType, int servings, CancellationToken ct = default);
     Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate, CancellationToken ct = default);
-    Task<List<PlannedMealDto>> GetPlannedMealsByDateRangeAsync(Guid userId, DateTime startDate, DateTime endDate);
-    Task<PlannedMealDto?> GetPlannedMealAsync(Guid plannedMealId);
     Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid mealId, CancellationToken ct = default);
     Task<List<PlannedMealDto>> GetMealsByDateAsync(Guid planId, DateOnly date, CancellationToken ct = default);
-    Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedFor, string mealType, int servings, Guid? recipeId = null, string? customMealName = null, string? notes = null);
     Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedDate, string mealType, int? servings, CancellationToken ct = default);
     Task RemovePlannedMealAsync(Guid plannedMealId, CancellationToken ct = default);
-    Task MarkMealAsPreparedAsync(Guid plannedMealId, bool isPrepared);
     Task MarkMealAsCompletedAsync(Guid plannedMealId, CancellationToken ct = default);
 
     // Calendar
     Task<List<MealPlanCalendarDay>> GetCalendarAsync(Guid userId, int year, int month, CancellationToken ct = default);
     Task<bool> UserCanAccessPlannedMealAsync(Guid plannedMealId, Guid userId, CancellationToken ct = default);
-
-    // Summary / Week view
-    Task<MealPlanSummaryData> GetMealPlanSummaryAsync(Guid userId);
 
     // Nutritional Goals
     Task<Guid> SetNutritionalGoalAsync(Guid userId, string goalType, decimal targetValue, string? unit, DateTime? startDate, DateTime? endDate, CancellationToken ct = default);
@@ -43,7 +33,6 @@ public interface IMealPlanningRepository
     Task<List<PlanTemplateDto>> GetUserTemplatesAsync(Guid userId, CancellationToken ct = default);
     Task<PlanTemplateDto?> GetTemplateByIdAsync(Guid templateId, CancellationToken ct = default);
     Task<Guid> ApplyTemplateAsync(Guid templateId, Guid userId, DateTime startDate, CancellationToken ct = default);
-
     // Cooking History
     Task<Guid> RecordCookingHistoryAsync(CookingHistoryRecord record, CancellationToken ct = default);
     Task UpdateCookingRatingAsync(Guid historyId, Guid userId, byte rating, bool? wouldCookAgain, string? notes, CancellationToken ct = default);
@@ -61,16 +50,6 @@ public interface IMealPlanningRepository
     Task<Dictionary<Guid, int>> GetUserRecipeCookCountsAsync(Guid userId, CancellationToken ct = default);
 }
 
-
-// Summary data returned by the backend (not the client DTO)
-public class MealPlanSummaryData
-{
-    public int TotalActivePlans { get; set; }
-    public int TotalUpcomingMeals { get; set; }
-    public int MealsThisWeek { get; set; }
-    public int PreparedThisWeek { get; set; }
-}
-
 public class MealPlanDto
 {
     public Guid Id { get; set; }
@@ -78,7 +57,6 @@ public class MealPlanDto
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
     public string? Name { get; set; }
-    public string Status { get; set; } = "Active";
     public int TotalMeals { get; set; }
     public int CompletedMeals { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -93,17 +71,10 @@ public class PlannedMealDto
     public string? CustomMealName { get; set; }
     public string RecipeName { get; set; } = string.Empty;
     public DateTime PlannedDate { get; set; }
-    /// <summary>Backward-compat alias for PlannedDate (used by older controller endpoints).</summary>
-    public DateTime PlannedFor
-    {
-        get => PlannedDate;
-        set => PlannedDate = value;
-    }
     public string MealType { get; set; } = string.Empty;
     public int? Servings { get; set; }
     public bool IsCompleted { get; set; }
     public DateTime? CompletedAt { get; set; }
-    public string? Notes { get; set; }
 }
 
 public class MealPlanCalendarDay

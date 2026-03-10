@@ -383,6 +383,8 @@ public class NotificationController : ControllerBase
             _logger.LogError(ex, "Error during GDPR hard-delete for user data");
             return StatusCode(500, new { message = "An error occurred while deleting user notification data" });
         }
+    }
+
     // Allowlist of valid entity types for action URL construction.
     private static readonly HashSet<string> AllowedEntityTypes =
         new(StringComparer.OrdinalIgnoreCase) { "PlannedMeal", "InventoryItem", "Recipe", "CookingTimer" };
@@ -490,6 +492,7 @@ public class MarkNotificationReadRequest
 {
     public Guid NotificationId { get; set; }
     public bool IsRead { get; set; } = true;
+}
 /// <summary>Request body for the service-to-service internal notification endpoint.</summary>
 public class InternalNotificationRequest
 {

@@ -16,45 +16,34 @@ public class MealPlanningRepository : IMealPlanningRepository
         _nutritionLogRepo = nutritionLogRepo;
     }
 
-    // ──────────────────────── Meal Plans ────────────────────────
-
     public async Task<Guid> CreateMealPlanAsync(Guid userId, DateTime startDate, DateTime endDate, string? name, CancellationToken ct = default)
     {
         const string sql = @"
-            INSERT INTO MealPlan (UserId, StartDate, EndDate, Name, IsActive, CreatedAt)
+            INSERT INTO MealPlan (UserId, StartDate, EndDate, Name, CreatedAt)
             OUTPUT INSERTED.Id
-            VALUES (@UserId, @StartDate, @EndDate, @Name, 1, GETUTCDATE())";
+            VALUES (@UserId, @StartDate, @EndDate, @Name, GETUTCDATE())";
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@StartDate", startDate.Date);
-        command.Parameters.AddWithValue("@EndDate", endDate.Date);
-        command.Parameters.AddWithValue("@Name", (object?)name ?? DBNull.Value);
+        command.Parameters.AddWithValue("@StartDate", startDate);
+        command.Parameters.AddWithValue("@EndDate", endDate);
+        command.Parameters.AddWithValue("@Name", name ?? (object)DBNull.Value);
 
         return (Guid)(await command.ExecuteScalarAsync(ct))!;
     }
 
     public async Task<List<MealPlanDto>> GetUserMealPlansAsync(Guid userId, CancellationToken ct = default)
     {
-        var sql = @"
-            SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.IsActive, mp.CreatedAt,
+        const string sql = @"
+            SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1 AND IsDeleted = 0) AS CompletedMeals
             FROM MealPlan mp
-            WHERE mp.UserId = @UserId AND mp.IsDeleted = 0";
-
-        if (!string.IsNullOrEmpty(status))
-        {
-            if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
-                sql += " AND mp.IsActive = 1";
-            else if (string.Equals(status, "archived", StringComparison.OrdinalIgnoreCase))
-                sql += " AND mp.IsActive = 0";
-        }
-
-        sql += " ORDER BY mp.StartDate DESC";
+            WHERE mp.UserId = @UserId AND mp.IsDeleted = 0
+            ORDER BY mp.StartDate DESC";
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
@@ -75,7 +64,7 @@ public class MealPlanningRepository : IMealPlanningRepository
     public async Task<MealPlanDto?> GetMealPlanAsync(Guid planId, Guid userId, CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.IsActive, mp.CreatedAt,
+            SELECT mp.Id, mp.UserId, mp.StartDate, mp.EndDate, mp.Name, mp.CreatedAt,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsDeleted = 0) AS TotalMeals,
                    (SELECT COUNT(*) FROM PlannedMeal WHERE MealPlanId = mp.Id AND IsCompleted = 1 AND IsDeleted = 0) AS CompletedMeals
             FROM MealPlan mp
@@ -95,28 +84,6 @@ public class MealPlanningRepository : IMealPlanningRepository
         }
 
         return null;
-    }
-
-    public async Task UpdateMealPlanAsync(Guid planId, Guid userId, string name, DateTime startDate, DateTime endDate, string status)
-    {
-        var isActive = !string.Equals(status, "Archived", StringComparison.OrdinalIgnoreCase);
-        const string sql = @"
-            UPDATE MealPlan
-            SET Name = @Name, StartDate = @StartDate, EndDate = @EndDate, IsActive = @IsActive, UpdatedAt = GETUTCDATE()
-            WHERE Id = @PlanId AND UserId = @UserId AND IsDeleted = 0";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@PlanId", planId);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Name", name);
-        command.Parameters.AddWithValue("@StartDate", startDate.Date);
-        command.Parameters.AddWithValue("@EndDate", endDate.Date);
-        command.Parameters.AddWithValue("@IsActive", isActive);
-
-        await command.ExecuteNonQueryAsync();
     }
 
     public async Task<MealPlanDto?> GetMealPlanByIdAsync(Guid planId, CancellationToken ct = default)
@@ -145,7 +112,7 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task DeleteMealPlanAsync(Guid planId, Guid userId, CancellationToken ct = default)
     {
-        const string sql = "UPDATE MealPlan SET IsDeleted = 1, UpdatedAt = GETUTCDATE() WHERE Id = @PlanId AND UserId = @UserId";
+        const string sql = "UPDATE MealPlan SET IsDeleted = 1 WHERE Id = @PlanId AND UserId = @UserId";
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
@@ -156,26 +123,6 @@ public class MealPlanningRepository : IMealPlanningRepository
 
         await command.ExecuteNonQueryAsync(ct);
     }
-
-    public async Task SetMealPlanStatusAsync(Guid planId, Guid userId, string status)
-    {
-        var isActive = !string.Equals(status, "Archived", StringComparison.OrdinalIgnoreCase);
-        const string sql = @"
-            UPDATE MealPlan SET IsActive = @IsActive, UpdatedAt = GETUTCDATE()
-            WHERE Id = @PlanId AND UserId = @UserId AND IsDeleted = 0";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@PlanId", planId);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@IsActive", isActive);
-
-        await command.ExecuteNonQueryAsync();
-    }
-
-    // ──────────────────────── Planned Meals ────────────────────────
 
     public async Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid? recipeId, DateTime plannedDate, string mealType, int servings, CancellationToken ct = default)
     {
@@ -194,31 +141,8 @@ public class MealPlanningRepository : IMealPlanningRepository
         command.Parameters.AddWithValue("@PlannedDate", plannedDate);
         command.Parameters.AddWithValue("@MealType", mealType);
         command.Parameters.AddWithValue("@Servings", servings);
-        command.Parameters.AddWithValue("@Notes", (object?)notes ?? DBNull.Value);
 
         return (Guid)(await command.ExecuteScalarAsync(ct))!;
-    }
-
-    public async Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid? recipeId, DateTime plannedFor, string mealType, int servings, string? customMealName = null, string? notes = null)
-    {
-        const string sql = @"
-            INSERT INTO PlannedMeal (MealPlanId, UserId, RecipeId, PlannedDate, MealType, Servings, CreatedAt)
-            OUTPUT INSERTED.Id
-            VALUES (@MealPlanId, @UserId, @RecipeId, @PlannedDate, @MealType, @Servings, GETUTCDATE())";
-
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@MealPlanId", mealPlanId);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@RecipeId", recipeId.HasValue ? recipeId.Value : (object)DBNull.Value);
-        command.Parameters.AddWithValue("@PlannedDate", plannedFor.Date);
-        command.Parameters.AddWithValue("@MealType", mealType);
-        command.Parameters.AddWithValue("@Servings", servings);
-        command.Parameters.AddWithValue("@Notes", (object?)notes ?? DBNull.Value);
-
-        return (Guid)(await command.ExecuteScalarAsync())!;
     }
 
     private static readonly string EmptyGuidStr = Guid.Empty.ToString();
@@ -243,8 +167,10 @@ public class MealPlanningRepository : IMealPlanningRepository
 
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@MealPlanId", mealPlanId);
-        if (startDate.HasValue) command.Parameters.AddWithValue("@StartDate", startDate.Value.Date);
-        if (endDate.HasValue) command.Parameters.AddWithValue("@EndDate", endDate.Value.Date);
+        if (startDate.HasValue)
+            command.Parameters.AddWithValue("@StartDate", startDate.Value);
+        if (endDate.HasValue)
+            command.Parameters.AddWithValue("@EndDate", endDate.Value);
 
         List<PlannedMealDto> meals = new();
         await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
@@ -252,34 +178,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         {
             meals.Add(MapPlannedMeal(reader));
         }
-        return meals;
-    }
 
-    public async Task<List<PlannedMealDto>> GetPlannedMealsByDateRangeAsync(Guid userId, DateTime startDate, DateTime endDate)
-    {
-        string sql = $@"
-            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{MealPlanningRepository.EmptyGuidStr}'), pm.RecipeId,
-                   '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt
-            FROM PlannedMeal pm
-            INNER JOIN MealPlan mp ON mp.Id = pm.MealPlanId
-            WHERE mp.UserId = @UserId AND pm.IsDeleted = 0 AND mp.IsDeleted = 0
-              AND pm.PlannedDate >= @StartDate AND pm.PlannedDate <= @EndDate
-            ORDER BY pm.PlannedDate, pm.MealType";
-
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@StartDate", startDate.Date);
-        command.Parameters.AddWithValue("@EndDate", endDate.Date);
-
-        List<PlannedMealDto> meals = new();
-        await using SqlDataReader reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            meals.Add(MapPlannedMeal(reader));
-        }
         return meals;
     }
 
@@ -332,29 +231,6 @@ public class MealPlanningRepository : IMealPlanningRepository
         return meals;
     }
 
-    public async Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedFor, string mealType, int servings, Guid? recipeId = null, string? customMealName = null, string? notes = null)
-    {
-        const string sql = @"
-            UPDATE PlannedMeal
-            SET PlannedDate = @PlannedDate, MealType = @MealType, Servings = @Servings,
-                RecipeId = COALESCE(@RecipeId, RecipeId),
-                CustomMealName = COALESCE(@CustomMealName, CustomMealName)
-            WHERE Id = @PlannedMealId AND IsDeleted = 0";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@PlannedMealId", plannedMealId);
-        command.Parameters.AddWithValue("@PlannedDate", plannedFor.Date);
-        command.Parameters.AddWithValue("@MealType", mealType);
-        command.Parameters.AddWithValue("@Servings", servings);
-        command.Parameters.AddWithValue("@RecipeId", (object?)recipeId ?? DBNull.Value);
-        command.Parameters.AddWithValue("@CustomMealName", (object?)customMealName ?? DBNull.Value);
-
-        await command.ExecuteNonQueryAsync();
-    }
-
     public async Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedDate, string mealType, int? servings, CancellationToken ct = default)
     {
         string sql = servings.HasValue
@@ -387,29 +263,9 @@ public class MealPlanningRepository : IMealPlanningRepository
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task MarkMealAsPreparedAsync(Guid plannedMealId, bool isPrepared)
-    {
-        const string sql = @"
-            UPDATE PlannedMeal
-            SET IsCompleted = @IsPrepared, CompletedAt = CASE WHEN @IsPrepared = 1 THEN GETUTCDATE() ELSE NULL END
-            WHERE Id = @PlannedMealId AND IsDeleted = 0";
-
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@PlannedMealId", plannedMealId);
-        command.Parameters.AddWithValue("@IsPrepared", isPrepared);
-
-        await command.ExecuteNonQueryAsync();
-    }
-
     public async Task MarkMealAsCompletedAsync(Guid plannedMealId, CancellationToken ct = default)
     {
-        const string sql = @"
-            UPDATE PlannedMeal
-            SET IsCompleted = 1, CompletedAt = GETUTCDATE()
-            WHERE Id = @PlannedMealId AND IsDeleted = 0";
+        const string sql = "UPDATE PlannedMeal SET IsCompleted = 1, CompletedAt = GETUTCDATE() WHERE Id = @PlannedMealId";
 
         await using SqlConnection connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
@@ -472,54 +328,26 @@ public class MealPlanningRepository : IMealPlanningRepository
         return ((int?)await command.ExecuteScalarAsync(ct) ?? 0) > 0;
     }
 
-    // ──────────────────────── Summary ────────────────────────
-
-    public async Task<MealPlanSummaryData> GetMealPlanSummaryAsync(Guid userId)
+    public async Task<Guid> SetNutritionalGoalAsync(Guid userId, string goalType, decimal targetValue, string? unit, DateTime? startDate, DateTime? endDate)
     {
-        var today = DateTime.UtcNow.Date;
-        var weekStart = today.AddDays(-(int)today.DayOfWeek);
-        var weekEnd = weekStart.AddDays(6);
-
         const string sql = @"
-            SELECT
-                (SELECT COUNT(*) FROM MealPlan WHERE UserId = @UserId AND IsActive = 1 AND IsDeleted = 0) AS TotalActivePlans,
-                (SELECT COUNT(*) FROM PlannedMeal pm
-                 INNER JOIN MealPlan mp ON mp.Id = pm.MealPlanId
-                 WHERE mp.UserId = @UserId AND pm.IsDeleted = 0 AND mp.IsDeleted = 0 AND pm.PlannedDate >= @Today) AS TotalUpcomingMeals,
-                (SELECT COUNT(*) FROM PlannedMeal pm
-                 INNER JOIN MealPlan mp ON mp.Id = pm.MealPlanId
-                 WHERE mp.UserId = @UserId AND pm.IsDeleted = 0 AND mp.IsDeleted = 0
-                   AND pm.PlannedDate >= @WeekStart AND pm.PlannedDate <= @WeekEnd) AS MealsThisWeek,
-                (SELECT COUNT(*) FROM PlannedMeal pm
-                 INNER JOIN MealPlan mp ON mp.Id = pm.MealPlanId
-                 WHERE mp.UserId = @UserId AND pm.IsDeleted = 0 AND mp.IsDeleted = 0 AND pm.IsCompleted = 1
-                   AND pm.PlannedDate >= @WeekStart AND pm.PlannedDate <= @WeekEnd) AS PreparedThisWeek";
+            INSERT INTO NutritionalGoal (UserId, GoalType, TargetValue, Unit, StartDate, EndDate, IsActive, CreatedAt)
+            OUTPUT INSERTED.Id
+            VALUES (@UserId, @GoalType, @TargetValue, @Unit, @StartDate, @EndDate, 1, GETUTCDATE())";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Today", today);
-        command.Parameters.AddWithValue("@WeekStart", weekStart);
-        command.Parameters.AddWithValue("@WeekEnd", weekEnd);
+        command.Parameters.AddWithValue("@GoalType", goalType);
+        command.Parameters.AddWithValue("@TargetValue", targetValue);
+        command.Parameters.AddWithValue("@Unit", unit ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@StartDate", startDate ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@EndDate", endDate ?? (object)DBNull.Value);
 
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            return new MealPlanSummaryData
-            {
-                TotalActivePlans = reader.GetInt32(0),
-                TotalUpcomingMeals = reader.GetInt32(1),
-                MealsThisWeek = reader.GetInt32(2),
-                PreparedThisWeek = reader.GetInt32(3)
-            };
-        }
-
-        return new MealPlanSummaryData();
+        return (Guid)await command.ExecuteScalarAsync()!;
     }
-
-    // ──────────────────────── Nutritional Goals ────────────────────────
 
     public async Task<List<MealPlanCalendarDay>> GetCalendarAsync(Guid userId, int year, int month, CancellationToken ct = default)
     {
