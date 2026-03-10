@@ -88,31 +88,46 @@ public sealed class StripeWebhookController : ControllerBase
             {
                 Subscription sub = (Subscription)ev.Data.Object;
                 string tier     = MapPriceIdToTier(sub.Items.Data[0].Price.Id);
-                Guid userId     = GetUserIdFromMetadata(sub.Metadata);
+                Guid? userId    = GetUserIdFromMetadata(sub.Metadata);
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("No valid userId in Stripe subscription metadata for sub {SubId}", sub.Id);
+                    return;
+                }
                 DateTime periodEnd = sub.Items.Data.Count > 0
                     ? sub.Items.Data[0].CurrentPeriodEnd
                     : DateTime.UtcNow.AddMonths(1);
-                await _subs.UpdateUserSubscriptionAsync(userId, tier, sub.Id, periodEnd, ct);
+                await _subs.UpdateUserSubscriptionAsync(userId.Value, tier, sub.Id, periodEnd, ct);
                 _logger.LogInformation(
                     "Subscription {Event} for user {UserId}: tier={Tier}, sub={SubId}",
-                    ev.Type, userId, tier, sub.Id);
+                    ev.Type, userId.Value, tier, sub.Id);
                 break;
             }
 
             case EventTypes.CustomerSubscriptionDeleted:
             {
                 Subscription sub = (Subscription)ev.Data.Object;
-                Guid userId      = GetUserIdFromMetadata(sub.Metadata);
-                await _subs.DowngradeToFreeAsync(userId, ct);
-                _logger.LogInformation("Subscription deleted — downgraded user {UserId} to Free", userId);
+                Guid? userId     = GetUserIdFromMetadata(sub.Metadata);
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("No valid userId in Stripe subscription metadata for sub {SubId}", sub.Id);
+                    return;
+                }
+                await _subs.DowngradeToFreeAsync(userId.Value, ct);
+                _logger.LogInformation("Subscription deleted — downgraded user {UserId} to Free", userId.Value);
                 break;
             }
 
             case EventTypes.CustomerSubscriptionTrialWillEnd:
             {
                 Subscription sub = (Subscription)ev.Data.Object;
-                Guid userId      = GetUserIdFromMetadata(sub.Metadata);
-                _logger.LogInformation("Trial ending soon for user {UserId}", userId);
+                Guid? userId     = GetUserIdFromMetadata(sub.Metadata);
+                if (!userId.HasValue)
+                {
+                    _logger.LogWarning("No valid userId in Stripe subscription metadata for sub {SubId}", sub.Id);
+                    return;
+                }
+                _logger.LogInformation("Trial ending soon for user {UserId}", userId.Value);
                 // TODO: Send trial-ending notification via NotificationService
                 break;
             }
@@ -131,8 +146,8 @@ public sealed class StripeWebhookController : ControllerBase
         _ => "Free"
     };
 
-    private static Guid GetUserIdFromMetadata(IDictionary<string, string> metadata)
+    private static Guid? GetUserIdFromMetadata(IDictionary<string, string> metadata)
         => metadata.TryGetValue("userId", out string? id) && Guid.TryParse(id, out Guid guid)
             ? guid
-            : Guid.Empty;
+            : null;
 }

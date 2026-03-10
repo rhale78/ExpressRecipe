@@ -471,6 +471,7 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
             SET SubscriptionTier       = @TierName,
                 StripeSubscriptionId   = @StripeSubscriptionId,
                 SubscriptionExpiresAt  = @CurrentPeriodEnd,
+                -- Clear cancellation flag: handles both new subscriptions and reactivations
                 SubscriptionCancelledAt = NULL,
                 UpdatedAt              = GETUTCDATE()
             WHERE UserId = @UserId AND IsDeleted = 0";

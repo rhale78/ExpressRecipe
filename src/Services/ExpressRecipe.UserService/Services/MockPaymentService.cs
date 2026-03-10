@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace ExpressRecipe.UserService.Services;
 
 /// <summary>
@@ -6,7 +8,7 @@ namespace ExpressRecipe.UserService.Services;
 /// </summary>
 public sealed class MockPaymentService : IPaymentService
 {
-    private static readonly HashSet<string> _processedEvents = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> _processedEvents = new(StringComparer.Ordinal);
 
     public Task CreateCustomerAsync(Guid userId, string email, string name,
         CancellationToken ct = default)
@@ -30,12 +32,12 @@ public sealed class MockPaymentService : IPaymentService
 
     public Task<bool> EventAlreadyProcessedAsync(string stripeEventId,
         CancellationToken ct = default)
-        => Task.FromResult(_processedEvents.Contains(stripeEventId));
+        => Task.FromResult(_processedEvents.ContainsKey(stripeEventId));
 
     public Task MarkEventProcessedAsync(string stripeEventId, string eventType,
         CancellationToken ct = default)
     {
-        _processedEvents.Add(stripeEventId);
+        _processedEvents.TryAdd(stripeEventId, 0);
         return Task.CompletedTask;
     }
 }
