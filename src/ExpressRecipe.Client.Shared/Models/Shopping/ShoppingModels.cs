@@ -369,10 +369,9 @@ public class StartShoppingScanRequest
 
 public class ScanPurchaseRequest
 {
-    public Guid SessionId { get; set; }
-    public Guid ShoppingListItemId { get; set; }
     public string? Barcode { get; set; }
-    public decimal ActualPrice { get; set; }
+    public decimal Quantity { get; set; } = 1;
+    public decimal Price { get; set; }
 }
 
 public class ShoppingScanSessionResultDto

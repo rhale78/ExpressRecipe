@@ -403,7 +403,9 @@
 
     private async Task ShowTemplatesModal()
     {
-        _templates = await ShoppingApi.GetTemplatesAsync();
+        _templates = _activeHouseholdId.HasValue
+            ? await ShoppingApi.GetHouseholdTemplatesAsync(_activeHouseholdId.Value)
+            : await ShoppingApi.GetTemplatesAsync();
         _showTemplatesModal = true;
     }
 
@@ -430,11 +432,13 @@
 
     private async Task CreateListFromTemplate(Guid templateId)
     {
+        ShoppingListTemplateDto? template = _templates?.FirstOrDefault(t => t.Id == templateId);
+
         Guid? newListId = await ShoppingApi.CreateListFromTemplateAsync(
             templateId,
             new CreateListFromTemplateRequest
             {
-                ListName = null   // uses template name
+                ListName = template?.Name ?? "Shopping List"
             });
 
         if (newListId.HasValue)
@@ -447,16 +451,34 @@
 
     private async Task SearchLists()
     {
-        ShoppingListSearchRequest request = new()
+        if (_activeHouseholdId.HasValue)
         {
-            Status = _selectedStatus == "All" ? null : _selectedStatus,
-            Page = _currentPage,
-            PageSize = PageSize,
-            SortBy = "CreatedAt",
-            SortDescending = true
-        };
+            List<ShoppingListDto>? householdLists = await ShoppingApi.GetHouseholdListsAsync(_activeHouseholdId.Value);
+            string? statusFilter = _selectedStatus == "All" ? null : _selectedStatus;
+            List<ShoppingListDto> filtered = householdLists
+                ?.Where(l => statusFilter == null || l.Status == statusFilter)
+                .ToList() ?? new();
+            _searchResult = new ShoppingListSearchResult
+            {
+                Lists = filtered,
+                TotalCount = filtered.Count,
+                Page = 1,
+                PageSize = filtered.Count
+            };
+        }
+        else
+        {
+            ShoppingListSearchRequest request = new()
+            {
+                Status = _selectedStatus == "All" ? null : _selectedStatus,
+                Page = _currentPage,
+                PageSize = PageSize,
+                SortBy = "CreatedAt",
+                SortDescending = true
+            };
 
-        _searchResult = await ShoppingApi.SearchShoppingListsAsync(request);
+            _searchResult = await ShoppingApi.SearchShoppingListsAsync(request);
+        }
         StateHasChanged();
     }
 

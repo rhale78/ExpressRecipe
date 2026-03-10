@@ -10,7 +10,7 @@
 @inject IRecipeApiClient RecipeApi
 @inject IPriceApiClient PriceApi
 @inject IToastService ToastService
-@inject IJSRuntime JS
+@inject ILogger<ShoppingListDetails> Logger
 @inject NavigationManager Navigation
 
 <PageTitle>@(_list?.Name ?? "Shopping List") - ExpressRecipe</PageTitle>
@@ -42,8 +42,7 @@
                 <div class="list-status-badge @_list.Status.ToLower()">@_list.Status</div>
             </div>
             <div class="header-actions">
-                <button class="btn btn-secondary" @onclick="ToggleShopMode"
-                        disabled="@(_isShopModeActive && _activeScanSession == null)">
+                <button class="btn btn-secondary" @onclick="ToggleShopMode">
                     @(_isShopModeActive ? "✓ Exit Shop Mode" : "🛒 Shop Mode")
                 </button>
                 <button class="btn btn-secondary" @onclick="ToggleEditMode">
@@ -624,7 +623,14 @@
     {
         await LoadList();
         _favorites = await ShoppingApi.GetFavoritesAsync();
-        _ = LoadPriceComparisons();
+        try
+        {
+            await LoadPriceComparisons();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load price comparisons for list {ListId}", Id);
+        }
     }
 
     private async Task LoadList()
@@ -645,16 +651,41 @@
             return;
         }
 
-        _bestPrices = new Dictionary<Guid, List<PriceComparisonDto>>();
-        foreach (ShoppingListItemDto item in _list.Items.Where(i => i.ProductId.HasValue))
+        List<ShoppingListItemDto> itemsWithProduct = _list.Items
+            .Where(i => i.ProductId.HasValue)
+            .ToList();
+
+        if (!itemsWithProduct.Any())
         {
-            List<PriceComparisonDto>? prices = await ShoppingApi.GetBestPricesAsync(item.ProductId!.Value);
-            if (prices?.Any() == true)
-            {
-                _bestPrices[item.Id] = prices;
-            }
+            _bestPrices = new Dictionary<Guid, List<PriceComparisonDto>>();
+            StateHasChanged();
+            return;
         }
 
+        System.Collections.Concurrent.ConcurrentDictionary<Guid, List<PriceComparisonDto>> bestPricesLocal = new();
+        const int MaxConcurrentRequests = 5;
+        using System.Threading.SemaphoreSlim semaphore = new(MaxConcurrentRequests);
+
+        List<Task> tasks = itemsWithProduct.Select(async item =>
+        {
+            await semaphore.WaitAsync();
+            try
+            {
+                List<PriceComparisonDto>? prices = await ShoppingApi.GetBestPricesAsync(item.ProductId!.Value);
+                if (prices?.Any() == true)
+                {
+                    bestPricesLocal[item.Id] = prices;
+                }
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }).ToList();
+
+        await Task.WhenAll(tasks);
+
+        _bestPrices = bestPricesLocal.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         StateHasChanged();
     }
 
@@ -663,6 +694,13 @@
     private async Task ShowStorePicker()
     {
         _nearbyStores = await ShoppingApi.GetNearbyStoresAsync(0, 0);
+
+        if (_nearbyStores == null || !_nearbyStores.Any())
+        {
+            ToastService.ShowWarning("No nearby stores could be found. Please try again later or check your connection.");
+            return;
+        }
+
         _showStorePicker = true;
     }
 
@@ -674,7 +712,7 @@
         bool ok = await ShoppingApi.SetPreferredStoreAsync(store.Id);
         if (ok)
         {
-            ToastService.ShowInfo($"List assigned to {store.Name}.");
+            ToastService.ShowInfo($"Preferred store set to {store.Name}.");
         }
     }
 
@@ -713,16 +751,20 @@
         if (_isShopModeActive)
         {
             _isShopModeActive = false;
+            _activeScanSession = null;
             return;
         }
 
         _isShopModeActive = true;
-        Guid? sessionId = await ShoppingApi.StartShoppingScanSessionAsync(
+        await ShoppingApi.StartShoppingScanSessionAsync(
             new StartShoppingScanRequest { ShoppingListId = Id });
 
-        if (sessionId.HasValue)
+        _activeScanSession = await ShoppingApi.GetActiveShoppingScanSessionAsync();
+
+        if (_activeScanSession == null)
         {
-            _activeScanSession = await ShoppingApi.GetActiveShoppingScanSessionAsync();
+            _isShopModeActive = false;
+            ToastService.ShowError("Could not start a scan session. Please try again.");
         }
     }
 
@@ -745,13 +787,13 @@
             _activeScanSession.Id,
             new ScanPurchaseRequest
             {
-                SessionId = _activeScanSession.Id,
-                ShoppingListItemId = Guid.Empty,
-                Barcode = barcode
+                Barcode = barcode,
+                Quantity = 1,
+                Price = 0m
             });
 
         _lastShopScan = new ScanResult(ok,
-            ok ? $"✓ Scanned {barcode}" : $"Not found on list: {barcode}");
+            ok ? $"✓ Recorded purchase for {barcode}" : $"Failed to record purchase for {barcode}");
 
         _activeScanSession = await ShoppingApi.GetActiveShoppingScanSessionAsync();
         await LoadList();
@@ -764,20 +806,8 @@
             return;
         }
 
-        ShoppingScanSessionResultDto? result =
-            await ShoppingApi.EndShoppingScanSessionAsync(_activeScanSession.Id);
-
-        if (result != null && result.TotalItemsScanned > 0)
-        {
-            bool addToInventory = await JS.InvokeAsync<bool>(
-                "confirm",
-                $"{result.TotalItemsScanned} items purchased. Go to Inventory to add them to your stock?");
-
-            if (addToInventory)
-            {
-                Navigation.NavigateTo("/inventory");
-            }
-        }
+        await ShoppingApi.EndShoppingScanSessionAsync(_activeScanSession.Id);
+        ToastService.ShowSuccess("Shopping session ended. Check your Inventory page to add purchased items to stock.");
 
         _activeScanSession = null;
         _isShopModeActive = false;
