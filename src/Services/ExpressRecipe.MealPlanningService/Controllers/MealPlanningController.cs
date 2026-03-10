@@ -7,6 +7,7 @@ using ExpressRecipe.MealPlanningService.Data;
 using ExpressRecipe.MealPlanningService.Logging;
 using ExpressRecipe.MealPlanningService.Services;
 using ExpressRecipe.MealPlanningService.Services.Printing;
+using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
 
@@ -34,6 +35,10 @@ public class MealPlanningController : ControllerBase
 
     private readonly IMealPlanPdfService _pdfService;
 
+    private readonly IMealScheduleConfigRepository _scheduleRepo;
+    private readonly IGoogleCalendarService _googleCal;
+    private readonly IHolidayService _holidays;
+
     public MealPlanningController(
         ILogger<MealPlanningController> logger,
         IMealPlanningRepository repository,
@@ -48,7 +53,10 @@ public class MealPlanningController : ControllerBase
         IMealPlanCopyService copyService,
         IMealPlanTemplateService templateService,
         IMealPlanHistoryService history, IMealVotingRepository voting,
-        IMealPlanPdfService pdfService)
+        IMealPlanPdfService pdfService,
+        IMealScheduleConfigRepository scheduleRepo,
+        IGoogleCalendarService googleCal,
+        IHolidayService holidays)
     {
         _logger = logger;
         _repository = repository;
@@ -65,6 +73,9 @@ public class MealPlanningController : ControllerBase
         _history = history;
         _voting = voting;
         _pdfService = pdfService;
+        _scheduleRepo = scheduleRepo;
+        _googleCal    = googleCal;
+        _holidays     = holidays;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -756,6 +767,51 @@ public class MealPlanningController : ControllerBase
             GroceryGrouping = grouping
         };
         return Ok(await _pdfService.AssemblePrintDataAsync(options, GetUserId(), ct));
+
+    // ── Schedule config ───────────────────────────────────────────────────────
+
+    [HttpGet("schedule-config")]
+    public async Task<IActionResult> GetScheduleConfig(CancellationToken ct)
+        => Ok(await _scheduleRepo.GetConfigsAsync(GetUserId(), ct));
+
+    [HttpPut("schedule-config")]
+    public async Task<IActionResult> SetScheduleConfig([FromBody] List<MealScheduleConfigDto> configs, CancellationToken ct)
+    {
+        await _scheduleRepo.SetConfigsAsync(GetUserId(), configs, ct);
+        return NoContent();
+    }
+
+    // ── Google Calendar ───────────────────────────────────────────────────────
+
+    [HttpGet("calendar/status")]
+    public async Task<IActionResult> GetCalendarStatus(CancellationToken ct)
+        => Ok(new { connected = await _googleCal.IsConnectedAsync(GetUserId(), ct) });
+
+    [HttpGet("calendar/events")]
+    public async Task<IActionResult> GetCalendarEvents([FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
+        => Ok(await _googleCal.GetEventsAsync(GetUserId(), from, to, ct));
+
+    // ── Holidays ─────────────────────────────────────────────────────────────
+
+    [HttpGet("holidays")]
+    public IActionResult GetHolidays([FromQuery] int year, [FromQuery] int month, [FromQuery] string? categories)
+    {
+        IReadOnlyList<string> cats = categories?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            ?? Array.Empty<string>();
+        return Ok(_holidays.GetHolidaysForMonth(year, month, cats));
+    }
+
+    // ── Auto-fill ─────────────────────────────────────────────────────────────
+
+    [HttpPost("plans/{id}/auto-fill")]
+    public async Task<IActionResult> AutoFill(Guid id, [FromBody] AutoFillRequest request, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        List<CalendarEventDto> calEvents = request.RespectCalendar
+            ? await _googleCal.GetEventsAsync(userId, request.FromDate, request.ToDate, ct)
+            : new();
+        // Auto-fill logic placeholder — returns calendar events that affect the plan window
+        return Ok(new { planId = id, busyDates = calEvents.Where(e => e.IsBusy).Select(e => e.Date).Distinct() });
     }
 }
 
@@ -971,4 +1027,9 @@ public class CourseReviewRequest
     public byte Rating { get; set; }
     [MaxLength(500)]
     public string? Comment { get; set; }
+public sealed class AutoFillRequest
+{
+    public DateOnly FromDate       { get; set; }
+    public DateOnly ToDate         { get; set; }
+    public bool     RespectCalendar { get; set; } = true;
 }

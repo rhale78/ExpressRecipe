@@ -4,6 +4,7 @@ using ExpressRecipe.MealPlanningService.Services;
 using ExpressRecipe.MealPlanningService.Workers;
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
+using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
 using ExpressRecipe.MealPlanningService.Services.Printing;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
@@ -33,7 +34,7 @@ builder.Services.AddAuthentication("Bearer")
 builder.Services.AddAuthorization();
 
 // Register database connection
-var connectionString = builder.Configuration.GetConnectionString("mealplandb")
+string connectionString = builder.Configuration.GetConnectionString("mealplandb")
     ?? throw new InvalidOperationException("Database connection string 'mealplandb' not found");
 
 // Register repositories
@@ -115,6 +116,36 @@ builder.Services.AddHttpClient("ShoppingService", client =>
     client.BaseAddress = new Uri(builder.Configuration["services:shoppingservice:https:0"] ?? builder.Configuration["services:shoppingservice:http:0"] ?? "http://shoppingservice");
 });
 
+builder.Services.AddScoped<IMealScheduleConfigRepository>(_ =>
+    new MealScheduleConfigRepository(connectionString));
+
+// Google Calendar token repository uses AuthService DB when configured; falls back to mealplandb
+string calendarTokenConnectionString = builder.Configuration.GetConnectionString("authdb") ?? connectionString;
+builder.Services.AddScoped<IGoogleCalendarTokenRepository>(_ =>
+    new GoogleCalendarTokenRepository(calendarTokenConnectionString));
+
+// Register Google Calendar service
+builder.Services.AddScoped<IGoogleCalendarService, GoogleCalendarService>();
+
+// Register Holiday service (singleton — purely in-memory)
+builder.Services.AddSingleton<IHolidayService, HolidayService>();
+
+// HTTP clients
+builder.Services.AddHttpClient("GoogleCalendar");
+builder.Services.AddHttpClient("NotificationService", client =>
+{
+    string notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
+    client.BaseAddress = new Uri(notificationServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Background worker for meal cook notifications
+builder.Services.AddHostedService(sp =>
+    new MealCookNotificationWorker(
+        connectionString,
+        sp.GetRequiredService<IHttpClientFactory>(),
+        sp.GetRequiredService<ILogger<MealCookNotificationWorker>>()));
+
 // Add controllers
 builder.Services.AddControllers();
 
@@ -127,7 +158,7 @@ var app = builder.Build();
 await app.RunDatabaseManagementAsync("MealPlanningService", "mealplandb");
 
 // Run migrations using shared MigrationRunner
-var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+string migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
 if (!Directory.Exists(migrationsPath))
 {
     migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
