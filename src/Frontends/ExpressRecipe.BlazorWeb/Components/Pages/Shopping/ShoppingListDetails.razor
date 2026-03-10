@@ -3,10 +3,12 @@
 @using ExpressRecipe.Client.Shared.Models.Shopping
 @using ExpressRecipe.Client.Shared.Models.Product
 @using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Models.Price
 @using ExpressRecipe.Client.Shared.Services
 @inject IShoppingListApiClient ShoppingApi
 @inject IProductApiClient ProductApi
 @inject IRecipeApiClient RecipeApi
+@inject IPriceApiClient PriceApi
 @inject NavigationManager Navigation
 
 <PageTitle>@(_list?.Name ?? "Shopping List") - ExpressRecipe</PageTitle>
@@ -83,6 +85,89 @@
                 <span class="btn-icon">📉</span> Add Low Stock Items
             </button>
         </div>
+
+        <!-- Price Comparison (Plus feature) -->
+        <FeatureGuard FeatureKey="price-comparison" RequiredTier="Plus"
+                      Title="Price Comparison requires Plus"
+                      Description="Compare prices across stores for items on your list and find the best deals. Available on Plus and above.">
+            <div class="price-comparison-section">
+                <div class="price-comparison-header">
+                    <h2>💲 Price Comparison</h2>
+                    <button class="btn btn-secondary-outline" @onclick="LoadPriceComparison" disabled="@_isPriceComparisonLoading">
+                        @if (_isPriceComparisonLoading)
+                        {
+                            <span>Loading…</span>
+                        }
+                        else
+                        {
+                            <span>🔄 Compare Prices</span>
+                        }
+                    </button>
+                </div>
+
+                @if (_isPriceComparisonLoading)
+                {
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <p>Fetching prices…</p>
+                    </div>
+                }
+                else if (_priceComparisonResult != null)
+                {
+                    @if (!string.IsNullOrWhiteSpace(_priceComparisonResult.BestStore))
+                    {
+                        <div class="best-store-banner">
+                            🏆 Best store for this list: <strong>@_priceComparisonResult.BestStore</strong>
+                            — potential savings of <strong>@_priceComparisonResult.PotentialSavings.ToString("C")</strong>
+                        </div>
+                    }
+
+                    <div class="price-comparison-table-container">
+                        <table class="data-table price-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    @foreach (var store in _priceComparisonResult.StoreTotals)
+                                    {
+                                        <th>@store.StoreName</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var product in _priceComparisonResult.Products)
+                                {
+                                    <tr>
+                                        <td>@product.ProductName</td>
+                                        @foreach (var store in _priceComparisonResult.StoreTotals)
+                                        {
+                                            var price = product.PricesByStore.TryGetValue(store.StoreName, out var p) ? p : (decimal?)null;
+                                            <td class="@(store.StoreName == product.BestStore ? "price-best" : "")">
+                                                @(price.HasValue ? price.Value.ToString("C") : "—")
+                                            </td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="store-total-row">
+                                    <td><strong>Total</strong></td>
+                                    @foreach (var store in _priceComparisonResult.StoreTotals)
+                                    {
+                                        <td><strong>@store.TotalPrice.ToString("C")</strong></td>
+                                    }
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <p class="price-comparison-hint">
+                        Click <strong>Compare Prices</strong> to see which store has the best deal for items on your list.
+                    </p>
+                }
+            </div>
+        </FeatureGuard>
 
         <!-- Shopping Items -->
         <div class="items-container">
@@ -389,6 +474,10 @@
     // Add from recipe
     private bool _showAddFromRecipeModal = false;
 
+    // Price comparison
+    private bool _isPriceComparisonLoading = false;
+    private PriceComparisonResult? _priceComparisonResult;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadList();
@@ -585,5 +674,29 @@
         {
             await LoadList();
         }
+    }
+
+    private async Task LoadPriceComparison()
+    {
+        if (_list == null) return;
+
+        _isPriceComparisonLoading = true;
+        _priceComparisonResult = null;
+        StateHasChanged();
+
+        var productIds = _list.Items
+            .Select(i => i.ProductId)
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+
+        if (productIds.Any())
+        {
+            var request = new PriceComparisonRequest { ProductIds = productIds };
+            _priceComparisonResult = await PriceApi.ComparePricesAsync(request);
+        }
+
+        _isPriceComparisonLoading = false;
+        StateHasChanged();
     }
 }

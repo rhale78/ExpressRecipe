@@ -4,13 +4,19 @@
 @using ExpressRecipe.Client.Shared.Services
 @inject IInventoryApiClient InventoryApi
 @inject NavigationManager Navigation
-
 <PageTitle>My Inventory - ExpressRecipe</PageTitle>
 
 <div class="inventory-container">
     <div class="inventory-header">
         <h1>🥫 My Inventory</h1>
         <div class="header-actions">
+            <FeatureGuard FeatureKey="inventory-tracking" RequiredTier="Plus"
+                          Title="Scan Session requires Plus"
+                          Description="Start a barcode-scanning session to add items to your inventory instantly. Available on Plus and above.">
+                <button class="btn btn-secondary" @onclick="NavigateToScanSession">
+                    <span class="btn-icon">📷</span> Scan Session
+                </button>
+            </FeatureGuard>
             <button class="btn btn-primary" @onclick="NavigateToAdd">
                 <span class="btn-icon">➕</span> Add Item
             </button>
@@ -478,6 +484,11 @@
     private void NavigateToAdd()
     {
         Navigation.NavigateTo("/inventory/add");
+    }
+
+    private void NavigateToScanSession()
+    {
+        Navigation.NavigateTo("/scanner");
     }
 
     private void HandleNavigateToEdit(Guid id)

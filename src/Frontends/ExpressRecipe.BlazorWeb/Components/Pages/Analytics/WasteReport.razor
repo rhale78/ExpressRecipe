@@ -1,5 +1,8 @@
 @using ExpressRecipe.Client.Shared.Models.Analytics
 
+<FeatureGuard FeatureKey="advanced-reports" RequiredTier="Premium"
+              Title="Advanced Reports require Premium"
+              Description="Unlock food waste tracking, category breakdowns, and waste reduction insights with a Premium subscription.">
 <div class="report-section">
     <div class="report-header">
         <h2>🗑️ Food Waste Report</h2>
@@ -154,6 +157,7 @@
         </div>
     </div>
 </div>
+</FeatureGuard>
 
 @code {
     [Parameter]
