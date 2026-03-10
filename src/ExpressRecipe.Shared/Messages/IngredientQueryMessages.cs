@@ -1,4 +1,5 @@
 using ExpressRecipe.Messaging.Core.Abstractions;
+using ExpressRecipe.Shared.Matching;
 
 namespace ExpressRecipe.Shared.Messages;
 
@@ -8,15 +9,18 @@ namespace ExpressRecipe.Shared.Messages;
 /// </summary>
 public record RequestIngredientLookup(
     string       CorrelationId,
-    List<string> Names) : IMessage;
+    List<string> Names,
+    string?      SourceService = null) : IMessage;
 
 /// <summary>
 /// Response to <see cref="RequestIngredientLookup"/>.
 /// <see cref="Results"/> is a dictionary keyed by name (case-insensitive) with the resolved ingredient ID.
+/// <see cref="MatchResults"/> contains full <see cref="MatchResult"/> details for each name.
 /// </summary>
 public record IngredientLookupResponse(
-    string                      CorrelationId,
-    Dictionary<string, Guid>    Results) : IMessage;
+    string                             CorrelationId,
+    Dictionary<string, Guid>           Results,
+    Dictionary<string, MatchResult>?   MatchResults = null) : IMessage;
 
 /// <summary>
 /// Request: create multiple ingredients by name in a single round-trip.
