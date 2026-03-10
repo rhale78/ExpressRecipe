@@ -359,7 +359,7 @@
                     <label>Target Date</label>
                     <input type="date" class="form-control"
                            value="@_cloneTargetDate.ToString("yyyy-MM-dd")"
-                           @onchange="e => _cloneTargetDate = DateTime.Parse(e.Value!.ToString()!)" />
+                           @onchange="e => _cloneTargetDate = ParseDateInput(e.Value, _cloneTargetDate)" />
                 </div>
                 <div class="form-group">
                     <label>Meal Type</label>
@@ -397,13 +397,13 @@
                     <label>Source Date (copy from)</label>
                     <input type="date" class="form-control"
                            value="@_copyDaySource.ToString("yyyy-MM-dd")"
-                           @onchange="e => _copyDaySource = DateTime.Parse(e.Value!.ToString()!)" />
+                           @onchange="e => _copyDaySource = ParseDateInput(e.Value, _copyDaySource)" />
                 </div>
                 <div class="form-group">
                     <label>Target Date (paste to)</label>
                     <input type="date" class="form-control"
                            value="@_copyDayTarget.ToString("yyyy-MM-dd")"
-                           @onchange="e => _copyDayTarget = DateTime.Parse(e.Value!.ToString()!)" />
+                           @onchange="e => _copyDayTarget = ParseDateInput(e.Value, _copyDayTarget)" />
                 </div>
                 @if (!string.IsNullOrEmpty(_copyDayError))
                 {
@@ -432,13 +432,13 @@
                     <label>Source Week Start (Sunday)</label>
                     <input type="date" class="form-control"
                            value="@_copyWeekSource.ToString("yyyy-MM-dd")"
-                           @onchange="e => _copyWeekSource = DateTime.Parse(e.Value!.ToString()!)" />
+                           @onchange="e => _copyWeekSource = ParseDateInput(e.Value, _copyWeekSource)" />
                 </div>
                 <div class="form-group">
                     <label>Target Week Start (Sunday)</label>
                     <input type="date" class="form-control"
                            value="@_copyWeekTarget.ToString("yyyy-MM-dd")"
-                           @onchange="e => _copyWeekTarget = DateTime.Parse(e.Value!.ToString()!)" />
+                           @onchange="e => _copyWeekTarget = ParseDateInput(e.Value, _copyWeekTarget)" />
                 </div>
                 @if (!string.IsNullOrEmpty(_copyWeekError))
                 {
@@ -483,13 +483,13 @@
                         <label>From Date</label>
                         <input type="date" class="form-control"
                                value="@_templateFromDate.ToString("yyyy-MM-dd")"
-                               @onchange="e => _templateFromDate = DateTime.Parse(e.Value!.ToString()!)" />
+                               @onchange="e => _templateFromDate = ParseDateInput(e.Value, _templateFromDate)" />
                     </div>
                     <div class="form-group">
                         <label>To Date</label>
                         <input type="date" class="form-control"
                                value="@_templateToDate.ToString("yyyy-MM-dd")"
-                               @onchange="e => _templateToDate = DateTime.Parse(e.Value!.ToString()!)" />
+                               @onchange="e => _templateToDate = ParseDateInput(e.Value, _templateToDate)" />
                     </div>
                 </div>
                 <div class="form-group form-check-group">
@@ -504,7 +504,7 @@
                 }
                 @if (!string.IsNullOrEmpty(_saveTemplateSuccess))
                 {
-                    <div class="alert alert-success">@_saveTemplateSuccess</div>
+                    <div class="mealplan-alert-success">@_saveTemplateSuccess</div>
                 }
             </div>
             <div class="modal-footer">
@@ -981,4 +981,22 @@
     };
 
     private string GetMealTypeClass(string mealType) => mealType.ToLower();
+
+    /// <summary>Safely parses a date string in yyyy-MM-dd format (as returned by type="date" inputs).</summary>
+    private static DateTime ParseDateInput(object? value, DateTime fallback)
+    {
+        string? str = value?.ToString();
+        if (string.IsNullOrEmpty(str))
+            return fallback;
+
+        if (DateTime.TryParseExact(str, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out DateTime result))
+        {
+            return result;
+        }
+
+        return fallback;
+    }
 }

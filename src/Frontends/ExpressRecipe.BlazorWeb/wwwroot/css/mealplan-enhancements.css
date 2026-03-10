@@ -27,7 +27,8 @@
     display: flex;
 }
 
-.btn-icon {
+.meal-planning-container .btn-icon,
+.day-view-container .btn-icon {
     background: rgba(255, 255, 255, 0.9);
     border: 1px solid #dee2e6;
     border-radius: 6px;
@@ -38,12 +39,14 @@
     transition: background 0.15s;
 }
 
-.btn-icon:hover {
+.meal-planning-container .btn-icon:hover,
+.day-view-container .btn-icon:hover {
     background: white;
     border-color: #6f42c1;
 }
 
-.btn-icon.danger:hover {
+.meal-planning-container .btn-icon.danger:hover,
+.day-view-container .btn-icon.danger:hover {
     background: #fff5f5;
     border-color: #dc3545;
     color: #dc3545;
@@ -309,8 +312,8 @@
     padding: 1rem 0;
 }
 
-/* ── Alert success ── */
-.alert-success {
+/* ── Alert success (meal-planning scoped) ── */
+.mealplan-alert-success {
     background: #d1f0d8;
     color: #1a5c2a;
     border: 1px solid #a3d9b0;
@@ -334,15 +337,15 @@
     font-weight: 500;
 }
 
-/* ── Badge ── */
-.badge {
+/* ── Badge (meal-planning scoped, avoids conflicting with Bootstrap .badge) ── */
+.mealplan-badge {
     border-radius: 20px;
     padding: 0.2rem 0.6rem;
     font-size: 0.75rem;
     font-weight: 600;
 }
 
-.badge-success {
+.mealplan-badge-success {
     background: #d1f0d8;
     color: #1a5c2a;
 }

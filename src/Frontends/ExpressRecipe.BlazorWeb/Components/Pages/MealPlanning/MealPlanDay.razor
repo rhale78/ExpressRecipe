@@ -59,7 +59,7 @@
                             <div class="day-meal-actions">
                                 @if (meal.IsPrepared)
                                 {
-                                    <span class="badge badge-success">✅ Prepared</span>
+                                    <span class="mealplan-badge mealplan-badge-success">✅ Prepared</span>
                                 }
                                 else
                                 {
@@ -124,7 +124,7 @@
                                             <span class="course-servings text-muted">@course.Servings srv</span>
                                             @if (course.IsCompleted)
                                             {
-                                                <span class="badge badge-success">✓</span>
+                                                <span class="mealplan-badge mealplan-badge-success">✓</span>
                                             }
                                             <button class="btn-icon danger" title="Remove course"
                                                     @onclick="() => DeleteCourse(meal.Id, course.Id)">✕</button>
@@ -335,7 +335,7 @@
                     <label>Target Date</label>
                     <input type="date" class="form-control"
                            value="@_cloneTargetDate.ToString("yyyy-MM-dd")"
-                           @onchange="e => _cloneTargetDate = DateTime.Parse(e.Value!.ToString()!)" />
+                           @onchange="e => _cloneTargetDate = ParseDateInput(e.Value, _cloneTargetDate)" />
                 </div>
                 <div class="form-group">
                     <label>Meal Type</label>
@@ -399,8 +399,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!DateTime.TryParse(Date, out _parsedDate))
+        if (!DateTime.TryParseExact(Date, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out _parsedDate))
         {
+            // Invalid date in route — fall back to today
             _parsedDate = DateTime.Today;
         }
 
@@ -581,6 +585,8 @@
         {
             _showCloneMealModal = false;
             _cloneMealSource = null;
+            // Navigate to the target day so the cloned meal is immediately visible
+            Navigation.NavigateTo($"/meal-planning/day/{_cloneTargetDate:yyyy-MM-dd}");
         }
         else
         {
@@ -730,5 +736,22 @@
             .Select(n => n.Trim())
             .Where(n => !string.IsNullOrEmpty(n))
             .ToList();
+    }
+
+    private static DateTime ParseDateInput(object? value, DateTime fallback)
+    {
+        string? str = value?.ToString();
+        if (string.IsNullOrEmpty(str))
+            return fallback;
+
+        if (DateTime.TryParseExact(str, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out DateTime result))
+        {
+            return result;
+        }
+
+        return fallback;
     }
 }
