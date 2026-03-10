@@ -1,5 +1,6 @@
 using ExpressRecipe.Shared.DTOs.User;
 using ExpressRecipe.UserService.Data;
+using ExpressRecipe.UserService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -12,14 +13,17 @@ namespace ExpressRecipe.UserService.Controllers;
 public class SubscriptionsController : ControllerBase
 {
     private readonly ISubscriptionRepository _subscriptionRepository;
+    private readonly IPaymentService _payment;
     private readonly ILogger<SubscriptionsController> _logger;
 
     public SubscriptionsController(
         ISubscriptionRepository subscriptionRepository,
+        IPaymentService payment,
         ILogger<SubscriptionsController> logger)
     {
         _subscriptionRepository = subscriptionRepository;
-        _logger = logger;
+        _payment                = payment;
+        _logger                 = logger;
     }
 
     private Guid? GetCurrentUserId()
@@ -289,6 +293,70 @@ public class SubscriptionsController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving feature access");
             return StatusCode(500, new { message = "An error occurred while retrieving feature access" });
+        }
+    }
+
+    /// <summary>
+    /// Create a Stripe Checkout session to start or upgrade a subscription.
+    /// Returns a redirect URL to the Stripe-hosted payment page.
+    /// </summary>
+    [HttpPost("checkout")]
+    public async Task<ActionResult> CreateCheckoutSession([FromBody] CreateCheckoutSessionRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            Guid? userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            string url = await _payment.CreateCheckoutSessionAsync(
+                userId.Value,
+                request.StripePriceId,
+                request.WithTrial,
+                request.SuccessUrl,
+                request.CancelUrl,
+                ct);
+
+            return Ok(new { url });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Stripe checkout session");
+            return StatusCode(500, new { message = "An error occurred while creating the checkout session" });
+        }
+    }
+
+    /// <summary>
+    /// Create a Stripe Billing Portal session so the user can manage their subscription.
+    /// Returns a redirect URL to the Stripe-hosted billing portal.
+    /// </summary>
+    [HttpPost("billing-portal")]
+    public async Task<ActionResult> CreateBillingPortalSession([FromBody] BillingPortalSessionRequest request,
+        CancellationToken ct)
+    {
+        try
+        {
+            Guid? userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            string url = await _payment.CreateBillingPortalSessionAsync(userId.Value, request.ReturnUrl, ct);
+            return Ok(new { url });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "Billing portal error for user");
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Stripe billing portal session");
+            return StatusCode(500, new { message = "An error occurred while creating the billing portal session" });
         }
     }
 }

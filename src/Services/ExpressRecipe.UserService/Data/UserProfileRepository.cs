@@ -12,6 +12,8 @@ public interface IUserProfileRepository
     Task<bool> DeleteAsync(Guid userId, Guid? deletedBy = null);
     Task<bool> UserProfileExistsAsync(Guid userId);
     Task<bool> SetSuspendedAsync(Guid userId, bool suspended, Guid? adminId = null);
+    Task<string?> GetStripeCustomerIdAsync(Guid userId, CancellationToken ct = default);
+    Task UpdateStripeCustomerIdAsync(Guid userId, string stripeCustomerId, CancellationToken ct = default);
 }
 
 public class UserProfileRepository : SqlHelper, IUserProfileRepository
@@ -163,5 +165,29 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
             CreateParameter("@AdminId", adminId));
 
         return rowsAffected > 0;
+    }
+
+    public async Task<string?> GetStripeCustomerIdAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT StripeCustomerId
+            FROM UserProfile
+            WHERE UserId = @UserId AND IsDeleted = 0";
+
+        return await ExecuteScalarAsync<string>(sql, ct, CreateParameter("@UserId", userId));
+    }
+
+    public async Task UpdateStripeCustomerIdAsync(Guid userId, string stripeCustomerId,
+        CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE UserProfile
+            SET StripeCustomerId = @StripeCustomerId,
+                UpdatedAt        = GETUTCDATE()
+            WHERE UserId = @UserId AND IsDeleted = 0";
+
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@StripeCustomerId", stripeCustomerId));
     }
 }

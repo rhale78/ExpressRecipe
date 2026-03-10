@@ -172,3 +172,27 @@ public class UpdatePaymentMethodRequest
     [StringLength(100)]
     public string PaymentMethodId { get; set; } = string.Empty;
 }
+
+public class CreateCheckoutSessionRequest
+{
+    [Required]
+    [StringLength(200)]
+    public string StripePriceId { get; set; } = string.Empty;
+
+    public bool WithTrial { get; set; } = false;
+
+    [Required]
+    [StringLength(2000)]
+    public string SuccessUrl { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(2000)]
+    public string CancelUrl { get; set; } = string.Empty;
+}
+
+public class BillingPortalSessionRequest
+{
+    [Required]
+    [StringLength(2000)]
+    public string ReturnUrl { get; set; } = string.Empty;
+}

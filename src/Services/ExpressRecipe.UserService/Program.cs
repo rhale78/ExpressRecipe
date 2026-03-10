@@ -67,6 +67,19 @@ builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(conne
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
+builder.Services.AddScoped<IStripeEventLogRepository>(sp => new StripeEventLogRepository(connectionString));
+
+// Register payment service — MockPaymentService in local mode, StripePaymentService otherwise
+if (builder.Configuration["APP_LOCAL_MODE"] == "true")
+{
+    builder.Services.AddSingleton<ExpressRecipe.UserService.Services.IPaymentService,
+        ExpressRecipe.UserService.Services.MockPaymentService>();
+}
+else
+{
+    builder.Services.AddScoped<ExpressRecipe.UserService.Services.IPaymentService,
+        ExpressRecipe.UserService.Services.StripePaymentService>();
+}
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
