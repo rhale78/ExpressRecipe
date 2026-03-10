@@ -157,18 +157,20 @@ public class ReferralService : IReferralService
 
     private static string GenerateCode()
     {
-        var rng = new Random();
+        var bytes = new byte[CodeLength];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
         var chars = new char[CodeLength];
         for (var i = 0; i < CodeLength; i++)
         {
-            chars[i] = CodeChars[rng.Next(CodeChars.Length)];
+            chars[i] = CodeChars[bytes[i] % CodeChars.Length];
         }
         return new string(chars);
     }
 
     private static string GenerateShareToken()
     {
-        return Convert.ToBase64String(Guid.NewGuid().ToByteArray())
-            .Replace("+", "A").Replace("/", "B").Replace("=", "").Substring(0, 22);
+        var base64 = Convert.ToBase64String(Guid.NewGuid().ToByteArray())
+            .Replace("+", "A").Replace("/", "B").Replace("=", "");
+        return base64.Length >= 22 ? base64[..22] : base64.PadRight(22, 'X');
     }
 }

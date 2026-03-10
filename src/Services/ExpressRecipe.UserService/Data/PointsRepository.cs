@@ -634,9 +634,6 @@ public class PointsRepository : SqlHelper, IPointsRepository
         {
             return d;
         }
-        if (value.EndsWith("30d", StringComparison.OrdinalIgnoreCase)) return 30;
-        if (value.EndsWith("7d", StringComparison.OrdinalIgnoreCase)) return 7;
-        if (value.EndsWith("1d", StringComparison.OrdinalIgnoreCase)) return 1;
         return 0;
     }
 }

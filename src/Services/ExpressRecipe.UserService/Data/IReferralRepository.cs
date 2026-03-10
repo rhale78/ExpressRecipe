@@ -218,7 +218,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
                 EntityType = GetString(reader, "EntityType") ?? string.Empty,
                 EntityId = GetGuid(reader, "EntityId"),
                 Token = GetString(reader, "Token") ?? string.Empty,
-                ExpiresAt = GetNullableDateTime(reader, "ExpiresAt") ?? DateTime.MinValue,
+                ExpiresAt = GetNullableDateTime(reader, "ExpiresAt") ?? DateTime.MaxValue,
                 ViewCount = GetInt(reader, "ViewCount") ?? 0,
                 CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },

@@ -175,13 +175,13 @@ public class ApprovalQueueService : IApprovalQueueService
         }
     }
 
-    private static Task FireAndForgetAsync(Task task)
+    private Task FireAndForgetAsync(Task task)
     {
         _ = task.ContinueWith(t =>
         {
             if (t.IsFaulted)
             {
-                // swallow — non-blocking
+                _logger.LogError(t.Exception, "Failed to publish PointsEarnedEvent");
             }
         }, TaskContinuationOptions.OnlyOnFaulted);
         return Task.CompletedTask;
