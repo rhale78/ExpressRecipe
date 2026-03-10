@@ -1,0 +1,372 @@
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Shared.DTOs.User
+@inject IAllergyApiClient AllergyApi
+@inject IUserProfileApiClient UserProfileApi
+@inject IToastService ToastService
+
+@if (_visible)
+{
+<div class="modal-overlay" @onclick="TryClose">
+    <div class="modal-dialog" @onclick:stopPropagation="true">
+        <div class="modal-header">
+            <h3>🩺 Log a Reaction</h3>
+            <button class="btn-close" @onclick="Close" aria-label="Close"></button>
+        </div>
+        <div class="modal-step-indicator">
+            @for (int si = 1; si <= 3; si++)
+            {
+                var stepNum = si;
+                <div class="step-dot @(stepNum < _step ? "done" : stepNum == _step ? "active" : "")"></div>
+            }
+        </div>
+        <div class="modal-body">
+            <AllergyDisclaimer />
+
+            @if (_step == 1)
+            {
+                <div class="wizard-section">
+                    <label>Which products were involved?</label>
+                    @foreach (var product in _products)
+                    {
+                        var p = product;
+                        <div class="product-row">
+                            <input type="text" class="form-control" placeholder="Product name"
+                                   value="@p.ProductName"
+                                   @oninput="e => p.ProductName = e.Value?.ToString() ?? string.Empty" />
+                            <div class="reaction-toggle">
+                                <button class="@(p.HadReaction ? "selected-reaction" : "")"
+                                        @onclick="() => p.HadReaction = true">Had reaction</button>
+                                <button class="@(!p.HadReaction ? "selected-control" : "")"
+                                        @onclick="() => p.HadReaction = false">No reaction</button>
+                            </div>
+                            @if (_products.Count > 1)
+                            {
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveProduct(p)">x</button>
+                            }
+                        </div>
+                    }
+                    <button class="btn btn-sm btn-outline-secondary mt-2" @onclick="AddProduct">+ Add another product</button>
+                </div>
+            }
+            else if (_step == 2)
+            {
+                <div class="wizard-section">
+                    <label>Who was affected?</label>
+                    @foreach (var kvp in _allMembers)
+                    {
+                        var membKey = kvp.Key;
+                        <div class="form-check mb-1">
+                            <input type="checkbox" class="form-check-input" id="@($"m_{membKey}")"
+                                   checked="@_selectedMemberIds.Contains(membKey)"
+                                   @onchange="() => ToggleMember(membKey)" />
+                            <label class="form-check-label" for="@($"m_{membKey}")">@kvp.Value</label>
+                        </div>
+                    }
+                </div>
+                @foreach (var sid in _selectedMemberIds.ToList())
+                {
+                    var memberId = sid;
+                    var memberName = _allMembers.GetValueOrDefault(memberId, "Me");
+                    if (!_memberDetails.TryGetValue(memberId, out var detail))
+                    {
+                        detail = new MemberReactionDetail();
+                        _memberDetails[memberId] = detail;
+                    }
+                    var d = detail;
+                    <div class="wizard-section" style="border-left:3px solid #e5e7eb;padding-left:12px;margin-bottom:16px;">
+                        <strong>@memberName</strong>
+                        <div class="mt-2 mb-1"><small class="text-muted">Severity</small></div>
+                        <div class="severity-group mb-3">
+                            @foreach (var sev in new[] { "Intolerance", "Itchy", "Rash", "ThroatClosing", "ERVisit" })
+                            {
+                                var s = sev;
+                                <button class="@GetSeverityBtnClass(s, d.Severity)" @onclick="() => SetSeverity(d, s)">@SeverityLabel(s)</button>
+                            }
+                        </div>
+                        <div class="mb-1"><small class="text-muted">Reaction type (optional)</small></div>
+                        <div class="chip-group mb-3">
+                            @foreach (var rt in _reactionTypes)
+                            {
+                                var r = rt;
+                                var chSel = d.SelectedReactionTypes.Contains(r);
+                                <button class="@(chSel ? "chip selected" : "chip")" @onclick="() => ToggleReactionType(d, r)">@r</button>
+                            }
+                        </div>
+                        <div class="d-flex gap-3 align-items-center mb-2">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="@($"epi_{memberId}")"
+                                       checked="@d.RequiredEpipen"
+                                       @onchange="e => d.RequiredEpipen = (bool)(e.Value ?? false)" />
+                                <label class="form-check-label" for="@($"epi_{memberId}")">Epi-pen used</label>
+                            </div>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="@($"er_{memberId}")"
+                                       checked="@d.RequiredER"
+                                       @onchange="e => d.RequiredER = (bool)(e.Value ?? false)" />
+                                <label class="form-check-label" for="@($"er_{memberId}")">ER visit</label>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else if (_step == 3)
+            {
+                <div class="wizard-section">
+                    <label>When did this happen?</label>
+                    <input type="datetime-local" class="form-control mb-3"
+                           value="@_incidentDateLocal" @onchange="OnDateChanged" />
+                    <label>Exposure type</label>
+                    <div class="exposure-group mb-3">
+                        @foreach (var et in new[] { "Ingestion", "Touch", "Smell" })
+                        {
+                            var v = et;
+                            var etSel = _exposureType == v;
+                            <button class="@(etSel ? "exposure-btn selected" : "exposure-btn")" @onclick="() => _exposureType = v">
+                                @v
+                            </button>
+                        }
+                    </div>
+                    <label>Time to reaction</label>
+                    <div class="latency-group mb-3">
+                        @foreach (var lat in new[] { "Immediate", "Minutes", "Hours", "Delayed" })
+                        {
+                            var l = lat;
+                            var latSel = _latency == l;
+                            <button class="@(latSel ? "latency-btn selected" : "latency-btn")" @onclick="() => _latency = l">@l</button>
+                        }
+                    </div>
+                    <label>Notes (optional)</label>
+                    <textarea class="form-control" rows="3" @bind="_notes" placeholder="Any additional context..."></textarea>
+                    <div class="mt-3" style="font-size:0.8rem;color:#78350f;">
+                        This log is for personal tracking only - not a medical diagnosis.
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline-secondary" @onclick="Close">Cancel</button>
+            @if (_step > 1)
+            {
+                <button class="btn btn-outline-secondary" @onclick="() => _step--">Back</button>
+            }
+            @if (_step < 3)
+            {
+                <button class="btn btn-primary" @onclick="Next" disabled="@(!CanAdvance())">Next</button>
+            }
+            else
+            {
+                <button class="btn btn-primary" @onclick="Submit" disabled="@_submitting">
+                    @(_submitting ? "Logging..." : "Log Reaction")
+                </button>
+            }
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    [Parameter] public Guid? InitialProductId { get; set; }
+    [Parameter] public string? InitialProductName { get; set; }
+    [Parameter] public EventCallback OnIncidentLogged { get; set; }
+
+    private bool _visible;
+    private int  _step = 1;
+
+    private List<IncidentProductModel> _products = new();
+    private Dictionary<string, string> _allMembers = new();
+    private HashSet<string>            _selectedMemberIds = new();
+    private Dictionary<string, MemberReactionDetail> _memberDetails = new();
+    private readonly List<string> _reactionTypes = new()
+    {
+        "Hives", "Itching", "Rash", "Swelling", "Stomach pain",
+        "Vomiting", "Breathing difficulty", "Throat tightening", "Dizziness"
+    };
+
+    private DateTime _incidentDate = DateTime.Now;
+    private string   _incidentDateLocal = string.Empty;
+    private string   _exposureType = "Ingestion";
+    private string?  _latency;
+    private string?  _notes;
+    private bool     _submitting;
+
+    public async Task ShowAsync(Guid? productId = null, string? productName = null)
+    {
+        _step = 1;
+        _incidentDate = DateTime.Now;
+        _incidentDateLocal = _incidentDate.ToString("yyyy-MM-ddTHH:mm");
+        _products = new List<IncidentProductModel>
+        {
+            new() { ProductId = productId ?? InitialProductId,
+                    ProductName = productName ?? InitialProductName ?? string.Empty,
+                    HadReaction = true }
+        };
+        _selectedMemberIds.Clear();
+        _memberDetails.Clear();
+        _exposureType = "Ingestion";
+        _latency      = null;
+        _notes        = null;
+        _submitting   = false;
+
+        _allMembers.Clear();
+        _allMembers["me"] = "Me";
+        _selectedMemberIds.Add("me");
+        try
+        {
+            var family = await UserProfileApi.GetFamilyMembersAsync();
+            if (family != null)
+                foreach (var f in family)
+                    _allMembers[f.Id.ToString()] = f.Name;
+        }
+        catch { }
+
+        _visible = true;
+        StateHasChanged();
+    }
+
+    private void Close() { _visible = false; StateHasChanged(); }
+    private void TryClose() => Close();
+    private void AddProduct() => _products.Add(new IncidentProductModel { HadReaction = true });
+    private void RemoveProduct(IncidentProductModel p) => _products.Remove(p);
+
+    private void ToggleMember(string key)
+    {
+        if (!_selectedMemberIds.Remove(key))
+            _selectedMemberIds.Add(key);
+    }
+
+    private void ToggleReactionType(MemberReactionDetail d, string rt)
+    {
+        if (!d.SelectedReactionTypes.Remove(rt))
+            d.SelectedReactionTypes.Add(rt);
+    }
+
+    private void SetSeverity(MemberReactionDetail d, string severity)
+    {
+        d.Severity = severity;
+        // Pre-fill epi-pen/ER for high-severity selections — user can override these checkboxes
+        if (severity == "ThroatClosing" || severity == "ERVisit")
+        {
+            d.RequiredEpipen = true;
+            d.RequiredER = severity == "ERVisit";
+        }
+    }
+
+    private void OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var dt))
+        {
+            _incidentDate = dt;
+            _incidentDateLocal = dt.ToString("yyyy-MM-ddTHH:mm");
+        }
+    }
+
+    private static string GetSeverityBtnClass(string sev, string currentSeverity)
+    {
+        bool selected = sev == currentSeverity;
+        bool isEr     = sev == "ERVisit";
+        if (selected && isEr) return "severity-btn er selected";
+        if (selected)         return "severity-btn selected";
+        if (isEr)             return "severity-btn er";
+        return "severity-btn";
+    }
+
+    private bool CanAdvance()
+    {
+        if (_step == 1) return _products.Any(p => !string.IsNullOrWhiteSpace(p.ProductName));
+        if (_step == 2) return _selectedMemberIds.Count > 0
+                            && _selectedMemberIds.All(id => _memberDetails.TryGetValue(id, out var d)
+                                                         && !string.IsNullOrEmpty(d.Severity));
+        return true;
+    }
+
+    private void Next()
+    {
+        if (_step == 1 && !_memberDetails.ContainsKey("me"))
+            _memberDetails["me"] = new MemberReactionDetail();
+        _step++;
+    }
+
+    private async Task Submit()
+    {
+        _submitting = true;
+        try
+        {
+            var members = _selectedMemberIds.Select(id =>
+            {
+                var det = _memberDetails.GetValueOrDefault(id) ?? new MemberReactionDetail();
+                bool isMem = Guid.TryParse(id, out var guid);
+                return new CreateIncidentMemberRequest
+                {
+                    MemberId              = isMem ? guid : null,
+                    MemberName            = _allMembers.GetValueOrDefault(id, "Me"),
+                    Severity              = det.Severity,
+                    ReactionTypes         = string.Join(",", det.SelectedReactionTypes),
+                    TreatmentType         = det.TreatmentType,
+                    TreatmentDose         = det.TreatmentDose,
+                    ResolutionTimeMinutes = det.ResolutionTimeMinutes,
+                    RequiredEpipen        = det.RequiredEpipen,
+                    RequiredER            = det.RequiredER
+                };
+            }).ToList();
+
+            var request = new CreateAllergyIncidentV2Request
+            {
+                IncidentDate    = _incidentDate.ToUniversalTime(),
+                ExposureType    = _exposureType,
+                ReactionLatency = _latency,
+                Notes           = _notes,
+                Products        = _products
+                    .Where(p => !string.IsNullOrWhiteSpace(p.ProductName))
+                    .Select(p => new CreateIncidentProductRequest
+                    {
+                        ProductId   = p.ProductId,
+                        ProductName = p.ProductName,
+                        HadReaction = p.HadReaction
+                    }).ToList(),
+                Members = members
+            };
+
+            var newId = await AllergyApi.CreateIncidentAsync(request);
+            if (newId.HasValue)
+            {
+                ToastService.ShowSuccess("Reaction logged. We will analyze your history for patterns.");
+                Close();
+                await OnIncidentLogged.InvokeAsync();
+            }
+            else
+            {
+                ToastService.ShowError("Failed to log reaction. Please try again.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error: {ex.Message}");
+        }
+        finally { _submitting = false; }
+    }
+
+    private static string SeverityLabel(string sev) => sev switch
+    {
+        "ThroatClosing" => "Throat Closing",
+        "ERVisit"       => "ER Visit",
+        _               => sev
+    };
+
+    private sealed class IncidentProductModel
+    {
+        public Guid?  ProductId   { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public bool   HadReaction { get; set; } = true;
+    }
+
+    private sealed class MemberReactionDetail
+    {
+        public string          Severity              { get; set; } = string.Empty;
+        public HashSet<string> SelectedReactionTypes { get; set; } = new();
+        public string?         TreatmentType         { get; set; }
+        public string?         TreatmentDose         { get; set; }
+        public int?            ResolutionTimeMinutes  { get; set; }
+        public bool            RequiredEpipen         { get; set; }
+        public bool            RequiredER             { get; set; }
+    }
+}
