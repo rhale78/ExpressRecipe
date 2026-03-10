@@ -44,6 +44,9 @@ public partial class ShoppingRepository
 
     public async Task<List<ShoppingListItemDto>> GetRecipeIngredientsAsItemsAsync(Guid recipeId, int servings)
     {
+        // Clamp servings to a reasonable range to avoid overflow
+        servings = Math.Clamp(servings, 1, 100);
+
         try
         {
             var client = _httpClientFactory.CreateClient();

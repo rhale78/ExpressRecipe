@@ -222,7 +222,7 @@ public class BarcodeScannerService
 
         return allergenTags
             .Select(tag => tag.Replace("en:", "").Replace("-", " ").Trim())
-            .Where(a => !string.IsNullOrWhiteSpace(a))
+            .Where(a => a.Length > 0)
             .Select(a => char.ToUpper(a[0]) + a.Substring(1)) // Capitalize
             .ToList();
     }

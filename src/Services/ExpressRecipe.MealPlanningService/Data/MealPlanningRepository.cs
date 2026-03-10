@@ -46,12 +46,10 @@ public class MealPlanningRepository : IMealPlanningRepository
 
         if (!string.IsNullOrEmpty(status))
         {
-            sql += status.ToLower() switch
-            {
-                "active" => " AND mp.IsActive = 1",
-                "archived" => " AND mp.IsActive = 0",
-                _ => string.Empty
-            };
+            if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+                sql += " AND mp.IsActive = 1";
+            else if (string.Equals(status, "archived", StringComparison.OrdinalIgnoreCase))
+                sql += " AND mp.IsActive = 0";
         }
 
         sql += " ORDER BY mp.StartDate DESC";
