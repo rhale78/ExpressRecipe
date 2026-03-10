@@ -1,0 +1,213 @@
+/* ── Shopping Context Bar ────────────────────────────────────── */
+.shopping-context-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.context-hint { font-size: 0.85rem; color: #15803d; }
+
+/* ── Store Assignment Bar ────────────────────────────────────── */
+.list-store-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 0.5rem 0.875rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.store-label { color: #6b7280; font-weight: 600; }
+.assigned-store-name { font-weight: 700; color: #111827; }
+
+.optimization-badge {
+    margin-left: auto;
+    background: #dcfce7;
+    color: #15803d;
+    border-radius: 20px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* ── Price Comparison Chips ──────────────────────────────────── */
+.item-price-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    padding: 0.25rem 0 0.1rem 0;
+}
+
+.best-price-label { font-size: 0.78rem; color: #6b7280; }
+
+.price-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 0.15rem 0.6rem;
+    color: #374151;
+}
+
+.sale-badge {
+    background: #dc2626;
+    color: #fff;
+    border-radius: 4px;
+    padding: 0 0.3rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+/* ── Shop Mode Banner ────────────────────────────────────────── */
+.shop-mode-banner {
+    background: linear-gradient(135deg, #14532d 0%, #166534 100%);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.shop-mode-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+}
+
+.shop-mode-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.scan-barcode-input {
+    flex: 1;
+    min-width: 180px;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    font-size: 0.9rem;
+}
+
+.scan-barcode-input::placeholder { color: rgba(255,255,255,0.7); }
+
+.scan-last-result {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+}
+
+.scan-success { background: rgba(187,247,208,0.25); color: #bbf7d0; }
+.scan-error   { background: rgba(254,202,202,0.25); color: #fecaca; }
+
+/* ── Favorites Panel ─────────────────────────────────────────── */
+.favorites-section { margin-bottom: 1rem; }
+
+.favorites-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    padding: 0.3rem 0.85rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #374151;
+    transition: background 0.15s;
+}
+
+.favorites-toggle:hover { background: #f9fafb; }
+
+.fav-count {
+    background: #f59e0b;
+    color: #fff;
+    border-radius: 10px;
+    padding: 0 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.favorites-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+
+.fav-chip {
+    display: inline-flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.35rem 0.7rem;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    max-width: 140px;
+}
+
+.fav-chip:hover {
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0,123,255,0.12);
+}
+
+.fav-name { font-size: 0.9rem; font-weight: 600; color: #111827; }
+.fav-qty { font-size: 0.75rem; color: #6b7280; }
+
+/* ── Template Cards ──────────────────────────────────────────── */
+.template-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+
+.template-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.template-card:hover { background: #f0f4ff; border-color: #007bff; }
+
+.template-item-count { font-size: 0.8rem; color: #6b7280; }
+.template-description { font-size: 0.85rem; color: #6b7280; margin: 0; }
+
+/* ── Store Picker ────────────────────────────────────────────── */
+.store-picker-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.store-picker-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.store-picker-item:hover { background: #f9fafb; }
+.store-chain { font-size: 0.8rem; color: #6b7280; }
+.store-address-sm { font-size: 0.8rem; color: #9ca3af; }
