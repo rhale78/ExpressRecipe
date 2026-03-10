@@ -77,7 +77,8 @@
     private async Task HandleSnoozed(Guid itemId)
     {
         await OnItemSnoozed.InvokeAsync(itemId);
-        _currentIndex++;   // advance past snoozed item (item stays in list until parent removes it)
+        // The parent removes the item from the list, so the next item shifts into
+        // Items[_currentIndex] automatically — no index change needed.
     }
 
     private void Skip()

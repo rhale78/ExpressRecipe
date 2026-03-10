@@ -1,8 +1,9 @@
 namespace ExpressRecipe.Client.Shared.Services;
 
 /// <summary>
-/// Singleton that caches the work-queue pending count so the dashboard badge
-/// and the /queue page both read the same value without double-fetching.
+/// Scoped per-circuit state that caches the work-queue pending count so the
+/// navigation badge and the /queue page both read the same value without double-fetching.
+/// Fires OnChange so subscribers (e.g. MainLayout, WorkQueueBadge) re-render reactively.
 /// </summary>
 public interface IWorkQueueState
 {

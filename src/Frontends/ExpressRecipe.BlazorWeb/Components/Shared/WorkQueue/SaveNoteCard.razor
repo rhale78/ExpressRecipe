@@ -43,6 +43,7 @@
     {
         _saving = true;
         await OnActioned.InvokeAsync((Item.Id, action));
+        _saved  = true;
         _saving = false;
     }
 }

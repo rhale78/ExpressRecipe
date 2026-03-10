@@ -82,11 +82,6 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         _connectionString = connectionString;
     }
 
-    private const string SelectColumns = @"
-        Id, UserId, HouseholdId, ItemType, Title, Body, Priority,
-        ActionPayload, Status, ActionTaken, ActionedAt, SnoozeUntil,
-        RelatedEntityType, RelatedEntityId, CreatedAt";
-
     // ── Read ─────────────────────────────────────────────────────────────────
 
     public async Task<List<WorkQueueItemDto>> GetPendingItemsAsync(
