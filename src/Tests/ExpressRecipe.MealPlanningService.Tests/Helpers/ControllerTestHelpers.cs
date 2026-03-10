@@ -6,26 +6,27 @@ namespace ExpressRecipe.MealPlanningService.Tests.Helpers;
 
 public static class ControllerTestHelpers
 {
-    public static ControllerContext CreateAuthenticatedContext(Guid userId)
+    public static ControllerContext CreateAuthenticatedContext(Guid userId, Guid? householdId = null)
     {
-        var claims = new List<Claim>
-        {
+        List<Claim> claims =
+        [
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim(ClaimTypes.Name, "testuser"),
-            new Claim(ClaimTypes.Email, "testuser@example.com")
-        };
+            new Claim(ClaimTypes.Email, "testuser@example.com"),
+        ];
 
-        var identity = new ClaimsIdentity(claims, "TestAuthentication");
-        var claimsPrincipal = new ClaimsPrincipal(identity);
-
-        return new ControllerContext
+        if (householdId.HasValue)
         {
-            HttpContext = new DefaultHttpContext { User = claimsPrincipal }
-        };
+            claims.Add(new Claim("household_id", householdId.Value.ToString()));
+        }
+
+        ClaimsIdentity identity        = new(claims, "TestAuthentication");
+        ClaimsPrincipal claimsPrincipal = new(identity);
+
+        DefaultHttpContext httpContext = new() { User = claimsPrincipal };
+        return new ControllerContext { HttpContext = httpContext };
     }
 
     public static ControllerContext CreateUnauthenticatedContext()
-    {
-        return new ControllerContext { HttpContext = new DefaultHttpContext() };
-    }
+        => new() { HttpContext = new DefaultHttpContext() };
 }

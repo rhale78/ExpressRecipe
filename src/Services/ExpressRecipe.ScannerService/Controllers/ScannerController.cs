@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using ExpressRecipe.ScannerService.Data;
 
@@ -132,6 +133,54 @@ public class ScannerController : ControllerBase
         var results = await _repository.GetUserOCRResultsAsync(userId.Value, limit);
         return Ok(results);
     }
+
+    /// <summary>
+    /// Save vision capture result
+    /// </summary>
+    [HttpPost("vision/capture")]
+    public async Task<IActionResult> SaveVisionCapture([FromBody] SaveVisionCaptureRequest request, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        _logger.LogInformation("User {UserId} saving vision capture", userId);
+
+        VisionCaptureRecord capture = new VisionCaptureRecord
+        {
+            UserId = userId,
+            ScanHistoryId = request.ScanHistoryId,
+            CaptureImageJpeg = request.CaptureImageJpeg,
+            DetectedBarcode = request.DetectedBarcode,
+            DetectedProductName = request.DetectedProductName,
+            DetectedBrand = request.DetectedBrand,
+            ProviderUsed = request.ProviderUsed,
+            Confidence = request.Confidence,
+            IsTrainingData = request.IsTrainingData
+        };
+
+        Guid captureId = await _repository.SaveVisionCaptureAsync(capture, ct);
+        return Ok(new { id = captureId });
+    }
+
+    /// <summary>
+    /// Submit a correction report for a vision capture
+    /// </summary>
+    [HttpPost("correction")]
+    public async Task<IActionResult> CreateCorrectionReport([FromBody] CreateCorrectionReportRequest request, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        _logger.LogInformation("User {UserId} creating correction report for capture {CaptureId}", userId, request.VisionCaptureId);
+
+        CorrectionReportRecord report = new CorrectionReportRecord
+        {
+            VisionCaptureId = request.VisionCaptureId,
+            UserId = userId,
+            AiGuess = request.AiGuess,
+            UserCorrection = request.UserCorrection,
+            UserNote = request.UserNote
+        };
+
+        Guid reportId = await _repository.CreateCorrectionReportAsync(report, ct);
+        return Ok(new { id = reportId });
+    }
 }
 
 public class ScanBarcodeRequest
@@ -156,4 +205,82 @@ public class SaveOCRRequest
     public string ExtractedText { get; set; } = string.Empty;
     public decimal Confidence { get; set; }
     public string? ProductMatch { get; set; }
+}
+
+public class SaveVisionCaptureRequest
+{
+    [Required]
+    public byte[] CaptureImageJpeg { get; set; } = Array.Empty<byte>();
+    public string? DetectedBarcode { get; set; }
+    public string? DetectedProductName { get; set; }
+    public string? DetectedBrand { get; set; }
+    public string? ProviderUsed { get; set; }
+    public decimal? Confidence { get; set; }
+    public Guid? ScanHistoryId { get; set; }
+    public bool IsTrainingData { get; set; }
+}
+
+public class CreateCorrectionReportRequest
+{
+    public Guid VisionCaptureId { get; set; }
+    public string? AiGuess { get; set; }
+    public string? UserCorrection { get; set; }
+    public string? UserNote { get; set; }
+}
+
+public class UpdateCorrectionStatusRequest
+{
+    [Required]
+    [RegularExpression("^(Approved|Rejected)$", ErrorMessage = "Status must be 'Approved' or 'Rejected'.")]
+    public string Status { get; set; } = string.Empty;
+}
+
+[Authorize(Roles = "Admin")]
+[ApiController]
+[Route("api/admin/scanner")]
+public class ScannerAdminController : ControllerBase
+{
+    private readonly ILogger<ScannerAdminController> _logger;
+    private readonly IScannerRepository _repository;
+
+    public ScannerAdminController(ILogger<ScannerAdminController> logger, IScannerRepository repository)
+    {
+        _logger = logger;
+        _repository = repository;
+    }
+
+    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    /// <summary>
+    /// Get correction reports, optionally filtered by status
+    /// </summary>
+    [HttpGet("corrections")]
+    public async Task<IActionResult> GetCorrectionReports([FromQuery] string? status, [FromQuery] int limit = 100, CancellationToken ct = default)
+    {
+        List<CorrectionReportRecord> reports = await _repository.GetCorrectionReportsAsync(status, limit, ct);
+        return Ok(reports);
+    }
+
+    /// <summary>
+    /// Update the status of a correction report (Approve or Reject)
+    /// </summary>
+    [HttpPut("corrections/{id}")]
+    public async Task<IActionResult> UpdateCorrectionStatus(Guid id, [FromBody] UpdateCorrectionStatusRequest request, CancellationToken ct)
+    {
+        Guid reviewerId = GetUserId();
+        _logger.LogInformation("Admin {ReviewerId} updating correction {ReportId} to {Status}", reviewerId, id, request.Status);
+
+        await _repository.UpdateCorrectionStatusAsync(id, request.Status, reviewerId, ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Export training data rows for AI model improvement
+    /// </summary>
+    [HttpGet("training-export")]
+    public async Task<IActionResult> GetTrainingExport([FromQuery] int limit = 500, CancellationToken ct = default)
+    {
+        List<TrainingExportRow> rows = await _repository.GetTrainingExportAsync(limit, ct);
+        return Ok(rows);
+    }
 }

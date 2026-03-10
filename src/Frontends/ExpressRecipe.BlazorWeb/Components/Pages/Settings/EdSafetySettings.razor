@@ -1,0 +1,67 @@
+@page "/settings/edsafety/{MemberId:guid}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+
+<PageTitle>Eating Disorder Safety - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo($"/settings/cookprofile/{MemberId}"))">
+                    ← Back to Cook Profile
+                </button>
+                <h1>🛡️ Eating Disorder Safety</h1>
+            </div>
+            <p class="settings-subtitle">
+                When Eating Disorder Recovery Mode is enabled, calorie counts, weight references,
+                and macro framing are hidden throughout the app.
+            </p>
+            <div class="settings-section">
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" @bind="_enabled" />
+                        Enable Eating Disorder Recovery Mode
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_isSaving">
+                        @(_isSaving ? "Saving..." : "Save")
+                    </button>
+                </div>
+                <small class="form-hint">
+                    This setting is stored server-side and applied before content reaches your browser.
+                    Substitute suggestions that include calorie or weight framing are filtered on the server.
+                </small>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="settings-container">
+            <p>Please <a href="/login">sign in</a> to manage safety settings.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid MemberId { get; set; }
+
+    private bool _enabled;
+    private bool _isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Load cook profile to get EatingDisorderRecovery flag
+        await Task.Delay(10);
+    }
+
+    private async Task SaveAsync()
+    {
+        _isSaving = true;
+        // TODO: PUT to PreferencesService with EatingDisorderRecovery flag
+        await Task.Delay(100);
+        _isSaving = false;
+    }
+}

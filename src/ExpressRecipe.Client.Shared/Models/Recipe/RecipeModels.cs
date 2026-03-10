@@ -235,3 +235,27 @@ public class RecipeDraftData
     public List<RecipeSourceDto> Sources { get; set; } = new();
     public DateTime SavedAt { get; set; } = DateTime.UtcNow;
 }
+
+public class RecipeShareTokenDto
+{
+    public Guid Id { get; set; }
+    public Guid RecipeId { get; set; }
+    public string Token { get; set; } = string.Empty;
+    public DateTime ExpiresAt { get; set; }
+    public int ViewCount { get; set; }
+    public RecipeDto? Recipe { get; set; }
+}
+
+public class HouseholdShareRequest
+{
+    public bool Shared { get; set; }
+    public Guid? HouseholdId { get; set; }
+}
+
+public class ShareRecipeEmailRequest
+{
+    public string ToEmail { get; set; } = string.Empty;
+    public string? FromName { get; set; }
+    public string? Message { get; set; }
+    public string? ShareUrl { get; set; }
+}

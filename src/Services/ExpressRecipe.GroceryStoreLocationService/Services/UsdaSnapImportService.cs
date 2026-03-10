@@ -19,6 +19,15 @@ public class UsdaSnapImportService
     private const string DataSource = "USDA_SNAP";
     private const int MaxExternalIdLength = 200;
 
+    // Store types to include by default (per problem spec)
+    private static readonly HashSet<string> IncludedStoreTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Supermarket",
+        "Super Store",
+        "Large Grocery Store",
+        "Medium Grocery Store"
+    };
+
     public UsdaSnapImportService(
         HttpClient httpClient,
         ILogger<UsdaSnapImportService> logger,
@@ -141,9 +150,25 @@ public class UsdaSnapImportService
                     var storeName = csv.GetField("Store_Name")?.Trim();
                     if (string.IsNullOrWhiteSpace(storeName)) continue;
 
+                    // Filter by store type
+                    var storeType = csv.GetField("Store_Type")?.Trim();
+                    var includeConvenience = _configuration.GetValue<bool>("StoreLocationImport:IncludeConvenienceStores", false);
+                    if (!string.IsNullOrWhiteSpace(storeType) && !IncludedStoreTypes.Contains(storeType))
+                    {
+                        // When IncludeConvenienceStores is true, only allow store types that explicitly
+                        // indicate convenience stores; otherwise skip the record entirely.
+                        bool isConvenienceStore = includeConvenience &&
+                            storeType.Contains("CONVENIENCE", StringComparison.OrdinalIgnoreCase);
+                        if (!isConvenienceStore) continue;
+                    }
+
                     var address = csv.GetField("Address")?.Trim() ?? string.Empty;
                     var zip = csv.GetField("Zip5")?.Trim() ?? string.Empty;
-                    var externalId = $"{storeName}_{address}_{zip}".Trim('_');
+                    var snapStoreId = csv.GetField("SNAP_STORE_ID")?.Trim()
+                        ?? csv.GetField("Record_ID")?.Trim();
+                    var externalId = !string.IsNullOrWhiteSpace(snapStoreId)
+                        ? snapStoreId
+                        : $"{storeName}_{address}_{zip}".Trim('_');
 
                     double? latitude = null;
                     double? longitude = null;
@@ -156,6 +181,7 @@ public class UsdaSnapImportService
                     stores.Add(new Data.UpsertGroceryStoreRequest
                     {
                         Name = storeName,
+                        StoreType = storeType,
                         Address = csv.GetField("Address")?.Trim(),
                         City = csv.GetField("City")?.Trim(),
                         State = csv.GetField("State")?.Trim(),
@@ -165,6 +191,7 @@ public class UsdaSnapImportService
                         Longitude = longitude,
                         ExternalId = externalId.Length > MaxExternalIdLength ? externalId[..MaxExternalIdLength] : externalId,
                         DataSource = DataSource,
+                        SnapStoreId = !string.IsNullOrWhiteSpace(snapStoreId) && snapStoreId.Length <= 50 ? snapStoreId : null,
                         AcceptsSnap = true,
                         IsActive = true
                     });

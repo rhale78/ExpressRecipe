@@ -18,6 +18,7 @@ public class AdminController : ControllerBase
     private readonly USDAFoodDataImportService _usdaImportService;
     private readonly OpenFoodFactsImportService _openFoodFactsImportService;
     private readonly IProductRepository _productRepository;
+    private readonly UsdaPortionImportService _usdaPortionImportService;
     private readonly ILogger<AdminController> _logger;
 
     // In-memory tracking of import jobs (in production, use database or distributed cache)
@@ -27,11 +28,13 @@ public class AdminController : ControllerBase
         USDAFoodDataImportService usdaImportService,
         OpenFoodFactsImportService openFoodFactsImportService,
         IProductRepository productRepository,
+        UsdaPortionImportService usdaPortionImportService,
         ILogger<AdminController> logger)
     {
         _usdaImportService = usdaImportService;
         _openFoodFactsImportService = openFoodFactsImportService;
         _productRepository = productRepository;
+        _usdaPortionImportService = usdaPortionImportService;
         _logger = logger;
     }
 
@@ -358,6 +361,25 @@ public class AdminController : ControllerBase
             StartedAt = job.StartedAt,
             CompletedAt = job.CompletedAt
         };
+    }
+
+    /// <summary>
+    /// Import USDA food_portion.csv into the IngredientUnitDensity table.
+    /// Safe to re-run (UPSERT is idempotent). Requires UsdaImport:PortionCsvPath in configuration.
+    /// </summary>
+    [HttpPost("import/usda-portions")]
+    public async Task<IActionResult> ImportUsdaPortions(CancellationToken ct)
+    {
+        try
+        {
+            int count = await _usdaPortionImportService.RunImportAsync(ct);
+            return Ok(new { message = $"USDA portion import complete. Upserted {count} rows.", rowsUpserted = count });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during USDA portion import");
+            return StatusCode(500, new { message = "An error occurred during USDA portion import." });
+        }
     }
 }
 

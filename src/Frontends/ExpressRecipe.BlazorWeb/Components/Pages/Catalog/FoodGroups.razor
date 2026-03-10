@@ -1,0 +1,145 @@
+@page "/catalog/food-groups"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Product
+@inject ICatalogApiClient CatalogApi
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Food Groups – ExpressRecipe</PageTitle>
+
+<div class="container py-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0">🥗 Food Substitute Groups</h1>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <input type="text" class="form-control" placeholder="Search groups…"
+                   value="@_search"
+                   @oninput="OnSearchChanged" />
+        </div>
+        <div class="col-md-4">
+            <select class="form-select" @bind="_functionalRole" @bind:after="LoadGroups">
+                <option value="">All functional roles</option>
+                <option value="Leavening">Leavening</option>
+                <option value="Fat/Oil">Fat / Oil</option>
+                <option value="Binding">Binding</option>
+                <option value="Liquid">Liquid</option>
+                <option value="Sweetener">Sweetener</option>
+                <option value="Thickener">Thickener</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-3 text-muted">Loading food groups…</p>
+        </div>
+    }
+    else if (_groups == null || _groups.Count == 0)
+    {
+        <div class="alert alert-info">No food groups found.</div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+            @foreach (FoodGroupDto group in _groups)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm food-group-card"
+                         @onclick="() => OpenGroup(group.Id)"
+                         style="cursor:pointer">
+                        <div class="card-body">
+                            <h5 class="card-title">@group.Name</h5>
+                            @if (!string.IsNullOrWhiteSpace(group.FunctionalRole))
+                            {
+                                <span class="badge @GetRoleBadgeClass(group.FunctionalRole) mb-2">@group.FunctionalRole</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(group.Description))
+                            {
+                                <p class="card-text text-muted small">@group.Description</p>
+                            }
+                        </div>
+                        <div class="card-footer text-muted small">
+                            @group.MemberCount substitute@(group.MemberCount != 1 ? "s" : "")
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .food-group-card:hover { border-color: #0d6efd; box-shadow: 0 4px 16px rgba(13,110,253,0.15) !important; }
+</style>
+
+@code {
+    private List<FoodGroupDto>? _groups;
+    private bool _isLoading;
+    private string _search = string.Empty;
+    private string _functionalRole = string.Empty;
+    private System.Timers.Timer? _debounce;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadGroups();
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _debounce?.Dispose();
+        _debounce = new System.Timers.Timer(350);
+        _debounce.Elapsed += async (_, _) =>
+        {
+            _debounce?.Dispose();
+            await InvokeAsync(async () => { await LoadGroups(); StateHasChanged(); });
+        };
+        _debounce.AutoReset = false;
+        _debounce.Start();
+    }
+
+    private async Task LoadGroups()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        try
+        {
+            _groups = await CatalogApi.GetFoodGroupsAsync(
+                string.IsNullOrWhiteSpace(_search) ? null : _search,
+                string.IsNullOrWhiteSpace(_functionalRole) ? null : _functionalRole);
+        }
+        catch
+        {
+            _groups = new List<FoodGroupDto>();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string GetRoleBadgeClass(string? role) => role switch
+    {
+        "Leavening"  => "bg-warning text-dark",
+        "Fat/Oil"    => "bg-success",
+        "Binding"    => "bg-secondary",
+        "Liquid"     => "bg-info text-dark",
+        "Sweetener"  => "bg-danger",
+        "Thickener"  => "bg-primary",
+        _            => "bg-secondary"
+    };
+
+    private void OpenGroup(Guid id) => Navigation.NavigateTo("/catalog/food-groups/" + id);
+
+    public void Dispose()
+    {
+        _debounce?.Dispose();
+    }
+}

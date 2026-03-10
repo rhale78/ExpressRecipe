@@ -1,4 +1,5 @@
 using System.Buffers;
+using ExpressRecipe.Shared.Units;
 
 namespace ExpressRecipe.RecipeParser.Helpers;
 
@@ -48,7 +49,10 @@ public static class TextParserHelper
         line = line.Trim();
         if (string.IsNullOrEmpty(line)) return (null, null, line);
 
-        var span = line.AsSpan();
+        // Normalize Unicode/HTML fraction characters to ASCII before scanning
+        string normalized = FractionParser.Normalize(line);
+
+        var span = normalized.AsSpan();
         int idx = 0;
 
         while (idx < span.Length && span[idx] == ' ') idx++;
@@ -72,6 +76,10 @@ public static class TextParserHelper
         string? qty = qEnd > qStart ? new string(span[qStart..qEnd]).Trim() : null;
 
         if (qty == null) return (null, null, line);
+
+        // Validate quantity parses successfully
+        decimal? parsedQty = FractionParser.ParseFraction(qty);
+        if (parsedQty == null) return (null, null, line);
 
         idx = qEnd;
         while (idx < span.Length && span[idx] == ' ') idx++;

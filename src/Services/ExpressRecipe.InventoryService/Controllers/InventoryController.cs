@@ -1,6 +1,9 @@
+using ExpressRecipe.InventoryService.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using ExpressRecipe.InventoryService.Data;
 
 namespace ExpressRecipe.InventoryService.Controllers;
@@ -12,11 +15,16 @@ public class InventoryController : ControllerBase
 {
     private readonly ILogger<InventoryController> _logger;
     private readonly IInventoryRepository _repository;
+    private readonly IInventorySaleRepository? _saleRepository;
+    private readonly IConfiguration? _configuration;
 
-    public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository)
+    public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository,
+        IInventorySaleRepository? saleRepository = null, IConfiguration? configuration = null)
     {
-        _logger = logger;
-        _repository = repository;
+        _logger         = logger;
+        _repository     = repository;
+        _saleRepository = saleRepository;
+        _configuration  = configuration;
     }
 
     private Guid? GetUserId()
@@ -35,7 +43,7 @@ public class InventoryController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
-            _logger.LogInformation("Getting inventory for user {UserId}", userId);
+            _logger.LogGettingInventory(userId.Value);
             var items = await _repository.GetUserInventoryAsync(userId.Value);
             return Ok(items);
         }
@@ -71,6 +79,7 @@ public class InventoryController : ControllerBase
                 request.PreferredStore,
                 request.StoreLocation);
             var item = await _repository.GetInventoryItemAsync(itemId, userId.Value);
+            _logger.LogInventoryItemAdded(userId.Value, itemId);
             return CreatedAtAction(nameof(GetItem), new { id = itemId }, item);
         }
         catch (Exception ex)
@@ -137,6 +146,7 @@ public class InventoryController : ControllerBase
             if (userId == null) return Unauthorized();
             _logger.LogInformation("Deleting inventory item {ItemId}", id);
             await _repository.DeleteInventoryItemAsync(id, userId.Value);
+            _logger.LogInventoryItemDeleted(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -156,7 +166,7 @@ public class InventoryController : ControllerBase
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized();
-            _logger.LogInformation("Getting expiring items for user {UserId}", userId);
+            _logger.LogGettingExpiringItems(userId.Value, daysAhead);
             var items = await _repository.GetExpiringItemsAsync(userId.Value, daysAhead);
             return Ok(items);
         }
@@ -201,6 +211,7 @@ public class InventoryController : ControllerBase
             _logger.LogInformation("Creating storage location for user {UserId}", userId);
             var locationId = await _repository.CreateStorageLocationAsync(userId.Value, request.HouseholdId, request.AddressId, request.Name, request.Description, request.Temperature);
             var locations = await _repository.GetStorageLocationsAsync(userId.Value);
+            _logger.LogStorageLocationCreated(userId.Value, locationId);
             return CreatedAtAction(nameof(GetStorageLocations), new { id = locationId }, locations.First(l => l.Id == locationId));
         }
         catch (Exception ex)
@@ -284,7 +295,10 @@ public class InventoryController : ControllerBase
     {
         try
         {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized();
             await _repository.DeleteStorageLocationAsync(id);
+            _logger.LogStorageLocationDeleted(userId.Value, id);
             return NoContent();
         }
         catch (Exception ex)
@@ -446,6 +460,57 @@ public class InventoryController : ControllerBase
     }
 
     /// <summary>
+    /// Get frozen inventory items matching a recipe's ingredients (service-to-service, used by ThawTaskGeneratorService).
+    /// Protected by an API key header (X-Internal-Api-Key) when InternalApi:Key is configured.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpGet("frozen-for-recipe/{householdId}/{recipeId}")]
+    public async Task<IActionResult> GetFrozenIngredientsForRecipe(
+        Guid householdId, Guid recipeId, CancellationToken ct)
+    {
+        // Validate service-to-service API key when one is configured.
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
+        try
+        {
+            _logger.LogInformation(
+                "Getting frozen ingredients for household {HouseholdId} recipe {RecipeId}",
+                householdId, recipeId);
+            List<FrozenIngredientResult> items =
+                await _repository.GetFrozenIngredientsForRecipeAsync(householdId, recipeId, ct);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting frozen ingredients for recipe {RecipeId}", recipeId);
+            return StatusCode(500, new { message = "An error occurred while retrieving frozen ingredients" });
+        }
+    }
+
+    // Constant-time comparison to guard against timing attacks when comparing API keys.
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) { return false; }
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
+    }
+
+    /// <summary>
     /// Get usage history for item
     /// </summary>
     [HttpGet("{id}/history")]
@@ -453,10 +518,10 @@ public class InventoryController : ControllerBase
     {
         try
         {
-            var userId = GetUserId();
+            Guid? userId = GetUserId();
             if (userId == null) return Unauthorized();
             _logger.LogInformation("Getting usage history for item {ItemId}", id);
-            var history = await _repository.GetUsageHistoryAsync(id, limit);
+            List<InventoryHistoryDto> history = await _repository.GetUsageHistoryAsync(id, limit);
             return Ok(history);
         }
         catch (Exception ex)
@@ -486,6 +551,45 @@ public class InventoryController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving internal low-stock items for user {UserId}", userId);
             return StatusCode(500, new { message = "An error occurred while retrieving low-stock items" });
+    // ──────────────────────────────────────────────────────────────────────────
+    //  PURCHASE EVENTS
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Record a purchase event (called by ShoppingService on list complete)
+    /// </summary>
+    [HttpPost("purchase-event")]
+    public async Task<IActionResult> RecordPurchaseEvent([FromBody] RecordPurchaseEventRequest request)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogInformation("Recording purchase event for user {UserId}", userId);
+            PurchaseEventRecord record = new PurchaseEventRecord
+            {
+                UserId = userId.Value,
+                HouseholdId = request.HouseholdId,
+                ProductId = request.ProductId,
+                IngredientId = request.IngredientId,
+                CustomName = request.CustomName,
+                Barcode = request.Barcode,
+                Quantity = request.Quantity,
+                Unit = request.Unit,
+                Price = request.Price,
+                StoreId = request.StoreId,
+                StoreName = request.StoreName,
+                PurchasedAt = request.PurchasedAt ?? DateTime.UtcNow,
+                Source = request.Source ?? "ManualAdd"
+            };
+            Guid eventId = await _repository.RecordPurchaseEventAsync(record);
+            _logger.LogPurchaseEventRecorded(userId.Value, record.ProductId, record.HouseholdId);
+            return Ok(new { id = eventId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording purchase event");
+            return StatusCode(500, new { message = "An error occurred while recording the purchase event" });
         }
     }
 
@@ -542,6 +646,392 @@ public class InventoryController : ControllerBase
         }
 
         return Ok(new { AddedCount = addedIds.Count, Ids = addedIds });
+    /// Add a long-term storage item (canned, freeze-dried, frozen, etc.)
+    /// </summary>
+    [HttpPost("long-term")]
+    public async Task<IActionResult> AddLongTermItem([FromBody] AddLongTermStorageRequest request, CancellationToken ct)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) { return Unauthorized(); }
+            Guid? householdId = GetHouseholdId();
+            if (!householdId.HasValue) { return Unauthorized(); }
+            Guid id = await _repository.AddItemAsync(new AddItemRequest
+            {
+                UserId              = userId.Value,
+                HouseholdId         = householdId,
+                Name                = request.Name,
+                Quantity            = request.Quantity,
+                Unit                = request.Unit,
+                StorageMethod       = request.StorageMethod,
+                IsLongTermStorage   = true,
+                BatchLabel          = request.BatchLabel,
+                StorageCapacityUnit = request.StorageCapacityUnit,
+                ExpirationDate      = request.ExpirationDate ?? ComputeExpiration(request.StorageMethod, request.ProcessDate),
+                Temperature         = request.StorageMethod == "FrozenMeal" ? "Frozen" : "Room",
+                Source              = request.Source ?? "Store"
+            }, ct);
+            return Ok(new { id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding long-term storage item");
+            return StatusCode(500, new { message = "An error occurred while adding the long-term storage item" });
+        }
+    }
+
+    /// <summary>
+    /// Get purchase history for user
+    /// </summary>
+    [HttpGet("purchase-history")]
+    public async Task<IActionResult> GetPurchaseHistory([FromQuery] Guid? productId = null, [FromQuery] int daysBack = 90)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            List<PurchaseEventDto> events = await _repository.GetPurchaseHistoryAsync(userId.Value, productId, daysBack);
+            return Ok(events);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving purchase history");
+            return StatusCode(500, new { message = "An error occurred while retrieving purchase history" });
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  CONSUMPTION PATTERNS
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Get consumption patterns for user
+    /// </summary>
+    [HttpGet("patterns")]
+    public async Task<IActionResult> GetConsumptionPatterns()
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogGettingPatterns(userId.Value, null);
+            List<ProductConsumptionPatternDto> patterns = await _repository.GetConsumptionPatternsAsync(userId.Value);
+            return Ok(patterns);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving consumption patterns");
+            return StatusCode(500, new { message = "An error occurred while retrieving consumption patterns" });
+        }
+    }
+
+    /// <summary>
+    /// Get abandoned products
+    /// </summary>
+    [HttpGet("patterns/abandoned")]
+    public async Task<IActionResult> GetAbandonedProducts()
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogGettingAbandonedProducts(userId.Value, null);
+            List<ProductConsumptionPatternDto> abandoned = await _repository.GetAbandonedProductsAsync(userId.Value);
+            return Ok(abandoned);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving abandoned products");
+            return StatusCode(500, new { message = "An error occurred while retrieving abandoned products" });
+        }
+    }
+
+    /// <summary>
+    /// Get low stock items predicted by consumption patterns
+    /// </summary>
+    [HttpGet("patterns/low-stock")]
+    public async Task<IActionResult> GetLowStockByPrediction([FromQuery] int daysAhead = 3)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogGettingLowStockPredictions(userId.Value, null);
+            List<ProductConsumptionPatternDto> lowStock = await _repository.GetLowStockByPredictionAsync(userId.Value, daysAhead);
+            return Ok(lowStock);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving low stock predictions");
+            return StatusCode(500, new { message = "An error occurred while retrieving low stock predictions" });
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  PRICE WATCH
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Get active price watch alerts for user
+    /// </summary>
+    [HttpGet("price-watch")]
+    public async Task<IActionResult> GetPriceWatchAlerts()
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogGettingPriceWatchAlerts(userId.Value, null);
+            List<PriceWatchAlertDto> alerts = await _repository.GetActiveWatchAlertsByUserAsync(userId.Value);
+            return Ok(alerts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving price watch alerts");
+            return StatusCode(500, new { message = "An error occurred while retrieving price watch alerts" });
+        }
+    }
+
+    /// <summary>
+    /// Set target price on a price watch alert
+    /// </summary>
+    [HttpPost("price-watch/{id}/target")]
+    public async Task<IActionResult> SetPriceWatchTarget(Guid id, [FromBody] SetTargetPriceRequest request)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            await _repository.SetPriceWatchTargetPriceAsync(userId.Value, id, request.TargetPrice);
+            _logger.LogPriceWatchAlertSet(userId.Value, id, request.TargetPrice);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting target price for alert {AlertId}", id);
+            return StatusCode(500, new { message = "An error occurred while setting the target price" });
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  ABANDONED PRODUCT INQUIRY
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Respond to an abandoned product inquiry
+    /// </summary>
+    [HttpPost("inquiry/{id}/respond")]
+    public async Task<IActionResult> RespondToInquiry(Guid id, [FromBody] InquiryResponseRequest request)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            await _repository.RecordInquiryResponseAsync(userId.Value, id, request.Response, request.Note);
+            _logger.LogInquiryResponseRecorded(userId.Value, id);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording inquiry response for {InquiryId}", id);
+            return StatusCode(500, new { message = "An error occurred while recording the inquiry response" });
+        }
+    }
+
+    /// <summary>
+    /// Get pending abandoned product inquiries for user
+    /// </summary>
+    [HttpGet("inquiry/pending")]
+    public async Task<IActionResult> GetPendingInquiries()
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogGettingPendingInquiries(userId.Value);
+            List<AbandonedProductInquiryDto> inquiries = await _repository.GetPendingInquiriesAsync(userId.Value);
+            return Ok(inquiries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving pending inquiries");
+            return StatusCode(500, new { message = "An error occurred while retrieving pending inquiries" });
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  WASTE REPORT
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Get waste analytics grouped by month
+    /// </summary>
+    [HttpGet("waste-report")]
+    public async Task<IActionResult> GetWasteReport([FromQuery] Guid? householdId = null)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) return Unauthorized();
+            _logger.LogGettingWasteReport(userId.Value, householdId);
+            List<WasteReportMonthDto> report = await _repository.GetWasteReportAsync(userId.Value, householdId);
+            return Ok(report);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving waste report");
+            return StatusCode(500, new { message = "An error occurred while retrieving waste report" });
+        }
+    }
+
+    /// <summary>
+    /// Get long-term storage items for the household, optionally filtered by storage method
+    /// </summary>
+    [HttpGet("long-term")]
+    public async Task<IActionResult> GetLongTermItems([FromQuery] string? storageMethod, CancellationToken ct)
+    {
+        try
+        {
+            Guid? householdId = GetHouseholdId();
+            if (!householdId.HasValue) return Unauthorized();
+            return Ok(await _repository.GetItemsAsync(householdId.Value, isLongTermOnly: true, storageMethod: storageMethod, ct: ct));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving long-term storage items");
+            return StatusCode(500, new { message = "An error occurred while retrieving long-term storage items" });
+        }
+    }
+
+    private static Guid? ExtractHouseholdId(System.Security.Claims.ClaimsPrincipal user)
+    {
+        string? value = user.FindFirstValue("household_id");
+        return Guid.TryParse(value, out Guid id) ? id : null;
+    }
+
+    private Guid? GetHouseholdId() => ExtractHouseholdId(User);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sales
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Record a sale of an inventory item and deduct the quantity.
+    /// Returns 422 if the item has insufficient quantity.
+    /// </summary>
+    [HttpPost("{id}/sell")]
+    public async Task<IActionResult> SellItem(Guid id, [FromBody] SellItemRequest request)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) { return Unauthorized(); }
+
+            InventoryItemDto? item = await _repository.GetInventoryItemAsync(id, userId.Value);
+            if (item == null) { return NotFound(); }
+
+            Guid householdId = item.HouseholdId ?? Guid.Empty;
+            if (householdId == Guid.Empty)
+            {
+                return UnprocessableEntity(new { message = "Item is not associated with a household." });
+            }
+
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+            {
+                return Forbid();
+            }
+
+            _logger.LogInformation(
+                "Recording sale of {Quantity} {Unit} from item {ItemId}", request.Quantity, request.Unit, id);
+
+            if (_saleRepository is null)
+                return StatusCode(503, new { message = "Sales service is not available." });
+
+            Guid saleId = await _saleRepository.RecordSaleAsync(
+                householdId,
+                id,
+                item.ProductName ?? item.CustomName ?? "Unknown",
+                request.Quantity,
+                request.Unit,
+                request.SaleDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                request.Buyer,
+                request.Notes,
+                request.AutoRemoveOnZero);
+
+            return Ok(new { id = saleId });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Insufficient quantity"))
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Inventory item {ItemId} not found during sell", id);
+            return NotFound();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording sale for item {ItemId}", id);
+            return StatusCode(500, new { message = "An error occurred while recording the sale." });
+        }
+    }
+
+    /// <summary>
+    /// Get sales history for a household, with optional date range and item filters.
+    /// </summary>
+    [HttpGet("sales")]
+    public async Task<IActionResult> GetSales(
+        [FromQuery] Guid householdId,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] Guid? itemId = null)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) { return Unauthorized(); }
+
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+            {
+                return Forbid();
+            }
+
+            if (_saleRepository is null)
+                return StatusCode(503, new { message = "Sales service is not available." });
+
+            if (itemId.HasValue)
+            {
+                List<InventorySaleDto> salesByItem = await _saleRepository.GetSalesByItemAsync(householdId, itemId.Value);
+                return Ok(salesByItem);
+            }
+
+            DateOnly effectiveFrom = from ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30));
+            DateOnly effectiveTo   = to   ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+            List<InventorySaleDto> sales = await _saleRepository.GetSalesAsync(householdId, effectiveFrom, effectiveTo);
+            return Ok(sales);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving sales for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving sales." });
+        }
+    }
+
+    private static DateTime ComputeExpiration(string? storageMethod, DateTime? processDate)
+    {
+        DateTime from = processDate ?? DateTime.UtcNow.Date;
+        return storageMethod switch
+        {
+            "Canned"         => from.AddMonths(18),
+            "CannedPressure" => from.AddMonths(24),
+            "FreezeDried"    => from.AddYears(25),
+            "Dehydrated"     => from.AddMonths(12),
+            "FrozenMeal"     => from.AddMonths(6),
+            "Pickled"        => from.AddMonths(12),
+            _                => from.AddMonths(12)
+        };
     }
 }
 
@@ -604,4 +1094,52 @@ public class InternalAddInventoryItemRequest
     public decimal? PurchasePrice { get; set; }
     public DateTime PurchasedAt { get; set; }
     public string? PreferredStore { get; set; }
+public class RecordPurchaseEventRequest
+{
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public Guid? IngredientId { get; set; }
+    public string? CustomName { get; set; }
+    public string? Barcode { get; set; }
+    public decimal Quantity { get; set; } = 1;
+    public string? Unit { get; set; }
+    public decimal? Price { get; set; }
+    public Guid? StoreId { get; set; }
+    public string? StoreName { get; set; }
+    public DateTime? PurchasedAt { get; set; }
+    public string? Source { get; set; }
+}
+
+public class SetTargetPriceRequest
+{
+    public decimal TargetPrice { get; set; }
+}
+
+public class InquiryResponseRequest
+{
+    public string Response { get; set; } = string.Empty;
+    public string? Note { get; set; }
+}
+
+public class AddLongTermStorageRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public string? Unit { get; set; }
+    public string? StorageMethod { get; set; }
+    public string? BatchLabel { get; set; }
+    public string? StorageCapacityUnit { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public DateTime? ProcessDate { get; set; }
+    public string? Source { get; set; }
+}
+
+public class SellItemRequest
+{
+    public decimal Quantity { get; set; }
+    public string Unit { get; set; } = string.Empty;
+    public DateOnly? SaleDate { get; set; }
+    public string? Buyer { get; set; }
+    public string? Notes { get; set; }
+    public bool AutoRemoveOnZero { get; set; } = true;
 }

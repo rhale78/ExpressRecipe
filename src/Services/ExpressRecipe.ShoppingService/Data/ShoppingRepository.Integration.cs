@@ -161,10 +161,10 @@ public partial class ShoppingRepository
               AND sli.AddToInventoryOnPurchase = 1
               AND sli.IsDeleted = 0";
 
-        await using var connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new(_connectionString);
         await connection.OpenAsync();
 
-        await using var command = new SqlCommand(sql, connection);
+        await using SqlCommand command = new(sql, connection);
         command.Parameters.AddWithValue("@ListId", listId);
 
         var itemsToAdd = new List<InternalInventoryAddItem>();
@@ -249,3 +249,4 @@ public partial class ShoppingRepository
         public string? PreferredStore { get; set; }
     }
 }
+

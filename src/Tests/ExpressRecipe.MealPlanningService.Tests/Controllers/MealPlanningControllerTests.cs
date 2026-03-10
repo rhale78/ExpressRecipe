@@ -1,351 +1,736 @@
-using Moq;
+using ExpressRecipe.MealPlanningService.Controllers;
+using ExpressRecipe.MealPlanningService.Services.Printing;
+using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
+using ExpressRecipe.MealPlanningService.Data;
+using ExpressRecipe.MealPlanningService.Services;
+using ExpressRecipe.MealPlanningService.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using ExpressRecipe.MealPlanningService.Controllers;
-using ExpressRecipe.MealPlanningService.Data;
-using ExpressRecipe.MealPlanningService.Tests.Helpers;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using MealPlanningControllerHelpers = ExpressRecipe.MealPlanningService.Tests.Helpers.ControllerTestHelpers;
 
 namespace ExpressRecipe.MealPlanningService.Tests.Controllers;
 
+/// <summary>
+/// Unit tests for <see cref="MealPlanningController"/>.
+/// All repository and service dependencies are mocked; HTTP context is set up
+/// via <see cref="MealPlanningControllerHelpers.CreateAuthenticatedContext"/>.
+/// </summary>
 public class MealPlanningControllerTests
 {
-    private readonly Mock<IMealPlanningRepository> _mockRepository;
-    private readonly Mock<ILogger<MealPlanningController>> _mockLogger;
-    private readonly MealPlanningController _controller;
-    private readonly Guid _testUserId;
+    private readonly Mock<IMealPlanningRepository> _repoMock = new();
+    private readonly Mock<IMealSuggestionService> _suggestionMock = new();
+    private readonly Mock<IHttpClientFactory> _httpClientFactoryMock = new();
+    private readonly IConfiguration _config = new ConfigurationBuilder().Build();
+    private readonly Guid _userId = Guid.NewGuid();
 
-    public MealPlanningControllerTests()
+    private readonly Mock<INutritionLogRepository>      _nutritionLogRepoMock     = new();
+    private readonly Mock<INutritionLoggingService>     _nutritionLoggingMock     = new();
+    private readonly Mock<ICookingHistoryRepository>    _cookingHistoryMock       = new();
+    private readonly Mock<IMealCourseRepository>        _courseMock               = new();
+    private readonly Mock<IMealAttendeeRepository>      _attendeeMock             = new();
+    private readonly Mock<IMealPlanCopyService>         _copyServiceMock          = new();
+    private readonly Mock<IMealPlanTemplateService>     _templateServiceMock      = new();
+    private readonly Mock<IMealPlanHistoryService>      _historyMock              = new();
+    private readonly Mock<IMealVotingRepository>        _votingMock               = new();
+    private readonly Mock<IMealPlanPdfService>          _pdfServiceMock           = new();
+    private readonly Mock<IMealScheduleConfigRepository> _scheduleRepoMock        = new();
+    private readonly Mock<IGoogleCalendarService>       _googleCalMock            = new();
+    private readonly Mock<IHolidayService>              _holidaysMock             = new();
+
+    private MealPlanningController CreateController()
     {
-        _mockRepository = new Mock<IMealPlanningRepository>();
-        _mockLogger = new Mock<ILogger<MealPlanningController>>();
-        _controller = new MealPlanningController(_mockLogger.Object, _mockRepository.Object);
-        _testUserId = Guid.NewGuid();
-        _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
+        MealPlanningController controller = new(
+            NullLogger<MealPlanningController>.Instance,
+            _repoMock.Object,
+            _suggestionMock.Object,
+            _httpClientFactoryMock.Object,
+            _config,
+            _nutritionLogRepoMock.Object,
+            _nutritionLoggingMock.Object,
+            _cookingHistoryMock.Object,
+            _courseMock.Object,
+            _attendeeMock.Object,
+            _copyServiceMock.Object,
+            _templateServiceMock.Object,
+            _historyMock.Object,
+            _votingMock.Object,
+            _pdfServiceMock.Object,
+            _scheduleRepoMock.Object,
+            _googleCalMock.Object,
+            _holidaysMock.Object);
+
+        controller.ControllerContext = MealPlanningControllerHelpers.CreateAuthenticatedContext(_userId);
+        return controller;
     }
 
-    // ──────────── GetMealPlan ────────────
+    // ── CreateMealPlan ────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetMealPlan_WhenPlanExists_ReturnsOk()
+    public async Task CreateMealPlan_ValidRequest_Returns201CreatedWithPlanDto()
     {
-        var planId = Guid.NewGuid();
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId, Name = "Test Plan", Status = "Active" };
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-
-        var result = await _controller.GetMealPlan(planId);
-
-        result.Should().BeOfType<OkObjectResult>();
-        ((OkObjectResult)result).Value.Should().Be(plan);
-    }
-
-    [Fact]
-    public async Task GetMealPlan_WhenPlanNotFound_ReturnsNotFound()
-    {
-        var planId = Guid.NewGuid();
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync((MealPlanDto?)null);
-
-        var result = await _controller.GetMealPlan(planId);
-
-        result.Should().BeOfType<NotFoundResult>();
-    }
-
-    [Fact]
-    public async Task GetMealPlan_WhenUnauthenticated_ReturnsUnauthorized()
-    {
-        _controller.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
-        var result = await _controller.GetMealPlan(Guid.NewGuid());
-        result.Should().BeOfType<UnauthorizedResult>();
-    }
-
-    // ──────────── CreateMealPlan ────────────
-
-    [Fact]
-    public async Task CreateMealPlan_WithValidRequest_ReturnsOkWithId()
-    {
-        var planId = Guid.NewGuid();
-        var request = new CreateMealPlanApiRequest
+        Guid planId = Guid.NewGuid();
+        MealPlanDto expectedPlan = new()
         {
-            Name = "My Plan",
-            StartDate = DateTime.Today,
-            EndDate = DateTime.Today.AddDays(6)
+            Id        = planId,
+            UserId    = _userId,
+            Name      = "Weekly Plan",
+            StartDate = DateTime.UtcNow.Date,
+            EndDate   = DateTime.UtcNow.Date.AddDays(7)
         };
-        _mockRepository.Setup(r => r.CreateMealPlanAsync(_testUserId, request.StartDate, request.EndDate, request.Name))
-                       .ReturnsAsync(planId);
 
-        var result = await _controller.CreateMealPlan(request);
+        _repoMock.Setup(r => r.CreateMealPlanAsync(
+                _userId,
+                expectedPlan.StartDate,
+                expectedPlan.EndDate,
+                expectedPlan.Name))
+            .ReturnsAsync(planId);
 
-        result.Should().BeOfType<OkObjectResult>();
-        var body = ((OkObjectResult)result).Value;
-        body.Should().NotBeNull();
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId))
+            .ReturnsAsync(expectedPlan);
+
+        MealPlanningController controller = CreateController();
+        CreatePlanRequest request = new()
+        {
+            StartDate = expectedPlan.StartDate,
+            EndDate   = expectedPlan.EndDate,
+            Name      = expectedPlan.Name
+        };
+
+        IActionResult result = await controller.CreateMealPlan(request);
+
+        CreatedAtActionResult createdResult = result.Should().BeOfType<CreatedAtActionResult>().Subject;
+        createdResult.StatusCode.Should().Be(201);
+        createdResult.ActionName.Should().Be(nameof(MealPlanningController.GetMealPlan));
+        createdResult.Value.Should().Be(expectedPlan);
     }
 
     [Fact]
-    public async Task CreateMealPlan_WithEmptyName_ReturnsBadRequest()
+    public async Task CreateMealPlan_DelegatesToRepositoryWithAuthenticatedUserId()
     {
-        var request = new CreateMealPlanApiRequest { Name = "", StartDate = DateTime.Today, EndDate = DateTime.Today.AddDays(6) };
+        Guid planId = Guid.NewGuid();
+        DateTime start = DateTime.UtcNow.Date;
+        DateTime end   = start.AddDays(6);
 
-        var result = await _controller.CreateMealPlan(request);
+        _repoMock.Setup(r => r.CreateMealPlanAsync(_userId, start, end, "My Plan"))
+            .ReturnsAsync(planId);
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId))
+            .ReturnsAsync(new MealPlanDto { Id = planId, UserId = _userId });
 
-        result.Should().BeOfType<BadRequestObjectResult>();
+        MealPlanningController controller = CreateController();
+
+        await controller.CreateMealPlan(new CreatePlanRequest
+        {
+            StartDate = start,
+            EndDate   = end,
+            Name      = "My Plan"
+        });
+
+        _repoMock.Verify(r => r.CreateMealPlanAsync(_userId, start, end, "My Plan"), Times.Once);
+    }
+
+    // ── GetMealPlans ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetMealPlans_ReturnsOkWithListOfPlans()
+    {
+        List<MealPlanDto> plans = new()
+        {
+            new MealPlanDto { Id = Guid.NewGuid(), UserId = _userId, Name = "Plan A" },
+            new MealPlanDto { Id = Guid.NewGuid(), UserId = _userId, Name = "Plan B" }
+        };
+
+        _repoMock.Setup(r => r.GetUserMealPlansAsync(_userId))
+            .ReturnsAsync(plans);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetMealPlans();
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(plans);
     }
 
     [Fact]
-    public async Task CreateMealPlan_WhenUnauthenticated_ReturnsUnauthorized()
+    public async Task GetMealPlans_NoPlanExists_ReturnsOkWithEmptyList()
     {
-        _controller.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
-        var result = await _controller.CreateMealPlan(new CreateMealPlanApiRequest { Name = "X", StartDate = DateTime.Today, EndDate = DateTime.Today.AddDays(6) });
-        result.Should().BeOfType<UnauthorizedResult>();
+        _repoMock.Setup(r => r.GetUserMealPlansAsync(_userId))
+            .ReturnsAsync(new List<MealPlanDto>());
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetMealPlans();
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.As<List<MealPlanDto>>().Should().BeEmpty();
     }
 
-    // ──────────── DeleteMealPlan ────────────
+    // ── GetMealPlan ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task DeleteMealPlan_WhenPlanExists_ReturnsNoContent()
+    public async Task GetMealPlan_ExistingPlan_ReturnsOkWithPlanDto()
     {
-        var planId = Guid.NewGuid();
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId };
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-        _mockRepository.Setup(r => r.DeleteMealPlanAsync(planId, _testUserId)).Returns(Task.CompletedTask);
+        Guid planId = Guid.NewGuid();
+        MealPlanDto plan = new() { Id = planId, UserId = _userId, Name = "My Plan" };
 
-        var result = await _controller.DeleteMealPlan(planId);
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId))
+            .ReturnsAsync(plan);
 
-        result.Should().BeOfType<NoContentResult>();
-        _mockRepository.Verify(r => r.DeleteMealPlanAsync(planId, _testUserId), Times.Once);
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetMealPlan(planId);
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().Be(plan);
     }
 
     [Fact]
-    public async Task DeleteMealPlan_WhenPlanNotFound_ReturnsNotFound()
+    public async Task GetMealPlan_PlanNotFound_Returns404NotFound()
     {
-        var planId = Guid.NewGuid();
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync((MealPlanDto?)null);
+        Guid planId = Guid.NewGuid();
 
-        var result = await _controller.DeleteMealPlan(planId);
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId))
+            .ReturnsAsync((MealPlanDto?)null);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetMealPlan(planId);
 
         result.Should().BeOfType<NotFoundResult>();
-        _mockRepository.Verify(r => r.DeleteMealPlanAsync(It.IsAny<Guid>(), It.IsAny<Guid>()), Times.Never);
     }
 
-    // ──────────── GetMealPlanSummary ────────────
+    // ── DeletePlan ────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetMealPlanSummary_WhenAuthenticated_ReturnsOk()
+    public async Task DeletePlan_ExistingPlan_Returns204NoContent()
     {
-        var summary = new MealPlanSummaryData { TotalActivePlans = 2, MealsThisWeek = 5 };
-        _mockRepository.Setup(r => r.GetMealPlanSummaryAsync(_testUserId)).ReturnsAsync(summary);
+        Guid planId = Guid.NewGuid();
 
-        var result = await _controller.GetMealPlanSummary();
+        _repoMock.Setup(r => r.DeleteMealPlanAsync(planId, _userId))
+            .Returns(Task.CompletedTask);
 
-        result.Should().BeOfType<OkObjectResult>();
-        ((OkObjectResult)result).Value.Should().Be(summary);
-    }
+        MealPlanningController controller = CreateController();
 
-    // ──────────── SearchMealPlans ────────────
-
-    [Fact]
-    public async Task SearchMealPlans_ReturnsPaginatedResults()
-    {
-        var plans = Enumerable.Range(0, 5).Select(i => new MealPlanDto
-        {
-            Id = Guid.NewGuid(),
-            UserId = _testUserId,
-            Name = $"Plan {i}",
-            Status = "Active"
-        }).ToList();
-
-        _mockRepository.Setup(r => r.GetUserMealPlansAsync(_testUserId, "Active")).ReturnsAsync(plans);
-
-        var result = await _controller.SearchMealPlans(new SearchMealPlansRequest { Status = "Active", Page = 1, PageSize = 3 });
-
-        result.Should().BeOfType<OkObjectResult>();
-    }
-
-    // ──────────── CompleteMealPlan ────────────
-
-    [Fact]
-    public async Task CompleteMealPlan_WhenPlanExists_ReturnsNoContent()
-    {
-        var planId = Guid.NewGuid();
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId, Status = "Active" };
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-        _mockRepository.Setup(r => r.SetMealPlanStatusAsync(planId, _testUserId, "Completed")).Returns(Task.CompletedTask);
-
-        var result = await _controller.CompleteMealPlan(planId);
+        IActionResult result = await controller.DeletePlan(planId);
 
         result.Should().BeOfType<NoContentResult>();
-        _mockRepository.Verify(r => r.SetMealPlanStatusAsync(planId, _testUserId, "Completed"), Times.Once);
+        _repoMock.Verify(r => r.DeleteMealPlanAsync(planId, _userId), Times.Once);
     }
 
-    [Fact]
-    public async Task ArchiveMealPlan_WhenPlanExists_ReturnsNoContent()
-    {
-        var planId = Guid.NewGuid();
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId, Status = "Active" };
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-        _mockRepository.Setup(r => r.SetMealPlanStatusAsync(planId, _testUserId, "Archived")).Returns(Task.CompletedTask);
-
-        var result = await _controller.ArchiveMealPlan(planId);
-
-        result.Should().BeOfType<NoContentResult>();
-    }
-
-    // ──────────── AddMealEntry ────────────
+    // ── AddPlannedMeal ────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task AddMealEntry_WithValidRequest_ReturnsOkWithEntryId()
+    public async Task AddPlannedMeal_ValidRequest_ReturnsOkWithMealId()
     {
-        var planId = Guid.NewGuid();
-        var entryId = Guid.NewGuid();
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId };
-        var request = new AddMealEntryApiRequest
+        Guid planId  = Guid.NewGuid();
+        Guid mealId  = Guid.NewGuid();
+        AddMealRequest request = new()
         {
+            RecipeId   = Guid.NewGuid(),
+            PlannedDate = DateTime.UtcNow.AddDays(1),
+            MealType   = "Lunch",
+            Servings   = 2
+        };
+
+        _repoMock.Setup(r => r.AddPlannedMealAsync(
+                planId, _userId,
+                request.RecipeId, request.PlannedDate,
+                request.MealType, request.Servings))
+            .ReturnsAsync(mealId);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.AddPlannedMeal(planId, request);
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(new { id = mealId });
+    }
+
+    [Fact]
+    public async Task AddPlannedMeal_DelegatesToRepositoryWithAuthenticatedUserId()
+    {
+        Guid planId  = Guid.NewGuid();
+        Guid recipeId = Guid.NewGuid();
+        AddMealRequest request = new() { RecipeId = recipeId, PlannedDate = DateTime.UtcNow.AddDays(2) };
+
+        _repoMock.Setup(r => r.AddPlannedMealAsync(
+                planId, _userId,
+                recipeId, request.PlannedDate,
+                request.MealType, request.Servings))
+            .ReturnsAsync(Guid.NewGuid());
+
+        MealPlanningController controller = CreateController();
+
+        await controller.AddPlannedMeal(planId, request);
+
+        _repoMock.Verify(r => r.AddPlannedMealAsync(
+            planId, _userId,
+            recipeId, request.PlannedDate,
+            request.MealType, request.Servings), Times.Once);
+    }
+
+    // ── GetPlannedMeals ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetPlannedMeals_ReturnsOkWithMealsList()
+    {
+        Guid planId = Guid.NewGuid();
+        List<PlannedMealDto> meals = new()
+        {
+            new PlannedMealDto { Id = Guid.NewGuid(), MealPlanId = planId, RecipeName = "Pasta" },
+            new PlannedMealDto { Id = Guid.NewGuid(), MealPlanId = planId, RecipeName = "Salad" }
+        };
+
+        _repoMock.Setup(r => r.GetPlannedMealsAsync(planId, null, null))
+            .ReturnsAsync(meals);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetPlannedMeals(planId, null, null);
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(meals);
+    }
+
+    [Fact]
+    public async Task GetPlannedMeals_WithDateFilters_PassesFiltersToRepository()
+    {
+        Guid planId       = Guid.NewGuid();
+        DateTime startDate = DateTime.UtcNow.Date;
+        DateTime endDate   = startDate.AddDays(7);
+
+        _repoMock.Setup(r => r.GetPlannedMealsAsync(planId, startDate, endDate))
+            .ReturnsAsync(new List<PlannedMealDto>());
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetPlannedMeals(planId, startDate, endDate);
+
+        result.Should().BeOfType<OkObjectResult>();
+        _repoMock.Verify(r => r.GetPlannedMealsAsync(planId, startDate, endDate), Times.Once);
+    }
+
+    // ── CompletePlannedMeal ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CompletePlannedMeal_ValidMeal_ReturnsOkWithHistoryId()
+    {
+        Guid planId    = Guid.NewGuid();
+        Guid mealId    = Guid.NewGuid();
+        Guid historyId = Guid.NewGuid();
+
+        PlannedMealDto meal = new()
+        {
+            Id         = mealId,
             MealPlanId = planId,
-            Date = DateTime.Today,
-            MealType = "Dinner",
-            RecipeId = Guid.NewGuid(),
-            Servings = 4
+            RecipeId   = Guid.NewGuid(),
+            RecipeName = "Tacos",
+            MealType   = "Dinner",
+            Servings   = 2
         };
+        MealPlanDto plan = new() { Id = planId, UserId = _userId };
 
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-        _mockRepository.Setup(r => r.AddPlannedMealAsync(planId, _testUserId, request.RecipeId, request.Date, request.MealType, request.Servings, null, null))
-                       .ReturnsAsync(entryId);
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId)).ReturnsAsync(plan);
+        _repoMock.Setup(r => r.MarkMealAsCompletedAsync(mealId)).Returns(Task.CompletedTask);
+        _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
+            .ReturnsAsync(historyId);
 
-        var result = await _controller.AddMealEntry(request);
+        MealPlanningController controller = CreateController();
 
-        result.Should().BeOfType<OkObjectResult>();
+        IActionResult result = await controller.CompletePlannedMeal(planId, mealId, null);
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(new { historyId });
+        _repoMock.Verify(r => r.MarkMealAsCompletedAsync(mealId), Times.Once);
     }
 
     [Fact]
-    public async Task AddMealEntry_WhenPlanNotFound_ReturnsNotFound()
+    public async Task CompletePlannedMeal_MealNotFound_Returns404NotFound()
     {
-        var planId = Guid.NewGuid();
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync((MealPlanDto?)null);
+        Guid planId = Guid.NewGuid();
+        Guid mealId = Guid.NewGuid();
 
-        var result = await _controller.AddMealEntry(new AddMealEntryApiRequest { MealPlanId = planId, Date = DateTime.Today, MealType = "Dinner", Servings = 2 });
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PlannedMealDto?)null);
 
-        result.Should().BeOfType<NotFoundObjectResult>();
-    }
+        MealPlanningController controller = CreateController();
 
-    // ──────────── DeleteMealEntry ────────────
-
-    [Fact]
-    public async Task DeleteMealEntry_WhenEntryOwnedByUser_ReturnsNoContent()
-    {
-        var entryId = Guid.NewGuid();
-        var planId = Guid.NewGuid();
-        var entry = new PlannedMealDto { Id = entryId, MealPlanId = planId };
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId };
-
-        _mockRepository.Setup(r => r.GetPlannedMealAsync(entryId)).ReturnsAsync(entry);
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-        _mockRepository.Setup(r => r.RemovePlannedMealAsync(entryId)).Returns(Task.CompletedTask);
-
-        var result = await _controller.DeleteMealEntry(entryId);
-
-        result.Should().BeOfType<NoContentResult>();
-        _mockRepository.Verify(r => r.RemovePlannedMealAsync(entryId), Times.Once);
-    }
-
-    [Fact]
-    public async Task DeleteMealEntry_WhenEntryNotFound_ReturnsNotFound()
-    {
-        var entryId = Guid.NewGuid();
-        _mockRepository.Setup(r => r.GetPlannedMealAsync(entryId)).ReturnsAsync((PlannedMealDto?)null);
-
-        var result = await _controller.DeleteMealEntry(entryId);
+        IActionResult result = await controller.CompletePlannedMeal(planId, mealId, null);
 
         result.Should().BeOfType<NotFoundResult>();
+        _repoMock.Verify(r => r.MarkMealAsCompletedAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Fact]
-    public async Task DeleteMealEntry_WhenPlanOwnedByOtherUser_ReturnsForbid()
+    public async Task CompletePlannedMeal_MealBelongsToDifferentPlan_Returns404NotFound()
     {
-        var entryId = Guid.NewGuid();
-        var planId = Guid.NewGuid();
-        var entry = new PlannedMealDto { Id = entryId, MealPlanId = planId };
+        Guid planId        = Guid.NewGuid();
+        Guid mealId        = Guid.NewGuid();
+        Guid differentPlan = Guid.NewGuid();
 
-        _mockRepository.Setup(r => r.GetPlannedMealAsync(entryId)).ReturnsAsync(entry);
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync((MealPlanDto?)null);
+        PlannedMealDto meal = new()
+        {
+            Id         = mealId,
+            MealPlanId = differentPlan,   // does not match the route planId
+            RecipeName = "Tacos"
+        };
 
-        var result = await _controller.DeleteMealEntry(entryId);
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.CompletePlannedMeal(planId, mealId, null);
+
+        result.Should().BeOfType<NotFoundResult>();
+        _repoMock.Verify(r => r.MarkMealAsCompletedAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CompletePlannedMeal_PlanBelongsToDifferentUser_ReturnsForbid()
+    {
+        Guid planId = Guid.NewGuid();
+        Guid mealId = Guid.NewGuid();
+
+        PlannedMealDto meal = new()
+        {
+            Id         = mealId,
+            MealPlanId = planId,
+            RecipeName = "Tacos"
+        };
+
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
+        // Returning null simulates the plan not belonging to the authenticated user
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId))
+            .ReturnsAsync((MealPlanDto?)null);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.CompletePlannedMeal(planId, mealId, null);
 
         result.Should().BeOfType<ForbidResult>();
+        _repoMock.Verify(r => r.MarkMealAsCompletedAsync(It.IsAny<Guid>()), Times.Never);
     }
 
-    // ──────────── MarkMealPrepared ────────────
-
     [Fact]
-    public async Task MarkMealPrepared_WhenEntryOwnedByUser_ReturnsNoContent()
+    public async Task CompletePlannedMeal_RequestContainsRecipeName_UsesRequestNameInHistoryRecord()
     {
-        var entryId = Guid.NewGuid();
-        var planId = Guid.NewGuid();
-        var entry = new PlannedMealDto { Id = entryId, MealPlanId = planId };
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId };
+        Guid planId    = Guid.NewGuid();
+        Guid mealId    = Guid.NewGuid();
+        const string overriddenName = "Special Tacos";
 
-        _mockRepository.Setup(r => r.GetPlannedMealAsync(entryId)).ReturnsAsync(entry);
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-        _mockRepository.Setup(r => r.MarkMealAsPreparedAsync(entryId, true)).Returns(Task.CompletedTask);
-
-        var result = await _controller.MarkMealPrepared(new MarkMealPreparedApiRequest { EntryId = entryId, IsPrepared = true });
-
-        result.Should().BeOfType<NoContentResult>();
-    }
-
-    // ──────────── UpdateMealPlan ────────────
-
-    [Fact]
-    public async Task UpdateMealPlan_WhenPlanExists_ReturnsNoContent()
-    {
-        var planId = Guid.NewGuid();
-        var plan = new MealPlanDto { Id = planId, UserId = _testUserId };
-        var request = new UpdateMealPlanApiRequest
+        PlannedMealDto meal = new()
         {
-            Name = "Updated Plan",
-            StartDate = DateTime.Today,
-            EndDate = DateTime.Today.AddDays(6),
-            Status = "Active"
+            Id         = mealId,
+            MealPlanId = planId,
+            RecipeId   = Guid.NewGuid(),
+            RecipeName = "Original Name",
+            MealType   = "Dinner",
+            Servings   = 2
+        };
+        MealPlanDto plan = new() { Id = planId, UserId = _userId };
+
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId)).ReturnsAsync(plan);
+        _repoMock.Setup(r => r.MarkMealAsCompletedAsync(mealId)).Returns(Task.CompletedTask);
+        _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
+            .ReturnsAsync(Guid.NewGuid());
+
+        MealPlanningController controller = CreateController();
+        CompleteMealRequest request = new() { RecipeName = overriddenName };
+
+        await controller.CompletePlannedMeal(planId, mealId, request);
+
+        _repoMock.Verify(r => r.RecordCookingHistoryAsync(
+            It.Is<CookingHistoryRecord>(h => h.RecipeName == overriddenName), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task CompletePlannedMeal_NoRequestRecipeName_FallsBackToMealRecipeName()
+    {
+        Guid planId    = Guid.NewGuid();
+        Guid mealId    = Guid.NewGuid();
+        const string mealRecipeName = "Stored Recipe Name";
+
+        PlannedMealDto meal = new()
+        {
+            Id         = mealId,
+            MealPlanId = planId,
+            RecipeId   = Guid.NewGuid(),
+            RecipeName = mealRecipeName,
+            MealType   = "Dinner",
+            Servings   = 1
+        };
+        MealPlanDto plan = new() { Id = planId, UserId = _userId };
+
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId)).ReturnsAsync(plan);
+        _repoMock.Setup(r => r.MarkMealAsCompletedAsync(mealId)).Returns(Task.CompletedTask);
+        _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
+            .ReturnsAsync(Guid.NewGuid());
+
+        MealPlanningController controller = CreateController();
+
+        await controller.CompletePlannedMeal(planId, mealId, null);
+
+        _repoMock.Verify(r => r.RecordCookingHistoryAsync(
+            It.Is<CookingHistoryRecord>(h => h.RecipeName == mealRecipeName), default), Times.Once);
+    }
+
+    // ── GetSuggestions ────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetSuggestions_ValidRequest_ReturnsOkWithSuggestionsFromService()
+    {
+        List<MealSuggestion> suggestions = new()
+        {
+            new MealSuggestion { RecipeId = Guid.NewGuid(), RecipeName = "Pasta", Score = 95m },
+            new MealSuggestion { RecipeId = Guid.NewGuid(), RecipeName = "Salad", Score = 80m }
         };
 
-        _mockRepository.Setup(r => r.GetMealPlanAsync(planId, _testUserId)).ReturnsAsync(plan);
-        _mockRepository.Setup(r => r.UpdateMealPlanAsync(planId, _testUserId, request.Name, request.StartDate, request.EndDate, "Active"))
-                       .Returns(Task.CompletedTask);
+        _suggestionMock.Setup(s => s.SuggestAsync(It.IsAny<SuggestionRequest>(), default))
+            .ReturnsAsync(suggestions);
 
-        var result = await _controller.UpdateMealPlan(planId, request);
+        MealPlanningController controller = CreateController();
+        SuggestionRequest request = new() { Count = 5 };
+
+        IActionResult result = await controller.GetSuggestions(request);
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(suggestions);
+    }
+
+    [Fact]
+    public async Task GetSuggestions_InjectsAuthenticatedUserIdIntoRequest()
+    {
+        _suggestionMock.Setup(s => s.SuggestAsync(It.IsAny<SuggestionRequest>(), default))
+            .ReturnsAsync(new List<MealSuggestion>());
+
+        MealPlanningController controller = CreateController();
+        SuggestionRequest request = new() { Count = 3 };
+
+        await controller.GetSuggestions(request);
+
+        _suggestionMock.Verify(s => s.SuggestAsync(
+            It.Is<SuggestionRequest>(r => r.UserId == _userId), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetSuggestions_ForwardsRequestPropertiesWithOverriddenUserId()
+    {
+        Guid householdId = Guid.NewGuid();
+        _suggestionMock.Setup(s => s.SuggestAsync(It.IsAny<SuggestionRequest>(), default))
+            .ReturnsAsync(new List<MealSuggestion>());
+
+        MealPlanningController controller = CreateController();
+        SuggestionRequest request = new()
+        {
+            HouseholdId    = householdId,
+            MealType       = "Breakfast",
+            SuggestionMode = SuggestionModes.SomethingNew,
+            Count          = 7
+        };
+
+        await controller.GetSuggestions(request);
+
+        _suggestionMock.Verify(s => s.SuggestAsync(
+            It.Is<SuggestionRequest>(r =>
+                r.UserId      == _userId     &&
+                r.HouseholdId == householdId &&
+                r.MealType    == "Breakfast" &&
+                r.Count       == 7),
+            default), Times.Once);
+    }
+
+    // ── GetCookingHistory ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetCookingHistory_ReturnsOkWithHistoryList()
+    {
+        List<CookingHistoryDto> history = new()
+        {
+            new CookingHistoryDto { Id = Guid.NewGuid(), UserId = _userId, RecipeName = "Pasta" },
+            new CookingHistoryDto { Id = Guid.NewGuid(), UserId = _userId, RecipeName = "Pizza" }
+        };
+
+        _repoMock.Setup(r => r.GetCookingHistoryAsync(_userId, 90, default))
+            .ReturnsAsync(history);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetCookingHistory();
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(history);
+    }
+
+    [Fact]
+    public async Task GetCookingHistory_CustomDaysBack_PassesDaysBackToRepository()
+    {
+        _repoMock.Setup(r => r.GetCookingHistoryAsync(_userId, 30, default))
+            .ReturnsAsync(new List<CookingHistoryDto>());
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetCookingHistory(daysBack: 30);
+
+        result.Should().BeOfType<OkObjectResult>();
+        _repoMock.Verify(r => r.GetCookingHistoryAsync(_userId, 30, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetCookingHistory_NoHistory_ReturnsOkWithEmptyList()
+    {
+        _repoMock.Setup(r => r.GetCookingHistoryAsync(_userId, 90, default))
+            .ReturnsAsync(new List<CookingHistoryDto>());
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.GetCookingHistory();
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.As<List<CookingHistoryDto>>().Should().BeEmpty();
+    }
+
+    // ── RecordCookingHistory ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task RecordCookingHistory_ValidRequest_ReturnsOkWithHistoryId()
+    {
+        Guid historyId = Guid.NewGuid();
+
+        _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
+            .ReturnsAsync(historyId);
+
+        MealPlanningController controller = CreateController();
+        RecordCookingHistoryRequest request = new()
+        {
+            RecipeId   = Guid.NewGuid(),
+            RecipeName = "Homemade Burger",
+            Servings   = 4,
+            MealType   = "Dinner"
+        };
+
+        IActionResult result = await controller.RecordCookingHistory(request);
+
+        OkObjectResult okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(new { id = historyId });
+    }
+
+    [Fact]
+    public async Task RecordCookingHistory_SetsAuthenticatedUserIdOnRecord()
+    {
+        _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
+            .ReturnsAsync(Guid.NewGuid());
+
+        MealPlanningController controller = CreateController();
+        RecordCookingHistoryRequest request = new()
+        {
+            RecipeId   = Guid.NewGuid(),
+            RecipeName = "Soup"
+        };
+
+        await controller.RecordCookingHistory(request);
+
+        _repoMock.Verify(r => r.RecordCookingHistoryAsync(
+            It.Is<CookingHistoryRecord>(h => h.UserId == _userId), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordCookingHistory_SetsSpontaneousSource()
+    {
+        _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
+            .ReturnsAsync(Guid.NewGuid());
+
+        MealPlanningController controller = CreateController();
+        RecordCookingHistoryRequest request = new()
+        {
+            RecipeId   = Guid.NewGuid(),
+            RecipeName = "Stew"
+        };
+
+        await controller.RecordCookingHistory(request);
+
+        _repoMock.Verify(r => r.RecordCookingHistoryAsync(
+            It.Is<CookingHistoryRecord>(h => h.Source == "Spontaneous"), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecordCookingHistory_NoCookedAt_DefaultsToCurrent()
+    {
+        DateTime before = DateTime.UtcNow.AddSeconds(-1);
+
+        _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
+            .ReturnsAsync(Guid.NewGuid());
+
+        MealPlanningController controller = CreateController();
+        RecordCookingHistoryRequest request = new()
+        {
+            RecipeId   = Guid.NewGuid(),
+            RecipeName = "Quick Meal",
+            CookedAt   = null   // should be filled by controller
+        };
+
+        await controller.RecordCookingHistory(request);
+
+        _repoMock.Verify(r => r.RecordCookingHistoryAsync(
+            It.Is<CookingHistoryRecord>(h => h.CookedAt >= before), default), Times.Once);
+    }
+
+    // ── UpdateCookingRating ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task UpdateCookingRating_ValidRequest_Returns204NoContent()
+    {
+        Guid historyId = Guid.NewGuid();
+        UpdateRatingRequest request = new() { Rating = 4, WouldCookAgain = true, Notes = "Really good!" };
+
+        _repoMock.Setup(r => r.UpdateCookingRatingAsync(
+                historyId, _userId, 4, true, "Really good!", default))
+            .Returns(Task.CompletedTask);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.UpdateCookingRating(historyId, request);
+
+        result.Should().BeOfType<NoContentResult>();
+        _repoMock.Verify(r => r.UpdateCookingRatingAsync(
+            historyId, _userId, 4, true, "Really good!", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateCookingRating_MinimalRequest_Returns204NoContent()
+    {
+        Guid historyId = Guid.NewGuid();
+        UpdateRatingRequest request = new() { Rating = 3 };
+
+        _repoMock.Setup(r => r.UpdateCookingRatingAsync(historyId, _userId, 3, null, null, default))
+            .Returns(Task.CompletedTask);
+
+        MealPlanningController controller = CreateController();
+
+        IActionResult result = await controller.UpdateCookingRating(historyId, request);
 
         result.Should().BeOfType<NoContentResult>();
     }
 
     [Fact]
-    public async Task UpdateMealPlan_WhenPlanNotFound_ReturnsNotFound()
+    public async Task UpdateCookingRating_PassesAuthenticatedUserIdToRepository()
     {
-        _mockRepository.Setup(r => r.GetMealPlanAsync(It.IsAny<Guid>(), _testUserId)).ReturnsAsync((MealPlanDto?)null);
+        Guid historyId = Guid.NewGuid();
+        UpdateRatingRequest request = new() { Rating = 5 };
 
-        var result = await _controller.UpdateMealPlan(Guid.NewGuid(), new UpdateMealPlanApiRequest
-        {
-            Name = "Test",
-            StartDate = DateTime.Today,
-            EndDate = DateTime.Today.AddDays(6)
-        });
+        _repoMock.Setup(r => r.UpdateCookingRatingAsync(
+                historyId, _userId, It.IsAny<byte>(), It.IsAny<bool?>(), It.IsAny<string?>(), default))
+            .Returns(Task.CompletedTask);
 
-        result.Should().BeOfType<NotFoundResult>();
-    }
+        MealPlanningController controller = CreateController();
 
-    // ──────────── CreateQuickMealPlan ────────────
+        await controller.UpdateCookingRating(historyId, request);
 
-    [Fact]
-    public async Task CreateQuickMealPlan_WhenAuthenticated_ReturnsOkWithId()
-    {
-        var planId = Guid.NewGuid();
-        _mockRepository.Setup(r => r.CreateMealPlanAsync(_testUserId, It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<string>()))
-                       .ReturnsAsync(planId);
-
-        var result = await _controller.CreateQuickMealPlan(new QuickMealPlanApiRequest
-        {
-            StartDate = DateTime.Today,
-            DurationDays = 7
-        });
-
-        result.Should().BeOfType<OkObjectResult>();
-        _mockRepository.Verify(r => r.CreateMealPlanAsync(_testUserId, DateTime.Today, DateTime.Today.AddDays(6), It.IsAny<string>()), Times.Once);
+        _repoMock.Verify(r => r.UpdateCookingRatingAsync(
+            historyId, _userId, 5, null, null, default), Times.Once);
     }
 }

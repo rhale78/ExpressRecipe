@@ -7,6 +7,7 @@ using ExpressRecipe.RecipeService.Services;
 using ExpressRecipe.Shared.CQRS;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
+using ExpressRecipe.Shared.Units;
 using ExpressRecipe.Client.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -61,6 +62,7 @@ var connectionString = builder.Configuration.GetConnectionString("recipedb")
 
 builder.Services.AddScoped<IRecipeImportRepository>(sp => new RecipeImportRepository(connectionString));
 builder.Services.AddScoped<ICommentsRepository>(sp => new CommentsRepository(connectionString));
+builder.Services.AddScoped<IRecipeNutritionRepository>(sp => new RecipeNutritionRepository(connectionString));
 builder.Services.AddScoped<IRecipeRepository>(sp => 
 {
     var client = sp.GetRequiredService<IIngredientServiceClient>();
@@ -84,6 +86,10 @@ if (messagingEnabled)
 {
     builder.AddRabbitMqMessaging("messaging");
     builder.Services.AddSingleton<IRecipeEventPublisher, RecipeEventPublisher>();
+
+    // Handle nutrition query messages from MealPlanningService and other consumers
+    builder.Services.AddScoped<RecipeNutritionQueryHandler>();
+    builder.Services.AddHostedService<RecipeNutritionQuerySubscriber>();
 
     // Replace REST ingredient client with messaging-based client (last registration wins)
     builder.Services.AddScoped<IIngredientServiceClient>(sp =>
@@ -123,6 +129,20 @@ builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectio
 builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloadService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ServingSizeService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ShoppingListIntegrationService>();
+
+// Register print service
+builder.Services.AddScoped<IRecipePrintService, RecipePrintService>();
+
+// Register unit conversion (uses HttpIngredientDensityResolver to call ProductService)
+var productServiceUrl = builder.Configuration["Services:ProductService:BaseUrl"]
+    ?? builder.Configuration["services__productservice__http__0"]
+    ?? "http://productservice";
+builder.Services.AddHttpClient<IIngredientDensityResolver, HttpIngredientDensityResolver>(client =>
+{
+    client.BaseAddress = new Uri(productServiceUrl.TrimEnd('/') + "/");
+});
+builder.Services.AddScoped<IUnitConversionService>(sp =>
+    new UnitConversionService(sp.GetRequiredService<IIngredientDensityResolver>()));
 
 // Add controllers
 builder.Services.AddControllers();

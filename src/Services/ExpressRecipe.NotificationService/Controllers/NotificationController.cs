@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using ExpressRecipe.NotificationService.Data;
 
 namespace ExpressRecipe.NotificationService.Controllers;
@@ -13,10 +15,14 @@ public class NotificationController : ControllerBase
     private readonly ILogger<NotificationController> _logger;
     private readonly INotificationRepository _repository;
 
-    public NotificationController(ILogger<NotificationController> logger, INotificationRepository repository)
+    private readonly IConfiguration _configuration;
+
+    public NotificationController(ILogger<NotificationController> logger, INotificationRepository repository,
+        IConfiguration configuration)
     {
-        _logger = logger;
-        _repository = repository;
+        _logger        = logger;
+        _repository    = repository;
+        _configuration = configuration;
     }
 
     private Guid? GetUserId()
@@ -377,6 +383,84 @@ public class NotificationController : ControllerBase
             _logger.LogError(ex, "Error during GDPR hard-delete for user data");
             return StatusCode(500, new { message = "An error occurred while deleting user notification data" });
         }
+    // Allowlist of valid entity types for action URL construction.
+    private static readonly HashSet<string> AllowedEntityTypes =
+        new(StringComparer.OrdinalIgnoreCase) { "PlannedMeal", "InventoryItem", "Recipe", "CookingTimer" };
+
+    /// <summary>
+    /// Service-to-service endpoint for creating in-app notifications from other microservices.
+    /// Protected by an API key header (X-Internal-Api-Key) when InternalApi:Key is configured.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpPost("internal")]
+    public async Task<IActionResult> CreateInternal([FromBody] InternalNotificationRequest request)
+    {
+        // Validate service-to-service API key when one is configured.
+        string? configuredKey = _configuration["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
+        try
+        {
+            if (request.UserId == Guid.Empty)
+                return BadRequest(new { error = "UserId is required" });
+
+            // Build action URL — prefer an explicit ActionUrl, fall back to entity-type routing.
+            string? actionUrl = request.ActionUrl;
+            Dictionary<string, string>? metadata = null;
+
+            if (!string.IsNullOrEmpty(request.Priority)
+                || !string.IsNullOrEmpty(request.RelatedEntityType)
+                || request.RelatedEntityId.HasValue)
+            {
+                metadata = new Dictionary<string, string>();
+                if (!string.IsNullOrEmpty(request.Priority))
+                    metadata["priority"] = request.Priority;
+                if (!string.IsNullOrEmpty(request.RelatedEntityType))
+                {
+                    if (!AllowedEntityTypes.Contains(request.RelatedEntityType))
+                        return BadRequest(new { error = "Invalid RelatedEntityType" });
+                    metadata["relatedEntityType"] = request.RelatedEntityType;
+                    if (actionUrl == null && request.RelatedEntityId.HasValue)
+                        actionUrl = $"/{request.RelatedEntityType.ToLowerInvariant()}/{request.RelatedEntityId}";
+                }
+                if (request.RelatedEntityId.HasValue)
+                    metadata["relatedEntityId"] = request.RelatedEntityId.Value.ToString();
+            }
+
+            Guid notificationId = await _repository.CreateNotificationAsync(
+                request.UserId, request.Type, request.Title, request.Message, actionUrl, metadata);
+
+            return Ok(new { id = notificationId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating internal notification for user {UserId}", request.UserId);
+            return StatusCode(500, new { message = "An error occurred while creating the notification" });
+        }
+    }
+
+
+    // Constant-time comparison to guard against timing attacks when comparing API keys.
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) { return false; }
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        // Pad the shorter array so both buffers are equal length before comparing.
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 }
 
@@ -406,4 +490,15 @@ public class MarkNotificationReadRequest
 {
     public Guid NotificationId { get; set; }
     public bool IsRead { get; set; } = true;
+/// <summary>Request body for the service-to-service internal notification endpoint.</summary>
+public class InternalNotificationRequest
+{
+    public Guid UserId { get; set; }
+    public string Type { get; set; } = string.Empty;
+    public string Priority { get; set; } = "Normal";
+    public string Title { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public string? ActionUrl { get; set; }
+    public string? RelatedEntityType { get; set; }
+    public Guid? RelatedEntityId { get; set; }
 }

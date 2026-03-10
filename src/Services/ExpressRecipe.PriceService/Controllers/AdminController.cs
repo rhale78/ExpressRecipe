@@ -193,6 +193,14 @@ public class AdminController : ControllerBase
             return StatusCode(500, new { message = "An error occurred" });
         }
     }
+
+    /// <summary>GET /api/admin/import/trigger/{source} — Trigger a named import worker by source name</summary>
+    [HttpGet("import/trigger/{source}")]
+    public IActionResult TriggerNamedImport(string source)
+    {
+        _logger.LogInformation("Named import trigger requested for source: {Source}", source);
+        return Accepted(new { message = $"Import trigger for '{source}' is not yet wired (configure the relevant worker's FilePath and Enabled=true)", source });
+    }
 }
 
 public class TestBatchLookupRequest

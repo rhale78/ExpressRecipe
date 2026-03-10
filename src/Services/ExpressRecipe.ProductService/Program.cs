@@ -6,6 +6,7 @@ using ExpressRecipe.ProductService.Saga;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
+using ExpressRecipe.Shared.Units;
 using ExpressRecipe.Client.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -70,14 +71,27 @@ builder.Services.AddScoped<IIngredientRepository>(sp =>
     var logger = sp.GetRequiredService<ILogger<IngredientRepository>>();
     return new IngredientRepository(connectionString, client, cache, logger);
 });
-builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
-builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
 builder.Services.AddScoped<IBaseIngredientRepository>(sp => new BaseIngredientRepository(connectionString));
 builder.Services.AddScoped<IStoreRepository>(sp => new StoreRepository(connectionString));
 builder.Services.AddScoped<ICouponRepository>(sp => new CouponRepository(connectionString));
 builder.Services.AddScoped<IProductStagingRepository>(sp => 
     new ProductStagingRepository(connectionString, sp.GetRequiredService<ILogger<ProductStagingRepository>>()));
 builder.Services.AddScoped<IAllergenRepository>(sp => new AllergenRepository(connectionString));
+
+// Register food catalog repository and substitution service
+builder.Services.AddScoped<IFoodCatalogRepository>(sp => new FoodCatalogRepository(connectionString));
+builder.Services.AddScoped<IFoodSubstitutionService, FoodSubstitutionService>();
+builder.Services.AddScoped<CatalogSeedService>();
+
+// Named HttpClients used by FoodSubstitutionService
+builder.Services.AddHttpClient("SafeForkService", client =>
+{
+    client.BaseAddress = new Uri("http://safeforkservice");
+});
+builder.Services.AddHttpClient("InventoryService", client =>
+{
+    client.BaseAddress = new Uri("http://inventoryservice");
+});
 
 // Register OpenFoodFacts import service
 builder.Services.AddHttpClient<OpenFoodFactsImportService>();
@@ -93,6 +107,22 @@ builder.Services.AddScoped<OpenFoodFactsImportService>(sp =>
     return new OpenFoodFactsImportService(httpClient, productRepo, stagingRepo, imageRepo, logger, ingredientClient, configuration);
 });
 builder.Services.AddScoped<USDAFoodDataImportService>();
+
+// Register unit conversion services
+builder.Services.AddScoped<IngredientDensityResolver>(sp => new IngredientDensityResolver(
+    connectionString,
+    sp.GetRequiredService<HybridCacheService>()));
+builder.Services.AddScoped<IIngredientDensityResolver>(sp =>
+    sp.GetRequiredService<IngredientDensityResolver>());
+builder.Services.AddScoped<IUnitConversionService>(sp =>
+    new UnitConversionService(sp.GetRequiredService<IIngredientDensityResolver>()));
+
+// Register USDA portion import service and hosted worker
+builder.Services.AddScoped<UsdaPortionImportService>(sp => new UsdaPortionImportService(
+    connectionString,
+    sp.GetRequiredService<IConfiguration>(),
+    sp.GetRequiredService<ILogger<UsdaPortionImportService>>()));
+builder.Services.AddHostedService<UsdaPortionImportWorker>();
 
 // Register background workers
 builder.Services.AddHostedService<ExpressRecipe.ProductService.Workers.ProductDataImportWorker>();
@@ -163,6 +193,13 @@ if (!Directory.Exists(migrationsPath))
 }
 var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
 await app.RunMigrationsAsync(connectionString, migrations);
+
+// Seed food group catalog data if the table is empty
+using (IServiceScope seedScope = app.Services.CreateScope())
+{
+    CatalogSeedService seedService = seedScope.ServiceProvider.GetRequiredService<CatalogSeedService>();
+    await seedService.SeedIfEmptyAsync();
+}
 
 // Configure the HTTP request pipeline
 app.MapDefaultEndpoints();

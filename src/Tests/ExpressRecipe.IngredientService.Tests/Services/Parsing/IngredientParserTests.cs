@@ -1,6 +1,6 @@
-using ExpressRecipe.IngredientService.Data;
 using ExpressRecipe.IngredientService.Services.Parsing;
 using ExpressRecipe.Shared.DTOs.Product;
+using ExpressRecipe.Shared.Matching;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -9,15 +9,15 @@ namespace ExpressRecipe.IngredientService.Tests.Services.Parsing;
 
 public class IngredientParserTests
 {
-    private readonly Mock<IIngredientRepository> _mockRepo;
+    private readonly Mock<IIngredientMatchingService> _mockMatching;
     private readonly Mock<ILogger<IngredientParser>> _mockLogger;
     private readonly IngredientParser _parser;
 
     public IngredientParserTests()
     {
-        _mockRepo = new Mock<IIngredientRepository>();
+        _mockMatching = new Mock<IIngredientMatchingService>();
         _mockLogger = new Mock<ILogger<IngredientParser>>();
-        _parser = new IngredientParser(_mockRepo.Object, _mockLogger.Object);
+        _parser = new IngredientParser(_mockMatching.Object, _mockLogger.Object);
     }
 
     [Fact]
@@ -32,8 +32,8 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_SimpleIngredient_ExtractsName()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("flour", "flour"));
 
         var result = await _parser.ParseIngredientStringAsync("flour");
 
@@ -46,8 +46,8 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_WithQuantityAndUnit_ParsesCorrectly()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("flour", "flour"));
 
         var result = await _parser.ParseIngredientStringAsync("2 cups flour");
 
@@ -60,8 +60,8 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_WithFraction_ParsesQuantity()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("salt", "salt"));
 
         var result = await _parser.ParseIngredientStringAsync("1/2 tsp salt");
 
@@ -74,10 +74,17 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_WithMatchingIngredient_SetsDatabaseId()
     {
-        var ingredientId = Guid.NewGuid();
-        var matchedIngredient = new IngredientDto { Id = ingredientId, Name = "flour" };
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync("flour"))
-            .ReturnsAsync(matchedIngredient);
+        Guid ingredientId = Guid.NewGuid();
+        _mockMatching.Setup(m => m.MatchAsync("flour", It.IsAny<string>(), null, default))
+            .ReturnsAsync(new MatchResult
+            {
+                IngredientId = ingredientId,
+                IngredientName = "flour",
+                Confidence = 1.0m,
+                Strategy = MatchStrategy.Exact,
+                RawInput = "flour",
+                NormalizedInput = "flour"
+            });
 
         var result = await _parser.ParseIngredientStringAsync("flour");
 
@@ -89,8 +96,8 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_WithNoMatch_IngredientIdIsNull()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("flour", "flour"));
 
         var result = await _parser.ParseIngredientStringAsync("flour");
 
@@ -102,8 +109,8 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_WithTablespoon_NormalizesToTbsp()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("butter", "butter"));
 
         var result = await _parser.ParseIngredientStringAsync("2 tablespoons butter");
 
@@ -115,8 +122,8 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_WithPounds_NormalizesToLb()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("chicken", "chicken"));
 
         var result = await _parser.ParseIngredientStringAsync("1 lb chicken");
 
@@ -129,8 +136,9 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_CommaDelimited_MultipleComponents()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync((string raw, string _, Guid? __, CancellationToken ___) =>
+                MatchResult.Unresolved(raw, raw));
 
         var result = await _parser.ParseIngredientStringAsync("flour, salt");
 
@@ -142,8 +150,8 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_OriginalStringPreserved()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("flour", "flour"));
 
         const string input = "2 cups flour";
         var result = await _parser.ParseIngredientStringAsync(input);
@@ -154,8 +162,9 @@ public class IngredientParserTests
     [Fact]
     public async Task ParseIngredientStringAsync_OrderIndexAssignedSequentially()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync((string raw, string _, Guid? __, CancellationToken ___) =>
+                MatchResult.Unresolved(raw, raw));
 
         var result = await _parser.ParseIngredientStringAsync("flour, salt, sugar");
 
@@ -167,8 +176,9 @@ public class IngredientParserTests
     [Fact]
     public async Task BulkParseIngredientStringsAsync_MultipleStrings_ParsesAll()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync((string raw, string _, Guid? __, CancellationToken ___) =>
+                MatchResult.Unresolved(raw, raw));
 
         var result = await _parser.BulkParseIngredientStringsAsync(new[] { "flour", "salt" });
 
@@ -182,8 +192,8 @@ public class IngredientParserTests
     [Fact]
     public async Task BulkParseIngredientStringsAsync_DuplicateStrings_ParsedOnce()
     {
-        _mockRepo.Setup(r => r.GetIngredientByNameAsync(It.IsAny<string>()))
-            .ReturnsAsync((IngredientDto?)null);
+        _mockMatching.Setup(m => m.MatchAsync(It.IsAny<string>(), It.IsAny<string>(), null, default))
+            .ReturnsAsync(MatchResult.Unresolved("flour", "flour"));
 
         var result = await _parser.BulkParseIngredientStringsAsync(new[] { "flour", "flour" });
 
@@ -191,7 +201,7 @@ public class IngredientParserTests
         result.Should().HaveCount(1);
         result.Should().ContainKey("flour");
 
-        // Repository should have been called exactly once for the single unique ingredient
-        _mockRepo.Verify(r => r.GetIngredientByNameAsync("flour"), Times.Once());
+        // Matching service should have been called exactly once for the single unique ingredient
+        _mockMatching.Verify(m => m.MatchAsync("flour", It.IsAny<string>(), null, default), Times.Once());
     }
 }

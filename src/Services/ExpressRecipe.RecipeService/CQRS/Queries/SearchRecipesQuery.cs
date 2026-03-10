@@ -15,9 +15,10 @@ public record SearchRecipesQuery : IQuery<SearchRecipesResult>
     public int? MaxPrepTime { get; init; }
     public int? MaxTotalTime { get; init; }
     public decimal? MinRating { get; init; }
+    public decimal? MaxCostPerServing { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
-    public string SortBy { get; init; } = "CreatedAt"; // CreatedAt, Rating, ViewCount, Name
+    public string SortBy { get; init; } = "CreatedAt"; // CreatedAt, Rating, ViewCount, Name, Cost
     public bool SortDescending { get; init; } = true;
 }
 

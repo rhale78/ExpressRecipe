@@ -1,7 +1,9 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.ShoppingService.Data;
+using ExpressRecipe.ShoppingService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Units;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,6 +40,38 @@ builder.Services.AddScoped<IShoppingRepository>(sp =>
         connectionString,
         sp.GetRequiredService<ILogger<ShoppingRepository>>(),
         sp.GetRequiredService<IHttpClientFactory>()));
+
+// Register HTTP clients for external service integration
+builder.Services.AddHttpClient("PriceService", client =>
+{
+    string baseUrl = builder.Configuration["Services:PriceService"] ?? "http://priceservice";
+    client.BaseAddress = new Uri(baseUrl);
+});
+builder.Services.AddHttpClient("InventoryService", client =>
+{
+    string baseUrl = builder.Configuration["Services:InventoryService"] ?? "http://inventoryservice";
+    client.BaseAddress = new Uri(baseUrl);
+});
+builder.Services.AddHttpClient("RecipeService", client =>
+{
+    string baseUrl = builder.Configuration["Services:RecipeService"] ?? "http://recipeservice";
+    client.BaseAddress = new Uri(baseUrl);
+});
+
+// Register optimization and session services
+builder.Services.AddScoped<IShoppingOptimizationService, ShoppingOptimizationService>();
+builder.Services.AddScoped<IShoppingSessionService, ShoppingSessionService>();
+
+// Register unit conversion (uses HttpIngredientDensityResolver to call ProductService)
+var shoppingProductServiceUrl = builder.Configuration["Services:ProductService:BaseUrl"]
+    ?? builder.Configuration["services__productservice__http__0"]
+    ?? "http://productservice";
+builder.Services.AddHttpClient<IIngredientDensityResolver, HttpIngredientDensityResolver>(client =>
+{
+    client.BaseAddress = new Uri(shoppingProductServiceUrl.TrimEnd('/') + "/");
+});
+builder.Services.AddScoped<IUnitConversionService>(sp =>
+    new UnitConversionService(sp.GetRequiredService<IIngredientDensityResolver>()));
 
 // Add controllers
 builder.Services.AddControllers();
@@ -79,6 +113,12 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
 app.MapControllers();
 
 app.Run();

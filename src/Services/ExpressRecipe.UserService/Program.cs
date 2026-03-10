@@ -66,6 +66,7 @@ builder.Services.AddScoped<IFamilyScoreRepository>(sp => new FamilyScoreReposito
 builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(connectionString));
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
+builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>

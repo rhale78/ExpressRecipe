@@ -97,3 +97,52 @@ public class ProductApiClient : ApiClientBase, IProductApiClient
         public Guid Id { get; set; }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Catalog API client (food groups + substitutes)
+// ---------------------------------------------------------------------------
+
+public interface ICatalogApiClient
+{
+    Task<List<FoodGroupDto>?> GetFoodGroupsAsync(string? search = null, string? functionalRole = null);
+    Task<FoodGroupDetailResponse?> GetFoodGroupAsync(Guid id);
+    Task<List<SubstituteOptionDto>?> GetSubstitutesAsync(Guid ingredientId, Guid? userId = null, bool filterAllergens = false);
+    Task<bool> RecordSubstitutionAsync(RecordSubstitutionRequest request);
+}
+
+public class CatalogApiClient : ApiClientBase, ICatalogApiClient
+{
+    public CatalogApiClient(HttpClient httpClient, ITokenProvider tokenProvider)
+        : base(httpClient, tokenProvider)
+    {
+    }
+
+    public async Task<List<FoodGroupDto>?> GetFoodGroupsAsync(string? search = null, string? functionalRole = null)
+    {
+        List<string> query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(search)) { query.Add($"search={Uri.EscapeDataString(search)}"); }
+        if (!string.IsNullOrWhiteSpace(functionalRole)) { query.Add($"functionalRole={Uri.EscapeDataString(functionalRole)}"); }
+        string qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return await GetAsync<List<FoodGroupDto>>($"/api/catalog/food-groups{qs}");
+    }
+
+    public async Task<FoodGroupDetailResponse?> GetFoodGroupAsync(Guid id)
+    {
+        return await GetAsync<FoodGroupDetailResponse>($"/api/catalog/food-groups/{id}");
+    }
+
+    public async Task<List<SubstituteOptionDto>?> GetSubstitutesAsync(
+        Guid ingredientId, Guid? userId = null, bool filterAllergens = false)
+    {
+        List<string> query = new List<string>();
+        if (userId.HasValue) { query.Add($"userId={userId}"); }
+        if (filterAllergens) { query.Add("filterAllergens=true"); }
+        string qs = query.Count > 0 ? "?" + string.Join("&", query) : "";
+        return await GetAsync<List<SubstituteOptionDto>>($"/api/catalog/substitutes/{ingredientId}{qs}");
+    }
+
+    public async Task<bool> RecordSubstitutionAsync(RecordSubstitutionRequest request)
+    {
+        return await PostAsync("/api/catalog/substitution-history", request);
+    }
+}

@@ -79,4 +79,38 @@ public static partial class RecipeServiceLogs
         Level = LogLevel.Information,
         Message = "[RecipeProcessing→IngredientSvc] Flush: {RecipeCount} recipes, {IngredientCount} unique ingredients → bulk create+lookup")]
     public static partial void LogIngredientFlush(this ILogger logger, int recipeCount, int ingredientCount);
+
+    // ------------------------------------------------------------------
+    // Share token events (3013–3020)
+    // ------------------------------------------------------------------
+
+    [LoggerMessage(
+        EventId = 3013,
+        Level = LogLevel.Information,
+        Message = "[RecipeShare] Generated share token for recipe {RecipeId} by user {UserId} (expires in {ExpiryDays} days)")]
+    public static partial void LogShareTokenGenerated(this ILogger logger, Guid recipeId, Guid userId, int expiryDays);
+
+    [LoggerMessage(
+        EventId = 3014,
+        Level = LogLevel.Information,
+        Message = "[RecipeShare] Token '{Token}' accessed – ViewCount now {ViewCount}")]
+    public static partial void LogShareTokenAccessed(this ILogger logger, string token, int viewCount);
+
+    [LoggerMessage(
+        EventId = 3015,
+        Level = LogLevel.Information,
+        Message = "[RecipeShare] Token '{Token}' revoked by user {UserId}")]
+    public static partial void LogShareTokenRevoked(this ILogger logger, string token, Guid userId);
+
+    [LoggerMessage(
+        EventId = 3016,
+        Level = LogLevel.Information,
+        Message = "[RecipePrint] Generated {Format} for recipe {RecipeId}")]
+    public static partial void LogRecipePrinted(this ILogger logger, string format, Guid recipeId);
+
+    [LoggerMessage(
+        EventId = 3017,
+        Level = LogLevel.Information,
+        Message = "[HouseholdFavorite] Favorite {FavoriteId} household share set to {Shared} for household {HouseholdId}")]
+    public static partial void LogHouseholdShareUpdated(this ILogger logger, Guid favoriteId, bool shared, Guid? householdId);
 }

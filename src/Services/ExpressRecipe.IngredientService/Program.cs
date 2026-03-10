@@ -2,9 +2,11 @@ using System.Text;
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.IngredientService.Data;
 using ExpressRecipe.IngredientService.Services;
+using ExpressRecipe.IngredientService.Services.Matching;
 using ExpressRecipe.IngredientService.Services.Parsing;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.CQRS;
+using ExpressRecipe.Shared.Matching;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -21,6 +23,15 @@ var connectionString = builder.Configuration.GetConnectionString("ingredientdb")
 
 // Repositories
 builder.Services.AddScoped<IIngredientRepository>(sp => new IngredientRepository(connectionString));
+builder.Services.AddScoped<IIngredientMatchingRepository>(sp => new IngredientMatchingRepository(connectionString));
+
+// Matching service
+builder.Services.AddScoped<IIngredientMatchingService>(sp =>
+    new IngredientMatchingService(
+        sp.GetRequiredService<IIngredientMatchingRepository>(),
+        sp.GetRequiredService<IIngredientRepository>(),
+        sp.GetRequiredService<ExpressRecipe.Shared.Services.HybridCacheService>(),
+        sp.GetRequiredService<ILogger<IngredientMatchingService>>()));
 
 // Parsing Services
 builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>();

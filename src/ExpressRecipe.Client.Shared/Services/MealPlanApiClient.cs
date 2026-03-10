@@ -19,11 +19,17 @@ public interface IMealPlanApiClient
     Task<MealPlanWeekView?> GetWeekViewAsync(DateTime weekStart);
     Task<MealPlanNutritionSummaryDto?> GetNutritionSummaryAsync(Guid id);
 
+    // Month calendar
+    Task<List<MealPlanCalendarDay>?> GetCalendarAsync(int year, int month);
+
     // Meal Plan Entries
     Task<Guid?> AddMealEntryAsync(AddMealPlanEntryRequest request);
     Task<bool> UpdateMealEntryAsync(Guid entryId, UpdateMealPlanEntryRequest request);
     Task<bool> DeleteMealEntryAsync(Guid entryId);
     Task<bool> MarkMealPreparedAsync(MarkMealPreparedRequest request);
+
+    // Drag-and-drop move
+    Task<bool> MoveMealAsync(Guid mealId, DateOnly newDate, string newMealType);
 
     // Advanced operations
     Task<Guid?> GenerateShoppingListAsync(GenerateShoppingListFromMealPlanRequest request);
@@ -322,6 +328,40 @@ public class MealPlanApiClient : IMealPlanApiClient
         try
         {
             var response = await _httpClient.PostAsync($"/api/mealplan/{id}/archive", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<List<MealPlanCalendarDay>?> GetCalendarAsync(int year, int month)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<MealPlanCalendarDay>>(
+                $"/api/mealplanning/calendar?year={year}&month={month}");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> MoveMealAsync(Guid mealId, DateOnly newDate, string newMealType)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"/api/mealplanning/meals/{mealId}/move",
+                new { newDate, newMealType });
             return response.IsSuccessStatusCode;
         }
         catch

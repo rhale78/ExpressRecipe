@@ -11,4 +11,7 @@
     <PackageReference Include="QuestPDF" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
+  </ItemGroup>
 </Project>

@@ -31,5 +31,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Data\Seeds\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

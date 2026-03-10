@@ -1,5 +1,5 @@
 using ExpressRecipe.Shared.DTOs.Product;
-using ExpressRecipe.IngredientService.Data;
+using ExpressRecipe.Shared.Matching;
 using System.Text.RegularExpressions;
 
 namespace ExpressRecipe.IngredientService.Services.Parsing;
@@ -12,14 +12,14 @@ public interface IIngredientParser
 
 public class IngredientParser : IIngredientParser
 {
-    private readonly IIngredientRepository _ingredientRepository;
+    private readonly IIngredientMatchingService _matchingService;
     private readonly ILogger<IngredientParser> _logger;
 
     public IngredientParser(
-        IIngredientRepository ingredientRepository,
+        IIngredientMatchingService matchingService,
         ILogger<IngredientParser> logger)
     {
-        _ingredientRepository = ingredientRepository;
+        _matchingService = matchingService;
         _logger = logger;
     }
 
@@ -230,16 +230,16 @@ public class IngredientParser : IIngredientParser
 
     private async Task MatchComponentsToIngredientsAsync(List<ParsedIngredientComponent> components)
     {
-        foreach (var component in components)
+        foreach (ParsedIngredientComponent component in components)
         {
-            // Try matching with the CleanName if available
-            var nameToMatch = component.CleanName ?? component.Name;
-            var ingredient = await _ingredientRepository.GetIngredientByNameAsync(nameToMatch);
+            string nameToMatch = component.CleanName ?? component.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(nameToMatch)) { continue; }
 
-            if (ingredient != null)
+            MatchResult match = await _matchingService.MatchAsync(nameToMatch, "IngredientParser");
+            if (match.IsResolved)
             {
-                component.BaseIngredientId = ingredient.Id;
-                component.MatchedName = ingredient.Name;
+                component.BaseIngredientId = match.IngredientId;
+                component.MatchedName = match.IngredientName;
             }
 
             // Match sub-components

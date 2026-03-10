@@ -1,0 +1,197 @@
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Product
+@inject ICatalogApiClient CatalogApi
+@inject IToastService ToastService
+
+@* Substitute ingredient bottom sheet *@
+
+@if (IsOpen)
+{
+    <div class="substitute-sheet-overlay" @onclick="Close">
+        <div class="substitute-sheet" @onclick:stopPropagation="true">
+            <div class="substitute-sheet-header">
+                <h5 class="mb-0">Substitutes for <strong>@IngredientName</strong></h5>
+                <button class="btn-close" @onclick="Close" aria-label="Close"></button>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="substitute-sheet-body text-center py-4">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    <p class="mt-2 text-muted small">Finding substitutes…</p>
+                </div>
+            }
+            else if (_substitutes == null || _substitutes.Count == 0)
+            {
+                <div class="substitute-sheet-body text-center py-4">
+                    <p class="text-muted">No substitutes found for this ingredient.</p>
+                </div>
+            }
+            else
+            {
+                <div class="substitute-sheet-body">
+                    @foreach (SubstituteOptionDto sub in _substitutes)
+                    {
+                        <div class="substitute-card @(sub.IsOnHand ? "on-hand" : "")">
+                            <div class="d-flex align-items-start gap-2">
+                                <div class="flex-grow-1">
+                                    <div class="substitute-name fw-semibold">
+                                        @sub.Name
+                                        @if (sub.IsOnHand)
+                                        {
+                                            <span class="badge bg-success ms-1">✓ In pantry</span>
+                                        }
+                                        @if (sub.UserUsedBefore)
+                                        {
+                                            <span class="badge bg-info ms-1">Used before</span>
+                                        }
+                                    </div>
+
+                                    @if (!string.IsNullOrWhiteSpace(sub.SubstitutionRatio))
+                                    {
+                                        <div class="substitute-ratio text-muted small">📐 @sub.SubstitutionRatio</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(sub.BestFor))
+                                    {
+                                        <div class="substitute-bestfor text-muted small">✅ Best for: @sub.BestFor</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(sub.NotSuitableFor))
+                                    {
+                                        <div class="substitute-notsuitable text-muted small">⚠️ Not for: @sub.NotSuitableFor</div>
+                                    }
+                                    @if (sub.UserHistoryRating.HasValue)
+                                    {
+                                        <div class="substitute-rating text-warning small">
+                                            ⭐ Your rating: @sub.UserHistoryRating.Value.ToString("F1")
+                                        </div>
+                                    }
+
+                                    <div class="substitute-actions mt-2 d-flex gap-2">
+                                        @if (sub.HasHomemadeRecipe && sub.HomemadeRecipeId.HasValue)
+                                        {
+                                            <a href="/recipes/@sub.HomemadeRecipeId" class="btn btn-sm btn-outline-secondary">
+                                                🍳 Make it
+                                            </a>
+                                        }
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => MarkAsUsed(sub)">
+                                            I used this
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .substitute-sheet-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 1050;
+        display: flex;
+        align-items: flex-end;
+    }
+    .substitute-sheet {
+        background: #fff;
+        border-radius: 16px 16px 0 0;
+        width: 100%;
+        max-height: 85vh;
+        overflow-y: auto;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+        animation: slideUp 0.25s ease;
+    }
+    @@keyframes slideUp {
+        from { transform: translateY(100%); }
+        to   { transform: translateY(0); }
+    }
+    .substitute-sheet-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-bottom: 1px solid #eee;
+        position: sticky;
+        top: 0;
+        background: #fff;
+    }
+    .substitute-sheet-body { padding: 12px 20px 24px; }
+    .substitute-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: #fafafa;
+    }
+    .substitute-card.on-hand {
+        border-color: #28a745;
+        background: #f0fff4;
+    }
+</style>
+
+@code {
+    [Parameter] public Guid? IngredientId { get; set; }
+    [Parameter] public string IngredientName { get; set; } = "this ingredient";
+    [Parameter] public Guid? UserId { get; set; }
+    [Parameter] public Guid? RecipeId { get; set; }
+    [Parameter] public bool FilterAllergens { get; set; }
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<SubstituteOptionDto>? _substitutes;
+    private bool _isLoading;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen && IngredientId.HasValue && _substitutes == null)
+        {
+            await LoadSubstitutes();
+        }
+    }
+
+    private async Task LoadSubstitutes()
+    {
+        _isLoading = true;
+        try
+        {
+            _substitutes = await CatalogApi.GetSubstitutesAsync(IngredientId!.Value, UserId, FilterAllergens);
+        }
+        catch
+        {
+            _substitutes = new List<SubstituteOptionDto>();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task MarkAsUsed(SubstituteOptionDto sub)
+    {
+        try
+        {
+            await CatalogApi.RecordSubstitutionAsync(new RecordSubstitutionRequest
+            {
+                OriginalIngredientId = IngredientId,
+                SubstituteIngredientId = sub.IngredientId,
+                SubstituteCustomName = sub.IngredientId == null ? sub.Name : null,
+                RecipeId = RecipeId
+            });
+            ToastService.ShowSuccess($"Recorded use of {sub.Name}!");
+        }
+        catch
+        {
+            ToastService.ShowError("Could not record substitution.");
+        }
+    }
+
+    private async Task Close()
+    {
+        _substitutes = null;
+        await OnClose.InvokeAsync();
+    }
+}

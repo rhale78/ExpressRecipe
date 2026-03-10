@@ -26,6 +26,13 @@ public interface IRecipeApiClient
     Task<ImportRecipeResponse?> ImportRecipeFromPasteAsync(string pastedContent);
     Task<ImportRecipeResponse?> ImportRecipeFromUrlAsync(string url);
     Task<RecipeImportValidationResult?> ValidateRecipeImportAsync(ImportRecipeRequest request);
+
+    // Share tokens & print
+    Task<string?> GetShareTokenAsync(Guid recipeId, int expiryDays = 30);
+    Task<RecipeShareTokenDto?> GetSharedRecipeAsync(string token);
+    Task<bool> SetHouseholdShareAsync(Guid favoriteId, HouseholdShareRequest request);
+    Task<List<RecipeDto>?> GetHouseholdSharedRecipesAsync(Guid householdId);
+    Task<bool> ShareByEmailAsync(Guid recipeId, ShareRecipeEmailRequest request);
 }
 
 public class RecipeApiClient : ApiClientBase, IRecipeApiClient
@@ -140,5 +147,30 @@ public class RecipeApiClient : ApiClientBase, IRecipeApiClient
     private class FavoriteStatusResponse
     {
         public bool IsFavorite { get; set; }
+    }
+
+    public async Task<string?> GetShareTokenAsync(Guid recipeId, int expiryDays = 30)
+    {
+        return await GetAsync<string>($"/api/recipes/{recipeId}/share-token?expiryDays={expiryDays}");
+    }
+
+    public async Task<RecipeShareTokenDto?> GetSharedRecipeAsync(string token)
+    {
+        return await GetAsync<RecipeShareTokenDto>($"/api/recipes/shared/{token}");
+    }
+
+    public async Task<bool> SetHouseholdShareAsync(Guid favoriteId, HouseholdShareRequest request)
+    {
+        return await PutAsync($"/api/recipes/favorites/{favoriteId}/household-share", request);
+    }
+
+    public async Task<List<RecipeDto>?> GetHouseholdSharedRecipesAsync(Guid householdId)
+    {
+        return await GetAsync<List<RecipeDto>>($"/api/recipes/household-shared?householdId={householdId}");
+    }
+
+    public async Task<bool> ShareByEmailAsync(Guid recipeId, ShareRecipeEmailRequest request)
+    {
+        return await PostAsync($"/api/recipes/{recipeId}/share", request);
     }
 }
