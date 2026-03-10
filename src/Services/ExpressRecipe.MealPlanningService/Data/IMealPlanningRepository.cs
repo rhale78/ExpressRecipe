@@ -11,6 +11,7 @@ public interface IMealPlanningRepository
     // Planned Meals
     Task<Guid> AddPlannedMealAsync(Guid mealPlanId, Guid userId, Guid recipeId, DateTime plannedFor, string mealType, int servings);
     Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate);
+    Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid plannedMealId, Guid userId);
     Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedFor, string mealType, int servings);
     Task RemovePlannedMealAsync(Guid plannedMealId);
     Task<PlannedMealDto?> GetPlannedMealAsync(Guid plannedMealId);
@@ -59,11 +60,11 @@ public class PlannedMealDto
 {
     public Guid Id { get; set; }
     public Guid MealPlanId { get; set; }
-    public Guid RecipeId { get; set; }
+    public Guid? RecipeId { get; set; }
     public string RecipeName { get; set; } = string.Empty;
     public DateTime PlannedFor { get; set; }
     public string MealType { get; set; } = string.Empty;
-    public int Servings { get; set; }
+    public int? Servings { get; set; }
     public bool IsCompleted { get; set; }
     public DateTime? CompletedAt { get; set; }
 }
@@ -88,6 +89,8 @@ public class NutritionSummaryDto
     public decimal TotalCarbs { get; set; }
     public decimal TotalFat { get; set; }
     public Dictionary<string, decimal> GoalProgress { get; set; } = new();
+    public int MealCount { get; set; }
+    public int MealsWithoutNutrition { get; set; }
 }
 
 public class PlanTemplateDto

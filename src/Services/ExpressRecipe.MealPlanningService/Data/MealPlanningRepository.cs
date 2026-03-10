@@ -6,11 +6,14 @@ public class MealPlanningRepository : IMealPlanningRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<MealPlanningRepository> _logger;
+    private readonly INutritionLogRepository _nutritionLogRepo;
 
-    public MealPlanningRepository(string connectionString, ILogger<MealPlanningRepository> logger)
+    public MealPlanningRepository(string connectionString, ILogger<MealPlanningRepository> logger,
+        INutritionLogRepository nutritionLogRepo)
     {
         _connectionString = connectionString;
         _logger = logger;
+        _nutritionLogRepo = nutritionLogRepo;
     }
 
     public async Task<Guid> CreateMealPlanAsync(Guid userId, DateTime startDate, DateTime endDate, string? name)
@@ -169,17 +172,55 @@ public class MealPlanningRepository : IMealPlanningRepository
             {
                 Id = reader.GetGuid(0),
                 MealPlanId = reader.GetGuid(1),
-                RecipeId = reader.GetGuid(2),
+                RecipeId = reader.IsDBNull(2) ? null : reader.GetGuid(2),
                 RecipeName = reader.GetString(3),
                 PlannedFor = reader.GetDateTime(4),
                 MealType = reader.GetString(5),
-                Servings = reader.GetInt32(6),
+                Servings = reader.IsDBNull(6) ? null : reader.GetInt32(6),
                 IsCompleted = reader.GetBoolean(7),
                 CompletedAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8)
             });
         }
 
         return meals;
+    }
+
+    public async Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid plannedMealId, Guid userId)
+    {
+        // RecipeName is returned as empty string; the caller (CompleteMeal endpoint)
+        // supplies the recipe name through the request body (CompleteMealRequest.RecipeName).
+        // UserId scope prevents cross-user access; IsDeleted filter skips soft-deleted meals.
+        const string sql = @"
+            SELECT pm.Id, pm.MealPlanId, pm.RecipeId, '' AS RecipeName, pm.PlannedDate, pm.MealType, pm.Servings, pm.IsCompleted, pm.CompletedAt
+            FROM PlannedMeal pm
+            JOIN MealPlan mp ON mp.Id = pm.MealPlanId
+            WHERE pm.Id = @PlannedMealId AND mp.UserId = @UserId AND pm.IsDeleted = 0 AND mp.IsDeleted = 0";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@PlannedMealId", plannedMealId);
+        command.Parameters.AddWithValue("@UserId",        userId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return new PlannedMealDto
+            {
+                Id          = reader.GetGuid(0),
+                MealPlanId  = reader.GetGuid(1),
+                RecipeId    = reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                RecipeName  = reader.GetString(3),
+                PlannedFor  = reader.GetDateTime(4),
+                MealType    = reader.GetString(5),
+                Servings    = reader.IsDBNull(6) ? null : reader.GetInt32(6),
+                IsCompleted = reader.GetBoolean(7),
+                CompletedAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8)
+            };
+        }
+
+        return null;
     }
 
     public async Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedFor, string mealType, int servings)
@@ -317,15 +358,30 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task<NutritionSummaryDto> GetNutritionSummaryAsync(Guid userId, DateTime date)
     {
-        // Stub implementation - would calculate from completed meals
+        DateOnly logDate = DateOnly.FromDateTime(date);
+        DailySummaryRow summary = await _nutritionLogRepo.GetDailySummaryAsync(userId, logDate, CancellationToken.None);
+        NutritionalGoalRow? goal = await _nutritionLogRepo.GetActiveGoalAsync(userId, CancellationToken.None);
+
+        Dictionary<string, decimal> progress = new();
+        if (goal is not null)
+        {
+            if (goal.TargetCalories is > 0) { progress["calories"] = summary.TotalCalories / goal.TargetCalories.Value; }
+            if (goal.TargetProtein  is > 0) { progress["protein"]  = summary.TotalProtein  / goal.TargetProtein.Value; }
+            if (goal.TargetCarbs    is > 0) { progress["carbs"]    = summary.TotalCarbs    / goal.TargetCarbs.Value; }
+            if (goal.TargetFat      is > 0) { progress["fat"]      = summary.TotalFat      / goal.TargetFat.Value; }
+            if (goal.TargetFiber    is > 0) { progress["fiber"]    = summary.TotalFiber    / goal.TargetFiber.Value; }
+        }
+
         return new NutritionSummaryDto
         {
-            Date = date,
-            TotalCalories = 0,
-            TotalProtein = 0,
-            TotalCarbs = 0,
-            TotalFat = 0,
-            GoalProgress = new()
+            Date                  = date,
+            TotalCalories         = summary.TotalCalories,
+            TotalProtein          = summary.TotalProtein,
+            TotalCarbs            = summary.TotalCarbs,
+            TotalFat              = summary.TotalFat,
+            GoalProgress          = progress,
+            MealCount             = summary.MealCount,
+            MealsWithoutNutrition = summary.MealsWithoutNutrition
         };
     }
 
