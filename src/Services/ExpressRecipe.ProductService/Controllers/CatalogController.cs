@@ -13,15 +13,18 @@ public class CatalogController : ControllerBase
 {
     private readonly IFoodCatalogRepository _catalog;
     private readonly IFoodSubstitutionService _substitutionService;
+    private readonly IngredientDensityResolver _densityResolver;
     private readonly ILogger<CatalogController> _logger;
 
     public CatalogController(
         IFoodCatalogRepository catalog,
         IFoodSubstitutionService substitutionService,
+        IngredientDensityResolver densityResolver,
         ILogger<CatalogController> logger)
     {
         _catalog = catalog;
         _substitutionService = substitutionService;
+        _densityResolver = densityResolver;
         _logger = logger;
     }
 
@@ -153,6 +156,40 @@ public class CatalogController : ControllerBase
         SubstitutionHistoryRecord record = request with { UserId = currentUserId.Value };
         Guid id = await _catalog.RecordSubstitutionAsync(record, ct);
         return CreatedAtAction(nameof(RecordSubstitution), new { id }, id);
+    }
+
+    // -----------------------------------------------------------------------
+    // Density
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Get the density (g/ml) for an ingredient by its ID.
+    /// Returns 404 if no density data is available.
+    /// </summary>
+    [HttpGet("density/{ingredientId:guid}")]
+    public async Task<IActionResult> GetDensityById(Guid ingredientId, CancellationToken ct)
+    {
+        decimal? density = await _densityResolver.GetDensityAsync(ingredientId, null, ct);
+        if (density is null)
+        {
+            return NotFound(new { message = $"No density data for ingredient {ingredientId}" });
+        }
+        return Ok(new { GramsPerMl = density });
+    }
+
+    /// <summary>
+    /// Get the density (g/ml) for an ingredient by its name.
+    /// Returns 404 if no density data is available.
+    /// </summary>
+    [HttpGet("density/by-name/{ingredientName}")]
+    public async Task<IActionResult> GetDensityByName(string ingredientName, CancellationToken ct)
+    {
+        decimal? density = await _densityResolver.GetDensityAsync(null, ingredientName, ct);
+        if (density is null)
+        {
+            return NotFound(new { message = $"No density data for ingredient '{ingredientName}'" });
+        }
+        return Ok(new { GramsPerMl = density });
     }
 
     // -----------------------------------------------------------------------

@@ -7,6 +7,7 @@ using ExpressRecipe.RecipeService.Services;
 using ExpressRecipe.Shared.CQRS;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
+using ExpressRecipe.Shared.Units;
 using ExpressRecipe.Client.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -126,6 +127,17 @@ builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ShoppingListInte
 
 // Register print service
 builder.Services.AddScoped<IRecipePrintService, RecipePrintService>();
+
+// Register unit conversion (uses HttpIngredientDensityResolver to call ProductService)
+var productServiceUrl = builder.Configuration["Services:ProductService:BaseUrl"]
+    ?? builder.Configuration["services__productservice__http__0"]
+    ?? "http://productservice";
+builder.Services.AddHttpClient<IIngredientDensityResolver, HttpIngredientDensityResolver>(client =>
+{
+    client.BaseAddress = new Uri(productServiceUrl.TrimEnd('/') + "/");
+});
+builder.Services.AddScoped<IUnitConversionService>(sp =>
+    new UnitConversionService(sp.GetRequiredService<IIngredientDensityResolver>()));
 
 // Add controllers
 builder.Services.AddControllers();

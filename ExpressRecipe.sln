@@ -224,6 +224,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.MealPlanningS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.UserService.Tests", "src\Tests\ExpressRecipe.UserService.Tests\ExpressRecipe.UserService.Tests.csproj", "{26814460-00DF-471A-B074-9D362A07133D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.Shared.Tests", "src\Tests\ExpressRecipe.Shared.Tests\ExpressRecipe.Shared.Tests.csproj", "{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.ProductService.Tests", "src\Tests\ExpressRecipe.ProductService.Tests\ExpressRecipe.ProductService.Tests.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.RecipeParser", "src\RecipeParser\ExpressRecipe.RecipeParser\ExpressRecipe.RecipeParser.csproj", "{17609E3B-094D-4756-86B7-7B9592297AE5}"
@@ -839,6 +841,18 @@ Global
 		{69907909-D235-4ABA-B752-90FFAD2D7CED}.Release|x64.Build.0 = Release|Any CPU
 		{69907909-D235-4ABA-B752-90FFAD2D7CED}.Release|x86.ActiveCfg = Release|Any CPU
 		{69907909-D235-4ABA-B752-90FFAD2D7CED}.Release|x86.Build.0 = Release|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Debug|x64.Build.0 = Debug|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Debug|x86.Build.0 = Debug|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Release|x64.ActiveCfg = Release|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Release|x64.Build.0 = Release|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Release|x86.ActiveCfg = Release|Any CPU
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -898,6 +912,7 @@ Global
 		{14DAF418-0655-4AC7-B0BE-49C313ED370D} = {9D996D4B-B83F-33EE-5716-0A351D75AFA7}
 		{F0A4DB4C-E61A-40D2-8EDD-52EFEE8F7735} = {CD8887EB-25AF-83A0-D84C-3BC28A9232EE}
 		{69907909-D235-4ABA-B752-90FFAD2D7CED} = {9D996D4B-B83F-33EE-5716-0A351D75AFA7}
+		{6F0F55FD-6F71-41A7-B81B-EB19B9E80ACD} = {9D996D4B-B83F-33EE-5716-0A351D75AFA7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A0CA3AE9-2448-4D31-A125-E5F3C0FD8FC0}

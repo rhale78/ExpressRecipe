@@ -4,6 +4,7 @@ using ExpressRecipe.InventoryService.Services;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Units;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using RabbitMQ.Client;
 
@@ -116,6 +117,17 @@ if (messagingEnabled)
     builder.Services.AddHostedService<RecipeCookedEventSubscriber>();
     builder.Services.AddHostedService<MealDelayStorageSubscriber>();
 }
+
+// Register unit conversion (uses HttpIngredientDensityResolver to call ProductService)
+var inventoryProductServiceUrl = builder.Configuration["Services:ProductService:BaseUrl"]
+    ?? builder.Configuration["services__productservice__http__0"]
+    ?? "http://productservice";
+builder.Services.AddHttpClient<IIngredientDensityResolver, HttpIngredientDensityResolver>(client =>
+{
+    client.BaseAddress = new Uri(inventoryProductServiceUrl.TrimEnd('/') + "/");
+});
+builder.Services.AddScoped<IUnitConversionService>(sp =>
+    new UnitConversionService(sp.GetRequiredService<IIngredientDensityResolver>()));
 
 // Add controllers
 builder.Services.AddControllers();

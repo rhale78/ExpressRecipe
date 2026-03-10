@@ -3,6 +3,7 @@ using ExpressRecipe.ShoppingService.Data;
 using ExpressRecipe.ShoppingService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Units;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,6 +56,17 @@ builder.Services.AddHttpClient("RecipeService", client =>
 // Register optimization and session services
 builder.Services.AddScoped<IShoppingOptimizationService, ShoppingOptimizationService>();
 builder.Services.AddScoped<IShoppingSessionService, ShoppingSessionService>();
+
+// Register unit conversion (uses HttpIngredientDensityResolver to call ProductService)
+var shoppingProductServiceUrl = builder.Configuration["Services:ProductService:BaseUrl"]
+    ?? builder.Configuration["services__productservice__http__0"]
+    ?? "http://productservice";
+builder.Services.AddHttpClient<IIngredientDensityResolver, HttpIngredientDensityResolver>(client =>
+{
+    client.BaseAddress = new Uri(shoppingProductServiceUrl.TrimEnd('/') + "/");
+});
+builder.Services.AddScoped<IUnitConversionService>(sp =>
+    new UnitConversionService(sp.GetRequiredService<IIngredientDensityResolver>()));
 
 // Add controllers
 builder.Services.AddControllers();

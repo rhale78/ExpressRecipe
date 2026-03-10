@@ -241,6 +241,8 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
             dt.Columns.Add("SubstituteNotes", typeof(string));
             dt.Columns.Add("CreatedBy", typeof(Guid));
             dt.Columns.Add("CreatedAt", typeof(DateTime));
+            dt.Columns.Add("CanonicalAmount", typeof(decimal));
+            dt.Columns.Add("CanonicalUnit", typeof(string));
 
             foreach (var ing in ingredients)
             {
@@ -256,7 +258,9 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                     ing.IsOptional,
                     (object?)ing.SubstituteNotes ?? DBNull.Value,
                     (object?)createdBy ?? DBNull.Value,
-                    DateTime.UtcNow
+                    DateTime.UtcNow,
+                    (object?)ing.CanonicalAmount ?? DBNull.Value,
+                    (object?)ing.CanonicalUnit ?? DBNull.Value
                 );
             }
 
