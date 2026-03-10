@@ -1,4 +1,7 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.AIService.Configuration;
+using ExpressRecipe.AIService.Data;
+using ExpressRecipe.AIService.Providers;
 using ExpressRecipe.AIService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -49,6 +52,35 @@ builder.Services.AddHttpClient("Ollama", client =>
 
 // Register Ollama Service
 builder.Services.AddScoped<IOllamaService, OllamaService>();
+
+// ── AI Provider infrastructure ───────────────────────────────────────────────
+
+// Local-mode flag (APP_LOCAL_MODE=true disables cloud provider HTTP calls)
+builder.Services.AddSingleton<ILocalModeConfig, LocalModeConfig>();
+
+// Register all AI providers
+builder.Services.AddSingleton<IAIProvider, OllamaProvider>();
+builder.Services.AddSingleton<IAIProvider, ClaudeProvider>();
+builder.Services.AddSingleton<IAIProvider, OpenAIProvider>();
+builder.Services.AddSingleton<IAIProvider, GeminiProvider>();
+builder.Services.AddSingleton<IAIProvider, AzureOpenAIProvider>();
+
+// Provider factory (config-driven per use case with HybridCache)
+builder.Services.AddSingleton<IAIProviderFactory, AIProviderFactory>();
+
+// Data repositories for provider config and approval queue
+var aiConnectionString = builder.Configuration.GetConnectionString("aidb")
+    ?? builder.Configuration.GetConnectionString("SqlServer")
+    ?? "Server=localhost;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True";
+
+builder.Services.AddSingleton<IAIProviderConfigRepository>(
+    _ => new AIProviderConfigRepository(aiConnectionString));
+
+builder.Services.AddSingleton<IApprovalQueueRepository>(
+    _ => new ApprovalQueueRepository(aiConnectionString));
+
+// Approval queue service
+builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
 
 // Health checks
 builder.Services.AddHealthChecks();
