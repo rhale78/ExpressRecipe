@@ -465,6 +465,84 @@ public class InventoryController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while retrieving usage history" });
         }
     }
+
+    // ──────────── Internal service-to-service endpoints (AllowAnonymous) ────────────
+
+    /// <summary>
+    /// Internal endpoint: returns low-stock items for a given userId without requiring JWT auth.
+    /// Used by ShoppingService for service-to-service integration.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("internal/low-stock")]
+    public async Task<IActionResult> GetLowStockItemsInternal([FromQuery] Guid userId, [FromQuery] decimal threshold = 2.0m)
+    {
+        try
+        {
+            if (userId == Guid.Empty) return BadRequest(new { message = "userId is required" });
+            var items = await _repository.GetLowStockItemsAsync(userId, threshold);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving internal low-stock items for user {UserId}", userId);
+            return StatusCode(500, new { message = "An error occurred while retrieving low-stock items" });
+        }
+    }
+
+    /// <summary>
+    /// Internal endpoint: bulk-add purchased items to inventory without requiring JWT auth.
+    /// Used by ShoppingService after a shopping list is marked complete.
+    /// If StorageLocationId is Guid.Empty, the user's first storage location is used as a fallback.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpPost("internal/bulk-add")]
+    public async Task<IActionResult> BulkAddItemsInternal([FromBody] List<InternalAddInventoryItemRequest> items)
+    {
+        if (items == null || items.Count == 0)
+            return BadRequest(new { message = "items list is required and must not be empty" });
+
+        var addedIds = new List<Guid>();
+        foreach (var item in items)
+        {
+            try
+            {
+                // Resolve storage location: if not specified, use the user's first available location
+                var storageLocationId = item.StorageLocationId;
+                if (storageLocationId == Guid.Empty)
+                {
+                    var locations = await _repository.GetStorageLocationsAsync(item.UserId);
+                    var firstLocation = locations.FirstOrDefault();
+                    if (firstLocation == null)
+                    {
+                        _logger.LogWarning("No storage location found for user {UserId}; skipping item {Name}", item.UserId, item.CustomName);
+                        continue;
+                    }
+                    storageLocationId = firstLocation.Id;
+                }
+
+                var id = await _repository.AddInventoryItemAsync(
+                    item.UserId,
+                    item.HouseholdId,
+                    item.ProductId,
+                    item.CustomName,
+                    storageLocationId,
+                    item.Quantity,
+                    item.Unit,
+                    item.ExpirationDate,
+                    item.Barcode,
+                    item.PurchasePrice,
+                    item.PreferredStore,
+                    null);
+                addedIds.Add(id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding internal bulk inventory item {Name}", item.CustomName);
+            }
+        }
+
+        return Ok(new { AddedCount = addedIds.Count, Ids = addedIds });
+    }
 }
 
 public class AddInventoryItemRequest
@@ -507,4 +585,23 @@ public class UpdateStorageLocationRequest
     public string? Description { get; set; }
     public string? Temperature { get; set; }
     public Guid? AddressId { get; set; }
+}
+
+/// <summary>
+/// Request model for the internal bulk-add endpoint (service-to-service, no user JWT).
+/// </summary>
+public class InternalAddInventoryItemRequest
+{
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string? CustomName { get; set; }
+    public Guid StorageLocationId { get; set; }
+    public decimal Quantity { get; set; }
+    public string? Unit { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? Barcode { get; set; }
+    public decimal? PurchasePrice { get; set; }
+    public DateTime PurchasedAt { get; set; }
+    public string? PreferredStore { get; set; }
 }

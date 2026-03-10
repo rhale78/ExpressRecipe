@@ -298,8 +298,11 @@ public class MealPlanningController : ControllerBase
         var userId = GetUserId();
         if (userId == null) return Unauthorized();
 
+        // Default StartDate to today to satisfy the NOT NULL DB constraint when client omits it
+        var startDate = request.StartDate ?? DateTime.UtcNow.Date;
+
         var goalId = await _repository.SetNutritionalGoalAsync(
-            userId.Value, request.GoalType, request.TargetValue, request.Unit, request.StartDate, request.EndDate);
+            userId.Value, request.GoalType, request.TargetValue, request.Unit, startDate, request.EndDate);
         return Ok(new { id = goalId });
     }
 

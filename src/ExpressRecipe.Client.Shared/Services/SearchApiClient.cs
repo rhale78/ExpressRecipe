@@ -103,7 +103,26 @@ public class SearchApiClient : ISearchApiClient
 
     public async Task<GlobalSearchResult?> AdvancedSearchAsync(AdvancedSearchRequest request)
     {
-        var response = await _httpClient.GetAsync($"/api/search?query={Uri.EscapeDataString(request.Query ?? string.Empty)}&limit={request.PageSize}");
+        // Normalize page/size and translate to offset for backend
+        var page = request.Page > 0 ? request.Page : 1;
+        var pageSize = request.PageSize > 0 ? request.PageSize : 20;
+        var offset = (page - 1) * pageSize;
+
+        // Map the first entity-type filter if present
+        var entityType = request.Filters
+            .FirstOrDefault(f => string.Equals(f.Field, "entityType", StringComparison.OrdinalIgnoreCase))
+            ?.Value?.ToString() ?? string.Empty;
+
+        var url = new System.Text.StringBuilder(
+            $"/api/search?query={Uri.EscapeDataString(request.Query ?? string.Empty)}&limit={pageSize}&offset={offset}");
+
+        if (!string.IsNullOrEmpty(entityType))
+            url.Append($"&entityType={Uri.EscapeDataString(entityType)}");
+
+        if (!string.IsNullOrEmpty(request.SortBy))
+            url.Append($"&sortBy={Uri.EscapeDataString(request.SortBy)}&sortOrder={Uri.EscapeDataString(request.SortOrder)}");
+
+        var response = await _httpClient.GetAsync(url.ToString());
 
         if (!response.IsSuccessStatusCode)
         {

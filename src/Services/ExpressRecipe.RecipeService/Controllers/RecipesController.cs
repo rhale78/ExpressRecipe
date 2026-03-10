@@ -648,6 +648,34 @@ public class RecipesController : ControllerBase
     }
 
     /// <summary>
+    /// Internal service-to-service endpoint: returns shopping ingredients for a recipe without requiring user auth.
+    /// Used by ShoppingService to add recipe ingredients to a shopping list.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("{id:guid}/internal/shopping-ingredients")]
+    public async Task<ActionResult<ShoppingListPreparationDto>> GetShoppingIngredientsInternal(
+        Guid id,
+        [FromQuery] int? servings = null)
+    {
+        try
+        {
+            var recipe = await _recipeRepository.GetRecipeByIdAsync(id);
+            if (recipe == null)
+                return NotFound(new { message = "Recipe not found" });
+
+            var ingredients = await _recipeRepository.GetRecipeIngredientsAsync(id);
+            var shoppingList = _shoppingListService.PrepareRecipeForShopping(recipe, ingredients, servings);
+
+            return Ok(shoppingList);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error preparing internal shopping ingredients for recipe {RecipeId}", id);
+            return StatusCode(500, new { message = "An error occurred while preparing the shopping ingredients" });
+        }
+    }
+
+    /// <summary>
     /// Submit multiple recipes in one call – asynchronous channel path.
     /// Items are written to the <see cref="IRecipeBatchChannel"/> and processed by
     /// <see cref="RecipeBatchChannelWorker"/> in the background, which also fires

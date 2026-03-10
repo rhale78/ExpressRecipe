@@ -12,7 +12,7 @@ public partial class ShoppingRepository
         if (items.Count == 0)
         {
             _logger.LogWarning("No ingredients returned from RecipeService for recipe {RecipeId}", recipeId);
-            return Guid.NewGuid();
+            return Guid.Empty; // distinct from a real inserted ID — caller should check Guid.Empty
         }
 
         const string sql = @"
@@ -23,7 +23,7 @@ public partial class ShoppingRepository
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        var lastId = Guid.NewGuid();
+        var lastId = Guid.Empty;
         foreach (var item in items)
         {
             await using var command = new SqlCommand(sql, connection);
@@ -51,23 +51,24 @@ public partial class ShoppingRepository
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri("http://recipeservice");
-            var response = await client.GetAsync($"/api/recipes/{recipeId}/ingredients?servings={servings}");
+            // Use the AllowAnonymous internal endpoint (no user JWT needed for service-to-service calls)
+            var response = await client.GetAsync($"/api/recipes/{recipeId}/internal/shopping-ingredients?servings={servings}");
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("RecipeService returned {StatusCode} for recipe {RecipeId}", response.StatusCode, recipeId);
                 return new List<ShoppingListItemDto>();
             }
 
-            var ingredients = await response.Content.ReadFromJsonAsync<List<RecipeIngredientResult>>();
-            if (ingredients == null) return new List<ShoppingListItemDto>();
+            var shoppingList = await response.Content.ReadFromJsonAsync<RecipeShoppingListResult>();
+            if (shoppingList?.Items == null) return new List<ShoppingListItemDto>();
 
-            return ingredients.Select(i => new ShoppingListItemDto
+            return shoppingList.Items.Select(i => new ShoppingListItemDto
             {
                 Id = Guid.NewGuid(),
                 ProductName = i.IngredientName,
-                Quantity = i.Quantity * servings,
-                Unit = i.Unit,
-                Category = i.Category
+                Quantity = i.NormalizedQuantity > 0 ? i.NormalizedQuantity : i.ScaledQuantity,
+                Unit = i.NormalizedUnit.Length > 0 ? i.NormalizedUnit : i.Unit,
+                Category = null
             }).ToList();
         }
         catch (Exception ex)
@@ -83,7 +84,7 @@ public partial class ShoppingRepository
         if (items.Count == 0)
         {
             _logger.LogInformation("No low-stock items found for user {UserId} at threshold {Threshold}", userId, threshold);
-            return Guid.NewGuid();
+            return Guid.Empty; // distinct from a real inserted ID — caller should check Guid.Empty
         }
 
         const string sql = @"
@@ -94,14 +95,15 @@ public partial class ShoppingRepository
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        var lastId = Guid.NewGuid();
+        var lastId = Guid.Empty;
         foreach (var item in items)
         {
             await using var command = new SqlCommand(sql, connection);
             command.Parameters.AddWithValue("@ListId", listId);
             command.Parameters.AddWithValue("@ProductId", (object?)item.ProductId ?? DBNull.Value);
             command.Parameters.AddWithValue("@CustomName", (object?)item.ProductName ?? (object?)item.CustomName ?? DBNull.Value);
-            command.Parameters.AddWithValue("@Quantity", 1m);
+            // Use the computed deficit quantity (not a hardcoded 1)
+            command.Parameters.AddWithValue("@Quantity", item.Quantity > 0 ? item.Quantity : 1m);
             command.Parameters.AddWithValue("@Unit", (object?)item.Unit ?? DBNull.Value);
 
             var result = await command.ExecuteScalarAsync();
@@ -118,23 +120,25 @@ public partial class ShoppingRepository
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri("http://inventoryservice");
-            var response = await client.GetAsync($"/api/inventory/low-stock?userId={userId}&threshold={threshold}");
+            // Use the AllowAnonymous internal endpoint that accepts userId as query param
+            var response = await client.GetAsync($"/api/inventory/internal/low-stock?userId={userId}&threshold={threshold}");
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("InventoryService returned {StatusCode} for low-stock query", response.StatusCode);
+                _logger.LogWarning("InventoryService returned {StatusCode} for internal low-stock query", response.StatusCode);
                 return new List<ShoppingListItemDto>();
             }
 
-            var inventoryItems = await response.Content.ReadFromJsonAsync<List<LowStockInventoryItem>>();
+            // Response matches InventoryItemDto: ProductName/CustomName + Quantity + Unit
+            var inventoryItems = await response.Content.ReadFromJsonAsync<List<InventoryItemResult>>();
             if (inventoryItems == null) return new List<ShoppingListItemDto>();
 
             return inventoryItems.Select(i => new ShoppingListItemDto
             {
                 Id = Guid.NewGuid(),
-                ProductName = i.Name,
-                Quantity = threshold - (decimal)(i.CurrentQuantity ?? 0),
-                Unit = i.Unit,
-                Category = i.Category
+                ProductId = i.ProductId,
+                ProductName = i.ProductName ?? i.CustomName,
+                Quantity = Math.Max(0, threshold - i.Quantity), // amount needed to reach threshold
+                Unit = i.Unit
             }).Where(i => i.Quantity > 0).ToList();
         }
         catch (Exception ex)
@@ -146,13 +150,15 @@ public partial class ShoppingRepository
 
     public async Task AddPurchasedItemsToInventoryAsync(Guid listId)
     {
+        // Read purchased items from the shopping list (join to get UserId)
         const string sql = @"
-            SELECT ProductId, CustomName, Quantity, Unit, ActualPrice, PurchasedAt
-            FROM ShoppingListItem
-            WHERE ShoppingListId = @ListId 
-              AND IsChecked = 1 
-              AND AddToInventoryOnPurchase = 1
-              AND IsDeleted = 0";
+            SELECT sl.UserId, sli.ProductId, sli.CustomName, sli.Quantity, sli.Unit, sli.ActualPrice, sli.PurchasedAt
+            FROM ShoppingListItem sli
+            JOIN ShoppingList sl ON sl.Id = sli.ShoppingListId
+            WHERE sli.ShoppingListId = @ListId 
+              AND sli.IsChecked = 1 
+              AND sli.AddToInventoryOnPurchase = 1
+              AND sli.IsDeleted = 0";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -160,18 +166,19 @@ public partial class ShoppingRepository
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@ListId", listId);
 
-        var itemsToAdd = new List<InventoryAddRequest>();
+        var itemsToAdd = new List<InternalInventoryAddItem>();
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            itemsToAdd.Add(new InventoryAddRequest
+            itemsToAdd.Add(new InternalInventoryAddItem
             {
-                ProductId = reader.IsDBNull(0) ? null : reader.GetGuid(0),
-                Name = reader.IsDBNull(1) ? null : reader.GetString(1),
-                Quantity = reader.GetDecimal(2),
-                Unit = reader.IsDBNull(3) ? null : reader.GetString(3),
-                PurchasePrice = reader.IsDBNull(4) ? null : reader.GetDecimal(4),
-                PurchasedAt = reader.IsDBNull(5) ? DateTime.UtcNow : reader.GetDateTime(5)
+                UserId = reader.GetGuid(0),
+                ProductId = reader.IsDBNull(1) ? null : reader.GetGuid(1),
+                CustomName = reader.IsDBNull(2) ? null : reader.GetString(2),
+                Quantity = reader.GetDecimal(3),
+                Unit = reader.IsDBNull(4) ? null : reader.GetString(4),
+                PurchasePrice = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
+                PurchasedAt = reader.IsDBNull(6) ? DateTime.UtcNow : reader.GetDateTime(6)
             });
         }
 
@@ -185,7 +192,8 @@ public partial class ShoppingRepository
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri("http://inventoryservice");
-            var response = await client.PostAsJsonAsync("/api/inventory/bulk-add", itemsToAdd);
+            // Use the AllowAnonymous internal bulk-add endpoint
+            var response = await client.PostAsJsonAsync("/api/inventory/internal/bulk-add", itemsToAdd);
             if (response.IsSuccessStatusCode)
                 _logger.LogInformation("Added {Count} purchased items to inventory from list {ListId}", itemsToAdd.Count, listId);
             else
@@ -198,30 +206,45 @@ public partial class ShoppingRepository
     }
 
     // Internal DTOs for cross-service calls
-    private class RecipeIngredientResult
+    private class RecipeShoppingListResult
+    {
+        public Guid RecipeId { get; set; }
+        public string RecipeName { get; set; } = string.Empty;
+        public int Servings { get; set; }
+        public List<RecipeShoppingItem> Items { get; set; } = new();
+    }
+
+    private class RecipeShoppingItem
     {
         public string IngredientName { get; set; } = string.Empty;
+        public decimal ScaledQuantity { get; set; }
+        public string Unit { get; set; } = string.Empty;
+        public decimal NormalizedQuantity { get; set; }
+        public string NormalizedUnit { get; set; } = string.Empty;
+    }
+
+    // Maps to InventoryItemDto returned by InventoryService
+    private class InventoryItemResult
+    {
+        public Guid? ProductId { get; set; }
+        public string? ProductName { get; set; }
+        public string? CustomName { get; set; }
         public decimal Quantity { get; set; }
         public string? Unit { get; set; }
-        public string? Category { get; set; }
     }
 
-    private class LowStockInventoryItem
+    // Request body for the internal bulk-add endpoint
+    private class InternalInventoryAddItem
     {
+        public Guid UserId { get; set; }
+        public Guid? HouseholdId { get; set; }
         public Guid? ProductId { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public double? CurrentQuantity { get; set; }
-        public string? Unit { get; set; }
-        public string? Category { get; set; }
-    }
-
-    private class InventoryAddRequest
-    {
-        public Guid? ProductId { get; set; }
-        public string? Name { get; set; }
+        public string? CustomName { get; set; }
+        public Guid StorageLocationId { get; set; } // default Guid.Empty; InventoryService resolves to user default
         public decimal Quantity { get; set; }
         public string? Unit { get; set; }
         public decimal? PurchasePrice { get; set; }
         public DateTime PurchasedAt { get; set; }
+        public string? PreferredStore { get; set; }
     }
 }

@@ -165,9 +165,10 @@ public class NotificationControllerTests
             new() { Id = Guid.NewGuid(), UserId = _testUserId, Type = "ExpiringItem", IsRead = false },
             new() { Id = Guid.NewGuid(), UserId = _testUserId, Type = "LowStock", IsRead = false }
         };
+        // page=1, pageSize=50 → fetches pageSize * page = 50 from repo
         _mockRepository.Setup(r => r.GetUserNotificationsAsync(_testUserId, true, 50)).ReturnsAsync(notifications);
 
-        var result = await _controller.SearchNotifications(new NotificationSearchRequest { Type = "ExpiringItem", IsRead = false, PageSize = 50 });
+        var result = await _controller.SearchNotifications(new NotificationSearchRequest { Type = "ExpiringItem", IsRead = false, Page = 1, PageSize = 50 });
 
         result.Should().BeOfType<OkObjectResult>();
     }
@@ -229,6 +230,71 @@ public class NotificationControllerTests
         _mockRepository.Verify(r => r.MarkAsReadAsync(notificationId), Times.Once);
     }
 
+    [Fact]
+    public async Task MarkNotificationRead_WithIsReadFalse_CallsMarkAsUnread()
+    {
+        var notificationId = Guid.NewGuid();
+        var notification = new NotificationDto { Id = notificationId, UserId = _testUserId };
+        _mockRepository.Setup(r => r.GetNotificationAsync(notificationId)).ReturnsAsync(notification);
+        _mockRepository.Setup(r => r.MarkAsUnreadAsync(notificationId)).Returns(Task.CompletedTask);
+
+        var result = await _controller.MarkNotificationRead(new MarkNotificationReadRequest { NotificationId = notificationId, IsRead = false });
+
+        result.Should().BeOfType<NoContentResult>();
+        _mockRepository.Verify(r => r.MarkAsUnreadAsync(notificationId), Times.Once);
+        _mockRepository.Verify(r => r.MarkAsReadAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    // ──────────── GDPR / Permanent delete endpoints ────────────
+
+    [Fact]
+    public async Task HardDeleteNotification_WhenOwnedByUser_ReturnsNoContent()
+    {
+        var notificationId = Guid.NewGuid();
+        var notification = new NotificationDto { Id = notificationId, UserId = _testUserId };
+        _mockRepository.Setup(r => r.GetNotificationAsync(notificationId)).ReturnsAsync(notification);
+        _mockRepository.Setup(r => r.HardDeleteNotificationAsync(notificationId)).Returns(Task.CompletedTask);
+
+        var result = await _controller.HardDeleteNotification(notificationId);
+
+        result.Should().BeOfType<NoContentResult>();
+        _mockRepository.Verify(r => r.HardDeleteNotificationAsync(notificationId), Times.Once);
+    }
+
+    [Fact]
+    public async Task HardDeleteNotification_WhenOwnedByOtherUser_ReturnsForbid()
+    {
+        var notificationId = Guid.NewGuid();
+        var notification = new NotificationDto { Id = notificationId, UserId = Guid.NewGuid() };
+        _mockRepository.Setup(r => r.GetNotificationAsync(notificationId)).ReturnsAsync(notification);
+
+        var result = await _controller.HardDeleteNotification(notificationId);
+
+        result.Should().BeOfType<ForbidResult>();
+        _mockRepository.Verify(r => r.HardDeleteNotificationAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HardDeleteAllUserData_WhenAuthenticated_ReturnsNoContent()
+    {
+        _mockRepository.Setup(r => r.HardDeleteAllUserNotificationsAsync(_testUserId)).Returns(Task.CompletedTask);
+
+        var result = await _controller.HardDeleteAllUserData();
+
+        result.Should().BeOfType<NoContentResult>();
+        _mockRepository.Verify(r => r.HardDeleteAllUserNotificationsAsync(_testUserId), Times.Once);
+    }
+
+    [Fact]
+    public async Task HardDeleteAllUserData_WhenUnauthenticated_ReturnsUnauthorized()
+    {
+        _controller.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
+
+        var result = await _controller.HardDeleteAllUserData();
+
+        result.Should().BeOfType<UnauthorizedResult>();
+    }
+
     // ──────────── Preferences ────────────
 
     [Fact]
@@ -244,5 +310,21 @@ public class NotificationControllerTests
 
         result.Should().BeOfType<OkObjectResult>();
         ((OkObjectResult)result).Value.Should().Be(prefs);
+    }
+
+    [Fact]
+    public async Task UpdatePreferences_WithNullPreferences_ReturnsBadRequest()
+    {
+        var result = await _controller.UpdatePreferences(new UpdatePreferencesRequest { Preferences = null! });
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task UpdatePreferences_WithEmptyPreferences_ReturnsBadRequest()
+    {
+        var result = await _controller.UpdatePreferences(new UpdatePreferencesRequest { Preferences = new List<SavePreferenceRequest>() });
+
+        result.Should().BeOfType<BadRequestObjectResult>();
     }
 }

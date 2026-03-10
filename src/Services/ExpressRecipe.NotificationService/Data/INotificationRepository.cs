@@ -7,9 +7,15 @@ public interface INotificationRepository
     Task<List<NotificationDto>> GetUserNotificationsAsync(Guid userId, bool unreadOnly = false, int limit = 50);
     Task<NotificationDto?> GetNotificationAsync(Guid notificationId);
     Task MarkAsReadAsync(Guid notificationId);
+    Task MarkAsUnreadAsync(Guid notificationId);
     Task MarkAllAsReadAsync(Guid userId);
+    /// <summary>Soft-delete (sets IsDeleted=1). Use for normal user deletes.</summary>
     Task DeleteNotificationAsync(Guid notificationId);
+    /// <summary>Hard-delete (removes row). Use for GDPR right-to-erasure requests.</summary>
+    Task HardDeleteNotificationAsync(Guid notificationId);
     Task DeleteAllReadAsync(Guid userId);
+    /// <summary>Hard-deletes ALL notification data for a user. Use for GDPR account deletion.</summary>
+    Task HardDeleteAllUserNotificationsAsync(Guid userId);
     Task<int> GetUnreadCountAsync(Guid userId);
 
     // Preferences
