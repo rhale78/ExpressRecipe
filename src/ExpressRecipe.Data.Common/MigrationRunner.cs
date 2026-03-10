@@ -162,22 +162,48 @@ public class MigrationRunner
     }
 
     /// <summary>
-    /// Applies multiple migrations in order
+    /// Applies multiple migrations in order, guarded by a MigrationLock to prevent concurrent
+    /// migrations in multi-pod deployments. Retries up to 3 times if the lock is already held.
     /// </summary>
     /// <param name="migrations">Dictionary of migration ID to SQL script</param>
     public async Task ApplyMigrationsAsync(IDictionary<string, string> migrations)
     {
         await EnsureMigrationTableExistsAsync();
+        await EnsureMigrationLockTableExistsAsync();
 
-        // Sort migrations by ID to ensure they're applied in order
-        var orderedMigrations = migrations.OrderBy(m => m.Key);
-
-        foreach (var migration in orderedMigrations)
+        // Attempt to acquire the concurrency lock (retry up to 3 times with back-off)
+        bool lockAcquired = false;
+        for (int attempt = 0; attempt < 3; attempt++)
         {
-            await ApplyMigrationAsync(migration.Key, migration.Value);
+            lockAcquired = await TryAcquireMigrationLockAsync();
+            if (lockAcquired) break;
+
+            _logger?.LogWarning("Migration lock is held by another instance (attempt {Attempt}/3). Waiting 5 s …", attempt + 1);
+            await Task.Delay(TimeSpan.FromSeconds(5));
         }
 
-        _logger?.LogAllMigrationsCompleted();
+        if (!lockAcquired)
+        {
+            _logger?.LogWarning("Could not acquire migration lock after 3 attempts; skipping migrations on this instance.");
+            return;
+        }
+
+        try
+        {
+            // Sort migrations by ID to ensure they're applied in order
+            var orderedMigrations = migrations.OrderBy(m => m.Key);
+
+            foreach (var migration in orderedMigrations)
+            {
+                await ApplyMigrationAsync(migration.Key, migration.Value);
+            }
+
+            _logger?.LogAllMigrationsCompleted();
+        }
+        finally
+        {
+            await ReleaseMigrationLockAsync();
+        }
     }
 
     /// <summary>
@@ -201,5 +227,73 @@ public class MigrationRunner
         }
 
         return migrations;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Migration concurrency lock helpers
+    // ──────────────────────────────────────────────────────────────────────
+
+    private async Task EnsureMigrationLockTableExistsAsync()
+    {
+        const string sql = @"
+            IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[MigrationLock]') AND type = 'U')
+            BEGIN
+                CREATE TABLE [dbo].[MigrationLock] (
+                    Id       INT          NOT NULL PRIMARY KEY DEFAULT 1,
+                    LockedAt DATETIME2    NOT NULL,
+                    LockedBy NVARCHAR(100) NOT NULL,
+                    CONSTRAINT CK_MigrationLock_Single CHECK (Id = 1)
+                );
+            END";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Attempts to insert a lock row. Returns <c>true</c> when the lock was acquired,
+    /// <c>false</c> when another instance already holds it.
+    /// </summary>
+    private async Task<bool> TryAcquireMigrationLockAsync()
+    {
+        const string sql = @"
+            BEGIN TRY
+                INSERT INTO [dbo].[MigrationLock] (Id, LockedAt, LockedBy)
+                VALUES (1, GETUTCDATE(), @LockedBy);
+                SELECT 1;
+            END TRY
+            BEGIN CATCH
+                -- Duplicate key → another pod owns the lock
+                SELECT 0;
+            END CATCH";
+
+        var lockedBy = $"{Environment.MachineName}-{Environment.ProcessId}";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@LockedBy", lockedBy);
+
+        var result = await command.ExecuteScalarAsync();
+        return result is int i && i == 1;
+    }
+
+    private async Task ReleaseMigrationLockAsync()
+    {
+        const string sql = "DELETE FROM [dbo].[MigrationLock] WHERE Id = 1";
+
+        try
+        {
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(sql, connection);
+            await command.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to release migration lock; it will expire on next startup.");
+        }
     }
 }

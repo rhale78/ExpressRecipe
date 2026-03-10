@@ -381,6 +381,27 @@ public class AdminController : ControllerBase
             return StatusCode(500, new { message = "An error occurred during USDA portion import." });
         }
     }
+
+    /// <summary>
+    /// Force-import a product, bypassing the approval queue.
+    /// Sets ApprovalStatus='Approved' immediately. Admin only.
+    /// </summary>
+    [HttpPost("products/force-import")]
+    public async Task<IActionResult> ForceImportProduct(
+        [FromBody] ManualProductImportRequest req,
+        CancellationToken ct)
+    {
+        var adminIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(adminIdClaim, out var adminId))
+            return Unauthorized();
+
+        var productId = await _productRepository.ForceImportAsync(req, adminId);
+
+        _logger.LogInformation("Admin {AdminId} force-imported product '{Name}' → {ProductId}",
+            adminId, req.ProductName, productId);
+
+        return Ok(new { productId });
+    }
 }
 
 /// <summary>

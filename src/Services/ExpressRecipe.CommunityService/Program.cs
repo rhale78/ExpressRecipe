@@ -33,6 +33,8 @@ var connectionString = builder.Configuration.GetConnectionString("communitydb")
 // Register repositories
 builder.Services.AddScoped<ICommunityRepository>(sp =>
     new CommunityRepository(connectionString, sp.GetRequiredService<ILogger<CommunityRepository>>()));
+builder.Services.AddScoped<IApprovalQueueRepository>(sp =>
+    new ApprovalQueueRepository(connectionString));
 
 // Add controllers
 builder.Services.AddControllers();

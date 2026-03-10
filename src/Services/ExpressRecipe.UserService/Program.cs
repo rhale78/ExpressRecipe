@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.UserService.Data;
 using ExpressRecipe.Shared.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -67,6 +68,20 @@ builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(conne
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
+builder.Services.AddScoped<IGdprRepository>(sp => new GdprRepository(connectionString));
+builder.Services.AddScoped<IAuditRepository>(sp => new AuditRepository(connectionString));
+
+// Optional messaging (RabbitMQ) — gracefully disabled when connection string is absent
+bool messagingEnabled = !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"));
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+}
+else
+{
+    builder.Services.AddSingleton<ExpressRecipe.Messaging.Core.Abstractions.IMessageBus,
+        ExpressRecipe.UserService.Services.NoOpMessageBus>();
+}
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>

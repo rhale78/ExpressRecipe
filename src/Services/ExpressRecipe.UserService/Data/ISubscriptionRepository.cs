@@ -22,4 +22,7 @@ public interface ISubscriptionRepository
     // Feature Access
     Task<bool> HasFeatureAccessAsync(Guid userId, string featureName);
     Task<Dictionary<string, bool>> GetFeatureAccessMapAsync(Guid userId);
+
+    // Admin: grant a credit / extend a subscription tier
+    Task<Guid> GrantCreditAsync(Guid userId, string tier, int durationDays, string reason, Guid grantedBy, CancellationToken ct = default);
 }

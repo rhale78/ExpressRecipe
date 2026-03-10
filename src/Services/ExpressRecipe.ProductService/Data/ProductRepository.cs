@@ -35,6 +35,9 @@ public interface IProductRepository
     // High-speed bulk operations
     Task<int> BulkCreateFullProductsHighSpeedAsync(List<FullProductImportDto> products);
     Task<HashSet<string>> GetAllBarcodesAsync();
+
+    // Admin: force-import a product, bypassing the approval queue
+    Task<Guid> ForceImportAsync(ManualProductImportRequest request, Guid approvedBy);
 }
 
 public class ProductRepository : SqlHelper, IProductRepository
@@ -1306,5 +1309,32 @@ public class ProductRepository : SqlHelper, IProductRepository
         return results
             .Where(r => r.Product != null)
             .ToDictionary(r => r.Barcode, r => r.Product!, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Force-import a product with ApprovalStatus='Approved', bypassing the moderation queue.
+    /// Sets ApprovedBy and ApprovedAt immediately.
+    /// </summary>
+    public async Task<Guid> ForceImportAsync(ManualProductImportRequest request, Guid approvedBy)
+    {
+        const string sql = @"
+            INSERT INTO Product
+                (Id, Name, Brand, Barcode, Category, Description,
+                 ApprovalStatus, ApprovedBy, ApprovedAt, SubmittedBy, CreatedAt, IsDeleted)
+            VALUES
+                (@Id, @Name, @Brand, @Barcode, @Category, @Description,
+                 'Approved', @ApprovedBy, GETUTCDATE(), @ApprovedBy, GETUTCDATE(), 0)";
+
+        var productId = Guid.NewGuid();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@Id", productId),
+            CreateParameter("@Name", request.ProductName),
+            CreateParameter("@Brand", (object?)request.Brand ?? DBNull.Value),
+            CreateParameter("@Barcode", (object?)request.Barcode ?? DBNull.Value),
+            CreateParameter("@Category", (object?)request.Category ?? DBNull.Value),
+            CreateParameter("@Description", (object?)request.Description ?? DBNull.Value),
+            CreateParameter("@ApprovedBy", approvedBy));
+
+        return productId;
     }
     }

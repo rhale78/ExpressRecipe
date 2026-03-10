@@ -460,4 +460,39 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
     }
 
     #endregion
+
+    #region Admin
+
+    public async Task<Guid> GrantCreditAsync(Guid userId, string tier, int durationDays, string reason, Guid grantedBy, CancellationToken ct = default)
+    {
+        // Look up the subscription tier
+        const string tierSql = @"
+            SELECT Id FROM SubscriptionTier WHERE TierName = @TierName AND IsActive = 1";
+
+        var tierId = await ExecuteScalarAsync<Guid?>(tierSql,
+            CreateParameter("@TierName", tier));
+
+        tierId ??= await ExecuteScalarAsync<Guid?>(
+            "SELECT Id FROM SubscriptionTier WHERE IsActive = 1 ORDER BY SortOrder",
+            Array.Empty<SqlParameter>());
+
+        var creditId = Guid.NewGuid();
+        const string insertSql = @"
+            INSERT INTO UserSubscription
+                (Id, UserId, SubscriptionTierId, Status, BillingCycle, StartDate, EndDate, AutoRenew, CreatedAt)
+            VALUES
+                (@Id, @UserId, @TierId, 'Active', 'Credit', GETUTCDATE(),
+                 DATEADD(DAY, @DurationDays, GETUTCDATE()), 0, GETUTCDATE())";
+
+        await ExecuteNonQueryAsync(
+            insertSql,
+            CreateParameter("@Id", creditId),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@TierId", tierId ?? Guid.Empty),
+            CreateParameter("@DurationDays", durationDays));
+
+        return creditId;
+    }
+
+    #endregion
 }
