@@ -1,6 +1,6 @@
 @rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Services
-@inject ISubscriptionApiClient SubscriptionApi
+@inject SubscriptionStateService SubscriptionState
 @inject NavigationManager Navigation
 
 @if (_isLoading)
@@ -60,24 +60,20 @@ else
     private string EffectiveTitle =>
         !string.IsNullOrWhiteSpace(Title)
             ? Title
-            : $"Upgrade to {RequiredTier} to unlock this feature";
+            : !string.IsNullOrWhiteSpace(RequiredTier)
+                ? $"Upgrade to {RequiredTier} to unlock this feature"
+                : "Upgrade your subscription to unlock this feature";
 
     private string EffectiveDescription =>
         !string.IsNullOrWhiteSpace(Description)
             ? Description
             : "This feature is available on a higher subscription tier.";
 
-    private string TierCssClass => RequiredTier.ToLowerInvariant() switch
-    {
-        "premium" => "tier-premium",
-        "plus"    => "tier-plus",
-        "ad-free" or "adfree" => "tier-adfree",
-        _         => "tier-free",
-    };
+    private string TierCssClass => SubscriptionStateService.GetTierCssClass(RequiredTier);
 
     protected override async Task OnInitializedAsync()
     {
-        _hasAccess = await SubscriptionApi.HasFeatureAccessAsync(FeatureKey);
+        _hasAccess = await SubscriptionState.HasFeatureAccessAsync(FeatureKey);
         _isLoading = false;
     }
 

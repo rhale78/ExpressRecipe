@@ -87,7 +87,7 @@
         </div>
 
         <!-- Price Comparison (Plus feature) -->
-        <FeatureGuard FeatureKey="price-tracking" RequiredTier="Plus"
+        <FeatureGuard FeatureKey="price-comparison" RequiredTier="Plus"
                       Title="Price Comparison requires Plus"
                       Description="Compare prices across stores for items on your list and find the best deals. Available on Plus and above.">
             <div class="price-comparison-section">
@@ -681,6 +681,7 @@
         if (_list == null) return;
 
         _isPriceComparisonLoading = true;
+        _priceComparisonResult = null;
         StateHasChanged();
 
         var productIds = _list.Items

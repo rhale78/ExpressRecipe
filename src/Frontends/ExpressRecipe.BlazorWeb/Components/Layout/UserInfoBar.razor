@@ -3,7 +3,7 @@
 @using ExpressRecipe.Client.Shared.Services
 @inject NavigationManager Navigation
 @inject IAuthService AuthService
-@inject ISubscriptionApiClient SubscriptionApi
+@inject SubscriptionStateService SubscriptionState
 
 <AuthorizeView>
     <Authorized>
@@ -47,17 +47,11 @@
     private bool _showUserMenu = false;
     private string _tierName = "Free";
 
-    private string TierCssClass => _tierName.ToLowerInvariant() switch
-    {
-        "premium" => "tier-premium",
-        "plus"    => "tier-plus",
-        "ad-free" or "adfree" => "tier-adfree",
-        _         => "tier-free",
-    };
+    private string TierCssClass => SubscriptionStateService.GetTierCssClass(_tierName);
 
     protected override async Task OnInitializedAsync()
     {
-        _tierName = await SubscriptionApi.GetCurrentTierNameAsync();
+        _tierName = await SubscriptionState.GetCurrentTierNameAsync();
     }
 
     private string GetUserName(AuthenticationState context)
