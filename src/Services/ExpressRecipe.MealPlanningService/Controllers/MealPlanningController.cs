@@ -1196,6 +1196,7 @@ public class QuickPlanRequest
 public class UpdateEntryRequest
 {
     public DateTime Date { get; set; }
+    [Required]
     public string MealType { get; set; } = "Dinner";
     public int? Servings { get; set; }
 }
