@@ -19,7 +19,11 @@ public class ScannerController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Scan a barcode and check for allergens
@@ -28,15 +32,16 @@ public class ScannerController : ControllerBase
     public async Task<IActionResult> ScanBarcode([FromBody] ScanBarcodeRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         _logger.LogInformation("User {UserId} scanning barcode {Barcode}", userId, request.Barcode);
 
-        var scanId = await _repository.CreateScanAsync(userId, request.Barcode, request.ProductId, request.WasRecognized, request.ScanType);
+        var scanId = await _repository.CreateScanAsync(userId.Value, request.Barcode, request.ProductId, request.WasRecognized, request.ScanType);
 
         // Check for allergens if product was recognized
         List<ScanAlertDto> alerts = new();
         if (request.WasRecognized && !string.IsNullOrEmpty(request.ProductId))
         {
-            alerts = await _repository.CheckAllergensAsync(userId, Guid.Parse(request.ProductId));
+            alerts = await _repository.CheckAllergensAsync(userId.Value, Guid.Parse(request.ProductId));
         }
 
         return Ok(new { scanId, alerts });
@@ -49,7 +54,8 @@ public class ScannerController : ControllerBase
     public async Task<IActionResult> GetScanHistory([FromQuery] int limit = 50)
     {
         var userId = GetUserId();
-        var scans = await _repository.GetUserScansAsync(userId, limit);
+        if (userId == null) return Unauthorized();
+        var scans = await _repository.GetUserScansAsync(userId.Value, limit);
         return Ok(scans);
     }
 
@@ -60,7 +66,8 @@ public class ScannerController : ControllerBase
     public async Task<IActionResult> GetAlerts([FromQuery] bool unreadOnly = true)
     {
         var userId = GetUserId();
-        var alerts = await _repository.GetUserAlertsAsync(userId, unreadOnly);
+        if (userId == null) return Unauthorized();
+        var alerts = await _repository.GetUserAlertsAsync(userId.Value, unreadOnly);
         return Ok(alerts);
     }
 
@@ -81,10 +88,11 @@ public class ScannerController : ControllerBase
     public async Task<IActionResult> ReportUnknownProduct([FromBody] ReportUnknownProductRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         _logger.LogInformation("User {UserId} reporting unknown product {Barcode}", userId, request.Barcode);
 
         var unknownProductId = await _repository.ReportUnknownProductAsync(
-            userId, request.Barcode, request.ProductName, request.Brand, request.Photo);
+            userId.Value, request.Barcode, request.ProductName, request.Brand, request.Photo);
 
         return Ok(new { id = unknownProductId });
     }
@@ -106,8 +114,9 @@ public class ScannerController : ControllerBase
     public async Task<IActionResult> SaveOCRResult([FromBody] SaveOCRRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var ocrId = await _repository.SaveOCRResultAsync(
-            userId, request.Image, request.ExtractedText, request.Confidence, request.ProductMatch);
+            userId.Value, request.Image, request.ExtractedText, request.Confidence, request.ProductMatch);
 
         return Ok(new { id = ocrId });
     }
@@ -119,7 +128,8 @@ public class ScannerController : ControllerBase
     public async Task<IActionResult> GetOCRHistory([FromQuery] int limit = 50)
     {
         var userId = GetUserId();
-        var results = await _repository.GetUserOCRResultsAsync(userId, limit);
+        if (userId == null) return Unauthorized();
+        var results = await _repository.GetUserOCRResultsAsync(userId.Value, limit);
         return Ok(results);
     }
 }

@@ -19,7 +19,11 @@ public class StoresController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Get all stores
@@ -28,7 +32,8 @@ public class StoresController : ControllerBase
     public async Task<IActionResult> GetStores()
     {
         var userId = GetUserId();
-        var stores = await _repository.GetUserStoresAsync(userId);
+        if (userId == null) return Unauthorized();
+        var stores = await _repository.GetUserStoresAsync(userId.Value);
         return Ok(stores);
     }
 
@@ -52,8 +57,9 @@ public class StoresController : ControllerBase
     public async Task<IActionResult> CreateStore([FromBody] CreateStoreRequestDto request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var storeId = await _repository.CreateStoreAsync(
-            userId,
+            userId.Value,
             request.Name,
             request.Chain,
             request.Address,
@@ -104,7 +110,8 @@ public class StoresController : ControllerBase
     public async Task<IActionResult> SetPreferredStore(Guid storeId)
     {
         var userId = GetUserId();
-        await _repository.SetPreferredStoreAsync(userId, storeId);
+        if (userId == null) return Unauthorized();
+        await _repository.SetPreferredStoreAsync(userId.Value, storeId);
         _logger.LogInformation("User {UserId} set preferred store {StoreId}", userId, storeId);
         return NoContent();
     }
@@ -126,8 +133,9 @@ public class StoresController : ControllerBase
     public async Task<IActionResult> CreateStoreLayout(Guid storeId, [FromBody] CreateStoreLayoutRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var layoutId = await _repository.CreateStoreLayoutAsync(
-            userId,
+            userId.Value,
             storeId,
             request.CategoryName,
             request.Aisle,

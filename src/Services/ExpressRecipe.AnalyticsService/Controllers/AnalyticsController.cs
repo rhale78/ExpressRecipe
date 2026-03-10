@@ -19,14 +19,19 @@ public class AnalyticsController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     [HttpPost("events")]
     public async Task<IActionResult> TrackEvent([FromBody] TrackEventRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var eventId = await _repository.TrackEventAsync(
-            userId, request.EventType, request.EventName, request.Properties, request.SessionId, request.DeviceId);
+            userId.Value, request.EventType, request.EventName, request.Properties, request.SessionId, request.DeviceId);
         return Ok(new { id = eventId });
     }
 
@@ -34,7 +39,8 @@ public class AnalyticsController : ControllerBase
     public async Task<IActionResult> GetEvents([FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, [FromQuery] int limit = 100)
     {
         var userId = GetUserId();
-        var events = await _repository.GetUserEventsAsync(userId, startDate, endDate, limit);
+        if (userId == null) return Unauthorized();
+        var events = await _repository.GetUserEventsAsync(userId.Value, startDate, endDate, limit);
         return Ok(events);
     }
 
@@ -42,7 +48,8 @@ public class AnalyticsController : ControllerBase
     public async Task<IActionResult> GetUsageStats([FromQuery] DateTime startDate, [FromQuery] DateTime endDate)
     {
         var userId = GetUserId();
-        var stats = await _repository.GetUserUsageStatsAsync(userId, startDate, endDate);
+        if (userId == null) return Unauthorized();
+        var stats = await _repository.GetUserUsageStatsAsync(userId.Value, startDate, endDate);
         return Ok(stats);
     }
 
@@ -50,7 +57,8 @@ public class AnalyticsController : ControllerBase
     public async Task<IActionResult> GetUsageSummary([FromQuery] string period = "week")
     {
         var userId = GetUserId();
-        var summary = await _repository.GetUsageSummaryAsync(userId, period);
+        if (userId == null) return Unauthorized();
+        var summary = await _repository.GetUsageSummaryAsync(userId.Value, period);
         return Ok(summary);
     }
 
@@ -58,7 +66,8 @@ public class AnalyticsController : ControllerBase
     public async Task<IActionResult> GetPatterns([FromQuery] string? patternType)
     {
         var userId = GetUserId();
-        var patterns = await _repository.GetUserPatternsAsync(userId, patternType);
+        if (userId == null) return Unauthorized();
+        var patterns = await _repository.GetUserPatternsAsync(userId.Value, patternType);
         return Ok(patterns);
     }
 
@@ -66,7 +75,8 @@ public class AnalyticsController : ControllerBase
     public async Task<IActionResult> GetInsights([FromQuery] bool unreadOnly = false)
     {
         var userId = GetUserId();
-        var insights = await _repository.GetUserInsightsAsync(userId, unreadOnly);
+        if (userId == null) return Unauthorized();
+        var insights = await _repository.GetUserInsightsAsync(userId.Value, unreadOnly);
         return Ok(insights);
     }
 
@@ -96,7 +106,8 @@ public class AnalyticsController : ControllerBase
     public async Task<IActionResult> GetDashboardMetrics()
     {
         var userId = GetUserId();
-        var metrics = await _repository.GetDashboardMetricsAsync(userId);
+        if (userId == null) return Unauthorized();
+        var metrics = await _repository.GetDashboardMetricsAsync(userId.Value);
         return Ok(metrics);
     }
 

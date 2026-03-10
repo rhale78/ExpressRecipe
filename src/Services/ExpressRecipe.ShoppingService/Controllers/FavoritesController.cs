@@ -19,7 +19,11 @@ public class FavoritesController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Get user's favorite items
@@ -28,7 +32,8 @@ public class FavoritesController : ControllerBase
     public async Task<IActionResult> GetFavorites()
     {
         var userId = GetUserId();
-        var favorites = await _repository.GetUserFavoritesAsync(userId);
+        if (userId == null) return Unauthorized();
+        var favorites = await _repository.GetUserFavoritesAsync(userId.Value);
         return Ok(favorites);
     }
 
@@ -49,8 +54,9 @@ public class FavoritesController : ControllerBase
     public async Task<IActionResult> AddFavorite([FromBody] AddFavoriteRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var favoriteId = await _repository.AddFavoriteItemAsync(
-            userId,
+            userId.Value,
             request.HouseholdId,
             request.ProductId,
             request.CustomName,
@@ -95,9 +101,10 @@ public class FavoritesController : ControllerBase
     public async Task<IActionResult> AddFavoriteToList(Guid favoriteId, Guid listId)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         
         // Get the favorite item details
-        var favorites = await _repository.GetUserFavoritesAsync(userId);
+        var favorites = await _repository.GetUserFavoritesAsync(userId.Value);
         var favorite = favorites.FirstOrDefault(f => f.Id == favoriteId);
         
         if (favorite == null)
@@ -106,7 +113,7 @@ public class FavoritesController : ControllerBase
         // Add to shopping list
         var itemId = await _repository.AddItemToListAsync(
             listId,
-            userId,
+            userId.Value,
             favorite.ProductId,
             favorite.CustomName,
             favorite.TypicalQuantity,

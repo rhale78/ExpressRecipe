@@ -19,7 +19,11 @@ public class ScanController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Start shopping scan session (lock mode for continuous scanning)
@@ -28,7 +32,8 @@ public class ScanController : ControllerBase
     public async Task<IActionResult> StartSession([FromBody] StartScanSessionRequest request)
     {
         var userId = GetUserId();
-        var sessionId = await _repository.StartShoppingScanSessionAsync(userId, request.ShoppingListId, request.StoreId);
+        if (userId == null) return Unauthorized();
+        var sessionId = await _repository.StartShoppingScanSessionAsync(userId.Value, request.ShoppingListId, request.StoreId);
 
         _logger.LogInformation("User {UserId} started shopping scan session {SessionId} for list {ListId}", 
             userId, sessionId, request.ShoppingListId);
@@ -43,7 +48,8 @@ public class ScanController : ControllerBase
     public async Task<IActionResult> GetActiveSession()
     {
         var userId = GetUserId();
-        var session = await _repository.GetActiveShoppingScanSessionAsync(userId);
+        if (userId == null) return Unauthorized();
+        var session = await _repository.GetActiveShoppingScanSessionAsync(userId.Value);
 
         if (session == null)
             return NotFound("No active scan session");
@@ -118,7 +124,8 @@ public class ScanController : ControllerBase
     public async Task<IActionResult> GetSessionReport(Guid sessionId)
     {
         var userId = GetUserId();
-        var session = await _repository.GetActiveShoppingScanSessionAsync(userId);
+        if (userId == null) return Unauthorized();
+        var session = await _repository.GetActiveShoppingScanSessionAsync(userId.Value);
         
         if (session == null || session.Id != sessionId)
             return NotFound("Session not found");

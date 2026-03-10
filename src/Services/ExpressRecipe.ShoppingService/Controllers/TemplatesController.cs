@@ -19,7 +19,11 @@ public class TemplatesController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     /// <summary>
     /// Get user's templates
@@ -28,7 +32,8 @@ public class TemplatesController : ControllerBase
     public async Task<IActionResult> GetTemplates()
     {
         var userId = GetUserId();
-        var templates = await _repository.GetUserTemplatesAsync(userId);
+        if (userId == null) return Unauthorized();
+        var templates = await _repository.GetUserTemplatesAsync(userId.Value);
         return Ok(templates);
     }
 
@@ -49,7 +54,8 @@ public class TemplatesController : ControllerBase
     public async Task<IActionResult> GetTemplate(Guid templateId)
     {
         var userId = GetUserId();
-        var templates = await _repository.GetUserTemplatesAsync(userId);
+        if (userId == null) return Unauthorized();
+        var templates = await _repository.GetUserTemplatesAsync(userId.Value);
         var template = templates.FirstOrDefault(t => t.Id == templateId);
         
         if (template == null)
@@ -65,8 +71,9 @@ public class TemplatesController : ControllerBase
     public async Task<IActionResult> CreateTemplate([FromBody] CreateTemplateRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var templateId = await _repository.CreateTemplateAsync(
-            userId,
+            userId.Value,
             request.HouseholdId,
             request.Name,
             request.Description,
@@ -113,7 +120,8 @@ public class TemplatesController : ControllerBase
     public async Task<IActionResult> CreateListFromTemplate(Guid templateId, [FromBody] CreateListFromTemplateRequest request)
     {
         var userId = GetUserId();
-        var listId = await _repository.CreateListFromTemplateAsync(templateId, userId, request.ListName);
+        if (userId == null) return Unauthorized();
+        var listId = await _repository.CreateListFromTemplateAsync(templateId, userId.Value, request.ListName);
 
         _logger.LogInformation("User {UserId} created list {ListId} from template {TemplateId}", 
             userId, listId, templateId);

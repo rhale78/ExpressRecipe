@@ -19,7 +19,11 @@ public class SearchController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     [HttpGet]
     public async Task<IActionResult> Search(
@@ -30,10 +34,11 @@ public class SearchController : ControllerBase
         [FromQuery] int offset = 0)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var results = await _repository.SearchAsync(query, entityType, category, null, limit, offset);
 
         // Record search
-        await _repository.RecordSearchAsync(userId, query, entityType, results.TotalResults, results.TotalResults > 0);
+        await _repository.RecordSearchAsync(userId.Value, query, entityType, results.TotalResults, results.TotalResults > 0);
 
         return Ok(results);
     }
@@ -49,7 +54,8 @@ public class SearchController : ControllerBase
     public async Task<IActionResult> GetHistory([FromQuery] int limit = 20)
     {
         var userId = GetUserId();
-        var history = await _repository.GetUserSearchHistoryAsync(userId, limit);
+        if (userId == null) return Unauthorized();
+        var history = await _repository.GetUserSearchHistoryAsync(userId.Value, limit);
         return Ok(history);
     }
 
@@ -57,7 +63,8 @@ public class SearchController : ControllerBase
     public async Task<IActionResult> ClearHistory()
     {
         var userId = GetUserId();
-        await _repository.ClearUserSearchHistoryAsync(userId);
+        if (userId == null) return Unauthorized();
+        await _repository.ClearUserSearchHistoryAsync(userId.Value);
         return NoContent();
     }
 
@@ -72,7 +79,8 @@ public class SearchController : ControllerBase
     public async Task<IActionResult> GetRecommendations([FromQuery] string? entityType, [FromQuery] int limit = 20)
     {
         var userId = GetUserId();
-        var recommendations = await _repository.GetUserRecommendationsAsync(userId, entityType, limit);
+        if (userId == null) return Unauthorized();
+        var recommendations = await _repository.GetUserRecommendationsAsync(userId.Value, entityType, limit);
         return Ok(recommendations);
     }
 
@@ -80,7 +88,8 @@ public class SearchController : ControllerBase
     public async Task<IActionResult> RefreshRecommendations()
     {
         var userId = GetUserId();
-        await _repository.RefreshRecommendationsAsync(userId);
+        if (userId == null) return Unauthorized();
+        await _repository.RefreshRecommendationsAsync(userId.Value);
         return NoContent();
     }
 
@@ -88,7 +97,8 @@ public class SearchController : ControllerBase
     public async Task<IActionResult> SavePreference([FromBody] SavePreferenceRequest request)
     {
         var userId = GetUserId();
-        await _repository.SaveSearchPreferenceAsync(userId, request.PreferenceKey, request.PreferenceValue);
+        if (userId == null) return Unauthorized();
+        await _repository.SaveSearchPreferenceAsync(userId.Value, request.PreferenceKey, request.PreferenceValue);
         return NoContent();
     }
 
@@ -96,7 +106,8 @@ public class SearchController : ControllerBase
     public async Task<IActionResult> GetPreferences()
     {
         var userId = GetUserId();
-        var prefs = await _repository.GetUserPreferencesAsync(userId);
+        if (userId == null) return Unauthorized();
+        var prefs = await _repository.GetUserPreferencesAsync(userId.Value);
         return Ok(prefs);
     }
 }

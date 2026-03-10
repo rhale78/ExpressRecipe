@@ -19,13 +19,18 @@ public class CommunityController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     [HttpGet("contributions")]
     public async Task<IActionResult> GetContributions([FromQuery] int limit = 50)
     {
         var userId = GetUserId();
-        var contributions = await _repository.GetUserContributionsAsync(userId, limit);
+        if (userId == null) return Unauthorized();
+        var contributions = await _repository.GetUserContributionsAsync(userId.Value, limit);
         return Ok(contributions);
     }
 
@@ -40,7 +45,8 @@ public class CommunityController : ControllerBase
     public async Task<IActionResult> GetPoints()
     {
         var userId = GetUserId();
-        var points = await _repository.GetUserPointsAsync(userId);
+        if (userId == null) return Unauthorized();
+        var points = await _repository.GetUserPointsAsync(userId.Value);
         return Ok(new { points });
     }
 
@@ -48,8 +54,9 @@ public class CommunityController : ControllerBase
     public async Task<IActionResult> SubmitProduct([FromBody] SubmitProductRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var submissionId = await _repository.SubmitProductAsync(
-            userId, request.Name, request.Brand, request.Barcode, request.Category, request.Photo, request.IngredientsText);
+            userId.Value, request.Name, request.Brand, request.Barcode, request.Category, request.Photo, request.IngredientsText);
         return Ok(new { id = submissionId });
     }
 
@@ -57,7 +64,8 @@ public class CommunityController : ControllerBase
     public async Task<IActionResult> GetSubmissions()
     {
         var userId = GetUserId();
-        var submissions = await _repository.GetUserSubmissionsAsync(userId);
+        if (userId == null) return Unauthorized();
+        var submissions = await _repository.GetUserSubmissionsAsync(userId.Value);
         return Ok(submissions);
     }
 
@@ -65,8 +73,9 @@ public class CommunityController : ControllerBase
     public async Task<IActionResult> CreateReport([FromBody] CreateReportRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var reportId = await _repository.CreateReportAsync(
-            userId, request.EntityType, request.EntityId, request.ReportType, request.Reason, request.Details);
+            userId.Value, request.EntityType, request.EntityId, request.ReportType, request.Reason, request.Details);
         return Ok(new { id = reportId });
     }
 
@@ -74,8 +83,9 @@ public class CommunityController : ControllerBase
     public async Task<IActionResult> CreateReview([FromBody] CreateReviewRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var reviewId = await _repository.CreateReviewAsync(
-            userId, request.EntityType, request.EntityId, request.Rating, request.Comment, request.IsVerifiedPurchase);
+            userId.Value, request.EntityType, request.EntityId, request.Rating, request.Comment, request.IsVerifiedPurchase);
         return Ok(new { id = reviewId });
     }
 
@@ -97,7 +107,8 @@ public class CommunityController : ControllerBase
     public async Task<IActionResult> VoteReview(Guid id, [FromBody] VoteRequest request)
     {
         var userId = GetUserId();
-        await _repository.VoteReviewAsync(id, userId, request.IsHelpful);
+        if (userId == null) return Unauthorized();
+        await _repository.VoteReviewAsync(id, userId.Value, request.IsHelpful);
         return NoContent();
     }
 }
