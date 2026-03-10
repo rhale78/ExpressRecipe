@@ -2,6 +2,8 @@ using ExpressRecipe.InventoryService.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using ExpressRecipe.InventoryService.Data;
 
 namespace ExpressRecipe.InventoryService.Controllers;
@@ -15,11 +17,15 @@ public class InventoryController : ControllerBase
     private readonly IInventoryRepository _repository;
     private readonly IInventorySaleRepository _saleRepository;
 
-    public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository, IInventorySaleRepository saleRepository)
+    private readonly IConfiguration _configuration;
+
+    public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository,
+        IInventorySaleRepository saleRepository, IConfiguration configuration)
     {
-        _logger = logger;
-        _repository = repository;
+        _logger         = logger;
+        _repository     = repository;
         _saleRepository = saleRepository;
+        _configuration  = configuration;
     }
 
     private Guid? GetUserId()
@@ -452,6 +458,57 @@ public class InventoryController : ControllerBase
             _logger.LogError(ex, "Error retrieving inventory report");
             return StatusCode(500, new { message = "An error occurred while retrieving the inventory report" });
         }
+    }
+
+    /// <summary>
+    /// Get frozen inventory items matching a recipe's ingredients (service-to-service, used by ThawTaskGeneratorService).
+    /// Protected by an API key header (X-Internal-Api-Key) when InternalApi:Key is configured.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpGet("frozen-for-recipe/{householdId}/{recipeId}")]
+    public async Task<IActionResult> GetFrozenIngredientsForRecipe(
+        Guid householdId, Guid recipeId, CancellationToken ct)
+    {
+        // Validate service-to-service API key when one is configured.
+        string? configuredKey = _configuration["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
+        try
+        {
+            _logger.LogInformation(
+                "Getting frozen ingredients for household {HouseholdId} recipe {RecipeId}",
+                householdId, recipeId);
+            List<FrozenIngredientResult> items =
+                await _repository.GetFrozenIngredientsForRecipeAsync(householdId, recipeId, ct);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting frozen ingredients for recipe {RecipeId}", recipeId);
+            return StatusCode(500, new { message = "An error occurred while retrieving frozen ingredients" });
+        }
+    }
+
+    // Constant-time comparison to guard against timing attacks when comparing API keys.
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) { return false; }
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 
     /// <summary>

@@ -146,6 +146,35 @@ builder.Services.AddHostedService(sp =>
         sp.GetRequiredService<IHttpClientFactory>(),
         sp.GetRequiredService<ILogger<MealCookNotificationWorker>>()));
 
+builder.Services.AddScoped<IHouseholdTaskRepository>(_ =>
+    new HouseholdTaskRepository(connectionString));
+
+// Register task services
+builder.Services.AddScoped<IThawTaskGeneratorService, ThawTaskGeneratorService>();
+builder.Services.AddScoped<IHouseholdMemberQuery, HouseholdMemberHttpQuery>();
+
+// Register HTTP clients for inter-service calls
+builder.Services.AddHttpClient("InventoryService", (sp, client) =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:InventoryService"] ?? "http://localhost:5104");
+    string? apiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrEmpty(apiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
+});
+
+builder.Services.AddHttpClient("NotificationService", (sp, client) =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:NotificationService"] ?? "http://localhost:5108");
+    string? apiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrEmpty(apiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
+});
+
+// Register background workers
+builder.Services.AddHostedService<HouseholdTaskEscalationWorker>();
+
 // Add controllers
 builder.Services.AddControllers();
 

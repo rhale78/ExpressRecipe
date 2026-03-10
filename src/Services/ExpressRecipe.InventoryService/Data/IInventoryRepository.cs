@@ -108,6 +108,16 @@ public interface IInventoryRepository
     Task<Guid> CreateFromGardenHarvestAsync(Guid userId, Guid householdId, string plantName, decimal quantity, string unit, int freshnessDays, CancellationToken ct = default);
     Task<Guid> AddItemAsync(AddItemRequest request, CancellationToken ct = default);
     Task<List<InventoryItemDto>> GetItemsAsync(Guid householdId, bool isLongTermOnly = false, string? storageMethod = null, CancellationToken ct = default);
+
+    // Thaw task support
+    Task<List<FrozenIngredientResult>> GetFrozenIngredientsForRecipeAsync(Guid householdId, Guid recipeId, CancellationToken ct = default);
+}
+
+public class FrozenIngredientResult
+{
+    public string ItemName { get; set; } = string.Empty;
+    public string FoodCategory { get; set; } = string.Empty;
+    public Guid StorageLocationId { get; set; }
 }
 
 public class HouseholdDto
