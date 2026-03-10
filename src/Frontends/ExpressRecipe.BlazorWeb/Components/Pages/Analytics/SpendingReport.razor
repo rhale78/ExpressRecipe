@@ -1,5 +1,8 @@
 @using ExpressRecipe.Client.Shared.Models.Analytics
 
+<FeatureGuard FeatureKey="advanced-reports" RequiredTier="Premium"
+              Title="Advanced Reports require Premium"
+              Description="Unlock detailed spending analytics, top-product breakdowns, and store comparisons with a Premium subscription.">
 <div class="report-section">
     <div class="report-header">
         <h2>💰 Spending Report</h2>
@@ -90,6 +93,7 @@
         </div>
     }
 </div>
+</FeatureGuard>
 
 @code {
     [Parameter]

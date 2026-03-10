@@ -1,0 +1,88 @@
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Services
+@inject ISubscriptionApiClient SubscriptionApi
+@inject NavigationManager Navigation
+
+@if (_isLoading)
+{
+    @* Render nothing while we check access — avoids layout flash *@
+}
+else if (_hasAccess)
+{
+    @ChildContent
+}
+else
+{
+    <div class="feature-locked-wrapper">
+        <div class="feature-locked-card">
+            <div class="locked-icon">🔒</div>
+
+            <h3 class="locked-title">@EffectiveTitle</h3>
+
+            <p class="locked-description">@EffectiveDescription</p>
+
+            @if (!string.IsNullOrWhiteSpace(RequiredTier))
+            {
+                <span class="required-tier-badge @TierCssClass">@RequiredTier</span>
+            }
+
+            <button class="btn btn-primary btn-upgrade" @onclick="NavigateToUpgrade">
+                Upgrade Now
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Feature key to evaluate, e.g. "advanced-reports".</summary>
+    [Parameter, EditorRequired]
+    public string FeatureKey { get; set; } = string.Empty;
+
+    /// <summary>Human-readable tier name shown in the badge, e.g. "Premium".</summary>
+    [Parameter]
+    public string RequiredTier { get; set; } = string.Empty;
+
+    /// <summary>Override the default locked-card title.</summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    /// <summary>Override the default locked-card description.</summary>
+    [Parameter]
+    public string? Description { get; set; }
+
+    /// <summary>Content displayed when the user has access.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private bool _isLoading = true;
+    private bool _hasAccess = false;
+
+    private string EffectiveTitle =>
+        !string.IsNullOrWhiteSpace(Title)
+            ? Title
+            : $"Upgrade to {RequiredTier} to unlock this feature";
+
+    private string EffectiveDescription =>
+        !string.IsNullOrWhiteSpace(Description)
+            ? Description
+            : "This feature is available on a higher subscription tier.";
+
+    private string TierCssClass => RequiredTier.ToLowerInvariant() switch
+    {
+        "premium" => "tier-premium",
+        "plus"    => "tier-plus",
+        "ad-free" or "adfree" => "tier-adfree",
+        _         => "tier-free",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hasAccess = await SubscriptionApi.HasFeatureAccessAsync(FeatureKey);
+        _isLoading = false;
+    }
+
+    private void NavigateToUpgrade()
+    {
+        Navigation.NavigateTo("/settings/subscription");
+    }
+}
