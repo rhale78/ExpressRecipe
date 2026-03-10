@@ -9,6 +9,8 @@
 @inject IProductApiClient ProductApi
 @inject IRecipeApiClient RecipeApi
 @inject IPriceApiClient PriceApi
+@inject IToastService ToastService
+@inject IJSRuntime JS
 @inject NavigationManager Navigation
 
 <PageTitle>@(_list?.Name ?? "Shopping List") - ExpressRecipe</PageTitle>
@@ -40,6 +42,10 @@
                 <div class="list-status-badge @_list.Status.ToLower()">@_list.Status</div>
             </div>
             <div class="header-actions">
+                <button class="btn btn-secondary" @onclick="ToggleShopMode"
+                        disabled="@(_isShopModeActive && _activeScanSession == null)">
+                    @(_isShopModeActive ? "✓ Exit Shop Mode" : "🛒 Shop Mode")
+                </button>
                 <button class="btn btn-secondary" @onclick="ToggleEditMode">
                     @(_isEditMode ? "Done Editing" : "Edit List")
                 </button>
@@ -49,6 +55,53 @@
         @if (!string.IsNullOrWhiteSpace(_list.Description))
         {
             <p class="list-description-detail">@_list.Description</p>
+        }
+
+        <!-- Store Assignment Bar -->
+        <div class="list-store-bar">
+            <span class="store-label">🏪 Store:</span>
+            @if (_assignedStore != null)
+            {
+                <span class="assigned-store-name">@_assignedStore.Name</span>
+                <button class="btn-link" @onclick="ClearStoreAssignment">Change</button>
+            }
+            else
+            {
+                <button class="btn btn-outline btn-sm" @onclick="ShowStorePicker">
+                    Assign a Store
+                </button>
+            }
+        </div>
+
+        @if (_isShopModeActive)
+        {
+            <div class="shop-mode-banner">
+                <div class="shop-mode-info">
+                    <span>🛒</span>
+                    <strong>Shopping Mode Active</strong>
+                    @if (_activeScanSession != null)
+                    {
+                        <span>@_activeScanSession.ItemsScanned items scanned</span>
+                    }
+                </div>
+                <div class="shop-mode-controls">
+                    <input type="text" class="scan-barcode-input" placeholder="Scan barcode..."
+                           @bind="_shopBarcode" @bind:event="oninput"
+                           @onkeydown="HandleShopBarcode" />
+                    @if (_activeScanSession != null)
+                    {
+                        <button class="btn btn-success btn-sm" @onclick="FinishShopping">
+                            ✓ Finish & Add to Inventory
+                        </button>
+                    }
+                </div>
+                @if (_lastShopScan != null)
+                {
+                    <div class="scan-last-result @(_lastShopScan.Success ? "scan-success" : "scan-error")">
+                        @(_lastShopScan.Success ? "✓" : "✗") @_lastShopScan.Message
+                    </div>
+                }
+            </div>
         }
 
         <!-- Progress Section -->
@@ -171,6 +224,31 @@
 
         <!-- Shopping Items -->
         <div class="items-container">
+
+            <!-- Favorites Panel -->
+            <div class="favorites-section">
+                <button class="favorites-toggle" @onclick="ToggleFavorites">
+                    ⭐ Favourites @(_showFavorites ? "▲" : "▼")
+                    @if (_favorites?.Any() == true)
+                    {
+                        <span class="fav-count">@_favorites.Count</span>
+                    }
+                </button>
+
+                @if (_showFavorites && _favorites != null)
+                {
+                    <div class="favorites-grid">
+                        @foreach (FavoriteItemDto fav in _favorites)
+                        {
+                            <div class="fav-chip" @onclick="() => AddFavoriteToList(fav)">
+                                <span class="fav-name">@fav.Name</span>
+                                <span class="fav-qty">@fav.TypicalQuantity @fav.TypicalUnit</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
             @if (_list.Items.Any())
             {
                 @* Group by category and filter items *@
@@ -224,6 +302,20 @@
                                             @if (!string.IsNullOrWhiteSpace(item.Source))
                                             {
                                                 <span class="item-source">From @item.Source</span>
+                                            }
+
+                                            @if (_bestPrices.TryGetValue(item.Id, out List<PriceComparisonDto>? prices) && prices.Any())
+                                            {
+                                                <div class="item-price-row">
+                                                    <span class="best-price-label">Best price:</span>
+                                                    @foreach (PriceComparisonDto price in prices.Take(3))
+                                                    {
+                                                        <span class="price-chip">
+                                                            @price.StoreName — $@((price.UnitPrice ?? price.Price).ToString("0.00"))/@(price.Unit ?? "ea")
+                                                            @if (IsSaleDeal(price.DealType)) { <span class="sale-badge">SALE</span> }
+                                                        </span>
+                                                    }
+                                                </div>
                                             }
                                         </div>
 
@@ -311,6 +403,36 @@
         </div>
     }
 </div>
+
+<!-- Store Picker Modal -->
+@if (_showStorePicker && _nearbyStores != null)
+{
+    <div class="modal-overlay" @onclick="() => _showStorePicker = false">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h3>🏪 Choose a Store</h3>
+                <button class="modal-close" @onclick="() => _showStorePicker = false">✕</button>
+            </div>
+            @if (!_nearbyStores.Any())
+            {
+                <p class="empty-message">No stores found. Add stores under Grocery Stores.</p>
+            }
+            else
+            {
+                <div class="store-picker-list">
+                    @foreach (StoreDto store in _nearbyStores)
+                    {
+                        <div class="store-picker-item" @onclick="() => AssignStore(store)">
+                            <strong>@store.Name</strong>
+                            <span class="store-chain">@store.Chain</span>
+                            <span class="store-address-sm">@store.Address</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
 
 <!-- Add Item Modal -->
 @if (_showAddItemModal)
@@ -474,13 +596,35 @@
     // Add from recipe
     private bool _showAddFromRecipeModal = false;
 
-    // Price comparison
+    // Price comparison (bulk — existing feature)
     private bool _isPriceComparisonLoading = false;
     private PriceComparisonResult? _priceComparisonResult;
+
+    // Per-item best prices
+    private Dictionary<Guid, List<PriceComparisonDto>> _bestPrices = new();
+
+    // Store assignment
+    private StoreDto? _assignedStore;
+    private bool _showStorePicker;
+    private List<StoreDto>? _nearbyStores;
+
+    // Favorites
+    private List<FavoriteItemDto>? _favorites;
+    private bool _showFavorites;
+
+    // Shop mode / scan session
+    private bool _isShopModeActive;
+    private ShoppingScanSessionDto? _activeScanSession;
+    private string _shopBarcode = string.Empty;
+    private ScanResult? _lastShopScan;
+
+    private sealed record ScanResult(bool Success, string Message);
 
     protected override async Task OnInitializedAsync()
     {
         await LoadList();
+        _favorites = await ShoppingApi.GetFavoritesAsync();
+        _ = LoadPriceComparisons();
     }
 
     private async Task LoadList()
@@ -492,6 +636,152 @@
 
         _isLoading = false;
         StateHasChanged();
+    }
+
+    private async Task LoadPriceComparisons()
+    {
+        if (_list?.Items == null)
+        {
+            return;
+        }
+
+        _bestPrices = new Dictionary<Guid, List<PriceComparisonDto>>();
+        foreach (ShoppingListItemDto item in _list.Items.Where(i => i.ProductId.HasValue))
+        {
+            List<PriceComparisonDto>? prices = await ShoppingApi.GetBestPricesAsync(item.ProductId!.Value);
+            if (prices?.Any() == true)
+            {
+                _bestPrices[item.Id] = prices;
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    // ── Store assignment ─────────────────────────────────────────────────────
+
+    private async Task ShowStorePicker()
+    {
+        _nearbyStores = await ShoppingApi.GetNearbyStoresAsync(0, 0);
+        _showStorePicker = true;
+    }
+
+    private async Task AssignStore(StoreDto store)
+    {
+        _assignedStore = store;
+        _showStorePicker = false;
+
+        bool ok = await ShoppingApi.SetPreferredStoreAsync(store.Id);
+        if (ok)
+        {
+            ToastService.ShowInfo($"List assigned to {store.Name}.");
+        }
+    }
+
+    private void ClearStoreAssignment()
+    {
+        _assignedStore = null;
+    }
+
+    // ── Favorites ────────────────────────────────────────────────────────────
+
+    private void ToggleFavorites() { _showFavorites = !_showFavorites; }
+
+    private async Task AddFavoriteToList(FavoriteItemDto fav)
+    {
+        Guid? itemId = await ShoppingApi.AddItemAsync(new AddShoppingListItemRequest
+        {
+            ShoppingListId = Id,
+            Name = fav.Name,
+            Quantity = fav.TypicalQuantity ?? 1,
+            Unit = fav.TypicalUnit ?? "count",
+            Category = fav.Category
+        });
+
+        if (itemId.HasValue)
+        {
+            await ShoppingApi.UpdateFavoriteUsageAsync(fav.Id);
+            ToastService.ShowSuccess($"{fav.Name} added to list.");
+            await LoadList();
+        }
+    }
+
+    // ── Shop mode / scan session ─────────────────────────────────────────────
+
+    private async Task ToggleShopMode()
+    {
+        if (_isShopModeActive)
+        {
+            _isShopModeActive = false;
+            return;
+        }
+
+        _isShopModeActive = true;
+        Guid? sessionId = await ShoppingApi.StartShoppingScanSessionAsync(
+            new StartShoppingScanRequest { ShoppingListId = Id });
+
+        if (sessionId.HasValue)
+        {
+            _activeScanSession = await ShoppingApi.GetActiveShoppingScanSessionAsync();
+        }
+    }
+
+    private async Task HandleShopBarcode(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(_shopBarcode))
+        {
+            return;
+        }
+
+        string barcode = _shopBarcode.Trim();
+        _shopBarcode = string.Empty;
+
+        if (_activeScanSession == null)
+        {
+            return;
+        }
+
+        bool ok = await ShoppingApi.ScanPurchaseItemAsync(
+            _activeScanSession.Id,
+            new ScanPurchaseRequest
+            {
+                SessionId = _activeScanSession.Id,
+                ShoppingListItemId = Guid.Empty,
+                Barcode = barcode
+            });
+
+        _lastShopScan = new ScanResult(ok,
+            ok ? $"✓ Scanned {barcode}" : $"Not found on list: {barcode}");
+
+        _activeScanSession = await ShoppingApi.GetActiveShoppingScanSessionAsync();
+        await LoadList();
+    }
+
+    private async Task FinishShopping()
+    {
+        if (_activeScanSession == null)
+        {
+            return;
+        }
+
+        ShoppingScanSessionResultDto? result =
+            await ShoppingApi.EndShoppingScanSessionAsync(_activeScanSession.Id);
+
+        if (result != null && result.TotalItemsScanned > 0)
+        {
+            bool addToInventory = await JS.InvokeAsync<bool>(
+                "confirm",
+                $"{result.TotalItemsScanned} items purchased. Go to Inventory to add them to your stock?");
+
+            if (addToInventory)
+            {
+                Navigation.NavigateTo("/inventory");
+            }
+        }
+
+        _activeScanSession = null;
+        _isShopModeActive = false;
+        await LoadList();
     }
 
     private void NavigateBack()
@@ -511,13 +801,13 @@
 
     private async Task ToggleItemPurchased(ShoppingListItemDto item)
     {
-        var request = new MarkItemPurchasedRequest
+        MarkItemPurchasedRequest request = new()
         {
             ItemId = item.Id,
             IsPurchased = !item.IsPurchased
         };
 
-        var success = await ShoppingApi.MarkItemPurchasedAsync(request);
+        bool success = await ShoppingApi.MarkItemPurchasedAsync(request);
 
         if (success)
         {
@@ -583,7 +873,7 @@
         bool success;
         if (_editingItem != null)
         {
-            var updateRequest = new UpdateShoppingListItemRequest
+            UpdateShoppingListItemRequest updateRequest = new()
             {
                 ShoppingListId = Id,
                 ProductId = _newItem.ProductId,
@@ -599,7 +889,7 @@
         }
         else
         {
-            var itemId = await ShoppingApi.AddItemAsync(_newItem);
+            Guid? itemId = await ShoppingApi.AddItemAsync(_newItem);
             success = itemId.HasValue;
         }
 
@@ -619,14 +909,14 @@
         if (string.IsNullOrWhiteSpace(_productSearchTerm))
             return;
 
-        var request = new ProductSearchRequest
+        ProductSearchRequest request = new()
         {
             SearchTerm = _productSearchTerm,
             Page = 1,
             PageSize = 10
         };
 
-        var result = await ProductApi.SearchProductsAsync(request);
+        ProductSearchResult? result = await ProductApi.SearchProductsAsync(request);
         _productSearchResults = result?.Products ?? new();
         StateHasChanged();
     }
@@ -643,7 +933,7 @@
 
     private async Task DeleteItem(Guid itemId)
     {
-        var success = await ShoppingApi.DeleteItemAsync(itemId);
+        bool success = await ShoppingApi.DeleteItemAsync(itemId);
 
         if (success)
         {
@@ -663,12 +953,12 @@
 
     private async Task AddLowStockItems()
     {
-        var request = new AddLowStockItemsRequest
+        AddLowStockItemsRequest request = new()
         {
             ShoppingListId = Id
         };
 
-        var success = await ShoppingApi.AddLowStockItemsAsync(request);
+        bool success = await ShoppingApi.AddLowStockItemsAsync(request);
 
         if (success)
         {
@@ -684,7 +974,7 @@
         _priceComparisonResult = null;
         StateHasChanged();
 
-        var productIds = _list.Items
+        List<Guid> productIds = _list.Items
             .Select(i => i.ProductId)
             .OfType<Guid>()
             .Distinct()
@@ -692,11 +982,14 @@
 
         if (productIds.Any())
         {
-            var request = new PriceComparisonRequest { ProductIds = productIds };
+            PriceComparisonRequest request = new() { ProductIds = productIds };
             _priceComparisonResult = await PriceApi.ComparePricesAsync(request);
         }
 
         _isPriceComparisonLoading = false;
         StateHasChanged();
     }
+
+    private static bool IsSaleDeal(string? dealType) =>
+        dealType is "Sale" or "BOGO" or "BOGO50";
 }

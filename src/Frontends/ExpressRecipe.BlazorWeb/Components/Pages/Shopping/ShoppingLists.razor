@@ -1,8 +1,10 @@
 @page "/shopping"
 @rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.Client.Shared.Models.Inventory
 @using ExpressRecipe.Client.Shared.Services
 @inject IShoppingListApiClient ShoppingApi
+@inject IToastService ToastService
 @inject NavigationManager Navigation
 
 <PageTitle>Shopping Lists - ExpressRecipe</PageTitle>
@@ -11,6 +13,12 @@
     <div class="shopping-header">
         <h1>🛒 Shopping Lists</h1>
         <div class="header-actions">
+            <button class="btn btn-secondary" @onclick="ShowTemplatesModal">
+                📋 From Template
+            </button>
+            <button class="btn btn-secondary" @onclick="QuickAddLowStock">
+                📉 Add Low Stock
+            </button>
             <button class="btn btn-primary" @onclick="CreateNewList">
                 <span class="btn-icon">➕</span> New List
             </button>
@@ -20,6 +28,14 @@
     <p class="shopping-subtitle">
         Manage your shopping lists, add items from recipes or low-stock inventory.
     </p>
+
+    <div class="shopping-context-bar">
+        <HouseholdSwitcher OnHouseholdChanged="HandleHouseholdChanged" />
+        @if (_activeHouseholdId.HasValue)
+        {
+            <span class="context-hint">Showing lists for selected household</span>
+        }
+    </div>
 
     @if (_isLoading)
     {
@@ -272,6 +288,39 @@
     </div>
 }
 
+<!-- Templates Modal -->
+@if (_showTemplatesModal && _templates != null)
+{
+    <div class="modal-overlay" @onclick="() => _showTemplatesModal = false">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h3>📋 Create from Template</h3>
+                <button class="modal-close" @onclick="() => _showTemplatesModal = false">✕</button>
+            </div>
+            @if (!_templates.Any())
+            {
+                <p class="empty-message">No templates yet. Complete a shopping list and save it as a template.</p>
+            }
+            else
+            {
+                <div class="template-list">
+                    @foreach (ShoppingListTemplateDto template in _templates)
+                    {
+                        <div class="template-card" @onclick="() => CreateListFromTemplate(template.Id)">
+                            <strong>@template.Name</strong>
+                            <span class="template-item-count">Used @template.UsageCount time(s)</span>
+                            @if (!string.IsNullOrWhiteSpace(template.Description))
+                            {
+                                <p class="template-description">@template.Description</p>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
 <!-- Delete Confirmation Modal -->
 @if (_showDeleteModal && _selectedList != null)
 {
@@ -304,6 +353,13 @@
     private int _currentPage = 1;
     private const int PageSize = 12;
 
+    // Household context
+    private Guid? _activeHouseholdId;
+
+    // Templates
+    private bool _showTemplatesModal;
+    private List<ShoppingListTemplateDto>? _templates;
+
     // Create modal
     private bool _showCreateModal = false;
     private string _newListName = string.Empty;
@@ -334,9 +390,64 @@
         StateHasChanged();
     }
 
+    private async Task LoadSummary()
+    {
+        await LoadShoppingLists();
+    }
+
+    private async Task HandleHouseholdChanged(HouseholdDto? household)
+    {
+        _activeHouseholdId = household?.Id;
+        await LoadSummary();
+    }
+
+    private async Task ShowTemplatesModal()
+    {
+        _templates = await ShoppingApi.GetTemplatesAsync();
+        _showTemplatesModal = true;
+    }
+
+    private async Task QuickAddLowStock()
+    {
+        Guid? targetListId = _searchResult?.Lists.FirstOrDefault(l => l.Status == "Active")?.Id;
+        if (!targetListId.HasValue)
+        {
+            targetListId = await ShoppingApi.CreateShoppingListAsync(
+                new CreateShoppingListRequest { Name = "Low Stock Restock" });
+        }
+
+        if (targetListId.HasValue)
+        {
+            bool ok = await ShoppingApi.AddLowStockItemsAsync(
+                new AddLowStockItemsRequest { ShoppingListId = targetListId.Value });
+            if (ok)
+            {
+                ToastService.ShowSuccess("Low-stock items added to shopping list.");
+                await LoadSummary();
+            }
+        }
+    }
+
+    private async Task CreateListFromTemplate(Guid templateId)
+    {
+        Guid? newListId = await ShoppingApi.CreateListFromTemplateAsync(
+            templateId,
+            new CreateListFromTemplateRequest
+            {
+                ListName = null   // uses template name
+            });
+
+        if (newListId.HasValue)
+        {
+            _showTemplatesModal = false;
+            ToastService.ShowSuccess("List created from template.");
+            Navigation.NavigateTo($"/shopping/{newListId.Value}");
+        }
+    }
+
     private async Task SearchLists()
     {
-        var request = new ShoppingListSearchRequest
+        ShoppingListSearchRequest request = new()
         {
             Status = _selectedStatus == "All" ? null : _selectedStatus,
             Page = _currentPage,
@@ -394,14 +505,14 @@
         _isCreating = true;
         StateHasChanged();
 
-        var request = new CreateShoppingListRequest
+        CreateShoppingListRequest request = new()
         {
             Name = _newListName,
             Description = _newListDescription,
             ShoppingDate = _newListDate
         };
 
-        var listId = await ShoppingApi.CreateShoppingListAsync(request);
+        Guid? listId = await ShoppingApi.CreateShoppingListAsync(request);
 
         _isCreating = false;
 
@@ -419,7 +530,7 @@
 
     private async Task CompleteList(Guid id)
     {
-        var success = await ShoppingApi.CompleteShoppingListAsync(id);
+        bool success = await ShoppingApi.CompleteShoppingListAsync(id);
         if (success)
         {
             await LoadShoppingLists();
@@ -442,7 +553,7 @@
     {
         if (_selectedList == null) return;
 
-        var success = await ShoppingApi.DeleteShoppingListAsync(_selectedList.Id);
+        bool success = await ShoppingApi.DeleteShoppingListAsync(_selectedList.Id);
 
         if (success)
         {
