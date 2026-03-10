@@ -42,6 +42,7 @@ public sealed class NullGroundingRepository : IGroundingRepository
 public sealed class GroundingRepository : IGroundingRepository
 {
     private readonly string _connectionString;
+    private const int MaxKeywordTerms = 10; // cap dynamic OR terms to prevent large queries
 
     public GroundingRepository(string connectionString) { _connectionString = connectionString; }
 
@@ -50,8 +51,7 @@ public sealed class GroundingRepository : IGroundingRepository
     {
         // Split user message into words, match against Keywords column
         // Simple LIKE search — sufficient for seed table size (~15 rows)
-        string[] words = userMessage.ToLower().Split(' ', ',', '.', '?', '!')
-            .Where(w => w.Length > 3).Distinct().ToArray();
+        string[] words = ExtractKeywords(userMessage, minLength: 4);
 
         if (words.Length == 0) { return new List<CookingTechniqueIssueDto>(); }
 
@@ -89,8 +89,7 @@ public sealed class GroundingRepository : IGroundingRepository
     public async Task<List<IngredientPairingDto>> FindMatchingPairingsAsync(
         string dishName, int maxResults = 10, CancellationToken ct = default)
     {
-        string[] words = dishName.ToLower().Split(' ', ',')
-            .Where(w => w.Length > 2).Distinct().ToArray();
+        string[] words = ExtractKeywords(dishName, minLength: 3);
 
         if (words.Length == 0) { return new List<IngredientPairingDto>(); }
 
@@ -124,4 +123,16 @@ public sealed class GroundingRepository : IGroundingRepository
         }
         return results;
     }
+
+    /// <summary>
+    /// Splits a user input string into distinct lower-case keyword tokens,
+    /// filtering by minimum length and capping at <see cref="MaxKeywordTerms"/>.
+    /// </summary>
+    private static string[] ExtractKeywords(string input, int minLength) =>
+        input.ToLower()
+             .Split(' ', ',', '.', '?', '!')
+             .Where(w => w.Length >= minLength)
+             .Distinct()
+             .Take(MaxKeywordTerms)
+             .ToArray();
 }

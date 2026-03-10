@@ -214,7 +214,7 @@ public sealed class CookingAssistantService : ICookingAssistantService
         return ParseAssistantResponse(result.Text);
     }
 
-    private static CookingAssistantResponse ParseAssistantResponse(string json)
+    private CookingAssistantResponse ParseAssistantResponse(string json)
     {
         try
         {
@@ -257,9 +257,10 @@ public sealed class CookingAssistantService : ICookingAssistantService
                 CookingNoteToSave = noteToSave
             };
         }
-        catch
+        catch (JsonException ex)
         {
             // AI returned valid text but not valid JSON — surface the raw text
+            _logger.LogWarning(ex, "AI response could not be parsed as JSON; surfacing raw text");
             return new CookingAssistantResponse
             {
                 Success     = true,
