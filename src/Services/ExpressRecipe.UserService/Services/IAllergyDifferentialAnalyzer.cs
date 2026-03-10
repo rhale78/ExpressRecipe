@@ -127,7 +127,7 @@ public sealed class AllergyDifferentialAnalyzer : IAllergyDifferentialAnalyzer
 
             // Confidence = incidentFrequency × normalizedSeverityWeight
             decimal frequency  = (decimal)data.IncidentCount / totalIncidents;
-            decimal normWeight = data.MaxSeverityWeight / 3.0m;   // normalise to 0-1
+            decimal normWeight = data.MaxSeverityWeight / 3.0m;   // normalize to 0-1
             decimal confidence = frequency * normWeight;
 
             if (confidence < SuspectThreshold) { continue; }
