@@ -156,7 +156,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             ReactionTypes         = GetString(reader, "ReactionTypes"),
             TreatmentType         = GetString(reader, "TreatmentType"),
             TreatmentDose         = GetString(reader, "TreatmentDose"),
-            ResolutionTimeMinutes = GetNullableInt32(reader, "ResolutionTimeMinutes"),
+            ResolutionTimeMinutes = GetIntNullable(reader, "ResolutionTimeMinutes"),
             RequiredEpipen        = GetBoolean(reader, "RequiredEpipen"),
             RequiredER            = GetBoolean(reader, "RequiredER")
         }, CreateParameter("@IncidentId", incidentId));
@@ -385,10 +385,4 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
         LastUpdatedAt         = GetDateTime(reader, "LastUpdatedAt"),
         IsPromotedToConfirmed = GetBoolean(reader, "IsPromotedToConfirmed")
     };
-
-    private static int? GetNullableInt32(System.Data.IDataRecord reader, string column)
-    {
-        int ordinal = reader.GetOrdinal(column);
-        return reader.IsDBNull(ordinal) ? null : reader.GetInt32(ordinal);
-    }
 }

@@ -187,9 +187,9 @@
 
             await Task.WhenAll(suspectTask, clearedTask, incidentTask);
 
-            _suspects  = suspectTask.Result  ?? new();
-            _cleared   = clearedTask.Result  ?? new();
-            _incidents = incidentTask.Result ?? new();
+            _suspects  = await suspectTask  ?? new();
+            _cleared   = await clearedTask  ?? new();
+            _incidents = await incidentTask ?? new();
         }
         catch (Exception)
         {

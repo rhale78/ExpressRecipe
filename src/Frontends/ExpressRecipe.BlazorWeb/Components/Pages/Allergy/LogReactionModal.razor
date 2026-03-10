@@ -117,12 +117,12 @@
                            value="@_incidentDateLocal" @onchange="OnDateChanged" />
                     <label>Exposure type</label>
                     <div class="exposure-group mb-3">
-                        @foreach (var et in new[] { ("food", "Ingestion", "Ingestion"), ("hand", "Touch", "Touch"), ("nose", "Smell", "Smell") })
+                        @foreach (var et in new[] { "Ingestion", "Touch", "Smell" })
                         {
-                            var v = et.Item3;
+                            var v = et;
                             var etSel = _exposureType == v;
                             <button class="@(etSel ? "exposure-btn selected" : "exposure-btn")" @onclick="() => _exposureType = v">
-                                @et.Item2
+                                @v
                             </button>
                         }
                     </div>
@@ -243,6 +243,7 @@
     private void SetSeverity(MemberReactionDetail d, string severity)
     {
         d.Severity = severity;
+        // Pre-fill epi-pen/ER for high-severity selections — user can override these checkboxes
         if (severity == "ThroatClosing" || severity == "ERVisit")
         {
             d.RequiredEpipen = true;
