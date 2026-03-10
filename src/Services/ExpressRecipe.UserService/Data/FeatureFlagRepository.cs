@@ -134,31 +134,23 @@ public class FeatureFlagRepository : SqlHelper, IFeatureFlagRepository
 
     private static FeatureFlagDto MapFlag(SqlDataReader r) => new()
     {
-        Id                = r.GetGuid(r.GetOrdinal("Id")),
-        FeatureKey        = r.GetString(r.GetOrdinal("FeatureKey")),
-        Description       = r.IsDBNull(r.GetOrdinal("Description"))
-                              ? string.Empty
-                              : r.GetString(r.GetOrdinal("Description")),
-        IsEnabled         = r.GetBoolean(r.GetOrdinal("IsEnabled")),
-        RolloutPercentage = r.GetInt32(r.GetOrdinal("RolloutPercentage")),
-        RequiredTier      = r.IsDBNull(r.GetOrdinal("RequiredTier"))
-                              ? null
-                              : r.GetString(r.GetOrdinal("RequiredTier")),
-        CreatedAt         = r.GetDateTime(r.GetOrdinal("CreatedAt")),
-        UpdatedAt         = r.IsDBNull(r.GetOrdinal("UpdatedAt"))
-                              ? null
-                              : r.GetDateTime(r.GetOrdinal("UpdatedAt"))
+        Id                = GetGuid(r, "Id"),
+        FeatureKey        = GetString(r, "FeatureKey") ?? string.Empty,
+        Description       = GetString(r, "Description") ?? string.Empty,
+        IsEnabled         = GetBoolean(r, "IsEnabled"),
+        RolloutPercentage = GetInt32(r, "RolloutPercentage"),
+        RequiredTier      = GetNullableString(r, "RequiredTier"),
+        CreatedAt         = GetDateTime(r, "CreatedAt"),
+        UpdatedAt         = GetNullableDateTime(r, "UpdatedAt")
     };
 
     private static UserFeatureFlagOverrideDto MapOverride(SqlDataReader r) => new()
     {
-        Id         = r.GetGuid(r.GetOrdinal("Id")),
-        UserId     = r.GetGuid(r.GetOrdinal("UserId")),
-        FeatureKey = r.GetString(r.GetOrdinal("FeatureKey")),
-        IsEnabled  = r.GetBoolean(r.GetOrdinal("IsEnabled")),
-        ExpiresAt  = r.IsDBNull(r.GetOrdinal("ExpiresAt"))
-                       ? null
-                       : r.GetDateTime(r.GetOrdinal("ExpiresAt")),
-        CreatedAt  = r.GetDateTime(r.GetOrdinal("CreatedAt"))
+        Id         = GetGuid(r, "Id"),
+        UserId     = GetGuid(r, "UserId"),
+        FeatureKey = GetString(r, "FeatureKey") ?? string.Empty,
+        IsEnabled  = GetBoolean(r, "IsEnabled"),
+        ExpiresAt  = GetNullableDateTime(r, "ExpiresAt"),
+        CreatedAt  = GetDateTime(r, "CreatedAt")
     };
 }

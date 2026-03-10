@@ -228,7 +228,7 @@ public static class Extensions
             new LocalModeConfig(sp.GetRequiredService<IConfiguration>()));
 
         // Named HTTP client for calling UserService's feature-flag endpoint
-        builder.Services.AddHttpClient("userservice", client =>
+        builder.Services.AddHttpClient("UserService", client =>
         {
             client.BaseAddress = new Uri("http://userservice");
             client.Timeout = TimeSpan.FromSeconds(5);

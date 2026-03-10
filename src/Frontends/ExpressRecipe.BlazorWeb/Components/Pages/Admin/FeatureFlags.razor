@@ -55,6 +55,7 @@
                                 {
                                     <input type="number" min="0" max="100"
                                            class="rollout-input"
+                                           aria-label="Rollout percentage for @flag.FeatureKey"
                                            @bind="_editRollout"
                                            @bind:event="oninput" />
                                 }
@@ -66,7 +67,9 @@
                             <td>
                                 @if (_editingKey == flag.FeatureKey)
                                 {
-                                    <select class="tier-select" @bind="_editTier">
+                                    <select class="tier-select"
+                                            aria-label="Required tier for @flag.FeatureKey"
+                                            @bind="_editTier">
                                         <option value="">— none —</option>
                                         <option value="AdFree">AdFree</option>
                                         <option value="Plus">Plus</option>

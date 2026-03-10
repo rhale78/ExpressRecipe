@@ -296,6 +296,9 @@ public class SubscriptionsController : ControllerBase
     /// Internal endpoint used by AuthService to fetch tier name and household when
     /// building a JWT. No user auth required — this is a service-to-service call.
     /// </summary>
+    /// <remarks>HouseholdId is not currently stored on the subscription record and will
+    /// always be <c>null</c>. It is included in the response contract for forward-compatibility
+    /// once household association is added to the subscription model.</remarks>
     [HttpGet("user/{userId:guid}/tier")]
     [AllowAnonymous]
     public async Task<IActionResult> GetUserTier(Guid userId)

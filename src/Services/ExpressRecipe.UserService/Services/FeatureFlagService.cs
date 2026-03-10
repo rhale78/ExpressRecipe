@@ -122,14 +122,17 @@ public sealed class FeatureFlagService : IFeatureFlagService
     }
 
     /// <summary>
-    /// Removes cached entries for <paramref name="featureKey"/> so the next request
+    /// Removes the global cached entry for <paramref name="featureKey"/> so the next request
     /// reads fresh data from the DB. Call this after an admin toggle.
+    /// <para>
+    /// <b>Note:</b> Only the global cache key is removed explicitly. Per-user entries
+    /// (<c>ff:enabled:{key}:{userId}:{tier}</c>) will expire naturally within the 30-second
+    /// cache TTL. For immediate enforcement, consider shortening <see cref="CacheTtl"/> or
+    /// restarting the service.
+    /// </para>
     /// </summary>
     public void InvalidateCache(string featureKey)
     {
-        // Remove all user-specific and global entries for this key.
-        // The in-process cache does not support pattern-based removal; entries will
-        // also expire naturally within CacheTtl.
         _cache.Remove($"ff:global:{featureKey}");
         _logger.LogInformation("Feature flag cache invalidated for {FeatureKey}", featureKey);
     }

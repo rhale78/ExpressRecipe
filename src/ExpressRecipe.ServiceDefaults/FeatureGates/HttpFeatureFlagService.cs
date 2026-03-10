@@ -14,7 +14,7 @@ namespace ExpressRecipe.ServiceDefaults.FeatureGates;
 public sealed class HttpFeatureFlagService : IFeatureFlagService
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
-    private const string HttpClientName = "userservice";
+    private const string HttpClientName = "UserService";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IMemoryCache _cache;

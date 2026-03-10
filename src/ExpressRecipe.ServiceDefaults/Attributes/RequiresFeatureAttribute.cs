@@ -54,9 +54,11 @@ public sealed class RequiresFeatureAttribute : ActionFilterAttribute
             return;
         }
 
-        Guid userId = Guid.TryParse(
-            user.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-            ? id : Guid.Empty;
+        if (!Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out Guid userId))
+        {
+            context.Result = new UnauthorizedResult();
+            return;
+        }
 
         string userTier = user.FindFirstValue("subscription_tier") ?? "Free";
 
