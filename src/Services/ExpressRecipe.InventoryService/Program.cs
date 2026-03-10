@@ -53,6 +53,12 @@ builder.Services.AddScoped<IInventoryStorageReminderQuery>(sp =>
 
 builder.Services.AddScoped<IGardenRepository>(_ => new GardenRepository(connectionString));
 
+// Register livestock and sales repositories
+builder.Services.AddScoped<ILivestockRepository>(sp =>
+    new LivestockRepository(connectionString, sp.GetRequiredService<ILogger<LivestockRepository>>()));
+builder.Services.AddScoped<IInventorySaleRepository>(sp =>
+    new InventorySaleRepository(connectionString, sp.GetRequiredService<ILogger<InventorySaleRepository>>()));
+
 // Register seasonal produce service (singleton - pure in-memory calendar)
 builder.Services.AddSingleton<ExpressRecipe.MealPlanningService.Services.ISeasonalProduceService,
     ExpressRecipe.MealPlanningService.Services.SeasonalProduceService>();

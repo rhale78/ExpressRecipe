@@ -13,11 +13,13 @@ public class InventoryController : ControllerBase
 {
     private readonly ILogger<InventoryController> _logger;
     private readonly IInventoryRepository _repository;
+    private readonly IInventorySaleRepository _saleRepository;
 
-    public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository)
+    public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository, IInventorySaleRepository saleRepository)
     {
         _logger = logger;
         _repository = repository;
+        _saleRepository = saleRepository;
     }
 
     private Guid? GetUserId()
@@ -782,6 +784,107 @@ public class InventoryController : ControllerBase
 
     private Guid? GetHouseholdId() => ExtractHouseholdId(User);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Sales
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Record a sale of an inventory item and deduct the quantity.
+    /// Returns 422 if the item has insufficient quantity.
+    /// </summary>
+    [HttpPost("{id}/sell")]
+    public async Task<IActionResult> SellItem(Guid id, [FromBody] SellItemRequest request)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) { return Unauthorized(); }
+
+            InventoryItemDto? item = await _repository.GetInventoryItemAsync(id, userId.Value);
+            if (item == null) { return NotFound(); }
+
+            Guid householdId = item.HouseholdId ?? Guid.Empty;
+            if (householdId == Guid.Empty)
+            {
+                return UnprocessableEntity(new { message = "Item is not associated with a household." });
+            }
+
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+            {
+                return Forbid();
+            }
+
+            _logger.LogInformation(
+                "Recording sale of {Quantity} {Unit} from item {ItemId}", request.Quantity, request.Unit, id);
+
+            Guid saleId = await _saleRepository.RecordSaleAsync(
+                householdId,
+                id,
+                item.ProductName ?? item.CustomName ?? "Unknown",
+                request.Quantity,
+                request.Unit,
+                request.SaleDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                request.Buyer,
+                request.Notes,
+                request.AutoRemoveOnZero);
+
+            return Ok(new { id = saleId });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Insufficient quantity"))
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Inventory item {ItemId} not found during sell", id);
+            return NotFound();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording sale for item {ItemId}", id);
+            return StatusCode(500, new { message = "An error occurred while recording the sale." });
+        }
+    }
+
+    /// <summary>
+    /// Get sales history for a household, with optional date range and item filters.
+    /// </summary>
+    [HttpGet("sales")]
+    public async Task<IActionResult> GetSales(
+        [FromQuery] Guid householdId,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] Guid? itemId = null)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) { return Unauthorized(); }
+
+            if (!await _repository.IsUserMemberOfHouseholdAsync(householdId, userId.Value))
+            {
+                return Forbid();
+            }
+
+            if (itemId.HasValue)
+            {
+                List<InventorySaleDto> salesByItem = await _saleRepository.GetSalesByItemAsync(householdId, itemId.Value);
+                return Ok(salesByItem);
+            }
+
+            DateOnly effectiveFrom = from ?? DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30));
+            DateOnly effectiveTo   = to   ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+            List<InventorySaleDto> sales = await _saleRepository.GetSalesAsync(householdId, effectiveFrom, effectiveTo);
+            return Ok(sales);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving sales for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving sales." });
+        }
+    }
+
     private static DateTime ComputeExpiration(string? storageMethod, DateTime? processDate)
     {
         DateTime from = processDate ?? DateTime.UtcNow.Date;
@@ -878,4 +981,14 @@ public class AddLongTermStorageRequest
     public DateTime? ExpirationDate { get; set; }
     public DateTime? ProcessDate { get; set; }
     public string? Source { get; set; }
+}
+
+public class SellItemRequest
+{
+    public decimal Quantity { get; set; }
+    public string Unit { get; set; } = string.Empty;
+    public DateOnly? SaleDate { get; set; }
+    public string? Buyer { get; set; }
+    public string? Notes { get; set; }
+    public bool AutoRemoveOnZero { get; set; } = true;
 }
