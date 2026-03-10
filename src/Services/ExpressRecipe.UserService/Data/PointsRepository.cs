@@ -27,6 +27,15 @@ public interface IPointsRepository
     Task<RewardItemDto?> GetRewardByIdAsync(Guid id);
     Task<bool> RedeemRewardAsync(Guid userId, Guid rewardItemId);
     Task<List<RewardItemDto>> GetUserRedeemedRewardsAsync(Guid userId, bool activeOnly = true);
+
+    // Event-driven credit (from PointsEarnedEvent)
+    Task CreditAsync(Guid userId, int points, string reason, Guid? relatedEntityId);
+
+    // Subscription extension
+    Task ExtendSubscriptionAsync(Guid userId, int days);
+
+    // Badge
+    Task AwardBadgeAsync(Guid userId, string badgeCode);
 }
 
 public class PointsRepository : SqlHelper, IPointsRepository
@@ -467,29 +476,69 @@ public class PointsRepository : SqlHelper, IPointsRepository
             return false;
         }
 
-        // Check user balance
+        // Check user balance — throw so controller can return 422
         var balance = await GetUserPointBalanceAsync(userId);
         if (balance < reward.PointsCost)
         {
-            return false;
+            throw new InsufficientPointsException(balance, reward.PointsCost);
+        }
+
+        // Atomic deduction: UPDATE ... WHERE PointsBalance >= @Cost
+        const string deductSql = @"
+            UPDATE UserProfile
+            SET PointsBalance = PointsBalance - @Cost
+            WHERE UserId = @UserId AND PointsBalance >= @Cost";
+
+        var rowsAffected = await ExecuteNonQueryAsync(deductSql,
+            new SqlParameter("@UserId", userId),
+            new SqlParameter("@Cost", reward.PointsCost));
+
+        if (rowsAffected == 0)
+        {
+            throw new InsufficientPointsException(balance, reward.PointsCost);
         }
 
         // Create redemption record
         var redemptionId = Guid.NewGuid();
+        var newBalance = balance - reward.PointsCost;
 
-        const string sql = @"
+        const string insertRedemptionSql = @"
             INSERT INTO UserRewardRedemption (Id, UserId, RewardItemId, PointsSpent, RedeemedAt, IsActive)
             VALUES (@Id, @UserId, @RewardItemId, @PointsSpent, GETUTCDATE(), 1)";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(insertRedemptionSql,
             new SqlParameter("@Id", redemptionId),
             new SqlParameter("@UserId", userId),
             new SqlParameter("@RewardItemId", rewardItemId),
             new SqlParameter("@PointsSpent", reward.PointsCost));
 
-        // Deduct points
-        await AddPointTransactionAsync(userId, -reward.PointsCost, "Spent",
-            $"Redeemed: {reward.Name}", null, rewardItemId);
+        // Insert negative PointsTransaction (balance already updated atomically above)
+        const string insertTxSql = @"
+            INSERT INTO PointTransaction (Id, UserId, TransactionType, PointsAmount, BalanceAfter,
+                                         Description, UserContributionId, RewardItemId, TransactionDate)
+            VALUES (@Id, @UserId, 'Spent', @Amount, @BalanceAfter, @Description, NULL, @RewardItemId, GETUTCDATE())";
+
+        await ExecuteNonQueryAsync(insertTxSql,
+            new SqlParameter("@Id", Guid.NewGuid()),
+            new SqlParameter("@UserId", userId),
+            new SqlParameter("@Amount", -reward.PointsCost),
+            new SqlParameter("@BalanceAfter", newBalance),
+            new SqlParameter("@Description", (object)$"Redeemed: {reward.Name}"),
+            new SqlParameter("@RewardItemId", rewardItemId));
+
+        // Apply reward effect
+        if (reward.RewardType == "SubscriptionExtension" && !string.IsNullOrWhiteSpace(reward.Value))
+        {
+            var days = ParseSubscriptionDays(reward.Value);
+            if (days > 0)
+            {
+                await ExtendSubscriptionAsync(userId, days);
+            }
+        }
+        else if (reward.RewardType == "Badge" && !string.IsNullOrWhiteSpace(reward.Value))
+        {
+            await AwardBadgeAsync(userId, reward.Value);
+        }
 
         // Decrement quantity if limited
         if (reward.QuantityAvailable.HasValue)
@@ -538,6 +587,57 @@ public class PointsRepository : SqlHelper, IPointsRepository
                 CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
             new SqlParameter("@UserId", userId));
+    }
+
+    /// <summary>Credits points to a user from an external event (PointsEarnedEvent).</summary>
+    public async Task CreditAsync(Guid userId, int points, string reason, Guid? relatedEntityId)
+    {
+        await AddPointTransactionAsync(userId, points, "Earned", reason, null, null);
+    }
+
+    /// <summary>Extends a user's subscription by the given number of days.</summary>
+    public async Task ExtendSubscriptionAsync(Guid userId, int days)
+    {
+        const string sql = @"
+            UPDATE UserProfile
+            SET SubscriptionExpiresAt = CASE
+                WHEN SubscriptionExpiresAt IS NULL OR SubscriptionExpiresAt < GETUTCDATE()
+                    THEN DATEADD(day, @Days, GETUTCDATE())
+                ELSE DATEADD(day, @Days, SubscriptionExpiresAt)
+            END
+            WHERE UserId = @UserId";
+
+        await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@UserId", userId),
+            new SqlParameter("@Days", days));
+    }
+
+    /// <summary>Awards a badge to a user (idempotent — skips if already awarded).</summary>
+    public async Task AwardBadgeAsync(Guid userId, string badgeCode)
+    {
+        const string sql = @"
+            IF NOT EXISTS (SELECT 1 FROM UserBadge WHERE UserId = @UserId AND BadgeCode = @BadgeCode)
+            BEGIN
+                INSERT INTO UserBadge (Id, UserId, BadgeCode, AwardedAt)
+                VALUES (NEWID(), @UserId, @BadgeCode, GETUTCDATE())
+            END";
+
+        await ExecuteNonQueryAsync(sql,
+            new SqlParameter("@UserId", userId),
+            new SqlParameter("@BadgeCode", badgeCode));
+    }
+
+    private static int ParseSubscriptionDays(string value)
+    {
+        if (value.EndsWith("d", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(value[..^1], out var d))
+        {
+            return d;
+        }
+        if (value.EndsWith("30d", StringComparison.OrdinalIgnoreCase)) return 30;
+        if (value.EndsWith("7d", StringComparison.OrdinalIgnoreCase)) return 7;
+        if (value.EndsWith("1d", StringComparison.OrdinalIgnoreCase)) return 1;
+        return 0;
     }
 }
 

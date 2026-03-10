@@ -426,6 +426,28 @@ public class CommunityRepository : ICommunityRepository
         await command.ExecuteNonQueryAsync();
     }
 
+    public async Task<(Guid ReviewOwnerId, int HelpfulCount)?> GetReviewHelpfulInfoAsync(Guid reviewId)
+    {
+        const string sql = @"
+            SELECT UserId, HelpfulVotes
+            FROM CommunityReview
+            WHERE Id = @ReviewId";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@ReviewId", reviewId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (await reader.ReadAsync())
+        {
+            return (reader.GetGuid(0), reader.GetInt32(1));
+        }
+
+        return null;
+    }
+
     private async Task<List<ProductSubmissionDto>> ReadProductSubmissions(SqlCommand command)
     {
         var submissions = new List<ProductSubmissionDto>();

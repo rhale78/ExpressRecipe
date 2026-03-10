@@ -28,6 +28,7 @@ public interface ICommunityRepository
     Task<ReviewSummaryDto> GetReviewSummaryAsync(string entityType, Guid entityId);
     Task DeleteReviewAsync(Guid reviewId);
     Task VoteReviewAsync(Guid reviewId, Guid userId, bool isHelpful);
+    Task<(Guid ReviewOwnerId, int HelpfulCount)?> GetReviewHelpfulInfoAsync(Guid reviewId);
 }
 
 public class UserContributionDto

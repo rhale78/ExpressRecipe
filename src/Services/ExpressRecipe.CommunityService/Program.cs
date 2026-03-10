@@ -1,7 +1,10 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.CommunityService.Data;
+using ExpressRecipe.CommunityService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
+using RabbitMQ.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +36,48 @@ var connectionString = builder.Configuration.GetConnectionString("communitydb")
 // Register repositories
 builder.Services.AddScoped<ICommunityRepository>(sp =>
     new CommunityRepository(connectionString, sp.GetRequiredService<ILogger<CommunityRepository>>()));
+
+builder.Services.AddScoped<ICommunityRecipeRepository>(sp =>
+    new CommunityRecipeRepository(connectionString));
+
+// Conditionally register RabbitMQ for event publishing
+var rabbitEnabled = builder.Configuration.GetValue<bool?>("RabbitMQ:Enabled")
+    ?? !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]) ||
+       !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:ConnectionString"]) ||
+       !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"));
+
+if (rabbitEnabled)
+{
+    builder.Services.AddSingleton<IConnectionFactory>(sp =>
+    {
+        var uri = builder.Configuration["RabbitMQ:ConnectionString"]
+                  ?? builder.Configuration.GetConnectionString("messaging");
+
+        if (!string.IsNullOrWhiteSpace(uri))
+        {
+            return new ConnectionFactory { Uri = new Uri(uri) };
+        }
+
+        return new ConnectionFactory
+        {
+            HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
+            Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+            UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+            Password = builder.Configuration["RabbitMQ:Password"] ?? "guest"
+        };
+    });
+
+    builder.Services.AddSingleton<EventPublisher>();
+}
+
+// Register approval queue service
+builder.Services.AddScoped<IApprovalQueueService>(sp =>
+    new ApprovalQueueService(
+        sp.GetRequiredService<ICommunityRecipeRepository>(),
+        sp.GetRequiredService<ICommunityRepository>(),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<ILogger<ApprovalQueueService>>(),
+        sp.GetService<EventPublisher>()));
 
 // Add controllers
 builder.Services.AddControllers();

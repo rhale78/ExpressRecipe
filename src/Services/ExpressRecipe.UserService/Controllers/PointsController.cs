@@ -250,6 +250,11 @@ public class PointsController : ControllerBase
 
             return Ok(new { message = "Reward redeemed successfully" });
         }
+        catch (InsufficientPointsException ex)
+        {
+            _logger.LogWarning(ex, "Insufficient points for reward redemption");
+            return UnprocessableEntity(new { code = "InsufficientPoints", message = ex.Message, currentBalance = ex.CurrentBalance, requiredPoints = ex.RequiredPoints });
+        }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning(ex, "Failed to redeem reward");

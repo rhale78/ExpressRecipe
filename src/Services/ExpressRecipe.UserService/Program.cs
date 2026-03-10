@@ -1,8 +1,11 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.UserService.Data;
+using ExpressRecipe.UserService.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using RabbitMQ.Client;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -67,6 +70,7 @@ builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(conne
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
+builder.Services.AddScoped<IReferralRepository>(sp => new ReferralRepository(connectionString));
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
@@ -86,6 +90,44 @@ builder.Services.AddHttpClient("NotificationService", client =>
 builder.Services.AddHostedService<ExpressRecipe.UserService.Services.SubscriptionRenewalService>();
 builder.Services.AddHostedService<ExpressRecipe.UserService.Services.ScheduledReportsService>();
 builder.Services.AddHostedService<ExpressRecipe.UserService.Services.PointsManagementService>();
+
+// Conditionally register RabbitMQ for PointsEarnedSubscriber
+var rabbitEnabled = builder.Configuration.GetValue<bool?>("RabbitMQ:Enabled")
+    ?? !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:Host"]) ||
+       !string.IsNullOrWhiteSpace(builder.Configuration["RabbitMQ:ConnectionString"]) ||
+       !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"));
+
+if (rabbitEnabled)
+{
+    builder.Services.AddSingleton<IConnectionFactory>(sp =>
+    {
+        var uri = builder.Configuration["RabbitMQ:ConnectionString"]
+                  ?? builder.Configuration.GetConnectionString("messaging");
+
+        if (!string.IsNullOrWhiteSpace(uri))
+        {
+            return new ConnectionFactory { Uri = new Uri(uri) };
+        }
+
+        return new ConnectionFactory
+        {
+            HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
+            Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+            UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+            Password = builder.Configuration["RabbitMQ:Password"] ?? "guest"
+        };
+    });
+
+    builder.Services.AddSingleton<EventPublisher>();
+    builder.Services.AddHostedService<ExpressRecipe.UserService.Services.PointsEarnedSubscriber>();
+}
+
+// Register referral service (uses EventPublisher if available)
+builder.Services.AddScoped<IReferralService>(sp =>
+    new ReferralService(
+        sp.GetRequiredService<IReferralRepository>(),
+        sp.GetRequiredService<ILogger<ReferralService>>(),
+        sp.GetService<EventPublisher>()));
 
 // Add controllers
 builder.Services.AddControllers();
