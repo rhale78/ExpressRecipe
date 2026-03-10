@@ -111,6 +111,10 @@ public interface IInventoryRepository
 
     // Thaw task support
     Task<List<FrozenIngredientResult>> GetFrozenIngredientsForRecipeAsync(Guid householdId, Guid recipeId, CancellationToken ct = default);
+
+    // Allergy analysis support
+    Task<List<SafeProductUsageResult>> GetSafeProductHistoryAsync(
+        Guid householdId, int minUsageCount, CancellationToken ct = default);
 }
 
 public class FrozenIngredientResult
@@ -118,6 +122,12 @@ public class FrozenIngredientResult
     public string ItemName { get; set; } = string.Empty;
     public string FoodCategory { get; set; } = string.Empty;
     public Guid StorageLocationId { get; set; }
+}
+
+public sealed record SafeProductUsageResult
+{
+    public Guid ProductId  { get; init; }
+    public int  UsageCount { get; init; }
 }
 
 public class HouseholdDto

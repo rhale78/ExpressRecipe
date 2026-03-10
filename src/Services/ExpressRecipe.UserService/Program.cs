@@ -1,7 +1,9 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.UserService.Data;
+using ExpressRecipe.UserService.Services;
 using ExpressRecipe.Shared.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
@@ -67,25 +69,47 @@ builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(conne
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
+builder.Services.AddScoped<IAllergyIncidentRepository>(sp => new AllergyIncidentRepository(connectionString));
+
+// HybridCache (L1 in-memory + L2 Redis) for ingredient caching
+builder.Services.AddHybridCache();
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
 {
-    var authServiceUrl = builder.Configuration["Services:AuthService"] ?? "http://authservice";
+    string authServiceUrl = builder.Configuration["Services:AuthService"] ?? "http://authservice";
     client.BaseAddress = new Uri(authServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddHttpClient("NotificationService", client =>
 {
-    var notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
+    string notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
     client.BaseAddress = new Uri(notificationServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.Services.AddHttpClient("ProductService", client =>
+{
+    string productServiceUrl = builder.Configuration["Services:ProductService"] ?? "http://productservice";
+    client.BaseAddress = new Uri(productServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient("InventoryService", client =>
+{
+    string inventoryServiceUrl = builder.Configuration["Services:InventoryService"] ?? "http://inventoryservice";
+    client.BaseAddress = new Uri(inventoryServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Allergy analysis engine services
+builder.Services.AddSingleton<IAllergyAnalysisQueue, AllergyAnalysisQueue>();
+builder.Services.AddScoped<IIngredientFetchService, IngredientFetchService>();
+builder.Services.AddScoped<IAllergyDifferentialAnalyzer, AllergyDifferentialAnalyzer>();
 
 // Register background services
-builder.Services.AddHostedService<ExpressRecipe.UserService.Services.SubscriptionRenewalService>();
-builder.Services.AddHostedService<ExpressRecipe.UserService.Services.ScheduledReportsService>();
-builder.Services.AddHostedService<ExpressRecipe.UserService.Services.PointsManagementService>();
+builder.Services.AddHostedService<SubscriptionRenewalService>();
+builder.Services.AddHostedService<ScheduledReportsService>();
+builder.Services.AddHostedService<PointsManagementService>();
+builder.Services.AddHostedService<AllergyAnalysisWorker>();
 
 // Add controllers
 builder.Services.AddControllers();

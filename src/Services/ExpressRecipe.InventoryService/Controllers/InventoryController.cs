@@ -511,6 +511,29 @@ public class InventoryController : ControllerBase
     }
 
     /// <summary>
+    /// Get products safely consumed by this household in the last 180 days (service-to-service).
+    /// Used by the allergy differential analysis engine.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpGet("safe-product-history/{householdId}")]
+    public async Task<IActionResult> GetSafeProductHistory(
+        Guid householdId, [FromQuery] int minCount = 3, CancellationToken ct = default)
+    {
+        try
+        {
+            List<SafeProductUsageResult> results =
+                await _repository.GetSafeProductHistoryAsync(householdId, minCount, ct);
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error fetching safe product history for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred" });
+        }
+    }
+
+    /// <summary>
     /// Get usage history for item
     /// </summary>
     [HttpGet("{id}/history")]
