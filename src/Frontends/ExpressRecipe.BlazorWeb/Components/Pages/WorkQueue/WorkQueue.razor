@@ -1,0 +1,99 @@
+@page "/queue"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Services
+@inject IWorkQueueClientService Queue
+@inject IWorkQueueState          QueueState
+@inject NavigationManager        Nav
+
+<PageTitle>Work Queue - ExpressRecipe</PageTitle>
+
+<div class="queue-page">
+    <div class="queue-header">
+        <h1>📋 Work Queue</h1>
+        @if (!_loading)
+        {
+            <span class="item-count">@_items.Count item@(_items.Count == 1 ? "" : "s")</span>
+        }
+        <div class="queue-mode-toggle">
+            <button class="toggle-btn @(_wizardMode ? "active" : "")"
+                    @onclick="() => _wizardMode = true"
+                    title="One at a time">
+                🧙 One at a Time
+            </button>
+            <button class="toggle-btn @(!_wizardMode ? "active" : "")"
+                    @onclick="() => _wizardMode = false"
+                    title="View all items">
+                📋 View All
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading your queue…</p>
+        </div>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="queue-empty">
+            <span class="empty-icon">✅</span>
+            <h2>You're all caught up!</h2>
+            <p>No action items right now. Check back later.</p>
+            <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/dashboard")'>
+                🏠 Back to Dashboard
+            </button>
+        </div>
+    }
+    else if (_wizardMode)
+    {
+        <WorkQueueWizard Items="_items"
+                         OnItemActioned="HandleItemActioned"
+                         OnItemDismissed="HandleItemDismissed"
+                         OnItemSnoozed="HandleItemSnoozed"
+                         OnDone="HandleDone" />
+    }
+    else
+    {
+        <WorkQueueList Items="_items"
+                       OnItemActioned="HandleItemActioned"
+                       OnItemDismissed="HandleItemDismissed"
+                       OnItemSnoozed="HandleItemSnoozed" />
+    }
+</div>
+
+@code {
+    private List<WorkQueueItemDto> _items     = new();
+    private bool                   _loading   = true;
+    private bool                   _wizardMode = true;   // default: wizard mode
+
+    protected override async Task OnInitializedAsync()
+    {
+        _items   = await Queue.GetItemsAsync();
+        _loading = false;
+    }
+
+    private async Task HandleItemActioned((Guid itemId, string action) args)
+    {
+        await Queue.ActionItemAsync(args.itemId, args.action);
+        _items.RemoveAll(i => i.Id == args.itemId);
+        await QueueState.RefreshAsync();
+    }
+
+    private async Task HandleItemDismissed(Guid itemId)
+    {
+        await Queue.DismissItemAsync(itemId);
+        _items.RemoveAll(i => i.Id == itemId);
+        await QueueState.RefreshAsync();
+    }
+
+    private async Task HandleItemSnoozed(Guid itemId)
+    {
+        await Queue.SnoozeItemAsync(itemId);
+        _items.RemoveAll(i => i.Id == itemId);   // hidden for this session
+        await QueueState.RefreshAsync();
+    }
+
+    private void HandleDone() => Nav.NavigateTo("/dashboard");
+}

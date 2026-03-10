@@ -56,6 +56,17 @@
             <span class="nav-text">Meal Planning</span>
         </a>
 
+        <a href="/queue" class="nav-link @GetActiveClass("/queue")">
+            <span class="nav-icon">📋</span>
+            <span class="nav-text">Work Queue</span>
+            @if (WorkQueueCount > 0)
+            {
+                <span class="notification-badge @(WorkQueueHasCritical ? "badge-critical" : "")">
+                    @(WorkQueueCount > 99 ? "99+" : WorkQueueCount.ToString())
+                </span>
+            }
+        </a>
+
         <div class="nav-divider"></div>
 
         <a href="/discover" class="nav-link @GetActiveClass("/discover")">
@@ -142,6 +153,12 @@
 @code {
     [Parameter]
     public int UnreadCount { get; set; }
+
+    [Parameter]
+    public int WorkQueueCount { get; set; }
+
+    [Parameter]
+    public bool WorkQueueHasCritical { get; set; }
 
     private string GetActiveClass(string path)
     {

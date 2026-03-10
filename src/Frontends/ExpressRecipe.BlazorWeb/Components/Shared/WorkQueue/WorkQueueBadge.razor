@@ -1,0 +1,29 @@
+@using ExpressRecipe.Client.Shared.Services
+@implements IDisposable
+@inject IWorkQueueState QueueState
+
+@* Dashboard badge that shows the pending work-queue count.
+   Red badge when any Priority ≤ 3 items exist (Expired/Safety/Critical).
+   Subscribes to IWorkQueueState.OnChange so it updates when items are actioned. *@
+
+<a href="/queue" class="queue-badge-link" title="Work Queue">
+    <span class="queue-icon" aria-hidden="true">📋</span>
+    @if (QueueState.PendingCount > 0)
+    {
+        <span class="badge @(QueueState.HasCritical ? "badge-critical" : "badge-normal")"
+              aria-label="@QueueState.PendingCount pending work queue item@(QueueState.PendingCount == 1 ? "" : "s")">
+            @(QueueState.PendingCount > 99 ? "99+" : QueueState.PendingCount.ToString())
+        </span>
+    }
+</a>
+
+@code {
+    protected override void OnInitialized()
+    {
+        QueueState.OnChange += HandleStateChange;
+    }
+
+    private void HandleStateChange() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => QueueState.OnChange -= HandleStateChange;
+}

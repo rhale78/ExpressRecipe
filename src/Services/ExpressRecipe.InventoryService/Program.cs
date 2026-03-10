@@ -70,6 +70,9 @@ builder.Services.AddScoped<ILivestockRepository>(sp =>
 builder.Services.AddScoped<IInventorySaleRepository>(sp =>
     new InventorySaleRepository(connectionString, sp.GetRequiredService<ILogger<InventorySaleRepository>>()));
 
+// Register work queue repository (WQ1)
+builder.Services.AddScoped<IWorkQueueRepository>(_ => new WorkQueueRepository(connectionString));
+
 // Register seasonal produce service (singleton - pure in-memory calendar)
 builder.Services.AddSingleton<ExpressRecipe.MealPlanningService.Services.ISeasonalProduceService,
     ExpressRecipe.MealPlanningService.Services.SeasonalProduceService>();

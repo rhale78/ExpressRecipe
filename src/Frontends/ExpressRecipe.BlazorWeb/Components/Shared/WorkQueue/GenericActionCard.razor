@@ -1,0 +1,24 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Generic fallback action card — shown for item types that don't have a
+   dedicated sub-card. Provides a single "Mark Done" action button. *@
+
+<div class="generic-action-card">
+    <button class="btn btn-primary" @onclick="HandleAction" disabled="@_working">
+        @if (_working) { <span class="spinner-sm" /> } else { <span>Mark Done</span> }
+    </button>
+</div>
+
+@code {
+    [Parameter] public WorkQueueItemDto Item    { get; set; } = default!;
+    [Parameter] public EventCallback<(Guid, string)> OnActioned { get; set; }
+
+    private bool _working;
+
+    private async Task HandleAction()
+    {
+        _working = true;
+        await OnActioned.InvokeAsync((Item.Id, "Completed"));
+        _working = false;
+    }
+}

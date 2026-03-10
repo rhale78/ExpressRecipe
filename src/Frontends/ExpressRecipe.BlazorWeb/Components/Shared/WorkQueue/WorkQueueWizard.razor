@@ -1,0 +1,94 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Wizard mode: shows one action card at a time with a progress bar.
+   Skip pushes the current item to the end for this session without snoozing it in the DB.
+   "Done for today" fires OnDone to return to the dashboard.
+   
+   Front-end note: When the parent removes an item from the list Blazor's diff engine
+   updates the Items parameter and re-renders. The _currentIndex doesn't need to change
+   when an item is removed from the front — the next item naturally shifts into Items[_currentIndex].
+   This is different from jQuery/vanilla JS where you'd manage the DOM manually. *@
+
+<div class="wizard-container">
+    @* Progress bar *@
+    <div class="wizard-progress">
+        <div class="progress-bar-track">
+            <div class="progress-bar-fill" style="width: @ProgressPercent%"></div>
+        </div>
+        <span class="progress-label">
+            @if (Items.Count > 0)
+            { <text>@(_currentIndex + 1) of @Items.Count</text> }
+            else
+            { <text>All done!</text> }
+        </span>
+    </div>
+
+    @if (_currentIndex < Items.Count)
+    {
+        <WorkQueueItemCard Item="Items[_currentIndex]"
+                           IsWizardMode="true"
+                           OnActioned="HandleActioned"
+                           OnDismissed="HandleDismissed"
+                           OnSnoozed="HandleSnoozed" />
+
+        <div class="wizard-footer">
+            <button class="btn btn-outline btn-skip" @onclick="Skip">
+                ⏭ Skip for now
+            </button>
+            <button class="btn btn-secondary-outline btn-done-today" @onclick="DoneForToday">
+                ✋ Done for today
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="wizard-complete">
+            <span class="complete-icon">🎉</span>
+            <p>All done!</p>
+            <button class="btn btn-primary" @onclick='() => OnDone.InvokeAsync()'>Back to Home</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<WorkQueueItemDto>         Items          { get; set; } = new();
+    [Parameter] public EventCallback<(Guid, string)>  OnItemActioned { get; set; }
+    [Parameter] public EventCallback<Guid>            OnItemDismissed { get; set; }
+    [Parameter] public EventCallback<Guid>            OnItemSnoozed  { get; set; }
+    [Parameter] public EventCallback                  OnDone         { get; set; }
+
+    private int _currentIndex;
+
+    private double ProgressPercent =>
+        Items.Count == 0 ? 100 : (_currentIndex / (double)Items.Count) * 100;
+
+    private async Task HandleActioned((Guid itemId, string action) args)
+    {
+        await OnItemActioned.InvokeAsync(args);
+        // Item is removed from Items by the parent. The next item shifts into
+        // Items[_currentIndex] automatically — no index change needed.
+    }
+
+    private async Task HandleDismissed(Guid itemId)
+    {
+        await OnItemDismissed.InvokeAsync(itemId);
+    }
+
+    private async Task HandleSnoozed(Guid itemId)
+    {
+        await OnItemSnoozed.InvokeAsync(itemId);
+        _currentIndex++;   // advance past snoozed item (item stays in list until parent removes it)
+    }
+
+    private void Skip()
+    {
+        // Move current item to end of list for this session only (no DB snooze).
+        if (_currentIndex >= Items.Count) return;
+        WorkQueueItemDto current = Items[_currentIndex];
+        Items.RemoveAt(_currentIndex);
+        Items.Add(current);
+        // Don't increment _currentIndex — the next item slides into the current position.
+    }
+
+    private void DoneForToday() => OnDone.InvokeAsync();
+}
