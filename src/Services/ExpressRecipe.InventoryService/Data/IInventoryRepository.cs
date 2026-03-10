@@ -103,6 +103,11 @@ public interface IInventoryRepository
     Task<List<Guid>> GetDistinctUserIdsWithInventoryAsync(CancellationToken ct = default);
     Task<List<Guid>> GetDistinctUserIdsWithPurchaseHistoryAsync(CancellationToken ct = default);
     Task WriteInventoryHistoryDirectAsync(Guid itemId, Guid userId, string actionType, decimal quantityChange, decimal quantityBefore, decimal quantityAfter, string? reason, Guid? recipeId, CancellationToken ct = default);
+
+    // Garden & Long-Term Storage
+    Task<Guid> CreateFromGardenHarvestAsync(Guid userId, Guid householdId, string plantName, decimal quantity, string unit, int freshnessDays, CancellationToken ct = default);
+    Task<Guid> AddItemAsync(AddItemRequest request, CancellationToken ct = default);
+    Task<List<InventoryItemDto>> GetItemsAsync(Guid householdId, bool isLongTermOnly = false, string? storageMethod = null, CancellationToken ct = default);
 }
 
 public class HouseholdDto
@@ -191,6 +196,13 @@ public class InventoryItemDto
     public Guid? AddedBy { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    // Long-term storage fields (added by migration 006)
+    public string? StorageMethod { get; set; }
+    public bool IsLongTermStorage { get; set; }
+    public string? StorageCapacityUnit { get; set; }
+    public string? BatchLabel { get; set; }
+    public string? Source { get; set; }
+    public string? Temperature { get; set; }
 }
 
 public class ExpirationAlertDto
@@ -404,4 +416,21 @@ public class WasteReportMonthDto
     public int BadDisposed { get; set; }
     public int OtherDisposed { get; set; }
     public decimal TotalDisposedValue { get; set; }
+}
+
+public class AddItemRequest
+{
+    public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid? ProductId { get; set; }
+    public string? Name { get; set; }
+    public decimal Quantity { get; set; }
+    public string? Unit { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public string? StorageMethod { get; set; }
+    public bool IsLongTermStorage { get; set; }
+    public string? StorageCapacityUnit { get; set; }
+    public string? BatchLabel { get; set; }
+    public string? Source { get; set; }
+    public string? Temperature { get; set; }
 }

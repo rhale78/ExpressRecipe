@@ -516,6 +516,42 @@ public class InventoryController : ControllerBase
     }
 
     /// <summary>
+    /// Add a long-term storage item (canned, freeze-dried, frozen, etc.)
+    /// </summary>
+    [HttpPost("long-term")]
+    public async Task<IActionResult> AddLongTermItem([FromBody] AddLongTermStorageRequest request, CancellationToken ct)
+    {
+        try
+        {
+            Guid? userId = GetUserId();
+            if (userId == null) { return Unauthorized(); }
+            Guid? householdId = GetHouseholdId();
+            if (!householdId.HasValue) { return Unauthorized(); }
+            Guid id = await _repository.AddItemAsync(new AddItemRequest
+            {
+                UserId              = userId.Value,
+                HouseholdId         = householdId,
+                Name                = request.Name,
+                Quantity            = request.Quantity,
+                Unit                = request.Unit,
+                StorageMethod       = request.StorageMethod,
+                IsLongTermStorage   = true,
+                BatchLabel          = request.BatchLabel,
+                StorageCapacityUnit = request.StorageCapacityUnit,
+                ExpirationDate      = request.ExpirationDate ?? ComputeExpiration(request.StorageMethod, request.ProcessDate),
+                Temperature         = request.StorageMethod == "FrozenMeal" ? "Frozen" : "Room",
+                Source              = request.Source ?? "Store"
+            }, ct);
+            return Ok(new { id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding long-term storage item");
+            return StatusCode(500, new { message = "An error occurred while adding the long-term storage item" });
+        }
+    }
+
+    /// <summary>
     /// Get purchase history for user
     /// </summary>
     [HttpGet("purchase-history")]
@@ -718,6 +754,48 @@ public class InventoryController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while retrieving waste report" });
         }
     }
+
+    /// <summary>
+    /// Get long-term storage items for the household, optionally filtered by storage method
+    /// </summary>
+    [HttpGet("long-term")]
+    public async Task<IActionResult> GetLongTermItems([FromQuery] string? storageMethod, CancellationToken ct)
+    {
+        try
+        {
+            Guid? householdId = GetHouseholdId();
+            if (!householdId.HasValue) return Unauthorized();
+            return Ok(await _repository.GetItemsAsync(householdId.Value, isLongTermOnly: true, storageMethod: storageMethod, ct: ct));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving long-term storage items");
+            return StatusCode(500, new { message = "An error occurred while retrieving long-term storage items" });
+        }
+    }
+
+    private static Guid? ExtractHouseholdId(System.Security.Claims.ClaimsPrincipal user)
+    {
+        string? value = user.FindFirstValue("household_id");
+        return Guid.TryParse(value, out Guid id) ? id : null;
+    }
+
+    private Guid? GetHouseholdId() => ExtractHouseholdId(User);
+
+    private static DateTime ComputeExpiration(string? storageMethod, DateTime? processDate)
+    {
+        DateTime from = processDate ?? DateTime.UtcNow.Date;
+        return storageMethod switch
+        {
+            "Canned"         => from.AddMonths(18),
+            "CannedPressure" => from.AddMonths(24),
+            "FreezeDried"    => from.AddYears(25),
+            "Dehydrated"     => from.AddMonths(12),
+            "FrozenMeal"     => from.AddMonths(6),
+            "Pickled"        => from.AddMonths(12),
+            _                => from.AddMonths(12)
+        };
+    }
 }
 
 public class AddInventoryItemRequest
@@ -787,4 +865,17 @@ public class InquiryResponseRequest
 {
     public string Response { get; set; } = string.Empty;
     public string? Note { get; set; }
+}
+
+public class AddLongTermStorageRequest
+{
+    public string Name { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public string? Unit { get; set; }
+    public string? StorageMethod { get; set; }
+    public string? BatchLabel { get; set; }
+    public string? StorageCapacityUnit { get; set; }
+    public DateTime? ExpirationDate { get; set; }
+    public DateTime? ProcessDate { get; set; }
+    public string? Source { get; set; }
 }

@@ -51,6 +51,12 @@ builder.Services.AddScoped<IStorageLocationExtendedRepository>(sp =>
 builder.Services.AddScoped<IInventoryStorageReminderQuery>(sp =>
     new InventoryStorageReminderQuery(connectionString));
 
+builder.Services.AddScoped<IGardenRepository>(_ => new GardenRepository(connectionString));
+
+// Register seasonal produce service (singleton - pure in-memory calendar)
+builder.Services.AddSingleton<ExpressRecipe.MealPlanningService.Services.ISeasonalProduceService,
+    ExpressRecipe.MealPlanningService.Services.SeasonalProduceService>();
+
 // Register RabbitMQ for event publishing (legacy EventPublisher)
 builder.Services.AddSingleton<IConnectionFactory>(sp =>
 {
@@ -105,6 +111,7 @@ builder.Services.AddHostedService<ExpirationAlertWorker>();
 builder.Services.AddHostedService<LowStockMonitorWorker>();
 builder.Services.AddHostedService<PatternAnalysisWorker>();
 builder.Services.AddHostedService<StorageReminderWorker>();
+builder.Services.AddHostedService<GardenRipeCheckWorker>();
 
 // Register messaging and subscribers (optional — requires RabbitMQ)
 bool messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);

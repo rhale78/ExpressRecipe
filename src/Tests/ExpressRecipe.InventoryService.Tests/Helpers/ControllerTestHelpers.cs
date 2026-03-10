@@ -36,6 +36,33 @@ public static class ControllerTestHelpers
     }
 
     /// <summary>
+    /// Creates an authenticated controller context with user ID and household ID claims
+    /// </summary>
+    public static ControllerContext CreateAuthenticatedContext(Guid userId, Guid householdId)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Name, "testuser"),
+            new Claim(ClaimTypes.Email, "testuser@example.com"),
+            new Claim("household_id", householdId.ToString())
+        };
+
+        var identity = new ClaimsIdentity(claims, "TestAuthentication");
+        var claimsPrincipal = new ClaimsPrincipal(identity);
+
+        var httpContext = new DefaultHttpContext
+        {
+            User = claimsPrincipal
+        };
+
+        return new ControllerContext
+        {
+            HttpContext = httpContext
+        };
+    }
+
+    /// <summary>
     /// Creates an unauthenticated controller context
     /// </summary>
     public static ControllerContext CreateUnauthenticatedContext()
