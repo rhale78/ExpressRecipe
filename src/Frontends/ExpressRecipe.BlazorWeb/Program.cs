@@ -43,6 +43,11 @@ builder.Services.AddHttpClient<IProductApiClient, ProductApiClient>(client =>
     client.BaseAddress = new Uri("http://productservice");
 });
 
+builder.Services.AddHttpClient<ICatalogApiClient, CatalogApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://productservice");
+});
+
 // Register AdminApiClient with IHttpClientFactory for multi-service communication
 builder.Services.AddScoped<IAdminApiClient, AdminApiClient>();
 

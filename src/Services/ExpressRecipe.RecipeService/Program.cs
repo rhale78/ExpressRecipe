@@ -124,6 +124,9 @@ builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloa
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ServingSizeService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ShoppingListIntegrationService>();
 
+// Register print service
+builder.Services.AddScoped<IRecipePrintService, RecipePrintService>();
+
 // Add controllers
 builder.Services.AddControllers();
 

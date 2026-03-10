@@ -1,0 +1,121 @@
+@page "/catalog/food-groups/{GroupId:guid}"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Product
+@inject ICatalogApiClient CatalogApi
+@inject NavigationManager Navigation
+
+<PageTitle>@(_detail?.Group?.Name ?? "Food Group") – ExpressRecipe</PageTitle>
+
+<div class="container py-4">
+    <button class="btn btn-sm btn-outline-secondary mb-3" @onclick='() => Navigation.NavigateTo("/catalog/food-groups")'>
+        ← Back to Food Groups
+    </button>
+
+    @if (_isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    }
+    else if (_detail == null)
+    {
+        <div class="alert alert-warning">Food group not found.</div>
+    }
+    else
+    {
+        <div class="mb-4">
+            <h1 class="h3 mb-1">@_detail.Group.Name</h1>
+            @if (!string.IsNullOrWhiteSpace(_detail.Group.FunctionalRole))
+            {
+                <span class="badge bg-secondary me-2">@_detail.Group.FunctionalRole</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(_detail.Group.Description))
+            {
+                <p class="text-muted mt-2">@_detail.Group.Description</p>
+            }
+        </div>
+
+        @if (_detail.Members.Count == 0)
+        {
+            <div class="alert alert-info">No members in this group yet.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Ingredient / Name</th>
+                            <th>Substitution Ratio</th>
+                            <th>Best For</th>
+                            <th>Not Suitable For</th>
+                            <th>Allergen Free</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (FoodGroupMemberDto member in _detail.Members.OrderBy(m => m.RankOrder))
+                        {
+                            <tr>
+                                <td class="text-muted small">@member.RankOrder</td>
+                                <td>
+                                    <span class="fw-semibold">@(member.CustomName ?? member.IngredientId?.ToString() ?? "—")</span>
+                                </td>
+                                <td class="small">@(member.SubstitutionRatio ?? "—")</td>
+                                <td class="small text-success">@(member.BestFor ?? "—")</td>
+                                <td class="small text-danger">@(member.NotSuitableFor ?? "—")</td>
+                                <td class="small">
+                                    @if (member.AllergenFree.Length > 0)
+                                    {
+                                        @foreach (string allergen in member.AllergenFree)
+                                        {
+                                            <span class="badge bg-success me-1">@allergen-free</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (member.IsHomemadeRecipeAvailable && member.HomemadeRecipeId.HasValue)
+                                    {
+                                        <a href="/recipes/@member.HomemadeRecipeId" class="btn btn-sm btn-outline-primary">
+                                            🍳 Make it
+                                        </a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid GroupId { get; set; }
+
+    private FoodGroupDetailResponse? _detail;
+    private bool _isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _detail = await CatalogApi.GetFoodGroupAsync(GroupId);
+        }
+        catch
+        {
+            _detail = null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

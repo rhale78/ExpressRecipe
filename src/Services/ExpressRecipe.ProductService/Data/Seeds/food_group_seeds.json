@@ -1,0 +1,278 @@
+[
+  { "name": "Eggs", "description": "Whole eggs used for binding, leavening, or moisture", "functionalRole": "Binding", "members": [
+    { "customName": "Flaxseed Egg (1 tbsp ground flax + 3 tbsp water)", "substitutionRatio": "1 egg = 1 flax egg", "bestFor": "Cookies, quick breads", "notSuitableFor": "Meringue, soufflé", "rankOrder": 1, "allergenFree": ["egg","dairy"] },
+    { "customName": "Chia Egg (1 tbsp chia seeds + 3 tbsp water)", "substitutionRatio": "1 egg = 1 chia egg", "bestFor": "Muffins, pancakes", "notSuitableFor": "Recipes requiring volume from beaten eggs", "rankOrder": 2, "allergenFree": ["egg","dairy","gluten"] },
+    { "customName": "Aquafaba (chickpea brine)", "substitutionRatio": "3 tbsp = 1 whole egg; 2 tbsp = 1 egg white", "bestFor": "Meringue, macarons, mousses", "notSuitableFor": "Fried eggs", "rankOrder": 3, "allergenFree": ["egg","dairy","gluten"] },
+    { "customName": "Unsweetened Applesauce", "substitutionRatio": "1/4 cup = 1 egg", "bestFor": "Cakes, muffins, brownies", "notSuitableFor": "Savory dishes", "rankOrder": 4, "allergenFree": ["egg","dairy","gluten","nut"] },
+    { "customName": "Mashed Ripe Banana", "substitutionRatio": "1/4 cup = 1 egg", "bestFor": "Sweet baked goods", "notSuitableFor": "Neutral-flavored recipes", "rankOrder": 5, "allergenFree": ["egg","dairy","gluten","nut"] }
+  ]},
+  { "name": "Butter", "description": "Dairy butter used for fat, moisture, and flavor", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Coconut Oil (refined, neutral)", "substitutionRatio": "1 tbsp = 1 tbsp", "bestFor": "Baking, sautéing", "notSuitableFor": "Pastry that requires cold fat", "rankOrder": 1, "allergenFree": ["dairy","gluten","egg","nut"] },
+    { "customName": "Vegan Butter (e.g., Earth Balance)", "substitutionRatio": "1:1", "bestFor": "Most baked goods, spreads", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg"] },
+    { "customName": "Olive Oil", "substitutionRatio": "3/4 tbsp = 1 tbsp butter", "bestFor": "Savory cooking, some quick breads", "notSuitableFor": "Delicate pastry, frosting", "rankOrder": 3, "allergenFree": ["dairy","gluten","egg","nut"] },
+    { "customName": "Avocado (mashed)", "substitutionRatio": "1/4 cup = 1/4 cup", "bestFor": "Brownies, chocolate baked goods", "notSuitableFor": "Savory buttery sauces", "rankOrder": 4, "allergenFree": ["dairy","gluten","egg","nut"] },
+    { "customName": "Applesauce (unsweetened)", "substitutionRatio": "1/2 cup = 1/2 cup (reduces fat)", "bestFor": "Muffins, cakes", "notSuitableFor": "Crispy cookies, piecrust", "rankOrder": 5, "allergenFree": ["dairy","gluten","egg","nut"] }
+  ]},
+  { "name": "All-Purpose Flour", "description": "Wheat flour for structure in baked goods", "functionalRole": "Thickener", "members": [
+    { "customName": "Almond Flour", "substitutionRatio": "1 cup = 1 cup (use 25% less liquid)", "bestFor": "Cookies, low-carb baking", "notSuitableFor": "Yeast breads", "rankOrder": 1, "allergenFree": ["gluten","dairy","egg"] },
+    { "customName": "Oat Flour (certified GF)", "substitutionRatio": "1 cup = 1 cup", "bestFor": "Pancakes, quick breads", "notSuitableFor": "Crispy pastry", "rankOrder": 2, "allergenFree": ["gluten","dairy","egg","nut"] },
+    { "customName": "Rice Flour", "substitutionRatio": "1 cup = 1 cup", "bestFor": "Cookies, tempura-style coatings", "notSuitableFor": "Yeast breads without a blend", "rankOrder": 3, "allergenFree": ["gluten","dairy","egg","nut"] },
+    { "customName": "Cassava Flour", "substitutionRatio": "1 cup = 3/4 cup cassava", "bestFor": "Tortillas, flatbreads", "notSuitableFor": "Delicate pastry layers", "rankOrder": 4, "allergenFree": ["gluten","dairy","egg","nut"] },
+    { "customName": "Chickpea Flour", "substitutionRatio": "1 cup = 3/4 cup", "bestFor": "Savory dishes, fritters", "notSuitableFor": "Neutral-tasting cakes", "rankOrder": 5, "allergenFree": ["gluten","dairy","egg","nut"] }
+  ]},
+  { "name": "Cow's Milk", "description": "Dairy milk for liquid, fat, and protein", "functionalRole": "Liquid", "members": [
+    { "customName": "Oat Milk", "substitutionRatio": "1:1", "bestFor": "Baking, cereal, coffee", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","nut","soy"] },
+    { "customName": "Almond Milk (unsweetened)", "substitutionRatio": "1:1", "bestFor": "Smoothies, baking", "notSuitableFor": "Recipes sensitive to nutty flavor", "rankOrder": 2, "allergenFree": ["dairy","egg","soy","gluten"] },
+    { "customName": "Soy Milk", "substitutionRatio": "1:1", "bestFor": "Most baking and cooking", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut"] },
+    { "customName": "Coconut Milk (full-fat)", "substitutionRatio": "1:1 (richer)", "bestFor": "Curries, soups, creamy desserts", "notSuitableFor": "Neutral-flavored dishes", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Cashew Milk", "substitutionRatio": "1:1", "bestFor": "Creamy sauces, soups", "notSuitableFor": "Nut-free recipes", "rankOrder": 5, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Rice Milk", "substitutionRatio": "1:1 (thinner)", "bestFor": "Light baking, cereal", "notSuitableFor": "Rich cream sauces", "rankOrder": 6, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "White Granulated Sugar", "description": "Refined sugar for sweetness and structure", "functionalRole": "Sweetener", "members": [
+    { "customName": "Coconut Sugar", "substitutionRatio": "1:1", "bestFor": "Cookies, sauces", "notSuitableFor": "White-colored baked goods", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Maple Syrup", "substitutionRatio": "3/4 cup = 1 cup sugar (reduce liquid by 3 tbsp)", "bestFor": "Granola, sauces, baked goods", "notSuitableFor": "Dry rubs", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Honey", "substitutionRatio": "3/4 cup = 1 cup sugar (reduce liquid by 1/4 cup)", "bestFor": "Marinades, tea, baked goods", "notSuitableFor": "Vegan recipes, infants under 1", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Agave Nectar", "substitutionRatio": "2/3 cup = 1 cup sugar", "bestFor": "Beverages, salad dressings", "notSuitableFor": "High-heat caramelization", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Monk Fruit Sweetener", "substitutionRatio": "Per package instructions (1:1 blends)", "bestFor": "Low-carb baking", "notSuitableFor": "Fermented recipes (yeast needs real sugar)", "rankOrder": 5, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Stevia Blend (baking)", "substitutionRatio": "Per package instructions", "bestFor": "Low-calorie baked goods", "notSuitableFor": "Caramel, candy", "rankOrder": 6, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Heavy Cream", "description": "High-fat dairy cream for richness", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Coconut Cream (full-fat canned)", "substitutionRatio": "1:1", "bestFor": "Dairy-free whipped cream, soups, curries", "notSuitableFor": "Neutral-flavored cream sauces", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Cashew Cream (soaked cashews + water, blended)", "substitutionRatio": "1:1", "bestFor": "Creamy soups, pasta sauces", "notSuitableFor": "Nut-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Oat Milk (full-fat) + 1 tsp oil", "substitutionRatio": "1 cup oat milk + 1 tbsp neutral oil = 1 cup", "bestFor": "Soups, light sauces", "notSuitableFor": "Stiff whipped cream", "rankOrder": 3, "allergenFree": ["dairy","egg","nut","soy"] }
+  ]},
+  { "name": "Sour Cream", "description": "Tangy dairy product for moisture and richness", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Plain Coconut Yogurt", "substitutionRatio": "1:1", "bestFor": "Baking, dips, toppings", "notSuitableFor": "Very high-heat applications", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Cashew Sour Cream", "substitutionRatio": "1:1", "bestFor": "Tacos, baked potatoes, dips", "notSuitableFor": "Nut-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Plain Dairy-Free Yogurt", "substitutionRatio": "1:1", "bestFor": "Baking", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","gluten"] }
+  ]},
+  { "name": "Buttermilk", "description": "Acidic dairy liquid for leavening activation", "functionalRole": "Liquid", "members": [
+    { "customName": "Plant Milk + 1 tbsp Vinegar or Lemon Juice", "substitutionRatio": "1 cup = 1 cup plant milk + 1 tbsp acid (sit 5 min)", "bestFor": "Pancakes, biscuits, cakes", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten"] },
+    { "customName": "Plain Dairy-Free Yogurt + Water", "substitutionRatio": "3/4 cup yogurt + 1/4 cup water = 1 cup", "bestFor": "Quick breads, muffins", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten"] }
+  ]},
+  { "name": "Baking Powder", "description": "Chemical leavening agent (double-acting)", "functionalRole": "Leavening", "members": [
+    { "customName": "Baking Soda + Cream of Tartar", "substitutionRatio": "1 tsp = 1/4 tsp baking soda + 1/2 tsp cream of tartar", "bestFor": "Any recipe requiring baking powder", "notSuitableFor": "Recipes with acidic ingredients already", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Baking Soda + Vinegar", "substitutionRatio": "1 tsp = 1/4 tsp baking soda + 1/2 tsp vinegar", "bestFor": "Quick leavening in acidic batter", "notSuitableFor": "Delicate cakes", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Self-Rising Flour (adjust recipe)", "substitutionRatio": "Replace 1 cup flour + 1 tsp baking powder with 1 cup self-rising flour", "bestFor": "Biscuits, pancakes", "notSuitableFor": "Gluten-free recipes", "rankOrder": 3, "allergenFree": ["dairy","egg","nut","soy"] }
+  ]},
+  { "name": "Baking Soda", "description": "Alkaline leavening that reacts with acids", "functionalRole": "Leavening", "members": [
+    { "customName": "Baking Powder (4x amount)", "substitutionRatio": "1/4 tsp baking soda = 1 tsp baking powder", "bestFor": "Recipes with no added acid", "notSuitableFor": "Recipes high in acidic ingredients", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Potassium Bicarbonate + Salt", "substitutionRatio": "1:1 (add pinch of salt)", "bestFor": "Low-sodium substitution", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Gelatin (unflavored)", "description": "Animal-derived thickener and gelling agent", "functionalRole": "Thickener", "members": [
+    { "customName": "Agar-Agar Powder", "substitutionRatio": "1 tsp gelatin = 1 tsp agar-agar", "bestFor": "Panna cotta, jellies, puddings", "notSuitableFor": "Gummies (harder texture)", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Pectin (liquid or powder)", "substitutionRatio": "Per package instructions for jam-type gelling", "bestFor": "Jams, jellies, fruit-based desserts", "notSuitableFor": "Savory applications", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Carrageenan", "substitutionRatio": "1 tsp gelatin = 1/2 tsp carrageenan", "bestFor": "Dairy-free panna cotta, gels", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Cornstarch", "description": "Fine starch for thickening sauces and gravies", "functionalRole": "Thickener", "members": [
+    { "customName": "Arrowroot Powder", "substitutionRatio": "1 tbsp = 1 tbsp", "bestFor": "Clear sauces, fruit fillings", "notSuitableFor": "Dairy-based sauces (can become slimy)", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy","corn"] },
+    { "customName": "Tapioca Starch", "substitutionRatio": "2 tbsp = 1 tbsp cornstarch", "bestFor": "Pies, puddings", "notSuitableFor": "Recipes refrigerated overnight", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy","corn"] },
+    { "customName": "Potato Starch", "substitutionRatio": "1 tbsp = 1 tbsp (use less heat)", "bestFor": "Soups, gravies", "notSuitableFor": "High-heat frying", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy","corn"] },
+    { "customName": "Rice Flour", "substitutionRatio": "2 tbsp = 1 tbsp cornstarch", "bestFor": "Frying batters, thickening", "notSuitableFor": "Clear glossy sauces", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy","corn"] }
+  ]},
+  { "name": "Vegetable Oil (neutral)", "description": "Neutral liquid fat for cooking and baking", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Refined Coconut Oil (melted)", "substitutionRatio": "1:1", "bestFor": "Baking, high-heat cooking", "notSuitableFor": "Salad dressings (solidifies)", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Avocado Oil", "substitutionRatio": "1:1", "bestFor": "High-heat cooking, dressings", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Applesauce (unsweetened)", "substitutionRatio": "1/2 cup = 1/2 cup oil (in baking, reduces fat)", "bestFor": "Muffins, cakes (fat reduction)", "notSuitableFor": "Frying, savory cooking", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Mayonnaise", "description": "Egg-and-oil emulsion condiment", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Vegan Mayonnaise (e.g., Just Mayo)", "substitutionRatio": "1:1", "bestFor": "Sandwiches, salads, dressings", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg"] },
+    { "customName": "Hummus", "substitutionRatio": "1:1 (as spread)", "bestFor": "Sandwiches, wraps", "notSuitableFor": "Creamy salad dressings", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut"] },
+    { "customName": "Greek Yogurt", "substitutionRatio": "1:1", "bestFor": "Salads, dressings, dips", "notSuitableFor": "Egg-free diets", "rankOrder": 3, "allergenFree": ["egg","gluten","nut","soy"] },
+    { "customName": "Avocado (mashed)", "substitutionRatio": "1:1 (as spread)", "bestFor": "Toast, sandwiches", "notSuitableFor": "Creamy pasta salads", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Cream Cheese", "description": "Soft, mild dairy cheese for spreads and baking", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Cashew Cream Cheese (soaked cashews + lemon + nutritional yeast)", "substitutionRatio": "1:1", "bestFor": "Cheesecake, spreads, frostings", "notSuitableFor": "Nut-free diets", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Tofu Cream Cheese (firm silken tofu, blended)", "substitutionRatio": "1:1", "bestFor": "Cheesecake, dips", "notSuitableFor": "Soy-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut"] },
+    { "customName": "Coconut Cream Cheese (store-bought dairy-free)", "substitutionRatio": "1:1", "bestFor": "Bagels, frosting", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Honey", "description": "Natural liquid sweetener from bees", "functionalRole": "Sweetener", "members": [
+    { "customName": "Maple Syrup", "substitutionRatio": "1:1", "bestFor": "Oatmeal, marinades, baked goods", "notSuitableFor": "Recipes where honey's antibacterial property is needed", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Agave Nectar", "substitutionRatio": "3/4 cup = 1 cup honey (sweeter)", "bestFor": "Beverages, dressings, vegan baking", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Brown Rice Syrup", "substitutionRatio": "1 cup = 1 cup honey (less sweet)", "bestFor": "Granola bars, baked goods", "notSuitableFor": "Beverages (too thick)", "rankOrder": 3, "allergenFree": ["dairy","egg","nut","soy"] }
+  ]},
+  { "name": "Yogurt (plain dairy)", "description": "Fermented dairy for tang, moisture, and protein", "functionalRole": "Liquid", "members": [
+    { "customName": "Coconut Yogurt (plain)", "substitutionRatio": "1:1", "bestFor": "Baking, sauces, dips", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Soy Yogurt (plain)", "substitutionRatio": "1:1", "bestFor": "Smoothies, baking", "notSuitableFor": "Soy-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut"] },
+    { "customName": "Almond Yogurt (plain)", "substitutionRatio": "1:1", "bestFor": "Breakfast, dressings", "notSuitableFor": "Nut-free diets", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Silken Tofu (blended smooth)", "substitutionRatio": "1:1", "bestFor": "Smoothies, dips, baking", "notSuitableFor": "Soy-free diets", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut"] }
+  ]},
+  { "name": "Parmesan Cheese", "description": "Hard aged Italian cheese with umami depth", "functionalRole": "Other", "members": [
+    { "customName": "Nutritional Yeast Flakes", "substitutionRatio": "3 tbsp = 1/4 cup grated parmesan", "bestFor": "Pasta, salads, popcorn, soups", "notSuitableFor": "Melted cheese applications", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Vegan Parmesan (cashew + nutritional yeast)", "substitutionRatio": "1:1 (grated)", "bestFor": "Pasta, Caesar salad", "notSuitableFor": "Nut-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Hemp Seeds (toasted)", "substitutionRatio": "3 tbsp = 3 tbsp grated", "bestFor": "Topping salads, pasta", "notSuitableFor": "Melting applications", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","soy"] }
+  ]},
+  { "name": "Mozzarella Cheese", "description": "Soft, mild melting cheese", "functionalRole": "Other", "members": [
+    { "customName": "Vegan Mozzarella (store-bought)", "substitutionRatio": "1:1", "bestFor": "Pizza, caprese, lasagna", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg"] },
+    { "customName": "Cashew Mozzarella (homemade)", "substitutionRatio": "1:1 (sliceable when set)", "bestFor": "Caprese, pizza", "notSuitableFor": "Nut-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","soy"], "isHomemadeRecipeAvailable": true }
+  ]},
+  { "name": "Cheddar Cheese", "description": "Sharp aged cow's milk cheese", "functionalRole": "Other", "members": [
+    { "customName": "Vegan Cheddar (store-bought)", "substitutionRatio": "1:1", "bestFor": "Sandwiches, nachos, quesadillas", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg"] },
+    { "customName": "Nutritional Yeast Sauce", "substitutionRatio": "2-3 tbsp sauce = 1 oz cheddar", "bestFor": "Sauces, mac and cheese", "notSuitableFor": "Sliced applications", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Chicken Breast", "description": "Lean white poultry protein", "functionalRole": "Other", "members": [
+    { "customName": "Tofu (extra-firm, pressed)", "substitutionRatio": "1:1 by weight", "bestFor": "Stir-fries, curries, tacos", "notSuitableFor": "Soy-free diets; bone-in preparations", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut"] },
+    { "customName": "Seitan (wheat gluten)", "substitutionRatio": "1:1", "bestFor": "Sandwiches, stir-fries, stews", "notSuitableFor": "Gluten-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","nut","soy"] },
+    { "customName": "Chickpeas (cooked)", "substitutionRatio": "1.5 cups = 8 oz chicken", "bestFor": "Salads, soups, curries", "notSuitableFor": "Recipes requiring shredded texture without processing", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Jackfruit (young, canned in brine)", "substitutionRatio": "1:1 by weight (shredded)", "bestFor": "BBQ, tacos, pulled-style dishes", "notSuitableFor": "High-protein meal targets", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Tempeh", "substitutionRatio": "1:1 by weight", "bestFor": "Stir-fries, salads, sandwiches", "notSuitableFor": "Soy-free diets", "rankOrder": 5, "allergenFree": ["dairy","egg","gluten","nut"] }
+  ]},
+  { "name": "Ground Beef", "description": "Minced beef for burgers, sauces, and fillings", "functionalRole": "Other", "members": [
+    { "customName": "Beyond Meat Ground (or similar)", "substitutionRatio": "1:1", "bestFor": "Burgers, tacos, meat sauce", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten"] },
+    { "customName": "Impossible Burger (ground)", "substitutionRatio": "1:1", "bestFor": "Burgers, meat sauce", "notSuitableFor": "Soy-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten"] },
+    { "customName": "Lentils (cooked, drained)", "substitutionRatio": "1 lb beef ≈ 2 cups cooked lentils", "bestFor": "Bolognese, tacos, stuffed peppers", "notSuitableFor": "Recipes requiring browning crumbles", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Mushrooms (finely chopped portobello)", "substitutionRatio": "1 lb beef ≈ 1 lb mushrooms", "bestFor": "Pasta sauce, burgers", "notSuitableFor": null, "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Walnut Meat (pulsed walnuts + spices)", "substitutionRatio": "1 lb beef ≈ 2 cups walnut meat", "bestFor": "Tacos, lettuce wraps", "notSuitableFor": "Nut-free diets", "rankOrder": 5, "allergenFree": ["dairy","egg","gluten","soy"] }
+  ]},
+  { "name": "White Rice", "description": "Refined grain staple", "functionalRole": "Other", "members": [
+    { "customName": "Cauliflower Rice", "substitutionRatio": "1:1 by volume", "bestFor": "Low-carb stir-fries, fried rice", "notSuitableFor": "Sushi", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Quinoa (cooked)", "substitutionRatio": "1:1", "bestFor": "Bowls, pilafs, salads", "notSuitableFor": "Sticky rice applications", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Farro (cooked)", "substitutionRatio": "1:1", "bestFor": "Pilafs, soups, salads", "notSuitableFor": "Gluten-free diets", "rankOrder": 3, "allergenFree": ["dairy","egg","nut","soy"] },
+    { "customName": "Brown Rice", "substitutionRatio": "1:1 (longer cook time)", "bestFor": "Side dishes, stir-fries", "notSuitableFor": "Sticky preparations", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Breadcrumbs (regular)", "description": "Dried bread crumbs for coating and binding", "functionalRole": "Binding", "members": [
+    { "customName": "Panko Breadcrumbs (regular or GF)", "substitutionRatio": "1:1", "bestFor": "Crispy coatings, au gratin toppings", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","nut","soy"] },
+    { "customName": "Almond Flour", "substitutionRatio": "1:1", "bestFor": "Coating chicken/fish", "notSuitableFor": "Nut-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Crushed Rice Cakes or Rice Crackers", "substitutionRatio": "1:1", "bestFor": "Gluten-free coating", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Rolled Oats (blended)", "substitutionRatio": "1:1", "bestFor": "Meatballs, meatloaf binder", "notSuitableFor": "Crunchy coatings", "rankOrder": 4, "allergenFree": ["dairy","egg","nut","soy"] },
+    { "customName": "Crushed Cornflakes (GF variety)", "substitutionRatio": "1:1", "bestFor": "Crispy oven-baked coatings", "notSuitableFor": null, "rankOrder": 5, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Soy Sauce", "description": "Fermented soy-based umami condiment", "functionalRole": "Other", "members": [
+    { "customName": "Tamari (GF soy sauce)", "substitutionRatio": "1:1", "bestFor": "Stir-fries, marinades, dipping", "notSuitableFor": "Soy-free diets", "rankOrder": 1, "allergenFree": ["gluten","dairy","egg","nut"] },
+    { "customName": "Coconut Aminos", "substitutionRatio": "1:1 (slightly sweeter)", "bestFor": "All soy-sauce applications, Whole30/paleo", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["gluten","dairy","egg","nut","soy"] },
+    { "customName": "Worcestershire Sauce (vegan)", "substitutionRatio": "1:1 (stronger, use less)", "bestFor": "Marinades, burgers, gravies", "notSuitableFor": "Asian-flavored dishes", "rankOrder": 3, "allergenFree": ["gluten","dairy","egg","nut","soy"] },
+    { "customName": "Liquid Aminos (Bragg's)", "substitutionRatio": "1:1", "bestFor": "Salads, marinades, stir-fries", "notSuitableFor": "Soy-free strict diets (contains soy)", "rankOrder": 4, "allergenFree": ["gluten","dairy","egg","nut"] }
+  ]},
+  { "name": "Vinegar (white distilled)", "description": "Acidic liquid for balancing flavors and preserving", "functionalRole": "Other", "members": [
+    { "customName": "Apple Cider Vinegar", "substitutionRatio": "1:1", "bestFor": "Dressings, marinades, pickling, baking", "notSuitableFor": "Neutral-flavored applications", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Lemon Juice", "substitutionRatio": "1:1", "bestFor": "Dressings, marinades, brightening sauces", "notSuitableFor": "Pickling (insufficient acidity for preservation)", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Rice Vinegar", "substitutionRatio": "1:1 (milder)", "bestFor": "Asian dishes, dressings, sushi rice", "notSuitableFor": "Western pickles", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Olive Oil", "description": "Fruit oil for cooking, dressing, and flavor", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Avocado Oil", "substitutionRatio": "1:1", "bestFor": "High-heat cooking, dressings", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Refined Coconut Oil", "substitutionRatio": "1:1", "bestFor": "Baking, medium-heat cooking", "notSuitableFor": "Salad dressings (solidifies when cold)", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Sunflower Oil", "substitutionRatio": "1:1", "bestFor": "Neutral-flavored cooking, baking", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Lemon Juice", "description": "Citrus acid for brightness and preservation", "functionalRole": "Other", "members": [
+    { "customName": "Lime Juice", "substitutionRatio": "1:1", "bestFor": "Mexican dishes, marinades, cocktails", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Apple Cider Vinegar", "substitutionRatio": "1/2 tbsp = 1 tbsp lemon juice", "bestFor": "Dressings, marinades, baking", "notSuitableFor": "Desserts where lemon flavor is key", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "White Wine", "substitutionRatio": "3 tbsp = 1 tbsp lemon juice", "bestFor": "Sauces, seafood dishes", "notSuitableFor": "Alcohol-free cooking", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Onion", "description": "Aromatic allium for flavor base", "functionalRole": "Other", "members": [
+    { "customName": "Shallots", "substitutionRatio": "1 medium onion = 3-4 shallots", "bestFor": "French dishes, vinaigrettes, delicate sauces", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Leeks (white and light green parts)", "substitutionRatio": "1 medium onion = 1 large leek", "bestFor": "Soups, braises, quiche", "notSuitableFor": "Raw applications", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Green Onions (scallions)", "substitutionRatio": "1 cup = 1 medium onion (milder)", "bestFor": "Salads, Asian dishes, garnishes", "notSuitableFor": "Long-cooked dishes", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Onion Powder", "substitutionRatio": "1 tsp = 1 medium onion (flavor only, no texture)", "bestFor": "Spice rubs, sauces", "notSuitableFor": "Recipes needing texture from onion", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Asafoetida (hing) – for FODMAP diets", "substitutionRatio": "Pinch = 1 medium onion (strong, use sparingly)", "bestFor": "FODMAP-friendly cooking", "notSuitableFor": "Large amounts", "rankOrder": 5, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Garlic", "description": "Pungent allium used as flavor base", "functionalRole": "Other", "members": [
+    { "customName": "Garlic Powder", "substitutionRatio": "1/4 tsp = 1 clove fresh garlic", "bestFor": "Dry rubs, sauces, soups", "notSuitableFor": "Recipes where roasted whole garlic is featured", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Jarred Minced Garlic", "substitutionRatio": "1/2 tsp = 1 clove", "bestFor": "Convenient everyday cooking", "notSuitableFor": "Recipes where fresh garlic sharpness is essential", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Asafoetida (hing) – for FODMAP diets", "substitutionRatio": "Tiny pinch in oil = 1-2 cloves (very different aroma)", "bestFor": "FODMAP-friendly Indian cooking", "notSuitableFor": "Most Western dishes", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Roasted Garlic (from bulb)", "substitutionRatio": "1 tsp roasted = 1 clove raw (milder, sweeter)", "bestFor": "Spreads, pasta, dips", "notSuitableFor": "Raw garlic applications", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Vanilla Extract", "description": "Aromatic flavoring for sweet baking", "functionalRole": "Other", "members": [
+    { "customName": "Vanilla Bean Paste", "substitutionRatio": "1 tsp extract = 1 tsp paste (has bean specks)", "bestFor": "Ice cream, custard, anything where flecks are welcome", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Vanilla Powder", "substitutionRatio": "1 tsp extract = 1/2 tsp powder", "bestFor": "Dry spice blends, alcohol-free baking", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Almond Extract (use sparingly)", "substitutionRatio": "1/4 tsp almond = 1 tsp vanilla", "bestFor": "Cakes, cookies (different but complementary flavor)", "notSuitableFor": "Nut-free diets", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","soy"] },
+    { "customName": "Maple Syrup", "substitutionRatio": "1 tbsp = 1 tsp vanilla (add sweetness)", "bestFor": "Pancakes, oatmeal, quick breads", "notSuitableFor": "Neutral-sweet applications", "rankOrder": 4, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Cocoa Powder (unsweetened)", "description": "Dried chocolate solids for baking and beverages", "functionalRole": "Other", "members": [
+    { "customName": "Carob Powder", "substitutionRatio": "1:1 (naturally sweeter)", "bestFor": "Brownies, hot drinks, energy balls", "notSuitableFor": "Strict chocolate flavor replication", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Dutch-Process Cocoa", "substitutionRatio": "1:1 (adjust leavening: replace baking soda with baking powder)", "bestFor": "Deep dark chocolate color and flavor", "notSuitableFor": "Recipes relying on acidic cocoa for leavening", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Black Cocoa Powder", "substitutionRatio": "Blend 50/50 with regular cocoa", "bestFor": "Oreo-style cookies, dark cakes", "notSuitableFor": "Full substitution (very bitter)", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Chocolate Chips", "description": "Sweet chocolate morsels for baking", "functionalRole": "Other", "members": [
+    { "customName": "Dairy-Free/Vegan Chocolate Chips (e.g., Enjoy Life)", "substitutionRatio": "1:1", "bestFor": "Cookies, muffins, pancakes", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Cacao Nibs", "substitutionRatio": "1:1 (less sweet, more crunch)", "bestFor": "Granola, smoothies, less-sweet baked goods", "notSuitableFor": "Recipes where melted chocolate chips are needed", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Chopped Dark Chocolate Bar (70%+)", "substitutionRatio": "1:1 by weight", "bestFor": "Cookies, brownies, bark", "notSuitableFor": "Uniform chip-size applications", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Peanut Butter", "description": "Ground peanut spread high in protein and fat", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Almond Butter", "substitutionRatio": "1:1", "bestFor": "Toast, smoothies, cookies", "notSuitableFor": "Nut-free diets", "rankOrder": 1, "allergenFree": ["peanut","dairy","egg","gluten","soy"] },
+    { "customName": "Sunflower Seed Butter (SunButter)", "substitutionRatio": "1:1", "bestFor": "Nut-free school lunches, baking, smoothies", "notSuitableFor": "Recipes where peanut flavor is featured", "rankOrder": 2, "allergenFree": ["peanut","dairy","egg","gluten","nut","soy"] },
+    { "customName": "Cashew Butter", "substitutionRatio": "1:1", "bestFor": "Sauces, dressings, Asian noodles", "notSuitableFor": "Nut-free diets", "rankOrder": 3, "allergenFree": ["peanut","dairy","egg","gluten","soy"] },
+    { "customName": "Pumpkin Seed Butter", "substitutionRatio": "1:1", "bestFor": "Nut-free and peanut-free baking", "notSuitableFor": null, "rankOrder": 4, "allergenFree": ["peanut","dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Beef Broth / Stock", "description": "Savory meat-based liquid for soups and sauces", "functionalRole": "Liquid", "members": [
+    { "customName": "Vegetable Broth", "substitutionRatio": "1:1", "bestFor": "Soups, risotto, braising vegetables", "notSuitableFor": "Dishes where beefy depth is essential", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Mushroom Broth", "substitutionRatio": "1:1", "bestFor": "Gravies, stews, umami boost", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Miso Paste + Water (1 tbsp miso per cup water)", "substitutionRatio": "1 cup = 1 cup", "bestFor": "Ramen, noodle soups, sauces", "notSuitableFor": "Soy-free diets; large volumes", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut"] }
+  ]},
+  { "name": "Chicken Broth / Stock", "description": "Poultry-based cooking liquid", "functionalRole": "Liquid", "members": [
+    { "customName": "Vegetable Broth", "substitutionRatio": "1:1", "bestFor": "Soups, rice, sauces", "notSuitableFor": "Dishes where chicken flavor is central", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Water + Chicken Bouillon (or Better Than Bouillon)", "substitutionRatio": "1 cup water + 1 tsp bouillon = 1 cup stock", "bestFor": "Convenient weeknight cooking", "notSuitableFor": "Low-sodium diets without adjustment", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Mushroom Broth", "substitutionRatio": "1:1", "bestFor": "Savory soups, risotto", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Pasta (wheat-based)", "description": "Wheat-flour noodles in various shapes", "functionalRole": "Other", "members": [
+    { "customName": "Gluten-Free Pasta (rice, chickpea, or lentil-based)", "substitutionRatio": "1:1 by weight", "bestFor": "All pasta dishes", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["gluten","dairy","egg","nut"] },
+    { "customName": "Zucchini Noodles (zoodles)", "substitutionRatio": "1 lb pasta ≈ 2-3 medium zucchini", "bestFor": "Low-carb pasta dishes, cold salads", "notSuitableFor": "Baked pasta dishes, soups", "rankOrder": 2, "allergenFree": ["gluten","dairy","egg","nut","soy"] },
+    { "customName": "Spaghetti Squash (roasted, shredded)", "substitutionRatio": "1 lb pasta ≈ 1 small squash", "bestFor": "Baked pasta dishes, light sauces", "notSuitableFor": "Al dente bite preference", "rankOrder": 3, "allergenFree": ["gluten","dairy","egg","nut","soy"] },
+    { "customName": "Shirataki Noodles (konjac)", "substitutionRatio": "1:1 by volume", "bestFor": "Asian noodle dishes, soups", "notSuitableFor": "Italian dishes (very different texture)", "rankOrder": 4, "allergenFree": ["gluten","dairy","egg","nut","soy"] }
+  ]},
+  { "name": "Bread (sandwich-style)", "description": "Sliced wheat bread for sandwiches and toast", "functionalRole": "Other", "members": [
+    { "customName": "Gluten-Free Bread (commercial)", "substitutionRatio": "1:1 slice for slice", "bestFor": "Toast, sandwiches", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["gluten","dairy","egg"] },
+    { "customName": "Lettuce Wraps", "substitutionRatio": "2 large leaves = 2 slices bread", "bestFor": "Sandwiches, wraps (low-carb)", "notSuitableFor": "Hot sandwiches, toasting", "rankOrder": 2, "allergenFree": ["gluten","dairy","egg","nut","soy"] },
+    { "customName": "Rice Cakes (thick)", "substitutionRatio": "2 cakes = 2 slices", "bestFor": "Open-faced sandwiches", "notSuitableFor": "Traditional sandwiches", "rankOrder": 3, "allergenFree": ["gluten","dairy","egg","nut","soy"] },
+    { "customName": "Collard Green Leaves (blanched)", "substitutionRatio": "1-2 leaves = 1 wrap", "bestFor": "Wraps, burritos", "notSuitableFor": "Toasted applications", "rankOrder": 4, "allergenFree": ["gluten","dairy","egg","nut","soy"] }
+  ]},
+  { "name": "Cream of Tartar", "description": "Acidic powder stabilizing egg whites and activating soda", "functionalRole": "Leavening", "members": [
+    { "customName": "Lemon Juice", "substitutionRatio": "1/2 tsp cream of tartar = 1.5 tsp lemon juice", "bestFor": "Stabilizing meringue, activating baking soda", "notSuitableFor": "Recipes where dry ingredient is needed", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "White Vinegar", "substitutionRatio": "1/2 tsp cream of tartar = 1.5 tsp white vinegar", "bestFor": "Same as lemon juice", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Lard / Shortening", "description": "Solid animal or hydrogenated fat for flaky pastry", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Vegetable Shortening (e.g., Crisco)", "substitutionRatio": "1:1", "bestFor": "Pie crusts, frying, biscuits", "notSuitableFor": "Dairy-free + palm-oil-free diets", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Coconut Oil (chilled, solid)", "substitutionRatio": "1:1", "bestFor": "Flaky pie crust, cookies", "notSuitableFor": "Neutral-flavored pastry (coconut flavor may come through)", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Vegan Butter (cold/solid)", "substitutionRatio": "1:1", "bestFor": "Biscuits, pie crust", "notSuitableFor": null, "rankOrder": 3, "allergenFree": ["dairy","egg","nut"] }
+  ]},
+  { "name": "Condensed Milk (sweetened)", "description": "Thick, sweet reduced dairy milk", "functionalRole": "Sweetener", "members": [
+    { "customName": "Coconut Condensed Milk (canned, dairy-free)", "substitutionRatio": "1:1", "bestFor": "Flan, pie fillings, hot drinks", "notSuitableFor": "Neutral-dairy flavor needed", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Cashew Condensed Milk (homemade)", "substitutionRatio": "1:1", "bestFor": "Vegan fudge, ice cream", "notSuitableFor": "Nut-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","soy"], "isHomemadeRecipeAvailable": true }
+  ]},
+  { "name": "Cream of Mushroom Soup (canned)", "description": "Condensed mushroom cream soup used as sauce base", "functionalRole": "Liquid", "members": [
+    { "customName": "Homemade Dairy-Free Mushroom Cream Sauce", "substitutionRatio": "1 can (10.5 oz) = 1.5 cups sauce", "bestFor": "Casseroles, pot pies", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"], "isHomemadeRecipeAvailable": true },
+    { "customName": "Plain Coconut Cream + Sautéed Mushrooms + Flour/Starch", "substitutionRatio": "1 can = 1 cup coconut cream + 1/2 cup mushrooms + 2 tbsp starch", "bestFor": "Casseroles", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Salted Caramel Sauce", "description": "Sweet buttery caramel with salt", "functionalRole": "Sweetener", "members": [
+    { "customName": "Date Caramel (medjool dates + coconut cream + salt)", "substitutionRatio": "1:1 in volume", "bestFor": "Desserts, dipping, smoothies", "notSuitableFor": "Hard candy applications", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"], "isHomemadeRecipeAvailable": true },
+    { "customName": "Vegan Caramel Sauce (coconut sugar + coconut cream)", "substitutionRatio": "1:1", "bestFor": "Ice cream topping, brownies", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"], "isHomemadeRecipeAvailable": true }
+  ]},
+  { "name": "Sesame Oil (toasted)", "description": "Nutty aromatic oil from toasted sesame seeds", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Perilla Oil", "substitutionRatio": "1:1", "bestFor": "Korean dishes", "notSuitableFor": "Sesame-free diets strictly", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy","sesame"] },
+    { "customName": "Pumpkin Seed Oil (toasted)", "substitutionRatio": "1:1", "bestFor": "Salad dressings, drizzling", "notSuitableFor": "Cooking at high heat", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy","sesame"] }
+  ]},
+  { "name": "Tahini", "description": "Ground sesame seed paste", "functionalRole": "Fat/Oil", "members": [
+    { "customName": "Sunflower Seed Butter", "substitutionRatio": "1:1", "bestFor": "Hummus, dressings, sauces", "notSuitableFor": "Sesame purists", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy","sesame"] },
+    { "customName": "Pumpkin Seed Butter", "substitutionRatio": "1:1", "bestFor": "Dressings, dips", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy","sesame"] },
+    { "customName": "Almond Butter (unsweetened, drizzle of sesame-free oil)", "substitutionRatio": "1:1", "bestFor": "Noodle sauces, dressings", "notSuitableFor": "Nut-free diets, strict sesame-free (cross-contamination risk)", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","soy","sesame"] }
+  ]},
+  { "name": "Fish Sauce", "description": "Fermented fish-based liquid umami condiment", "functionalRole": "Other", "members": [
+    { "customName": "Soy Sauce + Nori Strip (infused)", "substitutionRatio": "1 tbsp fish sauce = 1 tbsp soy (infused with nori strip for 5 min)", "bestFor": "Thai and Vietnamese dishes", "notSuitableFor": "Fish-free diets completely (trace)? Use coconut aminos instead", "rankOrder": 1, "allergenFree": ["fish","dairy","egg","gluten","nut"] },
+    { "customName": "Coconut Aminos + Seaweed Flakes", "substitutionRatio": "1 tbsp = 1 tbsp", "bestFor": "Paleo, Whole30, fish-free", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["fish","dairy","egg","gluten","nut","soy"] },
+    { "customName": "Worcestershire Sauce (vegan variety)", "substitutionRatio": "1:1 (different flavor profile)", "bestFor": "Western dishes needing umami depth", "notSuitableFor": "Asian-flavored dishes specifically requiring fish sauce", "rankOrder": 3, "allergenFree": ["fish","dairy","egg","nut"] }
+  ]},
+  { "name": "Oyster Sauce", "description": "Thick sweet-savory sauce from oyster extract", "functionalRole": "Other", "members": [
+    { "customName": "Hoisin Sauce", "substitutionRatio": "1:1", "bestFor": "Stir-fries, marinades", "notSuitableFor": null, "rankOrder": 1, "allergenFree": ["fish","dairy","egg","gluten","nut"] },
+    { "customName": "Mushroom Oyster Sauce (vegan)", "substitutionRatio": "1:1", "bestFor": "Any oyster sauce application, fully vegan", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["fish","dairy","egg","gluten","nut","soy"] },
+    { "customName": "Soy Sauce + Molasses + Cornstarch (DIY)", "substitutionRatio": "2 tbsp soy + 1 tbsp molasses + 1 tsp starch + 1 tbsp water", "bestFor": "Stir-fries", "notSuitableFor": "Soy-free diets", "rankOrder": 3, "allergenFree": ["fish","dairy","egg","nut"] }
+  ]},
+  { "name": "Ricotta Cheese", "description": "Fresh, mild, grainy Italian whey cheese", "functionalRole": "Other", "members": [
+    { "customName": "Firm Tofu (crumbled, with lemon + nutritional yeast)", "substitutionRatio": "1:1", "bestFor": "Lasagna, stuffed shells, dairy-free cannoli filling", "notSuitableFor": "Soy-free diets", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut"] },
+    { "customName": "Cashew Ricotta (soaked cashews + lemon + garlic)", "substitutionRatio": "1:1", "bestFor": "Lasagna, stuffed pasta, toast", "notSuitableFor": "Nut-free diets", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","soy"], "isHomemadeRecipeAvailable": true },
+    { "customName": "Cottage Cheese (small-curd, drained)", "substitutionRatio": "1:1", "bestFor": "Lasagna filling, dips", "notSuitableFor": "Dairy-free diets", "rankOrder": 3, "allergenFree": ["egg","gluten","nut","soy"] }
+  ]},
+  { "name": "White Wine (for cooking)", "description": "Dry white wine for deglazing and flavoring", "functionalRole": "Liquid", "members": [
+    { "customName": "Chicken Broth or Vegetable Broth", "substitutionRatio": "1:1", "bestFor": "Deglazing, risotto, pasta sauces", "notSuitableFor": "Alcohol-based desserts", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Apple Juice + Splash of Vinegar", "substitutionRatio": "1:1 (slightly sweet)", "bestFor": "Braising, poultry dishes", "notSuitableFor": "Savory applications where sweetness is wrong", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Water + Lemon Juice", "substitutionRatio": "1 cup = 7/8 cup water + 2 tbsp lemon juice", "bestFor": "General cooking deglazing", "notSuitableFor": "Complex sauces relying on wine depth", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Red Wine (for cooking)", "description": "Dry red wine for braising, sauces, and stews", "functionalRole": "Liquid", "members": [
+    { "customName": "Beef Broth + 1 tbsp Tomato Paste", "substitutionRatio": "1 cup red wine = 1 cup broth + 1 tbsp tomato paste", "bestFor": "Braised meats, stews, Bolognese", "notSuitableFor": "Alcohol-based desserts", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Grape Juice (unsweetened) + Splash Vinegar", "substitutionRatio": "1 cup = 7/8 cup grape juice + 1 tbsp vinegar", "bestFor": "Braising, gravies", "notSuitableFor": null, "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Pomegranate Juice", "substitutionRatio": "1:1 (sweeter, deeper color)", "bestFor": "Lamb, duck, game", "notSuitableFor": "Neutral-flavored sauces", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]},
+  { "name": "Xanthan Gum", "description": "Gluten-free baking binder and stabilizer", "functionalRole": "Binding", "members": [
+    { "customName": "Psyllium Husk Powder", "substitutionRatio": "2 tsp psyllium = 1 tsp xanthan gum", "bestFor": "Gluten-free breads, wraps", "notSuitableFor": "Recipes needing neutral flavor", "rankOrder": 1, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Guar Gum", "substitutionRatio": "2 tsp guar = 1 tsp xanthan (use less in cold recipes)", "bestFor": "Cold sauces, ice cream, frozen desserts", "notSuitableFor": "Hot applications (less stable)", "rankOrder": 2, "allergenFree": ["dairy","egg","gluten","nut","soy"] },
+    { "customName": "Chia Seeds (ground)", "substitutionRatio": "1 tbsp ground chia + 3 tbsp water = 1 tsp xanthan", "bestFor": "Quick breads, pancakes", "notSuitableFor": "Recipes needing invisible binder", "rankOrder": 3, "allergenFree": ["dairy","egg","gluten","nut","soy"] }
+  ]}
+]

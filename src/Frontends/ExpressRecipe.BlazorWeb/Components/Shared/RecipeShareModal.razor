@@ -1,0 +1,207 @@
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@inject IRecipeApiClient RecipeApi
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@* Recipe share modal – email share + copy shareable link *@
+
+@if (IsOpen)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" style="background:rgba(0,0,0,0.5)">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Share Recipe</h5>
+                    <button type="button" class="btn-close" @onclick="Close" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body">
+                    @if (!string.IsNullOrWhiteSpace(_shareUrl))
+                    {
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Share Link</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" readonly value="@_shareUrl" />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="CopyLink">
+                                    📋 Copy
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                Link expires on @_expiresAt.ToString("MMMM d, yyyy")
+                            </div>
+                        </div>
+                        <hr />
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <button class="btn btn-outline-primary w-100" @onclick="GenerateLink" disabled="@_isGenerating">
+                                @if (_isGenerating)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                }
+                                🔗 Generate Share Link
+                            </button>
+                        </div>
+                        <hr />
+                    }
+
+                    <h6 class="mb-3">Send by Email</h6>
+                    <div class="mb-3">
+                        <label class="form-label">Recipient email</label>
+                        <input type="email" class="form-control" @bind="_toEmail" placeholder="friend@example.com" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Your name</label>
+                        <input type="text" class="form-control" @bind="_fromName" placeholder="Your name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Personal message (optional)</label>
+                        <textarea class="form-control" rows="2" @bind="_message" placeholder="Check out this recipe…"></textarea>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                    {
+                        <div class="alert alert-danger py-2 small">@_errorMessage</div>
+                    }
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="Close">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SendEmail" disabled="@_isSending">
+                        @if (_isSending)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                        }
+                        ✉️ Send
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid RecipeId { get; set; }
+    [Parameter] public string RecipeTitle { get; set; } = "Recipe";
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string? _shareUrl;
+    private DateTime _expiresAt;
+    private string _toEmail = string.Empty;
+    private string _fromName = string.Empty;
+    private string _message = string.Empty;
+    private string? _errorMessage;
+    private bool _isGenerating;
+    private bool _isSending;
+
+    protected override void OnParametersSet()
+    {
+        if (!IsOpen)
+        {
+            Reset();
+        }
+    }
+
+    private async Task GenerateLink()
+    {
+        _isGenerating = true;
+        _errorMessage = null;
+        try
+        {
+            string? token = await RecipeApi.GetShareTokenAsync(RecipeId, 30);
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                _shareUrl = $"{Navigation.BaseUri}recipes/shared/{token}";
+                _expiresAt = DateTime.UtcNow.AddDays(30);
+            }
+            else
+            {
+                _errorMessage = "Could not generate share link. Please try again.";
+            }
+        }
+        catch
+        {
+            _errorMessage = "Failed to generate share link.";
+        }
+        finally
+        {
+            _isGenerating = false;
+        }
+    }
+
+    private async Task CopyLink()
+    {
+        if (string.IsNullOrWhiteSpace(_shareUrl)) { return; }
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _shareUrl);
+            ToastService.ShowSuccess("Link copied to clipboard!");
+        }
+        catch
+        {
+            ToastService.ShowError("Could not copy link – please copy manually.");
+        }
+    }
+
+    private async Task SendEmail()
+    {
+        if (string.IsNullOrWhiteSpace(_toEmail))
+        {
+            _errorMessage = "Please enter a recipient email address.";
+            return;
+        }
+
+        _isSending = true;
+        _errorMessage = null;
+        try
+        {
+            // POST /api/recipes/{id}/share
+            bool sent = await RecipeApi.ShareByEmailAsync(RecipeId, new ShareRecipeEmailRequest
+            {
+                ToEmail = _toEmail,
+                FromName = _fromName,
+                Message = _message,
+                ShareUrl = _shareUrl
+            });
+
+            if (sent)
+            {
+                ToastService.ShowSuccess($"Recipe shared with {_toEmail}!");
+                await Close();
+            }
+            else
+            {
+                _errorMessage = "Failed to send email. Please try again.";
+            }
+        }
+        catch
+        {
+            _errorMessage = "An error occurred while sending.";
+        }
+        finally
+        {
+            _isSending = false;
+        }
+    }
+
+    private async Task Close()
+    {
+        Reset();
+        await OnClose.InvokeAsync();
+    }
+
+    private void Reset()
+    {
+        _shareUrl = null;
+        _toEmail = string.Empty;
+        _fromName = string.Empty;
+        _message = string.Empty;
+        _errorMessage = null;
+        _isGenerating = false;
+        _isSending = false;
+    }
+}

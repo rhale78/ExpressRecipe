@@ -161,4 +161,50 @@ public static partial class ProductServiceLogs
         Level = LogLevel.Information,
         Message = "[ProductEvent] Product {ProductId} approval status set to '{Status}'")]
     public static partial void LogProductApprovalChanged(this ILogger logger, Guid productId, string status);
+
+    // ------------------------------------------------------------------
+    // Food Catalog events (2026–2035)
+    // ------------------------------------------------------------------
+
+    [LoggerMessage(
+        EventId = 2026,
+        Level = LogLevel.Information,
+        Message = "[CatalogSeed] Seeded {GroupCount} food groups and {MemberCount} members")]
+    public static partial void LogCatalogSeeded(this ILogger logger, int groupCount, int memberCount);
+
+    [LoggerMessage(
+        EventId = 2027,
+        Level = LogLevel.Information,
+        Message = "[Catalog] Created food group '{Name}' (ID: {GroupId})")]
+    public static partial void LogFoodGroupCreated(this ILogger logger, string name, Guid groupId);
+
+    [LoggerMessage(
+        EventId = 2028,
+        Level = LogLevel.Information,
+        Message = "[Catalog] Added member '{MemberName}' to group {GroupId}")]
+    public static partial void LogFoodGroupMemberAdded(this ILogger logger, string? memberName, Guid groupId);
+
+    [LoggerMessage(
+        EventId = 2029,
+        Level = LogLevel.Information,
+        Message = "[Substitution] Returned {Count} substitute options for ingredient {IngredientId}")]
+    public static partial void LogSubstitutesReturned(this ILogger logger, int count, Guid ingredientId);
+
+    [LoggerMessage(
+        EventId = 2030,
+        Level = LogLevel.Warning,
+        Message = "[Substitution] Could not retrieve allergens for user {UserId}: {Reason}")]
+    public static partial void LogAllergenFetchFailed(this ILogger logger, Guid userId, string reason);
+
+    [LoggerMessage(
+        EventId = 2031,
+        Level = LogLevel.Warning,
+        Message = "[Substitution] Could not retrieve inventory for user {UserId}: {Reason}")]
+    public static partial void LogInventoryFetchFailed(this ILogger logger, Guid userId, string reason);
+
+    [LoggerMessage(
+        EventId = 2032,
+        Level = LogLevel.Information,
+        Message = "[Substitution] Recorded substitution history (ID: {RecordId}) for user {UserId}")]
+    public static partial void LogSubstitutionRecorded(this ILogger logger, Guid recordId, Guid userId);
 }
