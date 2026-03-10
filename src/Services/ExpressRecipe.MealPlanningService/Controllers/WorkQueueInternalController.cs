@@ -1,4 +1,5 @@
 using ExpressRecipe.MealPlanningService.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
@@ -13,6 +14,7 @@ public sealed class WorkQueueInternalController : ControllerBase
 
     public WorkQueueInternalController(IWorkQueueRepository repo) { _repo = repo; }
 
+    [AllowAnonymous]
     [HttpPost("upsert")]
     public async Task<IActionResult> UpsertItem(
         [FromBody] UpsertWorkQueueItemRequest req, CancellationToken ct = default)
