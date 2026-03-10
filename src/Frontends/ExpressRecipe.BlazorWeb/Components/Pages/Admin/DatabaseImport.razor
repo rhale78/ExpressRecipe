@@ -1,12 +1,14 @@
 @page "/admin/import"
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
 @using ExpressRecipe.Client.Shared.Services
+@attribute [Authorize(Roles = "Admin")]
 @inject IAdminApiClient AdminApi
 
 <PageTitle>Database Import - ExpressRecipe Admin</PageTitle>
 
-<AuthorizeView>
+<AuthorizeView Roles="Admin">
     <Authorized>
 <div class="admin-container">
     <div class="admin-header">
