@@ -35,6 +35,8 @@ public static class Extensions
 #pragma warning restore EXTEXP0018
 
         builder.Services.AddSingleton<ExpressRecipe.Shared.Services.HybridCacheService>();
+        builder.Services.AddSingleton<ExpressRecipe.Shared.Services.ILocalModeConfig,
+            ExpressRecipe.Shared.Services.LocalModeConfig>();
 
         builder.Services.ConfigureHttpClientDefaults(http =>
         {

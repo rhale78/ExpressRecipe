@@ -67,6 +67,10 @@ builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(conne
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
+builder.Services.AddSingleton<ExpressRecipe.Shared.Services.IFeatureFlagRepository>(
+    new FeatureFlagRepository(connectionString));
+builder.Services.AddScoped<ExpressRecipe.Shared.Services.IFeatureFlagService,
+    ExpressRecipe.Shared.Services.FeatureFlagService>();
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
