@@ -20,4 +20,8 @@ public record RecipeCookedEvent(
     Guid? HouseholdId,
     int Servings,
     DateTimeOffset CookedAt,
-    Guid CookingHistoryId) : IMessage;
+    Guid CookingHistoryId) : IMessage
+{
+    /// <summary>True when the cooking history row already has a user rating at publish time.</summary>
+    public bool HasRating { get; init; } = false;
+}

@@ -168,6 +168,9 @@ if (messagingEnabled)
     // Subscribe to ProductService lifecycle events so price data stays consistent
     builder.Services.AddHostedService<ProductEventSubscriber>();
 
+    // Subscribe to PriceDropEvents and forward work-queue items to MealPlanningService
+    builder.Services.AddHostedService<PriceDropQueueSubscriber>();
+
     // Register the price-processing saga workflow
     builder.Services.AddSqlSagaRepository<PriceProcessingSagaState>(connectionString, "PriceProcessingSagaState");
     builder.Services.AddSagaWorkflow(PriceProcessingWorkflow.Build());
@@ -188,6 +191,16 @@ else
 // Register price batch channel (async batch path) – always available regardless of messaging
 builder.Services.AddSingleton<IPriceBatchChannel, PriceBatchChannel>();
 builder.Services.AddHostedService<PriceBatchChannelWorker>();
+
+// MealPlanningService HTTP client for work-queue upserts
+builder.Services.AddHttpClient("MealPlanningService", client =>
+{
+    string? baseUrl = builder.Configuration["Services:MealPlanningService"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
