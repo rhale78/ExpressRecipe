@@ -151,7 +151,8 @@ public class MealPlanningRepository : IMealPlanningRepository
     {
         string sql = $@"
             SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
-                   '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt
+                   '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt,
+                   ISNULL(pm.CookedStatus, 'Pending') AS CookedStatus, pm.CookedAt, pm.CookedByTimerId
             FROM PlannedMeal pm
             WHERE pm.MealPlanId = @MealPlanId AND pm.IsDeleted = 0";
 
@@ -186,7 +187,8 @@ public class MealPlanningRepository : IMealPlanningRepository
     {
         string sql = $@"
             SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
-                   '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt
+                   '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt,
+                   ISNULL(pm.CookedStatus, 'Pending') AS CookedStatus, pm.CookedAt, pm.CookedByTimerId
             FROM PlannedMeal pm
             WHERE pm.Id = @Id AND pm.IsDeleted = 0";
 
@@ -209,7 +211,8 @@ public class MealPlanningRepository : IMealPlanningRepository
     {
         string sql = $@"
             SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
-                   '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt
+                   '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt,
+                   ISNULL(pm.CookedStatus, 'Pending') AS CookedStatus, pm.CookedAt, pm.CookedByTimerId
             FROM PlannedMeal pm
             WHERE pm.MealPlanId = @PlanId AND pm.PlannedDate = @Date AND pm.IsDeleted = 0
             ORDER BY pm.MealType";
@@ -272,6 +275,28 @@ public class MealPlanningRepository : IMealPlanningRepository
 
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@PlannedMealId", plannedMealId);
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task MarkMealCookedAsync(Guid plannedMealId, DateTime cookedAt, Guid? cookedByTimerId = null, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE PlannedMeal
+            SET CookedStatus     = 'Cooked',
+                CookedAt         = @CookedAt,
+                CookedByTimerId  = @CookedByTimerId,
+                IsCompleted      = 1,
+                CompletedAt      = ISNULL(CompletedAt, @CookedAt)
+            WHERE Id = @PlannedMealId";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@PlannedMealId", plannedMealId);
+        command.Parameters.AddWithValue("@CookedAt", cookedAt);
+        command.Parameters.AddWithValue("@CookedByTimerId", (object?)cookedByTimerId ?? DBNull.Value);
 
         await command.ExecuteNonQueryAsync(ct);
     }
@@ -600,7 +625,10 @@ public class MealPlanningRepository : IMealPlanningRepository
             MealType = reader.GetString(6),
             Servings = reader.GetInt32(7),
             IsCompleted = reader.GetBoolean(8),
-            CompletedAt = reader.IsDBNull(9) ? null : reader.GetDateTime(9)
+            CompletedAt = reader.IsDBNull(9) ? null : reader.GetDateTime(9),
+            CookedStatus = reader.FieldCount > 10 && !reader.IsDBNull(10) ? reader.GetString(10) : "Pending",
+            CookedAt = reader.FieldCount > 11 && !reader.IsDBNull(11) ? reader.GetDateTime(11) : null,
+            CookedByTimerId = reader.FieldCount > 12 && !reader.IsDBNull(12) ? reader.GetGuid(12) : null
         };
 
     // ── Cooking History ───────────────────────────────────────────────────────

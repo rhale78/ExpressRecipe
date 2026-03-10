@@ -53,6 +53,11 @@ public interface IRecipeRepository
     Task<List<RecipeDto>> GetRecipesByCuisineAsync(string cuisine, int limit = 50);
     Task<List<RecipeDto>> GetRecipesByTagAsync(string tag, int limit = 50);
     Task<List<RecipeDto>> GetRecipesByIngredientAsync(string ingredient, int limit = 50);
+    /// <summary>
+    /// Returns recipes where all required ingredients match one of the provided ingredient names
+    /// (case-insensitive). Used by PantryDiscovery to find "what can I make?" from pantry contents.
+    /// </summary>
+    Task<List<RecipeDto>> GetRecipesWithIngredientsAsync(IReadOnlyList<string> ingredientNames, int limit = 20);
     Task<List<string>> GetAllCategoriesAsync();
     Task<List<string>> GetAllCuisinesAsync();
     Task<object?> GetByExactTitleAsync(string title);

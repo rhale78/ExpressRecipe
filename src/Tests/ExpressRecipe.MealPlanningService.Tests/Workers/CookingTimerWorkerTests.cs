@@ -55,6 +55,9 @@ public class CookingTimerWorkerTests
         scopedProvider
             .Setup(p => p.GetService(typeof(ICookingTimerRepository)))
             .Returns(_mockRepository.Object);
+        scopedProvider
+            .Setup(p => p.GetService(typeof(IMealPlanningRepository)))
+            .Returns(new Mock<IMealPlanningRepository>().Object);
         scope.Setup(s => s.ServiceProvider).Returns(scopedProvider.Object);
         scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
 

@@ -59,4 +59,6 @@ public class AuthUser
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
+    /// <summary>Subscription tier name (e.g. "free", "plus", "premium"). Included as <c>subscription_tier</c> JWT claim.</summary>
+    public string? SubscriptionTierName { get; set; }
 }

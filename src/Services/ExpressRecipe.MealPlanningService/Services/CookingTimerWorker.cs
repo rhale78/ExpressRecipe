@@ -34,6 +34,7 @@ public sealed class CookingTimerWorker : BackgroundService
     {
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         ICookingTimerRepository timers = scope.ServiceProvider.GetRequiredService<ICookingTimerRepository>();
+        IMealPlanningRepository mealRepo = scope.ServiceProvider.GetRequiredService<IMealPlanningRepository>();
 
         List<CookingTimerDto> expired = await timers.GetExpiredUnnotifiedTimersAsync(ct);
         if (expired.Count == 0) { return; }
@@ -65,6 +66,28 @@ public sealed class CookingTimerWorker : BackgroundService
                 await timers.MarkNotificationSentAsync(timer.Id, ct);
                 _logger.LogInformation("Timer expired notification sent: {Label} for user {UserId}",
                     timer.Label, timer.UserId);
+
+                // If the timer is linked to a planned meal, mark it as cooked
+                if (timer.PlannedMealId.HasValue)
+                {
+                    try
+                    {
+                        await mealRepo.MarkMealCookedAsync(
+                            timer.PlannedMealId.Value,
+                            cookedAt: DateTime.UtcNow,
+                            cookedByTimerId: timer.Id,
+                            ct);
+                        _logger.LogInformation(
+                            "Marked PlannedMeal {MealId} as Cooked from timer {TimerId}",
+                            timer.PlannedMealId.Value, timer.Id);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex,
+                            "Failed to mark PlannedMeal {MealId} as cooked for timer {TimerId}",
+                            timer.PlannedMealId.Value, timer.Id);
+                    }
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

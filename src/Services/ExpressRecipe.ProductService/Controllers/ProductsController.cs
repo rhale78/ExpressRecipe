@@ -498,6 +498,41 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>
+    /// Returns the normalized ingredient list for a product.
+    /// Used internally by AllergyAnalysis to check known-safe ingredient lists.
+    /// Returns allergen-relevant name and ID for each ingredient.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("{id:guid}/ingredients/normalized")]
+    public async Task<ActionResult> GetNormalizedIngredients(Guid id)
+    {
+        try
+        {
+            if (!await _productRepository.ProductExistsAsync(id))
+                return NotFound(new { message = "Product not found" });
+
+            var ingredients = await _ingredientRepository.GetProductIngredientsAsync(id);
+
+            var normalized = ingredients.Select(i => new
+            {
+                i.Id,
+                i.IngredientId,
+                NormalizedName = (i.IngredientName ?? i.IngredientListString ?? string.Empty).Trim().ToLowerInvariant(),
+                i.IngredientName,
+                i.IngredientListString,
+                i.OrderIndex
+            }).ToList();
+
+            return Ok(new { ProductId = id, Ingredients = normalized });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving normalized ingredients for product {ProductId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving normalized ingredients" });
+        }
+    }
+
+    /// <summary>
     /// Remove ingredient from product
     /// </summary>
     [HttpDelete("{id:guid}/ingredients/{ingredientId:guid}")]

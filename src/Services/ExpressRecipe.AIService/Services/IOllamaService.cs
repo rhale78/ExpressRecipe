@@ -303,11 +303,45 @@ User: {request.Message}";
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Response parsers (stubs – AI responses handled in TryParseAiExtractionResponse)
+    // Response parsers
     // ──────────────────────────────────────────────────────────────────────────
 
     private static List<RecipeSuggestionDto> ParseRecipeSuggestions(string response, int count)
     {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(response))
+            {
+                // Strip markdown fences if present
+                var json = StripMarkdownFences(response);
+                // Try to find JSON array
+                var start = json.IndexOf('[');
+                var end   = json.LastIndexOf(']');
+                if (start >= 0 && end > start)
+                    json = json[start..(end + 1)];
+
+                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var items = System.Text.Json.JsonSerializer.Deserialize<List<RecipeSuggestionJsonItem>>(json, options);
+                if (items != null && items.Count > 0)
+                {
+                    return items.Take(count).Select(i => new RecipeSuggestionDto
+                    {
+                        RecipeName       = i.RecipeName     ?? i.Name             ?? "Unnamed Recipe",
+                        Description      = i.Description    ?? string.Empty,
+                        PrepTimeMinutes  = i.PrepTimeMinutes,
+                        CookTimeMinutes  = i.CookTimeMinutes,
+                        Difficulty       = i.Difficulty     ?? "Medium",
+                        MatchScore       = i.MatchScore,
+                        Reasoning        = i.Reasoning      ?? string.Empty,
+                        Ingredients      = i.Ingredients    ?? new List<string>(),
+                        Instructions     = i.Instructions   ?? new List<string>()
+                    }).ToList();
+                }
+            }
+        }
+        catch { /* fall through to fallback */ }
+
+        // Fallback: return placeholder items
         return Enumerable.Range(1, Math.Min(count, 3)).Select(i => new RecipeSuggestionDto
         {
             RecipeName = $"Suggested Recipe {i}",
@@ -319,17 +353,177 @@ User: {request.Message}";
         }).ToList();
     }
 
-    private static IngredientSubstitutionDto ParseSubstitutions(string response, string original) =>
-        new() { OriginalIngredient = original, Substitutions = new List<SubstitutionOptionDto>() };
+    private static IngredientSubstitutionDto ParseSubstitutions(string response, string original)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(response))
+            {
+                var json = StripMarkdownFences(response);
+                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
-    private static MealPlanSuggestionDto ParseMealPlan(string response, int days) =>
-        new() { Days = new List<DayMealPlanDto>() };
+                // Try array of substitution options first
+                var arrayStart = json.IndexOf('[');
+                var arrayEnd   = json.LastIndexOf(']');
+                if (arrayStart >= 0 && arrayEnd > arrayStart)
+                {
+                    var arrayJson = json[arrayStart..(arrayEnd + 1)];
+                    var items = System.Text.Json.JsonSerializer.Deserialize<List<SubstitutionOptionJsonItem>>(arrayJson, options);
+                    if (items != null && items.Count > 0)
+                    {
+                        return new IngredientSubstitutionDto
+                        {
+                            OriginalIngredient = original,
+                            Substitutions = items.Select(s => new SubstitutionOptionDto
+                            {
+                                Ingredient       = s.Ingredient     ?? s.Name         ?? string.Empty,
+                                Ratio            = s.Ratio          ?? "1:1",
+                                Explanation      = s.Explanation    ?? s.Notes        ?? string.Empty,
+                                IsHealthier      = s.IsHealthier,
+                                IsAvailable      = s.IsAvailable,
+                                SuitabilityScore = s.SuitabilityScore > 0 ? s.SuitabilityScore : 7
+                            }).ToList()
+                        };
+                    }
+                }
+
+                // Try object with substitutions property
+                var objStart = json.IndexOf('{');
+                var objEnd   = json.LastIndexOf('}');
+                if (objStart >= 0 && objEnd > objStart)
+                {
+                    var objJson = json[objStart..(objEnd + 1)];
+                    var wrapper = System.Text.Json.JsonSerializer.Deserialize<SubstitutionWrapperJsonItem>(objJson, options);
+                    if (wrapper?.Substitutions != null && wrapper.Substitutions.Count > 0)
+                    {
+                        return new IngredientSubstitutionDto
+                        {
+                            OriginalIngredient = original,
+                            Substitutions = wrapper.Substitutions.Select(s => new SubstitutionOptionDto
+                            {
+                                Ingredient       = s.Ingredient     ?? s.Name         ?? string.Empty,
+                                Ratio            = s.Ratio          ?? "1:1",
+                                Explanation      = s.Explanation    ?? s.Notes        ?? string.Empty,
+                                IsHealthier      = s.IsHealthier,
+                                IsAvailable      = s.IsAvailable,
+                                SuitabilityScore = s.SuitabilityScore > 0 ? s.SuitabilityScore : 7
+                            }).ToList()
+                        };
+                    }
+                }
+            }
+        }
+        catch { /* fall through */ }
+
+        return new() { OriginalIngredient = original, Substitutions = new List<SubstitutionOptionDto>() };
+    }
+
+    private static MealPlanSuggestionDto ParseMealPlan(string response, int days)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(response))
+            {
+                var json = StripMarkdownFences(response);
+                var start = json.IndexOf('{');
+                var end   = json.LastIndexOf('}');
+                if (start >= 0 && end > start)
+                    json = json[start..(end + 1)];
+
+                var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var parsed  = System.Text.Json.JsonSerializer.Deserialize<MealPlanJsonItem>(json, options);
+                if (parsed?.Days != null && parsed.Days.Count > 0)
+                {
+                    return new MealPlanSuggestionDto
+                    {
+                        Days = parsed.Days.Select((d, i) => new DayMealPlanDto
+                        {
+                            Date      = DateTime.UtcNow.Date.AddDays(i),
+                            Breakfast = d.Breakfast,
+                            Lunch     = d.Lunch,
+                            Dinner    = d.Dinner,
+                            Snacks    = d.Snacks
+                        }).ToList(),
+                        Reasoning     = parsed.Reasoning ?? string.Empty,
+                        EstimatedCost = parsed.EstimatedCost
+                    };
+                }
+            }
+        }
+        catch { /* fall through */ }
+
+        return new() { Days = new List<DayMealPlanDto>() };
+    }
 
     private static AllergenDetectionResult ParseAllergenDetection(string response) =>
         new() { ConfidenceScore = 0.9 };
 
     private static DietaryAnalysisResult ParseDietaryAnalysis(string response) =>
         new() { HealthScore = 75 };
+
+    private static string StripMarkdownFences(string text)
+    {
+        // Remove ```json ... ``` or ``` ... ``` wrappers
+        var t = text.Trim();
+        if (t.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstNewline = t.IndexOf('\n');
+            if (firstNewline >= 0)
+                t = t[(firstNewline + 1)..];
+        }
+        if (t.EndsWith("```", StringComparison.Ordinal))
+            t = t[..^3];
+        return t.Trim();
+    }
+
+    // ── private JSON mapping helpers ──────────────────────────────────────────
+
+    private sealed class RecipeSuggestionJsonItem
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("recipeName")]
+        public string? RecipeName { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public int PrepTimeMinutes { get; set; }
+        public int CookTimeMinutes { get; set; }
+        public string? Difficulty { get; set; }
+        public double MatchScore { get; set; }
+        public string? Reasoning { get; set; }
+        public List<string>? Ingredients { get; set; }
+        public List<string>? Instructions { get; set; }
+    }
+
+    private sealed class SubstitutionOptionJsonItem
+    {
+        public string? Ingredient { get; set; }
+        public string? Name { get; set; }
+        public string? Ratio { get; set; }
+        public string? Explanation { get; set; }
+        public string? Notes { get; set; }
+        public bool IsHealthier { get; set; }
+        public bool IsAvailable { get; set; }
+        public int SuitabilityScore { get; set; }
+    }
+
+    private sealed class SubstitutionWrapperJsonItem
+    {
+        public List<SubstitutionOptionJsonItem>? Substitutions { get; set; }
+    }
+
+    private sealed class MealPlanDayJsonItem
+    {
+        public string? Breakfast { get; set; }
+        public string? Lunch { get; set; }
+        public string? Dinner { get; set; }
+        public List<string>? Snacks { get; set; }
+    }
+
+    private sealed class MealPlanJsonItem
+    {
+        public List<MealPlanDayJsonItem>? Days { get; set; }
+        public string? Reasoning { get; set; }
+        public decimal EstimatedCost { get; set; }
+    }
 
     private class OllamaResponse
     {
