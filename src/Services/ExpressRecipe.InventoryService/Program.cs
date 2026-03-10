@@ -45,6 +45,10 @@ builder.Services.AddScoped<IInventoryRepository>(sp =>
 builder.Services.AddScoped<IEquipmentRepository>(sp =>
     new EquipmentRepository(connectionString));
 
+// Register equipment capability resolver
+builder.Services.AddSingleton<IEquipmentCapabilityResolver>(sp =>
+    new EquipmentCapabilityResolver(sp.GetRequiredService<IEquipmentRepository>()));
+
 builder.Services.AddScoped<IStorageLocationExtendedRepository>(sp =>
     new StorageLocationExtendedRepository(connectionString));
 
