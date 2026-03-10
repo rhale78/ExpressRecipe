@@ -66,8 +66,9 @@ public partial class ShoppingRepository
             {
                 Id = Guid.NewGuid(),
                 ProductName = i.IngredientName,
+                // Prefer normalized quantity/unit; fall back to scaled values
                 Quantity = i.NormalizedQuantity > 0 ? i.NormalizedQuantity : i.ScaledQuantity,
-                Unit = i.NormalizedUnit.Length > 0 ? i.NormalizedUnit : i.Unit,
+                Unit = !string.IsNullOrEmpty(i.NormalizedUnit) ? i.NormalizedUnit : i.Unit,
                 Category = null
             }).ToList();
         }

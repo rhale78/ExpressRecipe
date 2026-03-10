@@ -532,7 +532,7 @@ public class InventoryController : ControllerBase
                     item.Barcode,
                     item.PurchasePrice,
                     item.PreferredStore,
-                    null);
+                    storeLocation: null); // storeLocation not captured from ShoppingListItem
                 addedIds.Add(id);
             }
             catch (Exception ex)
