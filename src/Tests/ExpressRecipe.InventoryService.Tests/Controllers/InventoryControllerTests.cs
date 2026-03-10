@@ -3,6 +3,7 @@ using Moq;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using ExpressRecipe.InventoryService.Controllers;
 using ExpressRecipe.InventoryService.Data;
 using ExpressRecipe.InventoryService.Tests.Helpers;
@@ -20,7 +21,8 @@ public class InventoryControllerTests
     {
         _mockRepository = new Mock<IInventoryRepository>();
         _mockLogger = new Mock<ILogger<InventoryController>>();
-        _controller = new InventoryController(_mockLogger.Object, _mockRepository.Object);
+        IConfiguration config = new ConfigurationBuilder().Build();
+        _controller = new InventoryController(_mockLogger.Object, _mockRepository.Object, null, config);
         _testUserId = Guid.NewGuid();
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }

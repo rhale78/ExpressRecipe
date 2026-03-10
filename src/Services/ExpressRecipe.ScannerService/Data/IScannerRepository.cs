@@ -21,6 +21,17 @@ public interface IScannerRepository
     // OCR Results
     Task<Guid> SaveOCRResultAsync(Guid userId, byte[] image, string extractedText, decimal confidence, string? productMatch);
     Task<List<OCRResultDto>> GetUserOCRResultsAsync(Guid userId, int limit = 50);
+
+    // Vision Captures
+    Task<Guid> SaveVisionCaptureAsync(VisionCaptureRecord capture, CancellationToken ct = default);
+    Task UpdateVisionCaptureProductAsync(Guid captureId, Guid productId, bool found, CancellationToken ct = default);
+    Task<List<VisionCaptureRecord>> GetCapturePendingReviewAsync(int limit, CancellationToken ct = default);
+
+    // Correction Reports
+    Task<Guid> CreateCorrectionReportAsync(CorrectionReportRecord report, CancellationToken ct = default);
+    Task<List<CorrectionReportRecord>> GetCorrectionReportsAsync(string? status, int limit, CancellationToken ct = default);
+    Task UpdateCorrectionStatusAsync(Guid reportId, string status, Guid reviewedBy, CancellationToken ct = default);
+    Task<List<TrainingExportRow>> GetTrainingExportAsync(int limit, CancellationToken ct = default);
 }
 
 public class ScanHistoryDto
@@ -68,4 +79,47 @@ public class OCRResultDto
     public decimal Confidence { get; set; }
     public string? ProductMatch { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class VisionCaptureRecord
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public Guid? ScanHistoryId { get; set; }
+    public byte[] CaptureImageJpeg { get; set; } = Array.Empty<byte>();
+    public string? DetectedBarcode { get; set; }
+    public string? DetectedProductName { get; set; }
+    public string? DetectedBrand { get; set; }
+    public string? ProviderUsed { get; set; }
+    public decimal? Confidence { get; set; }
+    public bool ProductFoundInDb { get; set; }
+    public Guid? ResolvedProductId { get; set; }
+    public bool IsTrainingData { get; set; }
+    public DateTime CapturedAt { get; set; }
+}
+
+public class CorrectionReportRecord
+{
+    public Guid Id { get; set; }
+    public Guid VisionCaptureId { get; set; }
+    public Guid UserId { get; set; }
+    public string? AiGuess { get; set; }
+    public string? UserCorrection { get; set; }
+    public string? UserNote { get; set; }
+    public string Status { get; set; } = "Pending";
+    public Guid? ReviewedBy { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class TrainingExportRow
+{
+    public Guid CaptureId { get; set; }
+    public string? DetectedBarcode { get; set; }
+    public string? DetectedProductName { get; set; }
+    public string? DetectedBrand { get; set; }
+    public string? ProviderUsed { get; set; }
+    public decimal? Confidence { get; set; }
+    public string? CorrectedProductName { get; set; }
+    public DateTime CapturedAt { get; set; }
 }

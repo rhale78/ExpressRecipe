@@ -26,12 +26,15 @@ public abstract class ApiClientBase
     }
 
     protected async Task<T?> GetAsync<T>(string endpoint)
+        => await GetAsync<T>(endpoint, CancellationToken.None);
+
+    protected async Task<T?> GetAsync<T>(string endpoint, CancellationToken ct)
     {
         await SetAuthorizationHeaderAsync();
 
         try
         {
-            var response = await HttpClient.GetAsync(endpoint);
+            var response = await HttpClient.GetAsync(endpoint, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -45,7 +48,7 @@ public abstract class ApiClientBase
                 return default;
             }
 
-            return await response.Content.ReadFromJsonAsync<T>(JsonOptions);
+            return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
         }
         catch (HttpRequestException ex)
         {
@@ -54,12 +57,15 @@ public abstract class ApiClientBase
     }
 
     protected async Task<TResponse?> PostAsync<TRequest, TResponse>(string endpoint, TRequest data)
+        => await PostAsync<TRequest, TResponse>(endpoint, data, CancellationToken.None);
+
+    protected async Task<TResponse?> PostAsync<TRequest, TResponse>(string endpoint, TRequest data, CancellationToken ct)
     {
         await SetAuthorizationHeaderAsync();
 
         try
         {
-            var response = await HttpClient.PostAsJsonAsync(endpoint, data, JsonOptions);
+            var response = await HttpClient.PostAsJsonAsync(endpoint, data, JsonOptions, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -67,7 +73,7 @@ public abstract class ApiClientBase
                 return default;
             }
 
-            return await response.Content.ReadFromJsonAsync<TResponse>(JsonOptions);
+            return await response.Content.ReadFromJsonAsync<TResponse>(JsonOptions, ct);
         }
         catch (HttpRequestException ex)
         {
@@ -76,12 +82,15 @@ public abstract class ApiClientBase
     }
 
     protected async Task<bool> PostAsync<TRequest>(string endpoint, TRequest data)
+        => await PostAsync(endpoint, data, CancellationToken.None);
+
+    protected async Task<bool> PostAsync<TRequest>(string endpoint, TRequest data, CancellationToken ct)
     {
         await SetAuthorizationHeaderAsync();
 
         try
         {
-            var response = await HttpClient.PostAsJsonAsync(endpoint, data, JsonOptions);
+            var response = await HttpClient.PostAsJsonAsync(endpoint, data, JsonOptions, ct);
             return response.IsSuccessStatusCode;
         }
         catch (HttpRequestException ex)

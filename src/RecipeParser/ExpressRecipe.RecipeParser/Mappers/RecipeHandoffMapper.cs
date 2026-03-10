@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using ExpressRecipe.RecipeParser.Models;
+using ExpressRecipe.Shared.Units;
 
 namespace ExpressRecipe.RecipeParser.Mappers;
 
@@ -100,33 +101,8 @@ public static class RecipeHandoffMapper
         return match.Success ? int.Parse(match.Value) : 1;
     }
 
-    internal static decimal ParseQuantity(string? qty)
-    {
-        if (string.IsNullOrWhiteSpace(qty)) return 0m;
-        qty = qty.Trim();
-
-        // "1 1/2"
-        var mixedMatch = Regex.Match(qty, @"^(\d+)\s+(\d+)/(\d+)$");
-        if (mixedMatch.Success)
-        {
-            int whole = int.Parse(mixedMatch.Groups[1].Value);
-            int num = int.Parse(mixedMatch.Groups[2].Value);
-            int den = int.Parse(mixedMatch.Groups[3].Value);
-            return whole + (decimal)num / den;
-        }
-
-        // "1/2"
-        var fracMatch = Regex.Match(qty, @"^(\d+)/(\d+)$");
-        if (fracMatch.Success)
-        {
-            int num = int.Parse(fracMatch.Groups[1].Value);
-            int den = int.Parse(fracMatch.Groups[2].Value);
-            return (decimal)num / den;
-        }
-
-        if (decimal.TryParse(qty, NumberStyles.Number, CultureInfo.InvariantCulture, out var d)) return d;
-        return 0m;
-    }
+    internal static decimal ParseQuantity(string? qty) =>
+        FractionParser.ParseFraction(qty) ?? 0m;
 
     private static int? ParseNutInt(string? val)
     {

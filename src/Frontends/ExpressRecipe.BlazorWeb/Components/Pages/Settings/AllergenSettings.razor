@@ -1,0 +1,113 @@
+@page "/settings/allergens/{MemberId:guid}"
+@page "/setup/allergens/{MemberId:guid}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Allergen Profile - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="@(() => Navigation.NavigateTo("/settings/household"))">
+                    ← Back to Household
+                </button>
+                <h1>⚠️ Allergen Profile</h1>
+            </div>
+            <p class="settings-subtitle">
+                Manage allergens, sensitivities, and dietary restrictions for this member.
+            </p>
+
+            @if (_isLoading)
+            {
+                <div class="loading-container"><div class="spinner"></div><p>Loading allergen profile...</p></div>
+            }
+            else
+            {
+                <div class="settings-section">
+                    <div class="section-header">
+                        <h2>Allergen Entries</h2>
+                    </div>
+
+                    @if (_entries.Count == 0)
+                    {
+                        <p class="empty-message">No allergens recorded for this member.</p>
+                    }
+                    else
+                    {
+                        <div class="allergen-grid">
+                            @foreach (AllergenEntryItem entry in _entries)
+                            {
+                                <div class="allergen-checkbox-card @(entry.IsUnresolved ? "allergen-unresolved" : string.Empty)">
+                                    <span>@(entry.FreeFormName ?? entry.AllergenName ?? "Unknown")</span>
+                                    <span>@entry.Severity</span>
+                                    @if (entry.IsUnresolved)
+                                    {
+                                        <span class="unresolved-badge">⚠ Not matched — verify manually</span>
+                                    }
+                                    <button class="btn btn-outline btn-sm"
+                                            @onclick="@(() => RemoveEntryAsync(entry.Id))">
+                                        Remove
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="settings-section">
+                    <FreeformAllergenInput MemberId="@MemberId" OnEntryAdded="OnFreeformEntryAdded" />
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="settings-container">
+            <p>Please <a href="/login">sign in</a> to manage allergen profiles.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter]
+    public Guid MemberId { get; set; }
+
+    private bool _isLoading = true;
+    private List<AllergenEntryItem> _entries = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Load allergen profile via SafeForkService HTTP client
+        await Task.Delay(10);
+        _isLoading = false;
+    }
+
+    private async Task RemoveEntryAsync(Guid entryId)
+    {
+        // TODO: Call SafeForkService DELETE endpoint
+        await Task.CompletedTask;
+        _entries.RemoveAll(e => e.Id == entryId);
+    }
+
+    private void OnFreeformEntryAdded(FreeformAllergenInput.FreeformEntryModel entry)
+    {
+        _entries.Add(new AllergenEntryItem
+        {
+            Id = entry.Id,
+            FreeFormName = entry.FreeFormName,
+            IsUnresolved = entry.IsUnresolved,
+            Severity = "Moderate"
+        });
+    }
+
+    public class AllergenEntryItem
+    {
+        public Guid Id { get; set; }
+        public string? AllergenName { get; set; }
+        public string? FreeFormName { get; set; }
+        public string Severity { get; set; } = "Moderate";
+        public bool IsUnresolved { get; set; }
+    }
+}

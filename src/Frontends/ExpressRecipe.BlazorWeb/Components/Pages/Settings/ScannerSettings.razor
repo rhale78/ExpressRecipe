@@ -1,0 +1,204 @@
+@page "/settings/scanner"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@inject IJSRuntime JS
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Scanner Settings - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="settings-container">
+            <div class="settings-header">
+                <button class="btn btn-outline" @onclick="GoBackAsync">← Back to Settings</button>
+                <h1>📷 Scanner Settings</h1>
+            </div>
+            <p class="settings-subtitle">Configure scanner behavior and AI provider preferences.</p>
+
+            @if (_isLoading)
+            {
+                <div class="loading-container"><div class="spinner"></div><p>Loading settings…</p></div>
+            }
+            else
+            {
+                <div class="settings-section">
+                    <div class="section-header"><h2>AI Provider</h2></div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Preferred AI Provider</label>
+                        <select class="form-select" @bind="_preferredProvider">
+                            <option value="Auto">Auto (recommended)</option>
+                            <option value="ONNX">ONNX</option>
+                            <option value="PaddleOCR">PaddleOCR</option>
+                            <option value="OllamaVision">Ollama Vision</option>
+                            <option value="Azure">Azure Vision</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="section-header"><h2>Behavior</h2></div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="autoSearchToggle" @bind="_autoSearch" />
+                        <label class="form-check-label" for="autoSearchToggle">Auto-Search on UPC Detect</label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Default Session Mode</label>
+                        <div class="btn-group" role="group">
+                            <button class="btn @(_defaultSessionMode == "Single" ? "btn-primary" : "btn-outline-secondary")"
+                                    @onclick='() => _defaultSessionMode = "Single"'>Single</button>
+                            <button class="btn @(_defaultSessionMode == "Batch" ? "btn-primary" : "btn-outline-secondary")"
+                                    @onclick='() => _defaultSessionMode = "Batch"'>Batch</button>
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="freezeToggle" @bind="_freezePreview" />
+                        <label class="form-check-label" for="freezeToggle">Detection Freeze Preview</label>
+                    </div>
+
+                    @if (_freezePreview)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Freeze Duration (seconds)</label>
+                            <input type="number" class="form-control" style="max-width:120px"
+                                   min="1" max="5" @bind="_freezeSeconds" />
+                        </div>
+                    }
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="trainingToggle" @bind="_saveForTraining" />
+                        <label class="form-check-label" for="trainingToggle">Save captures for AI training</label>
+                        <small class="d-block text-muted">Captured images may be used to improve AI accuracy.</small>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="section-header"><h2>Camera</h2></div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Camera Direction</label>
+                        <select class="form-select" style="max-width:200px" @bind="_cameraFacingMode">
+                            <option value="environment">Rear (Environment)</option>
+                            <option value="user">Front (User)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-4">
+                    <button class="btn btn-primary" @onclick="SaveSettingsAsync">
+                        <i class="bi bi-check-lg me-1"></i>Save Settings
+                    </button>
+                    <button class="btn btn-outline-secondary" @onclick="ResetDefaultsAsync">
+                        Reset Defaults
+                    </button>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="settings-container">
+            <p>Please <a href="/login">sign in</a> to manage settings.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _isLoading = true;
+    private string _preferredProvider = "Auto";
+    private bool _autoSearch = true;
+    private string _defaultSessionMode = "Single";
+    private bool _freezePreview = false;
+    private int _freezeSeconds = 2;
+    private bool _saveForTraining = true;
+    private string _cameraFacingMode = "environment";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadSettingsAsync();
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        try
+        {
+            string? provider = await LoadPrefAsync("preferredProvider");
+            string? autoSearch = await LoadPrefAsync("autoSearch");
+            string? sessionMode = await LoadPrefAsync("defaultSessionMode");
+            string? freeze = await LoadPrefAsync("freezePreview");
+            string? freezeSec = await LoadPrefAsync("freezeSeconds");
+            string? training = await LoadPrefAsync("saveForTraining");
+            string? facing = await LoadPrefAsync("cameraFacingMode");
+
+            if (!string.IsNullOrWhiteSpace(provider)) { _preferredProvider = provider; }
+            if (bool.TryParse(autoSearch, out bool autoSearchVal)) { _autoSearch = autoSearchVal; }
+            if (!string.IsNullOrWhiteSpace(sessionMode)) { _defaultSessionMode = sessionMode; }
+            if (bool.TryParse(freeze, out bool freezeVal)) { _freezePreview = freezeVal; }
+            if (int.TryParse(freezeSec, out int freezeSecVal)) { _freezeSeconds = freezeSecVal; }
+            if (bool.TryParse(training, out bool trainingVal)) { _saveForTraining = trainingVal; }
+            if (!string.IsNullOrWhiteSpace(facing)) { _cameraFacingMode = facing; }
+        }
+        catch (Exception)
+        {
+            // defaults are fine
+        }
+    }
+
+    private async Task<string?> LoadPrefAsync(string key)
+    {
+        try
+        {
+            return await JS.InvokeAsync<string?>("scannerInterop.loadPreference", key);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("scannerInterop.savePreference", "preferredProvider", _preferredProvider);
+            await JS.InvokeVoidAsync("scannerInterop.savePreference", "autoSearch", _autoSearch.ToString().ToLower());
+            await JS.InvokeVoidAsync("scannerInterop.savePreference", "defaultSessionMode", _defaultSessionMode);
+            await JS.InvokeVoidAsync("scannerInterop.savePreference", "freezePreview", _freezePreview.ToString().ToLower());
+            await JS.InvokeVoidAsync("scannerInterop.savePreference", "freezeSeconds", _freezeSeconds.ToString());
+            await JS.InvokeVoidAsync("scannerInterop.savePreference", "saveForTraining", _saveForTraining.ToString().ToLower());
+            await JS.InvokeVoidAsync("scannerInterop.savePreference", "cameraFacingMode", _cameraFacingMode);
+            ToastService.ShowSuccess("Scanner settings saved.", "Saved");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to save: {ex.Message}", "Error");
+        }
+    }
+
+    private async Task ResetDefaultsAsync()
+    {
+        _preferredProvider = "Auto";
+        _autoSearch = true;
+        _defaultSessionMode = "Single";
+        _freezePreview = false;
+        _freezeSeconds = 2;
+        _saveForTraining = true;
+        _cameraFacingMode = "environment";
+        await SaveSettingsAsync();
+    }
+
+    private async Task GoBackAsync()
+    {
+        Navigation.NavigateTo("/settings");
+        await Task.CompletedTask;
+    }
+}

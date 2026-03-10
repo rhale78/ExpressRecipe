@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "ExpressRecipe.PreferencesService": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:53233;http://localhost:53234"
+    }
+  }
+}

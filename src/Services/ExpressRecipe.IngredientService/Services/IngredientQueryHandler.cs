@@ -1,6 +1,8 @@
 using ExpressRecipe.IngredientService.Data;
+using ExpressRecipe.IngredientService.Services.Matching;
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.Core.Messages;
+using ExpressRecipe.Shared.Matching;
 using ExpressRecipe.Shared.Messages;
 
 namespace ExpressRecipe.IngredientService.Services;
@@ -14,13 +16,16 @@ public sealed class IngredientQueryHandler :
     IRequestHandler<RequestIngredientBulkCreate, IngredientBulkCreateResponse>
 {
     private readonly IIngredientRepository _repository;
+    private readonly IIngredientMatchingService _matchingService;
     private readonly ILogger<IngredientQueryHandler> _logger;
 
     public IngredientQueryHandler(
         IIngredientRepository repository,
+        IIngredientMatchingService matchingService,
         ILogger<IngredientQueryHandler> logger)
     {
         _repository = repository;
+        _matchingService = matchingService;
         _logger = logger;
     }
 
@@ -31,9 +36,17 @@ public sealed class IngredientQueryHandler :
     {
         _logger.LogDebug("[IngredientQueryHandler] Bulk lookup: {Count} names", request.Names.Count);
 
-        var results = await _repository.GetIngredientIdsByNamesAsync(request.Names);
+        List<MatchResult> matches = await _matchingService.MatchBulkAsync(
+            request.Names, request.SourceService ?? "Unknown", ct: cancellationToken);
 
-        return new IngredientLookupResponse(request.CorrelationId, results);
+        Dictionary<string, Guid> ids = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, MatchResult> matchResults = new(StringComparer.OrdinalIgnoreCase);
+        foreach (MatchResult match in matches)
+        {
+            matchResults[match.RawInput] = match;
+            if (match.IsResolved) { ids[match.RawInput] = match.IngredientId!.Value; }
+        }
+        return new IngredientLookupResponse(request.CorrelationId, ids, matchResults);
     }
 
     public async Task<IngredientBulkCreateResponse> HandleAsync(
@@ -43,7 +56,7 @@ public sealed class IngredientQueryHandler :
     {
         _logger.LogDebug("[IngredientQueryHandler] Bulk create: {Count} names", request.Names.Count);
 
-        var created = await _repository.BulkCreateIngredientsAsync(request.Names);
+        int created = await _repository.BulkCreateIngredientsAsync(request.Names);
 
         return new IngredientBulkCreateResponse(request.CorrelationId, created);
     }

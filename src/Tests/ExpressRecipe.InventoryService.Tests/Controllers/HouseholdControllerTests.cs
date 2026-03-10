@@ -3,6 +3,7 @@ using Moq;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using ExpressRecipe.InventoryService.Controllers;
 using ExpressRecipe.InventoryService.Data;
 using ExpressRecipe.InventoryService.Tests.Helpers;
@@ -391,7 +392,9 @@ public class HouseholdControllerTests
 
         var inventoryController = new InventoryController(
             new Mock<ILogger<InventoryController>>().Object,
-            _mockRepository.Object);
+            _mockRepository.Object,
+            null,
+            new ConfigurationBuilder().Build());
         inventoryController.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
         // Act
@@ -426,7 +429,9 @@ public class HouseholdControllerTests
 
         var inventoryController = new InventoryController(
             new Mock<ILogger<InventoryController>>().Object,
-            _mockRepository.Object);
+            _mockRepository.Object,
+            null,
+            new ConfigurationBuilder().Build());
         inventoryController.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
         // Act

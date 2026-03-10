@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.ShoppingService.Data;
+using ExpressRecipe.ShoppingService.Services;
 
 namespace ExpressRecipe.ShoppingService.Controllers;
 
@@ -12,11 +13,16 @@ public class ScanController : ControllerBase
 {
     private readonly ILogger<ScanController> _logger;
     private readonly IShoppingRepository _repository;
+    private readonly IShoppingSessionService _sessionService;
 
-    public ScanController(ILogger<ScanController> logger, IShoppingRepository repository)
+    public ScanController(
+        ILogger<ScanController> logger,
+        IShoppingRepository repository,
+        IShoppingSessionService sessionService)
     {
         _logger = logger;
         _repository = repository;
+        _sessionService = sessionService;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -108,6 +114,36 @@ public class ScanController : ControllerBase
         {
             _logger.LogError(ex, "Error adding purchased items to inventory for list {ListId}", request.ListId);
             return StatusCode(500, new { error = "Failed to add items to inventory", details = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Complete a shopping scan session and notify inventory service for checked items.
+    /// </summary>
+    [HttpPost("{sessionId}/complete")]
+    public async Task<IActionResult> CompleteSession(Guid sessionId, CancellationToken ct = default)
+    {
+        try
+        {
+            Guid userId = GetUserId();
+            ShoppingSessionSummaryDto summary = await _sessionService.CompleteSessionAsync(sessionId, userId, ct);
+            _logger.LogInformation("User {UserId} completed shopping session {SessionId}", userId, sessionId);
+            return Ok(summary);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Session {SessionId} not found or invalid: {Message}", sessionId, ex.Message);
+            return NotFound(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning("Unauthorized attempt to complete session {SessionId}: {Message}", sessionId, ex.Message);
+            return Forbid();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error completing session {SessionId}", sessionId);
+            return StatusCode(500, new { message = "An error occurred while completing the session" });
         }
     }
 

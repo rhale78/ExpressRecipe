@@ -13,6 +13,9 @@
     <div class="planning-header">
         <h1>📅 Meal Planning</h1>
         <div class="header-actions">
+            <button class="btn btn-secondary" @onclick="NavigateToCalendarView">
+                🗓️ Calendar View
+            </button>
             <button class="btn btn-secondary" @onclick="CreateQuickPlan">
                 ⚡ Quick Plan
             </button>
@@ -77,6 +80,7 @@
             <div class="week-calendar">
                 @foreach (var day in _weekView.Days)
                 {
+                    string dayDateStr = day.Date.ToString("yyyy-MM-dd");
                     <div class="day-column @(day.Date.Date == DateTime.Today ? "today" : "")">
                         <!-- Day Header -->
                         <div class="day-header">
@@ -88,14 +92,21 @@
                             }
                         </div>
 
-                        <!-- Meals for the day -->
-                        <div class="day-meals">
+                        <!-- Drop zone for this day -->
+                        <div class="day-meals @(_dragOverDate == dayDateStr ? "drag-target" : "")"
+                             @ondragenter="() => OnDragEnter(dayDateStr)"
+                             @ondragleave="OnDragLeave"
+                             @ondragover:preventDefault
+                             @ondrop="() => OnDropToDay(dayDateStr)">
                             @if (day.Meals.Any())
                             {
                                 @foreach (var meal in day.Meals.OrderBy(m => GetMealTypeOrder(m.MealType)))
                                 {
                                     <div class="meal-card @(meal.IsPrepared ? "prepared" : "") @GetMealTypeClass(meal.MealType)"
-                                         @onclick="HandleViewMeal">
+                                         draggable="true"
+                                         @ondragstart="() => OnDragStart(meal)"
+                                         @ondragend="() => { _draggingMeal = null; _dragOverDate = null; }"
+                                         @onclick="() => ViewMeal(meal)">
                                         <div class="meal-type-badge">@GetMealTypeIcon(meal.MealType)</div>
 
                                         <div class="meal-info">
@@ -149,7 +160,7 @@
                         </div>
 
                         <!-- Add Meal Button -->
-                        <button class="add-meal-btn" @onclick="HandleShowAddMealModal">
+                        <button class="add-meal-btn" @onclick="() => ShowAddMealModal(day.Date)">
                             ➕ Add Meal
                         </button>
                     </div>
@@ -218,7 +229,7 @@
                         <div class="recipe-search-results">
                             @foreach (var recipe in _recipeSearchResults.Take(5))
                             {
-                                <div class="recipe-result-card" @onclick="HandleSelectRecipe">
+                                <div class="recipe-result-card" @onclick="() => SelectRecipe(recipe)">
                                     <strong>@recipe.Title</strong>
                                     <span class="text-muted">⏱️ @recipe.TotalTimeMinutes min</span>
                                     <button class="btn btn-sm btn-primary">Select</button>
@@ -276,6 +287,10 @@
     private string _recipeSearchTerm = string.Empty;
     private List<RecipeDto>? _recipeSearchResults;
 
+    // Drag-and-drop state
+    private MealPlanEntryDto? _draggingMeal;
+    private string? _dragOverDate;
+
     protected override async Task OnInitializedAsync()
     {
         _currentWeekStart = GetWeekStart(DateTime.Today);
@@ -284,8 +299,8 @@
 
     private DateTime GetWeekStart(DateTime date)
     {
-        // Get Sunday of the week
-        var diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        // Calculate offset to the previous Sunday; formula returns 0 when date is already a Sunday
+        int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
         return date.AddDays(-1 * diff).Date;
     }
 
@@ -298,7 +313,7 @@
         _weekView = await MealPlanApi.GetWeekViewAsync(_currentWeekStart);
 
         // Get current active plan for actions
-        var plansResult = await MealPlanApi.SearchMealPlansAsync(new MealPlanSearchRequest
+        MealPlanSearchResult? plansResult = await MealPlanApi.SearchMealPlansAsync(new MealPlanSearchRequest
         {
             Status = "Active",
             Page = 1,
@@ -328,6 +343,27 @@
         StateHasChanged();
     }
 
+    private void NavigateToCalendarView() => Navigation.NavigateTo("/meal-planning/calendar");
+
+    private Task OnDropToDay(string date) => OnDrop(date, "Dinner");
+
+    // ── Drag-and-drop ──────────────────────────────────────────────────────────
+
+    private void OnDragStart(MealPlanEntryDto meal) { _draggingMeal = meal; }
+    private void OnDragEnter(string date) { _dragOverDate = date; }
+    private void OnDragLeave() { _dragOverDate = null; }
+
+    private async Task OnDrop(string targetDate, string mealType)
+    {
+        if (_draggingMeal is null) { return; }
+        await MealPlanApi.MoveMealAsync(_draggingMeal.Id, DateOnly.Parse(targetDate), mealType);
+        _draggingMeal = null;
+        _dragOverDate = null;
+        await LoadWeekView();
+    }
+
+    // ── Modal ──────────────────────────────────────────────────────────────────
+
     private void ShowAddMealModal(DateTime date)
     {
         _selectedDate = date;
@@ -353,14 +389,14 @@
         if (string.IsNullOrWhiteSpace(_recipeSearchTerm))
             return;
 
-        var request = new RecipeSearchRequest
+        RecipeSearchRequest request = new()
         {
             SearchTerm = _recipeSearchTerm,
             Page = 1,
             PageSize = 10
         };
 
-        var result = await RecipeApi.SearchRecipesAsync(request);
+        RecipeSearchResult? result = await RecipeApi.SearchRecipesAsync(request);
         _recipeSearchResults = result?.Recipes ?? new();
         StateHasChanged();
     }
@@ -391,7 +427,7 @@
 
         _newMealEntry.MealPlanId = _currentActivePlan.Id;
 
-        var entryId = await MealPlanApi.AddMealEntryAsync(_newMealEntry);
+        Guid? entryId = await MealPlanApi.AddMealEntryAsync(_newMealEntry);
 
         if (entryId.HasValue)
         {
@@ -406,8 +442,7 @@
 
     private void ViewMeal(MealPlanEntryDto meal)
     {
-        // Mark as prepared/unprepared
-        var request = new MarkMealPreparedRequest
+        MarkMealPreparedRequest request = new()
         {
             EntryId = meal.Id,
             IsPrepared = !meal.IsPrepared
@@ -418,7 +453,7 @@
 
     private async Task MarkMealPreparedAsync(MarkMealPreparedRequest request)
     {
-        var success = await MealPlanApi.MarkMealPreparedAsync(request);
+        bool success = await MealPlanApi.MarkMealPreparedAsync(request);
         if (success)
         {
             await LoadMealPlanning();
@@ -432,8 +467,7 @@
 
     private void CreateQuickPlan()
     {
-        // Create a quick 7-day plan
-        var request = new QuickMealPlanRequest
+        QuickMealPlanRequest request = new()
         {
             StartDate = _currentWeekStart,
             DurationDays = 7,
@@ -447,7 +481,7 @@
 
     private async Task CreateQuickPlanAsync(QuickMealPlanRequest request)
     {
-        var planId = await MealPlanApi.CreateQuickMealPlanAsync(request);
+        Guid? planId = await MealPlanApi.CreateQuickMealPlanAsync(request);
         if (planId.HasValue)
         {
             await LoadMealPlanning();
@@ -459,14 +493,14 @@
         if (_currentActivePlan == null)
             return;
 
-        var request = new GenerateShoppingListFromMealPlanRequest
+        GenerateShoppingListFromMealPlanRequest request = new()
         {
             MealPlanId = _currentActivePlan.Id,
             SubtractInventory = true,
             ShoppingListName = $"Meal Plan: {_currentActivePlan.Name}"
         };
 
-        var listId = await MealPlanApi.GenerateShoppingListAsync(request);
+        Guid? listId = await MealPlanApi.GenerateShoppingListAsync(request);
 
         if (listId.HasValue)
         {
@@ -479,54 +513,23 @@
         // TODO: Implement nutrition summary modal
     }
 
-    private int GetMealTypeOrder(string mealType)
+    private int GetMealTypeOrder(string mealType) => mealType switch
     {
-        return mealType switch
-        {
-            "Breakfast" => 0,
-            "Lunch" => 1,
-            "Dinner" => 2,
-            "Snack" => 3,
-            _ => 4
-        };
-    }
+        "Breakfast" => 0,
+        "Lunch" => 1,
+        "Dinner" => 2,
+        "Snack" => 3,
+        _ => 4
+    };
 
-    private string GetMealTypeIcon(string mealType)
+    private string GetMealTypeIcon(string mealType) => mealType switch
     {
-        return mealType switch
-        {
-            "Breakfast" => "🍳",
-            "Lunch" => "🥗",
-            "Dinner" => "🍽️",
-            "Snack" => "🍿",
-            _ => "🍴"
-        };
-    }
+        "Breakfast" => "🍳",
+        "Lunch" => "🥗",
+        "Dinner" => "🍽️",
+        "Snack" => "🍿",
+        _ => "🍴"
+    };
 
-    private string GetMealTypeClass(string mealType)
-    {
-        return mealType.ToLower();
-    }
-
-    // Event Handlers
-    private void HandleViewMeal()
-    {
-        // TODO: Get the meal ID from the clicked item
-        // For now, this is a placeholder that would need the meal context
-        // In production, you'd pass the meal ID as a parameter or use a lambda
-    }
-
-    private void HandleShowAddMealModal()
-    {
-        // TODO: Show add meal modal
-        // For now, navigate to create meal plan or show inline form
-        Navigation.NavigateTo("/meal-planning/create");
-    }
-
-    private void HandleSelectRecipe()
-    {
-        // TODO: Get the recipe ID from the clicked item
-        // For now, this is a placeholder that would need the recipe context
-        // In production, you'd pass the recipe ID as a parameter or use a lambda
-    }
+    private string GetMealTypeClass(string mealType) => mealType.ToLower();
 }

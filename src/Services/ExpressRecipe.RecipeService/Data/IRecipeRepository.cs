@@ -56,4 +56,15 @@ public interface IRecipeRepository
     Task<List<string>> GetAllCategoriesAsync();
     Task<List<string>> GetAllCuisinesAsync();
     Task<object?> GetByExactTitleAsync(string title);
+
+    // Share tokens
+    Task<string> GenerateShareTokenAsync(Guid recipeId, Guid createdBy, int expiryDays, CancellationToken ct = default);
+    Task<RecipeShareTokenDto?> GetByShareTokenAsync(string token, CancellationToken ct = default);
+    Task IncrementTokenViewCountAsync(string token, CancellationToken ct = default);
+    Task<bool> ExpireShareTokenAsync(string token, Guid requestedBy, CancellationToken ct = default);
+
+    // Household favorites
+    Task SetFavoriteHouseholdShareAsync(Guid favoriteId, Guid userId, bool shared, Guid? householdId, CancellationToken ct = default);
+    Task<List<RecipeDto>> GetHouseholdSharedFavoritesAsync(Guid householdId, CancellationToken ct = default);
+    Task UpdateEstimatedCostAsync(Guid recipeId, decimal costPerServing, CancellationToken ct = default);
 }

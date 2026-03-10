@@ -31,6 +31,8 @@ public class RecipeDto
     public DateTime? UpdatedAt { get; set; }
     public int ViewCount { get; set; }
     public int FavoriteCount { get; set; }
+    public decimal? EstimatedCostPerServing { get; set; }
+    public DateTime? CostLastCalculatedAt { get; set; }
 
     // Navigation properties (populated on demand)
     public List<RecipeIngredientDto>? Ingredients { get; set; }
@@ -57,6 +59,8 @@ public class RecipeIngredientDto
     public string? SubstituteNotes { get; set; }
     public string? GroupName { get; set; }
     public string? OriginalText { get; set; }
+    public decimal? CanonicalAmount { get; set; }
+    public string? CanonicalUnit { get; set; }
 }
 
 public class RecipeNutritionDto

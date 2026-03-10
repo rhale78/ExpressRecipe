@@ -43,6 +43,11 @@ builder.Services.AddHttpClient<IProductApiClient, ProductApiClient>(client =>
     client.BaseAddress = new Uri("http://productservice");
 });
 
+builder.Services.AddHttpClient<ICatalogApiClient, CatalogApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://productservice");
+});
+
 // Register AdminApiClient with IHttpClientFactory for multi-service communication
 builder.Services.AddScoped<IAdminApiClient, AdminApiClient>();
 
@@ -63,6 +68,11 @@ builder.Services.AddHttpClient<IRecipeApiClient, RecipeApiClient>(client =>
 });
 
 builder.Services.AddHttpClient<IUserProfileApiClient, UserProfileApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://userservice");
+});
+
+builder.Services.AddHttpClient<IUserSettingsApiClient, UserSettingsApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://userservice");
 });
@@ -116,6 +126,11 @@ builder.Services.AddHttpClient<IAIApiClient, AIApiClient>(client =>
 builder.Services.AddHttpClient<IScannerApiClient, ScannerApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://scannerservice");
+});
+
+builder.Services.AddHttpClient<IVisionApiClient, VisionApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://visionservice");
 });
 
 builder.Services.AddHttpClient<IGroceryStoreApiClient, GroceryStoreApiClient>(client =>

@@ -56,3 +56,69 @@ public class CreateProductRequest
     public List<string> Allergens { get; set; } = new();
     public List<string> Ingredients { get; set; } = new();
 }
+
+// ---------------------------------------------------------------------------
+// Food Catalog client models
+// ---------------------------------------------------------------------------
+
+public class FoodGroupDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? FunctionalRole { get; set; }
+    public int MemberCount { get; set; }
+}
+
+public class FoodGroupDetailResponse
+{
+    public FoodGroupDto Group { get; set; } = null!;
+    public List<FoodGroupMemberDto> Members { get; set; } = new();
+}
+
+public class FoodGroupMemberDto
+{
+    public Guid Id { get; set; }
+    public Guid FoodGroupId { get; set; }
+    public Guid? IngredientId { get; set; }
+    public string? CustomName { get; set; }
+    public string? SubstitutionRatio { get; set; }
+    public string? SubstitutionNotes { get; set; }
+    public string? BestFor { get; set; }
+    public string? NotSuitableFor { get; set; }
+    public int RankOrder { get; set; }
+    public bool IsHomemadeRecipeAvailable { get; set; }
+    public Guid? HomemadeRecipeId { get; set; }
+    /// <summary>Allergens this substitute is free of (deserialized from AllergenFreeJson).</summary>
+    public string[] AllergenFree { get; set; } = Array.Empty<string>();
+}
+
+public class SubstituteOptionDto
+{
+    public Guid FoodGroupMemberId { get; set; }
+    public Guid? IngredientId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? SubstitutionRatio { get; set; }
+    public string? SubstitutionNotes { get; set; }
+    public string? BestFor { get; set; }
+    public string? NotSuitableFor { get; set; }
+    public int RankOrder { get; set; }
+    public string[] AllergenFree { get; set; } = Array.Empty<string>();
+    public bool IsOnHand { get; set; }
+    public decimal? UserHistoryRating { get; set; }
+    public bool UserUsedBefore { get; set; }
+    public bool HasHomemadeRecipe { get; set; }
+    public Guid? HomemadeRecipeId { get; set; }
+    public string? HomemadeRecipeName { get; set; }
+}
+
+public class RecordSubstitutionRequest
+{
+    public Guid? OriginalIngredientId { get; set; }
+    public string? OriginalCustomName { get; set; }
+    public Guid? SubstituteIngredientId { get; set; }
+    public string? SubstituteCustomName { get; set; }
+    public Guid? RecipeId { get; set; }
+    public int? UserRating { get; set; }
+    public string? Notes { get; set; }
+}
