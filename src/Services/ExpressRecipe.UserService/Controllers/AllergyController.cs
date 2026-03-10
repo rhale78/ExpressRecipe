@@ -54,7 +54,8 @@ public class AllergyController : ControllerBase
         {
             var id = await _repo.CreateIncidentAsync(householdId.Value, request, ct);
 
-            // Run analysis asynchronously per affected member (fire & forget with catch)
+            // Run analysis asynchronously per affected member (fire & forget with catch).
+            // Use CancellationToken.None so the analysis is not cancelled when the HTTP request completes.
             _ = Task.Run(async () =>
             {
                 var members = request.Members
@@ -62,8 +63,8 @@ public class AllergyController : ControllerBase
                     .Distinct()
                     .ToList();
 
-                await _analyzer.RunForMembersAsync(householdId.Value, members!, ct);
-            }, ct);
+                await _analyzer.RunForMembersAsync(householdId.Value, members!, CancellationToken.None);
+            });
 
             return CreatedAtAction(nameof(GetIncident), new { id }, new { id });
         }
