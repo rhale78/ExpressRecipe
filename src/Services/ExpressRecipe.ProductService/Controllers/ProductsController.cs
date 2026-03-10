@@ -67,8 +67,8 @@ public class ProductsController : ControllerBase
 
             var result = new ProductSearchResult
             {
-                Products = productsTask.Result,
-                TotalCount = countTask.Result,
+                Products = await productsTask,
+                TotalCount = await countTask,
                 Page = request.PageNumber,
                 PageSize = request.PageSize
             };

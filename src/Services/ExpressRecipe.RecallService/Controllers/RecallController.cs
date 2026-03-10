@@ -19,7 +19,11 @@ public class RecallController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     [HttpGet]
     public async Task<IActionResult> GetRecentRecalls([FromQuery] int limit = 100)
@@ -58,7 +62,8 @@ public class RecallController : ControllerBase
     public async Task<IActionResult> GetUserAlerts([FromQuery] bool unacknowledgedOnly = true)
     {
         var userId = GetUserId();
-        var alerts = await _repository.GetUserAlertsAsync(userId, unacknowledgedOnly);
+        if (userId == null) return Unauthorized();
+        var alerts = await _repository.GetUserAlertsAsync(userId.Value, unacknowledgedOnly);
         return Ok(alerts);
     }
 
@@ -73,7 +78,8 @@ public class RecallController : ControllerBase
     public async Task<IActionResult> GetUnacknowledgedCount()
     {
         var userId = GetUserId();
-        var count = await _repository.GetUnacknowledgedCountAsync(userId);
+        if (userId == null) return Unauthorized();
+        var count = await _repository.GetUnacknowledgedCountAsync(userId.Value);
         return Ok(new { count });
     }
 
@@ -81,7 +87,8 @@ public class RecallController : ControllerBase
     public async Task<IActionResult> Subscribe([FromBody] SubscribeRequest request)
     {
         var userId = GetUserId();
-        var subId = await _repository.SubscribeToRecallsAsync(userId, request.Category, request.Brand, request.Keyword);
+        if (userId == null) return Unauthorized();
+        var subId = await _repository.SubscribeToRecallsAsync(userId.Value, request.Category, request.Brand, request.Keyword);
         return Ok(new { id = subId });
     }
 
@@ -89,7 +96,8 @@ public class RecallController : ControllerBase
     public async Task<IActionResult> GetSubscriptions()
     {
         var userId = GetUserId();
-        var subs = await _repository.GetUserSubscriptionsAsync(userId);
+        if (userId == null) return Unauthorized();
+        var subs = await _repository.GetUserSubscriptionsAsync(userId.Value);
         return Ok(subs);
     }
 

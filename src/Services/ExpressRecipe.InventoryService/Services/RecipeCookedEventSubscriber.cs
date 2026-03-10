@@ -204,10 +204,10 @@ public sealed class RecipeCookedEventSubscriber : IHostedService
                 UserId = userId,
                 Type = "RecipeShortfall",
                 Priority = "Normal",
-                RecipeId = recipeId,
-                MissingIngredients = missingIngredients
+                Title = "Ingredient Shortfall After Cooking",
+                Message = $"Some ingredients were not fully available when cooking your recipe."
             };
-            await notificationClient.PostAsJsonAsync("/api/notifications/internal", payload, cancellationToken);
+            await notificationClient.PostAsJsonAsync("/api/Notification/internal", payload, cancellationToken);
         }
         catch (Exception ex)
         {

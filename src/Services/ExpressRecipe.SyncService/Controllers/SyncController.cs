@@ -19,14 +19,19 @@ public class SyncController : ControllerBase
         _repository = repository;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid? GetUserId()
+    {
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claim, out var id) ? id : null;
+    }
 
     [HttpPost("devices")]
     public async Task<IActionResult> RegisterDevice([FromBody] RegisterDeviceRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var deviceId = await _repository.RegisterDeviceAsync(
-            userId, request.DeviceName, request.DeviceType, request.OsVersion, request.AppVersion);
+            userId.Value, request.DeviceName, request.DeviceType, request.OsVersion, request.AppVersion);
         return Ok(new { id = deviceId });
     }
 
@@ -34,7 +39,8 @@ public class SyncController : ControllerBase
     public async Task<IActionResult> GetDevices()
     {
         var userId = GetUserId();
-        var devices = await _repository.GetUserDevicesAsync(userId);
+        if (userId == null) return Unauthorized();
+        var devices = await _repository.GetUserDevicesAsync(userId.Value);
         return Ok(devices);
     }
 
@@ -49,12 +55,13 @@ public class SyncController : ControllerBase
     public async Task<IActionResult> PushChanges([FromBody] PushChangesRequest request)
     {
         var userId = GetUserId();
+        if (userId == null) return Unauthorized();
         var syncIds = new List<Guid>();
 
         foreach (var change in request.Changes)
         {
             var syncId = await _repository.CreateSyncMetadataAsync(
-                userId, request.DeviceId, change.EntityType, change.EntityId,
+                userId.Value, request.DeviceId, change.EntityType, change.EntityId,
                 change.Version, change.Operation, change.Data, change.ClientTimestamp);
             syncIds.Add(syncId);
         }
@@ -66,7 +73,8 @@ public class SyncController : ControllerBase
     public async Task<IActionResult> PullChanges([FromQuery] Guid deviceId, [FromQuery] DateTime since)
     {
         var userId = GetUserId();
-        var changes = await _repository.GetPendingSyncsAsync(userId, deviceId, since);
+        if (userId == null) return Unauthorized();
+        var changes = await _repository.GetPendingSyncsAsync(userId.Value, deviceId, since);
         return Ok(changes);
     }
 
@@ -74,7 +82,8 @@ public class SyncController : ControllerBase
     public async Task<IActionResult> GetConflicts()
     {
         var userId = GetUserId();
-        var conflicts = await _repository.GetUnresolvedConflictsAsync(userId);
+        if (userId == null) return Unauthorized();
+        var conflicts = await _repository.GetUnresolvedConflictsAsync(userId.Value);
         return Ok(conflicts);
     }
 
@@ -82,7 +91,8 @@ public class SyncController : ControllerBase
     public async Task<IActionResult> ResolveConflict(Guid id, [FromBody] ResolveConflictRequest request)
     {
         var userId = GetUserId();
-        await _repository.ResolveConflictAsync(id, request.Resolution, request.ResolvedData, userId);
+        if (userId == null) return Unauthorized();
+        await _repository.ResolveConflictAsync(id, request.Resolution, request.ResolvedData, userId.Value);
         return NoContent();
     }
 
@@ -90,7 +100,8 @@ public class SyncController : ControllerBase
     public async Task<IActionResult> GetStats([FromQuery] Guid? deviceId)
     {
         var userId = GetUserId();
-        var stats = await _repository.GetSyncStatsAsync(userId, deviceId);
+        if (userId == null) return Unauthorized();
+        var stats = await _repository.GetSyncStatsAsync(userId.Value, deviceId);
         return Ok(stats);
     }
 }

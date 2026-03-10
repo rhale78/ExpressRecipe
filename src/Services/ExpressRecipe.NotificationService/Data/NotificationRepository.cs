@@ -68,7 +68,7 @@ public class NotificationRepository : INotificationRepository
         var sql = $@"
             SELECT TOP (@Limit) Id, UserId, Type, Title, Message, ActionUrl, Metadata, IsRead, ReadAt, CreatedAt
             FROM Notification
-            WHERE UserId = @UserId {(unreadOnly ? "AND IsRead = 0" : "")}
+            WHERE UserId = @UserId AND IsDeleted = 0 {(unreadOnly ? "AND IsRead = 0" : "")}
             ORDER BY CreatedAt DESC";
 
         await using var connection = new SqlConnection(_connectionString);
@@ -105,7 +105,7 @@ public class NotificationRepository : INotificationRepository
         const string sql = @"
             SELECT Id, UserId, Type, Title, Message, ActionUrl, Metadata, IsRead, ReadAt, CreatedAt
             FROM Notification
-            WHERE Id = @NotificationId";
+            WHERE Id = @NotificationId AND IsDeleted = 0";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -168,9 +168,42 @@ public class NotificationRepository : INotificationRepository
         }
     }
 
+    public async Task MarkAsUnreadAsync(Guid notificationId)
+    {
+        // First get the userId for broadcast
+        const string getUserSql = "SELECT UserId FROM Notification WHERE Id = @NotificationId";
+        Guid? userId = null;
+
+        await using (var connection = new SqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(getUserSql, connection);
+            command.Parameters.AddWithValue("@NotificationId", notificationId);
+            var result = await command.ExecuteScalarAsync();
+            if (result != null) userId = (Guid)result;
+        }
+
+        const string sql = "UPDATE Notification SET IsRead = 0, ReadAt = NULL WHERE Id = @NotificationId";
+
+        await using (var connection = new SqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new SqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@NotificationId", notificationId);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // Broadcast updated unread count
+        if (userId.HasValue && _broadcastService != null)
+        {
+            var unreadCount = await GetUnreadCountAsync(userId.Value);
+            await _broadcastService.BroadcastUnreadCountAsync(userId.Value, unreadCount);
+        }
+    }
+
     public async Task MarkAllAsReadAsync(Guid userId)
     {
-        const string sql = "UPDATE Notification SET IsRead = 1, ReadAt = GETUTCDATE() WHERE UserId = @UserId AND IsRead = 0";
+        const string sql = "UPDATE Notification SET IsRead = 1, ReadAt = GETUTCDATE() WHERE UserId = @UserId AND IsRead = 0 AND IsDeleted = 0";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -189,6 +222,21 @@ public class NotificationRepository : INotificationRepository
 
     public async Task DeleteNotificationAsync(Guid notificationId)
     {
+        // Soft delete — use HardDeleteNotificationAsync for GDPR erasure
+        const string sql = "UPDATE Notification SET IsDeleted = 1, DeletedAt = GETUTCDATE() WHERE Id = @NotificationId";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@NotificationId", notificationId);
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task HardDeleteNotificationAsync(Guid notificationId)
+    {
+        // Permanent deletion — for GDPR right-to-erasure requests only
         const string sql = "DELETE FROM Notification WHERE Id = @NotificationId";
 
         await using var connection = new SqlConnection(_connectionString);
@@ -200,9 +248,37 @@ public class NotificationRepository : INotificationRepository
         await command.ExecuteNonQueryAsync();
     }
 
+    public async Task DeleteAllReadAsync(Guid userId)
+    {
+        // Soft delete all read notifications
+        const string sql = "UPDATE Notification SET IsDeleted = 1, DeletedAt = GETUTCDATE() WHERE UserId = @UserId AND IsRead = 1 AND IsDeleted = 0";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task HardDeleteAllUserNotificationsAsync(Guid userId)
+    {
+        // Permanent deletion of ALL user notification data — for GDPR account deletion
+        const string sql = "DELETE FROM Notification WHERE UserId = @UserId";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        await command.ExecuteNonQueryAsync();
+    }
+
     public async Task<int> GetUnreadCountAsync(Guid userId)
     {
-        const string sql = "SELECT COUNT(*) FROM Notification WHERE UserId = @UserId AND IsRead = 0";
+        const string sql = "SELECT COUNT(*) FROM Notification WHERE UserId = @UserId AND IsRead = 0 AND IsDeleted = 0";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();

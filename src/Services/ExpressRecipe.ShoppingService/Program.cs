@@ -32,9 +32,14 @@ builder.Services.AddAuthorization();
 var connectionString = builder.Configuration.GetConnectionString("shoppingdb")
     ?? throw new InvalidOperationException("Database connection string 'shoppingdb' not found");
 
+builder.Services.AddHttpClient();
+
 // Register repositories
 builder.Services.AddScoped<IShoppingRepository>(sp =>
-    new ShoppingRepository(connectionString, sp.GetRequiredService<ILogger<ShoppingRepository>>()));
+    new ShoppingRepository(
+        connectionString,
+        sp.GetRequiredService<ILogger<ShoppingRepository>>(),
+        sp.GetRequiredService<IHttpClientFactory>()));
 
 // Register HTTP clients for external service integration
 builder.Services.AddHttpClient("PriceService", client =>

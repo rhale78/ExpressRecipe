@@ -28,7 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Services\ExpressRecipe.MealPlanningService\ExpressRecipe.MealPlanningService.csproj" />
+    <ProjectReference Include="..\..\Services\ExpressRecipe.NotificationService\ExpressRecipe.NotificationService.csproj" />
   </ItemGroup>
 
 </Project>

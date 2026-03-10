@@ -3,11 +3,13 @@ using ExpressRecipe.MealPlanningService.Services.Printing;
 using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
 using ExpressRecipe.MealPlanningService.Data;
 using ExpressRecipe.MealPlanningService.Services;
+using ExpressRecipe.MealPlanningService.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using MealPlanningControllerHelpers = ExpressRecipe.MealPlanningService.Tests.Helpers.ControllerTestHelpers;
 
 namespace ExpressRecipe.MealPlanningService.Tests.Controllers;
 

@@ -174,7 +174,7 @@ public class RestaurantsController : ControllerBase
     /// Approve or reject a restaurant (admin only)
     /// </summary>
     [HttpPost("{id:guid}/approve")]
-    [Authorize] // TODO: Add admin role check
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult> Approve(Guid id, [FromQuery] bool approve, [FromQuery] string? rejectionReason = null)
     {
         try

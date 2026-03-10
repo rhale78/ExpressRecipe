@@ -13,7 +13,7 @@ namespace ExpressRecipe.MealPlanningService.Controllers;
 
 [Authorize]
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/mealplan")]
 public class MealPlanningController : ControllerBase
 {
     private readonly ILogger<MealPlanningController> _logger;
@@ -118,6 +118,143 @@ public class MealPlanningController : ControllerBase
         await _repository.DeleteMealPlanAsync(id, userId, ct);
         _logger.LogMealPlanDeleted(userId, id);
         return NoContent();
+    }
+
+    // ── Summary / Search / Quick-plan ─────────────────────────────────────────
+
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetPlanSummary(CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        List<MealPlanDto> plans = await _repository.GetUserMealPlansAsync(userId, ct);
+        var now = DateTime.UtcNow;
+        var activePlans = plans.Where(p => p.StartDate <= now && p.EndDate >= now).ToList();
+        return Ok(new
+        {
+            TotalPlans = plans.Count,
+            ActivePlans = activePlans.Count,
+            NextMealPlanName = plans
+                .Where(p => p.StartDate >= now)
+                .OrderBy(p => p.StartDate)
+                .FirstOrDefault()?.Name
+        });
+    }
+
+    [HttpPost("search")]
+    public async Task<IActionResult> SearchPlans([FromBody] SearchPlansRequest request, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        List<MealPlanDto> plans = await _repository.GetUserMealPlansAsync(userId, ct);
+        if (!string.IsNullOrEmpty(request.Query))
+            plans = plans.Where(p => p.Name?.Contains(request.Query, StringComparison.OrdinalIgnoreCase) == true).ToList();
+        var total = plans.Count;
+        var page = Math.Max(1, request.Page);
+        var pageSize = request.PageSize > 0 ? request.PageSize : 20;
+        plans = plans.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Ok(new { Plans = plans, Total = total, Page = page, PageSize = pageSize });
+    }
+
+    [HttpPost("quick-plan")]
+    public async Task<IActionResult> CreateQuickPlan([FromBody] QuickPlanRequest request, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        var startDate = request.StartDate?.Date ?? DateTime.UtcNow.Date;
+        var endDate = startDate.AddDays(request.DurationDays > 0 ? request.DurationDays - 1 : 6);
+        var name = string.IsNullOrEmpty(request.Name) ? $"Week of {startDate:MMM dd}" : request.Name;
+        Guid planId = await _repository.CreateMealPlanAsync(userId, startDate, endDate, name, ct);
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(planId, userId, ct);
+        return CreatedAtAction(nameof(GetMealPlan), new { id = planId }, plan);
+    }
+
+    // ── Update / Extended Plan Views ──────────────────────────────────────────
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateMealPlan(Guid id, [FromBody] CreatePlanRequest request, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
+        if (plan == null) return NotFound();
+        // Full update requires a database migration to add the UPDATE statement.
+        // Return 501 until the repository method is implemented.
+        return StatusCode(501, new { message = "Meal plan update is not yet implemented. Use the plan's sub-resources to modify meals." });
+    }
+
+    [HttpGet("{id}/calendar")]
+    public async Task<IActionResult> GetPlanCalendar(Guid id, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
+        if (plan == null) return NotFound();
+        var year = plan.StartDate.Year;
+        var month = plan.StartDate.Month;
+        List<MealPlanCalendarDay> days = await _repository.GetCalendarAsync(userId, year, month, ct);
+        return Ok(new { Plan = plan, Days = days });
+    }
+
+    [HttpGet("week/{date}")]
+    public async Task<IActionResult> GetWeekView(DateTime date, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        var weekStart = date.Date;
+        var weekEnd = weekStart.AddDays(7);
+        List<MealPlanDto> plans = await _repository.GetUserMealPlansAsync(userId, ct);
+        var weekPlans = plans.Where(p => p.StartDate <= weekEnd && p.EndDate >= weekStart).ToList();
+        return Ok(new { WeekStart = weekStart, WeekEnd = weekEnd, Plans = weekPlans });
+    }
+
+    [HttpGet("{id}/nutrition")]
+    public async Task<IActionResult> GetPlanNutrition(Guid id, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
+        if (plan == null) return NotFound();
+        NutritionSummaryDto summary = await _repository.GetNutritionSummaryAsync(userId, plan.StartDate, ct);
+        return Ok(summary);
+    }
+
+    // ── Entries (alias routes) ────────────────────────────────────────────────
+
+    [HttpPut("entries/{id}")]
+    public async Task<IActionResult> UpdateMealEntry(Guid id, [FromBody] UpdateEntryRequest request, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        bool canAccess = await _repository.UserCanAccessPlannedMealAsync(id, userId, ct);
+        if (!canAccess) return Forbid();
+        await _repository.UpdatePlannedMealAsync(id, request.Date, request.MealType, request.Servings, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("entries/{id}")]
+    public async Task<IActionResult> DeleteMealEntry(Guid id, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        bool canAccess = await _repository.UserCanAccessPlannedMealAsync(id, userId, ct);
+        if (!canAccess) return Forbid();
+        await _repository.RemovePlannedMealAsync(id, ct);
+        return NoContent();
+    }
+
+    // ── Plan Status Operations ────────────────────────────────────────────────
+
+    [HttpPost("{id}/complete")]
+    public async Task<IActionResult> SetPlanComplete(Guid id, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
+        if (plan == null) return NotFound();
+        // Status persistence requires a database migration. Return 202 Accepted to acknowledge
+        // the intent and unblock UI without silently discarding the request.
+        return Accepted(new { id, status = "Completed", message = "Status update acknowledged; persistence requires a schema migration." });
+    }
+
+    [HttpPost("{id}/archive")]
+    public async Task<IActionResult> ArchivePlan(Guid id, CancellationToken ct = default)
+    {
+        Guid userId = GetUserId();
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId, ct);
+        if (plan == null) return NotFound();
+        // Status persistence requires a database migration. Return 202 Accepted.
+        return Accepted(new { id, status = "Archived", message = "Status update acknowledged; persistence requires a schema migration." });
     }
 
     // ── Planned Meals ──────────────────────────────────────────────────────────
@@ -465,6 +602,7 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> GenerateShoppingList(Guid id, [FromBody] GenerateShoppingListRequest request)
     {
         Guid userId = GetUserId();
+
 
         // Verify the plan belongs to the authenticated user
         MealPlanDto? mealPlan = await _repository.GetMealPlanAsync(id, userId);
@@ -1040,4 +1178,27 @@ public sealed class AutoFillRequest
     public DateOnly FromDate       { get; set; }
     public DateOnly ToDate         { get; set; }
     public bool     RespectCalendar { get; set; } = true;
+}
+
+public class SearchPlansRequest
+{
+    public string? Query { get; set; }
+    public string? Status { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+}
+
+public class QuickPlanRequest
+{
+    public string? Name { get; set; }
+    public DateTime? StartDate { get; set; }
+    public int DurationDays { get; set; } = 7;
+}
+
+public class UpdateEntryRequest
+{
+    public DateTime Date { get; set; }
+    [Required]
+    public string MealType { get; set; } = "Dinner";
+    public int? Servings { get; set; }
 }

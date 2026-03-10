@@ -175,7 +175,10 @@ builder.Services.AddScoped<NotificationHubClient>(sp =>
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
     var hubUrl = "http://notificationservice/hubs/notifications";
-    var token = tokenProvider.GetAccessTokenAsync().Result; // Get auth token
+    // GetAwaiter().GetResult() is intentional here: DI factory delegates cannot be async,
+    // and SignalR requires the token at construction. This runs outside the Blazor circuit
+    // so there is no SynchronizationContext deadlock risk.
+    var token = tokenProvider.GetAccessTokenAsync().GetAwaiter().GetResult();
 
     return new NotificationHubClient(hubUrl, token, logger, toast);
 });
@@ -186,7 +189,7 @@ builder.Services.AddScoped<SyncHubClient>(sp =>
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
 
     var hubUrl = "http://syncservice/hubs/sync";
-    var token = tokenProvider.GetAccessTokenAsync().Result;
+    var token = tokenProvider.GetAccessTokenAsync().GetAwaiter().GetResult();
 
     return new SyncHubClient(hubUrl, token, logger);
 });

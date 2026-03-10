@@ -66,7 +66,7 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<MealPlanDto>($"/api/mealplan/{id}");
+            return await _httpClient.GetFromJsonAsync<MealPlanDto>($"/api/mealplan/plans/{id}");
         }
         catch
         {
@@ -113,7 +113,7 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/mealplan", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/mealplan/plans", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<CreateMealPlanResponse>();
             return result?.Id;
@@ -165,7 +165,7 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            var response = await _httpClient.DeleteAsync($"/api/mealplan/{id}");
+            var response = await _httpClient.DeleteAsync($"/api/mealplan/plans/{id}");
             return response.IsSuccessStatusCode;
         }
         catch
@@ -227,10 +227,10 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/mealplan/entries", request);
+            var response = await _httpClient.PostAsJsonAsync($"/api/mealplan/plans/{request.MealPlanId}/meals", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<AddMealEntryResponse>();
-            return result?.EntryId;
+            return result?.Id;
         }
         catch
         {
@@ -277,7 +277,9 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/mealplan/entries/mark-prepared", request);
+            var response = await _httpClient.PutAsJsonAsync(
+                $"/api/mealplan/meals/{request.EntryId}/complete",
+                new { IsPrepared = request.IsPrepared });
             return response.IsSuccessStatusCode;
         }
         catch
@@ -293,7 +295,7 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/mealplan/generate-shopping-list", request);
+            var response = await _httpClient.PostAsJsonAsync($"/api/mealplan/plans/{request.MealPlanId}/generate-shopping-list", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<GenerateShoppingListResponse>();
             return result?.ShoppingListId;
@@ -344,7 +346,7 @@ public class MealPlanApiClient : IMealPlanApiClient
         try
         {
             return await _httpClient.GetFromJsonAsync<List<MealPlanCalendarDay>>(
-                $"/api/mealplanning/calendar?year={year}&month={month}");
+                $"/api/mealplan/calendar?year={year}&month={month}");
         }
         catch
         {
@@ -360,7 +362,7 @@ public class MealPlanApiClient : IMealPlanApiClient
         try
         {
             var response = await _httpClient.PutAsJsonAsync(
-                $"/api/mealplanning/meals/{mealId}/move",
+                $"/api/mealplan/meals/{mealId}/move",
                 new { newDate, newMealType });
             return response.IsSuccessStatusCode;
         }
@@ -377,7 +379,7 @@ public class MealPlanApiClient : IMealPlanApiClient
 
     private class AddMealEntryResponse
     {
-        public Guid EntryId { get; set; }
+        public Guid Id { get; set; }
     }
 
     private class GenerateShoppingListResponse

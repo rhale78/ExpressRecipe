@@ -94,19 +94,35 @@ public class SearchApiClient : ISearchApiClient
             MaxResults = 20
         };
 
-        var response = await _httpClient.PostAsJsonAsync("/api/search", request);
+        var response = await _httpClient.GetAsync($"/api/search?query={Uri.EscapeDataString(request.Query)}&entityType={string.Join(",", request.SearchTypes)}&limit={request.MaxResults}");
 
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
+        if (!response.IsSuccessStatusCode) return null;
 
         return await response.Content.ReadFromJsonAsync<GlobalSearchResult>();
     }
 
     public async Task<GlobalSearchResult?> AdvancedSearchAsync(AdvancedSearchRequest request)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/search/advanced", request);
+        // Normalize page/size and translate to offset for backend
+        var page = request.Page > 0 ? request.Page : 1;
+        var pageSize = request.PageSize > 0 ? request.PageSize : 20;
+        var offset = (page - 1) * pageSize;
+
+        // Map the first entity-type filter if present
+        var entityType = request.Filters
+            .FirstOrDefault(f => string.Equals(f.Field, "entityType", StringComparison.OrdinalIgnoreCase))
+            ?.Value?.ToString() ?? string.Empty;
+
+        var url = new System.Text.StringBuilder(
+            $"/api/search?query={Uri.EscapeDataString(request.Query ?? string.Empty)}&limit={pageSize}&offset={offset}");
+
+        if (!string.IsNullOrEmpty(entityType))
+            url.Append($"&entityType={Uri.EscapeDataString(entityType)}");
+
+        if (!string.IsNullOrEmpty(request.SortBy))
+            url.Append($"&sortBy={Uri.EscapeDataString(request.SortBy)}&sortOrder={Uri.EscapeDataString(request.SortOrder)}");
+
+        var response = await _httpClient.GetAsync(url.ToString());
 
         if (!response.IsSuccessStatusCode)
         {
@@ -118,7 +134,7 @@ public class SearchApiClient : ISearchApiClient
 
     public async Task<List<SearchSuggestion>> GetSearchSuggestionsAsync(string partialQuery)
     {
-        var response = await _httpClient.GetAsync($"/api/search/suggestions?q={Uri.EscapeDataString(partialQuery)}");
+        var response = await _httpClient.GetAsync($"/api/search/suggest?q={Uri.EscapeDataString(partialQuery)}");
 
         if (!response.IsSuccessStatusCode)
         {
@@ -130,7 +146,7 @@ public class SearchApiClient : ISearchApiClient
 
     public async Task<List<RecentSearch>> GetRecentSearchesAsync(int limit = 10)
     {
-        var response = await _httpClient.GetAsync($"/api/search/recent?limit={limit}");
+        var response = await _httpClient.GetAsync($"/api/search/history?limit={limit}");
 
         if (!response.IsSuccessStatusCode)
         {
@@ -142,13 +158,13 @@ public class SearchApiClient : ISearchApiClient
 
     public async Task<bool> ClearRecentSearchesAsync()
     {
-        var response = await _httpClient.DeleteAsync("/api/search/recent");
+        var response = await _httpClient.DeleteAsync("/api/search/history");
         return response.IsSuccessStatusCode;
     }
 
     public async Task<bool> SaveSearchAsync(string query)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/search/save", new { Query = query });
+        var response = await _httpClient.PostAsJsonAsync("/api/search/preferences", new { PreferenceKey = "recent_search", PreferenceValue = query });
         return response.IsSuccessStatusCode;
     }
 }

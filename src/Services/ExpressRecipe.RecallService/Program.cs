@@ -83,6 +83,12 @@ builder.Services.AddHttpClient("FDA", client =>
 // Register import services
 builder.Services.AddScoped<FDARecallImportService>();
 
+// HTTP client for cross-service notification calls
+builder.Services.AddHttpClient("notificationservice", client =>
+{
+    client.BaseAddress = new Uri("http://notificationservice/");
+});
+
 // Register background workers
 builder.Services.AddHostedService<RecallMonitorWorker>();
 

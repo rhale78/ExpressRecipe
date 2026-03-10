@@ -6,11 +6,13 @@ public partial class ShoppingRepository : IShoppingRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<ShoppingRepository> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    public ShoppingRepository(string connectionString, ILogger<ShoppingRepository> logger)
+    public ShoppingRepository(string connectionString, ILogger<ShoppingRepository> logger, IHttpClientFactory httpClientFactory)
     {
         _connectionString = connectionString;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<Guid> CreateShoppingListAsync(Guid userId, Guid? householdId, string name, string? description, string listType = "Standard", Guid? storeId = null)
