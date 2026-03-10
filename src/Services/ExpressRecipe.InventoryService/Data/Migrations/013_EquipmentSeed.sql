@@ -1,4 +1,4 @@
--- Migration: 011_EquipmentSeed
+-- Migration: 013_EquipmentSeed
 -- Description: Seed built-in equipment templates and their capabilities
 -- Date: 2026-03-09
 

@@ -72,7 +72,6 @@ builder.Services.AddHttpClient("RecipeService");
 builder.Services.AddHttpClient("InventoryService");
 builder.Services.AddHttpClient("SafeForkService");
 builder.Services.AddHttpClient("ShoppingService");
-builder.Services.AddHttpClient("NotificationService");
 builder.Services.AddHttpClient("MealPlanningService");
 
 // Register HybridCache for suggestion caching
@@ -132,12 +131,7 @@ builder.Services.AddSingleton<IHolidayService, HolidayService>();
 
 // HTTP clients
 builder.Services.AddHttpClient("GoogleCalendar");
-builder.Services.AddHttpClient("NotificationService", client =>
-{
-    string notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
-    client.BaseAddress = new Uri(notificationServiceUrl);
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+// NotificationService HTTP client registered below with API key support
 
 // Background worker for meal cook notifications
 builder.Services.AddHostedService(sp =>
@@ -178,12 +172,7 @@ builder.Services.AddHostedService<HouseholdTaskEscalationWorker>();
 builder.Services.AddSingleton<ICookingTimerRepository>(
     new CookingTimerRepository(connectionString));
 
-// Register HTTP client for NotificationService (used by CookingTimerWorker)
-builder.Services.AddHttpClient("NotificationService", client =>
-{
-    client.BaseAddress = new Uri(builder.Configuration["Services:NotificationService"]
-        ?? "http://localhost:5009");
-});
+// NotificationService HTTP client registered above with API key support
 
 // Register background workers
 builder.Services.AddHostedService<CookingTimerWorker>();

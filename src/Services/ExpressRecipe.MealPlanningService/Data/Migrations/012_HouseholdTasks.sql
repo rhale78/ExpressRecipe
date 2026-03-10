@@ -1,4 +1,4 @@
--- Migration: 002_HouseholdTasks
+-- Migration: 012_HouseholdTasks
 -- Description: Create HouseholdTask table for thaw reminders and household task management
 -- Date: 2026-03-09
 -- Note: HouseholdId is a logical FK to InventoryService.Household; not enforced cross-DB.
