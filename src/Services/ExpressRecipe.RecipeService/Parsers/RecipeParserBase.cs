@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ExpressRecipe.Shared.Units;
 
 namespace ExpressRecipe.RecipeService.Parsers;
 
@@ -14,16 +15,23 @@ public abstract class RecipeParserBase : IRecipeParser
     public abstract bool CanParse(string content, ParserContext context);
 
     /// <summary>
-    /// Parse quantity and unit from ingredient text
-    /// Examples: "2 cups", "1/2 tsp", "3-4 cloves"
+    /// Parse quantity and unit from ingredient text.
+    /// Examples: "2 cups", "1/2 tsp", "3-4 cloves", "1½ cups butter"
     /// </summary>
     protected (decimal? quantity, string? unit, string remaining) ParseQuantityAndUnit(string text)
     {
         text = text.Trim();
 
+        // Normalize Unicode fractions before regex matching
+        string normalizedText = FractionParser.Normalize(text);
+        if (string.IsNullOrWhiteSpace(normalizedText))
+        {
+            return (null, null, text);
+        }
+
         // Match patterns like: "2", "1/2", "2-3", "2 1/2"
         var quantityPattern = @"^(\d+(?:\s+\d+/\d+|\.\d+|/\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*";
-        var match = Regex.Match(text, quantityPattern);
+        var match = Regex.Match(normalizedText, quantityPattern);
 
         if (!match.Success)
         {
@@ -32,7 +40,7 @@ public abstract class RecipeParserBase : IRecipeParser
 
         var quantityStr = match.Groups[1].Value.Trim();
         var quantity = ParseQuantity(quantityStr);
-        var remaining = text.Substring(match.Length).Trim();
+        var remaining = normalizedText.Substring(match.Length).Trim();
 
         // Try to extract unit
         var unitPattern = @"^([a-zA-Z]+\.?)\s+";
@@ -49,51 +57,10 @@ public abstract class RecipeParserBase : IRecipeParser
     }
 
     /// <summary>
-    /// Parse quantity string (handles fractions, ranges, mixed numbers)
+    /// Parse quantity string (handles fractions, ranges, mixed numbers, and Unicode vulgar fractions).
+    /// Delegates to <see cref="FractionParser.ParseFraction"/>.
     /// </summary>
-    protected decimal? ParseQuantity(string quantityStr)
-    {
-        quantityStr = quantityStr.Trim();
-
-        // Handle ranges (take average): "2-3" -> 2.5
-        if (quantityStr.Contains('-'))
-        {
-            var parts = quantityStr.Split('-');
-            if (parts.Length == 2 &&
-                decimal.TryParse(parts[0].Trim(), out var min) &&
-                decimal.TryParse(parts[1].Trim(), out var max))
-            {
-                return (min + max) / 2;
-            }
-        }
-
-        // Handle mixed fractions: "2 1/2" -> 2.5
-        var mixedMatch = Regex.Match(quantityStr, @"(\d+)\s+(\d+)/(\d+)");
-        if (mixedMatch.Success)
-        {
-            var whole = int.Parse(mixedMatch.Groups[1].Value);
-            var numerator = int.Parse(mixedMatch.Groups[2].Value);
-            var denominator = int.Parse(mixedMatch.Groups[3].Value);
-            return whole + ((decimal)numerator / denominator);
-        }
-
-        // Handle simple fractions: "1/2" -> 0.5
-        var fractionMatch = Regex.Match(quantityStr, @"(\d+)/(\d+)");
-        if (fractionMatch.Success)
-        {
-            var numerator = int.Parse(fractionMatch.Groups[1].Value);
-            var denominator = int.Parse(fractionMatch.Groups[2].Value);
-            return (decimal)numerator / denominator;
-        }
-
-        // Handle decimal: "2.5"
-        if (decimal.TryParse(quantityStr, out var result))
-        {
-            return result;
-        }
-
-        return null;
-    }
+    protected static decimal? ParseQuantity(string? raw) => FractionParser.ParseFraction(raw);
 
     /// <summary>
     /// Normalize unit abbreviations to standard forms

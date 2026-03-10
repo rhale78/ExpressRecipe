@@ -72,6 +72,11 @@ builder.Services.AddHttpClient<IUserProfileApiClient, UserProfileApiClient>(clie
     client.BaseAddress = new Uri("http://userservice");
 });
 
+builder.Services.AddHttpClient<IUserSettingsApiClient, UserSettingsApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://userservice");
+});
+
 // IngredientService client - REST API only (gRPC disabled until HTTP/2 issues resolved)
 builder.Services.AddHttpClient<IngredientServiceClient>(client =>
 {
