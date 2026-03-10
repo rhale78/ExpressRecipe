@@ -146,6 +146,7 @@ builder.Services.AddScoped<IHouseholdTaskRepository>(_ =>
 // Register task services
 builder.Services.AddScoped<IThawTaskGeneratorService, ThawTaskGeneratorService>();
 builder.Services.AddScoped<IHouseholdMemberQuery, HouseholdMemberHttpQuery>();
+builder.Services.AddScoped<IPantryDiscoveryService, PantryDiscoveryService>();
 
 // Register HTTP clients for inter-service calls
 builder.Services.AddHttpClient("InventoryService", (sp, client) =>
@@ -155,6 +156,15 @@ builder.Services.AddHttpClient("InventoryService", (sp, client) =>
     string? apiKey = builder.Configuration["InternalApi:Key"];
     if (!string.IsNullOrEmpty(apiKey))
         client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
+});
+
+builder.Services.AddHttpClient("UserService", client =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["services:userservice:https:0"] ??
+        builder.Configuration["services:userservice:http:0"] ??
+        builder.Configuration["Services:UserService"] ??
+        "http://userservice");
 });
 
 builder.Services.AddHttpClient("NotificationService", (sp, client) =>

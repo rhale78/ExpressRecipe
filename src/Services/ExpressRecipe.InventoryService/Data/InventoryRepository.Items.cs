@@ -544,4 +544,45 @@ public partial class InventoryRepository
     }
 
     #endregion
+
+    #region Pantry Discovery Support
+
+    public async Task<List<PantryIngredientItem>> GetPantryIngredientNamesAsync(
+        Guid householdId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT DISTINCT
+                ii.Id                                                     AS InventoryItemId,
+                LOWER(TRIM(COALESCE(p.Name, ii.CustomName, '')))          AS NormalizedName,
+                COALESCE(p.Name, ii.CustomName, '')                       AS DisplayName
+            FROM InventoryItem ii
+            LEFT JOIN Product p ON p.Id = ii.ProductId
+            WHERE ii.HouseholdId = @HouseholdId
+              AND ii.IsDeleted   = 0
+              AND ii.Quantity    > 0
+              AND (ii.ExpirationDate IS NULL OR ii.ExpirationDate >= CAST(GETUTCDATE() AS DATE))
+              AND COALESCE(p.Name, ii.CustomName, '') <> ''
+            ORDER BY NormalizedName";
+
+        await using SqlConnection conn = new(_connectionString);
+        await conn.OpenAsync(ct);
+        await using SqlCommand cmd = new(sql, conn);
+        cmd.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
+
+        List<PantryIngredientItem> results = new();
+        await using SqlDataReader reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(new PantryIngredientItem
+            {
+                InventoryItemId = reader.GetGuid(0),
+                NormalizedName  = reader.GetString(1),
+                DisplayName     = reader.GetString(2)
+            });
+        }
+
+        return results;
+    }
+
+    #endregion
 }

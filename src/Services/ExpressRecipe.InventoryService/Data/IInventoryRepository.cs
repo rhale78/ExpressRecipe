@@ -111,6 +111,16 @@ public interface IInventoryRepository
 
     // Thaw task support
     Task<List<FrozenIngredientResult>> GetFrozenIngredientsForRecipeAsync(Guid householdId, Guid recipeId, CancellationToken ct = default);
+
+    // Pantry discovery support
+    Task<List<PantryIngredientItem>> GetPantryIngredientNamesAsync(Guid householdId, CancellationToken ct = default);
+}
+
+public class PantryIngredientItem
+{
+    public Guid InventoryItemId { get; set; }
+    public string NormalizedName { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
 }
 
 public class FrozenIngredientResult

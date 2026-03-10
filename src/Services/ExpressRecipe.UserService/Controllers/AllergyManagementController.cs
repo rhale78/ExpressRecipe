@@ -306,4 +306,43 @@ public class AllergyManagementController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while creating the incident record" });
         }
     }
+
+    /// <summary>
+    /// Internal service-to-service endpoint: returns allergen names (allergens + ingredient allergies)
+    /// for a given user, scoped to a household. Used by PantryDiscoveryService for dietary filtering.
+    /// No authentication required — callers are trusted internal services.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("internal/{userId:guid}/allergen-names")]
+    public async Task<ActionResult<List<string>>> GetAllergenNamesForDiscovery(Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            List<UserAllergenDto> allergens = await _allergenRepository.GetUserAllergensAsync(userId, includeReactions: false);
+            List<UserIngredientAllergyDto> ingredientAllergies = await _allergenRepository.GetUserIngredientAllergiesAsync(userId, includeReactions: false);
+
+            List<string> names = new();
+            foreach (UserAllergenDto a in allergens)
+            {
+                if (!string.IsNullOrWhiteSpace(a.AllergenName))
+                {
+                    names.Add(a.AllergenName);
+                }
+            }
+            foreach (UserIngredientAllergyDto ia in ingredientAllergies)
+            {
+                if (!string.IsNullOrWhiteSpace(ia.IngredientName))
+                {
+                    names.Add(ia.IngredientName);
+                }
+            }
+
+            return Ok(names.Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving allergen names for user {UserId}", userId);
+            return StatusCode(500, new { message = "An error occurred while retrieving allergen names" });
+        }
+    }
 }
