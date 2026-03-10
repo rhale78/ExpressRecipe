@@ -200,6 +200,19 @@ public class NotificationRepository : INotificationRepository
         await command.ExecuteNonQueryAsync();
     }
 
+    public async Task DeleteAllReadAsync(Guid userId)
+    {
+        const string sql = "DELETE FROM Notification WHERE UserId = @UserId AND IsRead = 1";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+
+        await command.ExecuteNonQueryAsync();
+    }
+
     public async Task<int> GetUnreadCountAsync(Guid userId)
     {
         const string sql = "SELECT COUNT(*) FROM Notification WHERE UserId = @UserId AND IsRead = 0";

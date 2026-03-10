@@ -9,6 +9,7 @@ public interface INotificationRepository
     Task MarkAsReadAsync(Guid notificationId);
     Task MarkAllAsReadAsync(Guid userId);
     Task DeleteNotificationAsync(Guid notificationId);
+    Task DeleteAllReadAsync(Guid userId);
     Task<int> GetUnreadCountAsync(Guid userId);
 
     // Preferences

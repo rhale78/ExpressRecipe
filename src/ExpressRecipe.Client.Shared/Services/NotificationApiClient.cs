@@ -50,7 +50,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<NotificationDto>($"/api/notifications/{id}");
+            return await _httpClient.GetFromJsonAsync<NotificationDto>($"/api/notification/{id}");
         }
         catch
         {
@@ -65,7 +65,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/notifications/search", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/notification/search", request);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<NotificationSearchResult>();
         }
@@ -82,7 +82,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<NotificationSummaryDto>("/api/notifications/summary");
+            return await _httpClient.GetFromJsonAsync<NotificationSummaryDto>("/api/notification/summary");
         }
         catch
         {
@@ -103,7 +103,7 @@ public class NotificationApiClient : INotificationApiClient
                 IsRead = isRead
             };
 
-            var response = await _httpClient.PostAsJsonAsync("/api/notifications/mark-read", request);
+            var response = await _httpClient.PostAsJsonAsync("/api/notification/mark-read", request);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -119,7 +119,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            var response = await _httpClient.PostAsync("/api/notifications/mark-all-read", null);
+            var response = await _httpClient.PostAsync("/api/notification/mark-all-read", null);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -135,7 +135,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            var response = await _httpClient.DeleteAsync($"/api/notifications/{id}");
+            var response = await _httpClient.DeleteAsync($"/api/notification/{id}");
             return response.IsSuccessStatusCode;
         }
         catch
@@ -151,7 +151,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            var response = await _httpClient.DeleteAsync("/api/notifications/delete-all-read");
+            var response = await _httpClient.DeleteAsync("/api/notification/delete-all-read");
             return response.IsSuccessStatusCode;
         }
         catch
@@ -167,7 +167,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<NotificationPreferencesDto>("/api/notifications/preferences");
+            return await _httpClient.GetFromJsonAsync<NotificationPreferencesDto>("/api/notification/preferences");
         }
         catch
         {
@@ -182,7 +182,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            var response = await _httpClient.PutAsJsonAsync("/api/notifications/preferences", request);
+            var response = await _httpClient.PutAsJsonAsync("/api/notification/preferences", request);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -198,7 +198,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            var response = await _httpClient.PostAsync("/api/notifications/generate-expiring", null);
+            var response = await _httpClient.PostAsync("/api/notification/generate-expiring", null);
             return response.IsSuccessStatusCode;
         }
         catch
@@ -214,7 +214,7 @@ public class NotificationApiClient : INotificationApiClient
 
         try
         {
-            var response = await _httpClient.PostAsync("/api/notifications/generate-low-stock", null);
+            var response = await _httpClient.PostAsync("/api/notification/generate-low-stock", null);
             return response.IsSuccessStatusCode;
         }
         catch
