@@ -135,7 +135,7 @@
 
                             <!-- Match bar -->
                             <div class="match-bar-container" title="@match.MatchedIngredientCount / @match.TotalIngredientCount ingredients available">
-                                <div class="match-bar-fill" style="width: calc(@match.MatchPercent * 100%)"></div>
+                                <div class="match-bar-fill" style="width: @((match.MatchPercent * 100m).ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div>
                             </div>
                             <div class="match-label">
                                 <strong>@match.MatchPercentFormatted</strong>

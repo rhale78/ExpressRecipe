@@ -118,9 +118,9 @@ public interface IInventoryRepository
 
 public class PantryIngredientItem
 {
-    public Guid InventoryItemId { get; set; }
-    public string NormalizedName { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
+    public Guid InventoryItemId { get; init; }
+    public string NormalizedName { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
 }
 
 public class FrozenIngredientResult

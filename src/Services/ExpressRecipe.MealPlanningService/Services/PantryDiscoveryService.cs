@@ -173,9 +173,9 @@ public sealed class PantryDiscoveryService : IPantryDiscoveryService
         {
             if (recipe.Ingredients.Count == 0) { continue; }
 
-            bool hasConflict = allergenBlocks.Any(a =>
+            bool hasConflict = allergenBlocks.Any(allergen =>
                 recipe.Ingredients.Any(i =>
-                    i.NormalizedName.Contains(a, StringComparison.OrdinalIgnoreCase)));
+                    ContainsWholeWord(i.NormalizedName, allergen)));
 
             List<string> matched = recipe.Ingredients
                 .Where(i => pantrySet.Contains(i.NormalizedName))
@@ -220,5 +220,36 @@ public sealed class PantryDiscoveryService : IPantryDiscoveryService
             TotalPantryIngredients = pantrySet.Count,
             CachedAt               = DateTime.UtcNow
         };
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="ingredientName"/> contains <paramref name="allergen"/> as a whole word.
+    /// "peanuts" matches allergen "peanuts" or "nuts". "coconut" does NOT match allergen "nut" unless "nut" is
+    /// a separate token. Comparison is case-insensitive.
+    /// </summary>
+    private static bool ContainsWholeWord(string ingredientName, string allergen)
+    {
+        if (string.IsNullOrWhiteSpace(allergen)) { return false; }
+
+        string source = ingredientName.ToLowerInvariant();
+        string target = allergen.ToLowerInvariant();
+
+        // Exact match
+        if (source == target) { return true; }
+
+        // Word-boundary scan: check every position where target starts in source
+        int start = 0;
+        while (true)
+        {
+            int idx = source.IndexOf(target, start, StringComparison.Ordinal);
+            if (idx < 0) { return false; }
+
+            bool leftBoundary  = idx == 0 || !char.IsLetterOrDigit(source[idx - 1]);
+            bool rightBoundary = idx + target.Length >= source.Length ||
+                                 !char.IsLetterOrDigit(source[idx + target.Length]);
+
+            if (leftBoundary && rightBoundary) { return true; }
+            start = idx + 1;
+        }
     }
 }
