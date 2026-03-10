@@ -35,6 +35,26 @@ public interface IMealPlanApiClient
     Task<Guid?> GenerateShoppingListAsync(GenerateShoppingListFromMealPlanRequest request);
     Task<bool> CompleteMealPlanAsync(Guid id);
     Task<bool> ArchiveMealPlanAsync(Guid id);
+
+    // Copy / Clone
+    Task<Guid?> CloneMealAsync(Guid mealId, CloneMealRequest request);
+    Task<bool> CopyDayAsync(Guid planId, CopyDayRequest request);
+    Task<bool> CopyWeekAsync(Guid planId, CopyWeekRequest request);
+
+    // Templates
+    Task<List<PlanTemplateDto>?> GetTemplatesAsync(bool includePublic = true);
+    Task<Guid?> SaveAsTemplateAsync(SaveTemplateRequest request);
+    Task<Guid?> ApplyTemplateAsync(Guid templateId, ApplyTemplateRequest request);
+
+    // Multi-course
+    Task<List<MealCourseDto>?> GetMealCoursesAsync(Guid mealId);
+    Task<Guid?> AddMealCourseAsync(Guid mealId, AddCourseRequest request);
+    Task<bool> UpdateMealCourseAsync(Guid mealId, Guid courseId, UpdateCourseRequest request);
+    Task<bool> DeleteMealCourseAsync(Guid mealId, Guid courseId);
+
+    // Attendees
+    Task<List<MealAttendeeDto>?> GetMealAttendeesAsync(Guid mealId);
+    Task<bool> UpdateMealAttendeesAsync(Guid mealId, List<MealAttendeeDto> attendees);
 }
 
 public class MealPlanApiClient : IMealPlanApiClient
@@ -386,4 +406,221 @@ public class MealPlanApiClient : IMealPlanApiClient
     {
         public Guid ShoppingListId { get; set; }
     }
+
+    // ── Copy / Clone ───────────────────────────────────────────────────────────
+
+    public async Task<Guid?> CloneMealAsync(Guid mealId, CloneMealRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"/api/mealplan/meals/{mealId}/clone", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<CloneMealResponse>();
+            return result?.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> CopyDayAsync(Guid planId, CopyDayRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"/api/mealplan/plans/{planId}/copy-day", request);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> CopyWeekAsync(Guid planId, CopyWeekRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"/api/mealplan/plans/{planId}/copy-week", request);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // ── Templates ──────────────────────────────────────────────────────────────
+
+    public async Task<List<PlanTemplateDto>?> GetTemplatesAsync(bool includePublic = true)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<PlanTemplateDto>>(
+                $"/api/mealplan/templates?includePublic={includePublic}");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<Guid?> SaveAsTemplateAsync(SaveTemplateRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/mealplan/templates", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<SaveTemplateResponse>();
+            return result?.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<Guid?> ApplyTemplateAsync(Guid templateId, ApplyTemplateRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync($"/api/mealplan/templates/{templateId}/apply", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<ApplyTemplateResponse>();
+            return result?.PlanId;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    // ── Multi-course ───────────────────────────────────────────────────────────
+
+    public async Task<List<MealCourseDto>?> GetMealCoursesAsync(Guid mealId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<MealCourseDto>>(
+                $"/api/mealplan/meals/{mealId}/courses");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<Guid?> AddMealCourseAsync(Guid mealId, AddCourseRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"/api/mealplan/meals/{mealId}/courses", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<AddCourseResponse>();
+            return result?.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> UpdateMealCourseAsync(Guid mealId, Guid courseId, UpdateCourseRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"/api/mealplan/meals/{mealId}/courses/{courseId}", request);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> DeleteMealCourseAsync(Guid mealId, Guid courseId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.DeleteAsync(
+                $"/api/mealplan/meals/{mealId}/courses/{courseId}");
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // ── Attendees ──────────────────────────────────────────────────────────────
+
+    public async Task<List<MealAttendeeDto>?> GetMealAttendeesAsync(Guid mealId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<MealAttendeeDto>>(
+                $"/api/mealplan/meals/{mealId}/attendees");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> UpdateMealAttendeesAsync(Guid mealId, List<MealAttendeeDto> attendees)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PutAsJsonAsync(
+                $"/api/mealplan/meals/{mealId}/attendees", attendees);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private class CloneMealResponse { public Guid Id { get; set; } }
+    private class SaveTemplateResponse { public Guid Id { get; set; } }
+    private class ApplyTemplateResponse { public Guid PlanId { get; set; } }
+    private class AddCourseResponse { public Guid Id { get; set; } }
 }

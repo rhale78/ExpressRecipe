@@ -55,6 +55,10 @@ public class CreateMealPlanRequest
     public string Name { get; set; } = string.Empty;
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public bool IsFuturePlan { get; set; }
+    public string? OccasionLabel { get; set; }
+    public decimal? BudgetTarget { get; set; }
 }
 
 public class UpdateMealPlanRequest : CreateMealPlanRequest
@@ -199,4 +203,96 @@ public class MealPlanCalendarDay
     public int MealCount { get; set; }
     public bool HasFuturePlan { get; set; }
     public string? HolidayLabel { get; set; }
+}
+
+// ── Multi-course ─────────────────────────────────────────────────────────────
+
+public class MealCourseDto
+{
+    public Guid Id { get; set; }
+    public Guid PlannedMealId { get; set; }
+    public string CourseType { get; set; } = string.Empty;
+    public Guid? RecipeId { get; set; }
+    public string? RecipeName { get; set; }
+    public string? CustomName { get; set; }
+    public decimal Servings { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsCompleted { get; set; }
+}
+
+public class AddCourseRequest
+{
+    public string CourseType { get; set; } = "Main";
+    public Guid? RecipeId { get; set; }
+    public string? CustomName { get; set; }
+    public decimal Servings { get; set; } = 1;
+}
+
+public class UpdateCourseRequest
+{
+    public Guid? RecipeId { get; set; }
+    public string? CustomName { get; set; }
+    public decimal Servings { get; set; } = 1;
+    public int SortOrder { get; set; }
+}
+
+// ── Attendees ────────────────────────────────────────────────────────────────
+
+public class MealAttendeeDto
+{
+    public Guid? UserId { get; set; }
+    public Guid? FamilyMemberId { get; set; }
+    public string? GuestName { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+}
+
+// ── Copy / Clone ─────────────────────────────────────────────────────────────
+
+public class CloneMealRequest
+{
+    public DateOnly TargetDate { get; set; }
+    public string TargetMealType { get; set; } = "Dinner";
+}
+
+public class CopyDayRequest
+{
+    public DateOnly SourceDate { get; set; }
+    public DateOnly TargetDate { get; set; }
+}
+
+public class CopyWeekRequest
+{
+    public DateOnly SourceWeekStart { get; set; }
+    public DateOnly TargetWeekStart { get; set; }
+}
+
+// ── Templates ────────────────────────────────────────────────────────────────
+
+public class PlanTemplateDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Category { get; set; }
+    public int SpanDays { get; set; }
+    public bool IsPublic { get; set; }
+    public int MealCount { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class SaveTemplateRequest
+{
+    public Guid PlanId { get; set; }
+    public DateOnly FromDate { get; set; }
+    public DateOnly ToDate { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Category { get; set; }
+    public bool IsPublic { get; set; }
+}
+
+public class ApplyTemplateRequest
+{
+    public Guid TargetPlanId { get; set; }
+    public DateOnly StartDate { get; set; }
 }

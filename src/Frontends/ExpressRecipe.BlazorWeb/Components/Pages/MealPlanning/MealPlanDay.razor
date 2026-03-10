@@ -1,0 +1,757 @@
+@page "/meal-planning/day/{Date}"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+@using ExpressRecipe.Client.Shared.Models.Recipe
+@using ExpressRecipe.Client.Shared.Services
+@inject IMealPlanApiClient MealPlanApi
+@inject IRecipeApiClient RecipeApi
+@inject NavigationManager Navigation
+
+<PageTitle>Day View - ExpressRecipe</PageTitle>
+
+<div class="day-view-container">
+    <div class="day-view-header">
+        <button class="btn btn-outline" @onclick="NavigateBack">← Back to Week</button>
+        <h1>📅 @_parsedDate.ToString("dddd, MMMM dd, yyyy")</h1>
+        <div class="header-actions">
+            <button class="btn btn-secondary" @onclick="NavigatePrevDay">
+                ← Prev Day
+            </button>
+            <button class="btn btn-secondary" @onclick="NavigateNextDay">
+                Next Day →
+            </button>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading day view...</p>
+        </div>
+    }
+    else
+    {
+        <div class="day-meals-list">
+            @if (!_dayMeals.Any())
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">🍽️</div>
+                    <h3>No Meals Planned</h3>
+                    <p>No meals are planned for this day.</p>
+                    <button class="btn btn-primary" @onclick="ShowAddMealModal">➕ Add Meal</button>
+                </div>
+            }
+            else
+            {
+                @foreach (var meal in _dayMeals.OrderBy(m => GetMealTypeOrder(m.MealType)))
+                {
+                    <div class="day-meal-card @(meal.IsPrepared ? "prepared" : "") @GetMealTypeClass(meal.MealType)">
+                        <!-- Meal Header -->
+                        <div class="day-meal-header">
+                            <div class="meal-type-info">
+                                <span class="meal-type-icon">@GetMealTypeIcon(meal.MealType)</span>
+                                <span class="meal-type-label">@meal.MealType</span>
+                            </div>
+                            <h3 class="day-meal-name">
+                                @(meal.RecipeName ?? meal.CustomMealName ?? "Unnamed Meal")
+                            </h3>
+                            <div class="day-meal-actions">
+                                @if (meal.IsPrepared)
+                                {
+                                    <span class="mealplan-badge mealplan-badge-success">✅ Prepared</span>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-success" @onclick="() => TogglePrepared(meal)">
+                                        ✓ Mark Prepared
+                                    </button>
+                                }
+                                <button class="btn btn-sm btn-secondary" @onclick="() => ShowCloneMealModal(meal)">
+                                    📋 Clone
+                                </button>
+                                <button class="btn btn-sm btn-danger" @onclick="() => DeleteMeal(meal)">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Meal Meta -->
+                        <div class="day-meal-meta">
+                            @if (meal.Servings > 0)
+                            {
+                                <span class="meta-chip">👥 @meal.Servings servings</span>
+                            }
+                            @if (meal.RecipePrepTime.HasValue || meal.RecipeCookTime.HasValue)
+                            {
+                                <span class="meta-chip">⏱️ @((meal.RecipePrepTime ?? 0) + (meal.RecipeCookTime ?? 0)) min</span>
+                            }
+                            @if (meal.RecipeAllergens.Any())
+                            {
+                                @foreach (var allergen in meal.RecipeAllergens.Take(3))
+                                {
+                                    <span class="allergen-tag-xs">⚠️ @allergen</span>
+                                }
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(meal.Notes))
+                        {
+                            <p class="day-meal-notes">📝 @meal.Notes</p>
+                        }
+
+                        <!-- Courses Panel -->
+                        <div class="courses-panel">
+                            <div class="panel-section-header">
+                                <h4>🍽️ Courses</h4>
+                                <button class="btn btn-sm btn-outline" @onclick="() => ShowAddCourseModal(meal)">
+                                    ➕ Add Course
+                                </button>
+                            </div>
+
+                            @if (_coursesLoading.Contains(meal.Id))
+                            {
+                                <div class="spinner-sm"></div>
+                            }
+                            else if (_coursesMap.TryGetValue(meal.Id, out List<MealCourseDto>? courses) && courses.Any())
+                            {
+                                <div class="courses-list">
+                                    @foreach (var course in courses.OrderBy(c => c.SortOrder))
+                                    {
+                                        <div class="course-item">
+                                            <span class="course-type-badge">@course.CourseType</span>
+                                            <span class="course-name">@(course.RecipeName ?? course.CustomName ?? "—")</span>
+                                            <span class="course-servings text-muted">@course.Servings srv</span>
+                                            @if (course.IsCompleted)
+                                            {
+                                                <span class="mealplan-badge mealplan-badge-success">✓</span>
+                                            }
+                                            <button class="btn-icon danger" title="Remove course"
+                                                    @onclick="() => DeleteCourse(meal.Id, course.Id)">✕</button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted small">No courses added yet.</p>
+                            }
+                        </div>
+
+                        <!-- Attendees Panel -->
+                        <div class="attendees-panel">
+                            <div class="panel-section-header">
+                                <h4>👥 Attendees</h4>
+                                <button class="btn btn-sm btn-outline" @onclick="() => ShowEditAttendeesModal(meal)">
+                                    ✏️ Edit
+                                </button>
+                            </div>
+
+                            @if (_attendeesLoading.Contains(meal.Id))
+                            {
+                                <div class="spinner-sm"></div>
+                            }
+                            else if (_attendeesMap.TryGetValue(meal.Id, out List<MealAttendeeDto>? attendees) && attendees.Any())
+                            {
+                                <div class="attendees-list">
+                                    @foreach (var attendee in attendees)
+                                    {
+                                        <span class="attendee-chip">👤 @attendee.DisplayName</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted small">No attendees specified.</p>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="day-add-meal">
+                    <button class="btn btn-primary" @onclick="ShowAddMealModal">➕ Add Another Meal</button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Add Meal Modal -->
+@if (_showAddMealModal)
+{
+    <div class="modal-overlay" @onclick="() => _showAddMealModal = false">
+        <div class="modal-content large" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>Add Meal - @_parsedDate.ToString("MMM dd, yyyy")</h2>
+                <button class="modal-close" @onclick="() => _showAddMealModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Meal Type *</label>
+                    <select class="form-control" @bind="_newMealEntry.MealType">
+                        <option value="Breakfast">🍳 Breakfast</option>
+                        <option value="Lunch">🥗 Lunch</option>
+                        <option value="Dinner">🍽️ Dinner</option>
+                        <option value="Snack">🍿 Snack</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Search Recipes</label>
+                    <div class="recipe-search-bar">
+                        <input type="text" class="form-control" placeholder="Search safe recipes..."
+                               @bind="_recipeSearchTerm" @bind:event="oninput" />
+                        <button class="btn btn-secondary" @onclick="SearchRecipes">Search</button>
+                    </div>
+                    @if (_recipeSearchResults?.Any() == true)
+                    {
+                        <div class="recipe-search-results">
+                            @foreach (var recipe in _recipeSearchResults.Take(5))
+                            {
+                                <div class="recipe-result-card" @onclick="() => SelectRecipe(recipe)">
+                                    <strong>@recipe.Title</strong>
+                                    <span class="text-muted">⏱️ @recipe.TotalTimeMinutes min</span>
+                                    <button class="btn btn-sm btn-primary">Select</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="divider-small">OR</div>
+                <div class="form-group">
+                    <label>Custom Meal Name</label>
+                    <input type="text" class="form-control" @bind="_newMealEntry.CustomMealName"
+                           placeholder="e.g., Leftovers, Takeout" />
+                </div>
+                <div class="form-group">
+                    <label>Servings</label>
+                    <input type="number" class="form-control" @bind="_newMealEntry.Servings" min="1" />
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea class="form-control" rows="2" @bind="_newMealEntry.Notes"></textarea>
+                </div>
+                @if (!string.IsNullOrEmpty(_addMealError))
+                {
+                    <div class="alert alert-error">@_addMealError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showAddMealModal = false">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveMeal">Add Meal</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Add Course Modal -->
+@if (_showAddCourseModal && _courseTargetMeal != null)
+{
+    <div class="modal-overlay" @onclick="() => _showAddCourseModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>➕ Add Course</h2>
+                <button class="modal-close" @onclick="() => _showAddCourseModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Course Type *</label>
+                    <select class="form-control" @bind="_newCourse.CourseType">
+                        <option value="Starter">Starter / Appetiser</option>
+                        <option value="Soup">Soup</option>
+                        <option value="Salad">Salad</option>
+                        <option value="Main">Main</option>
+                        <option value="Side">Side</option>
+                        <option value="Dessert">Dessert</option>
+                        <option value="Drink">Drink</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Course Name / Recipe</label>
+                    <input type="text" class="form-control" @bind="_newCourse.CustomName"
+                           placeholder="e.g., Caesar Salad, Garlic Bread" />
+                </div>
+                <div class="form-group">
+                    <label>Servings</label>
+                    <input type="number" class="form-control" @bind="_newCourse.Servings" min="0.5" step="0.5" />
+                </div>
+                @if (!string.IsNullOrEmpty(_addCourseError))
+                {
+                    <div class="alert alert-error">@_addCourseError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showAddCourseModal = false">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveCourse">➕ Add Course</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit Attendees Modal -->
+@if (_showAttendeesModal && _attendeeTargetMeal != null)
+{
+    <div class="modal-overlay" @onclick="() => _showAttendeesModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>👥 Edit Attendees</h2>
+                <button class="modal-close" @onclick="() => _showAttendeesModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Enter guest names (one per line)</p>
+                <div class="form-group">
+                    <label>Guest Names</label>
+                    <textarea class="form-control" rows="5"
+                              value="@string.Join("\n", _editAttendeeNames)"
+                              @onchange="e => _editAttendeeNames = ParseAttendeeNames(e.Value?.ToString())">
+                    </textarea>
+                    <small class="form-text">Each line = one guest name</small>
+                </div>
+                @if (!string.IsNullOrEmpty(_attendeesError))
+                {
+                    <div class="alert alert-error">@_attendeesError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showAttendeesModal = false">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveAttendees">💾 Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Clone Meal Modal -->
+@if (_showCloneMealModal && _cloneMealSource != null)
+{
+    <div class="modal-overlay" @onclick="() => _showCloneMealModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>📋 Clone Meal</h2>
+                <button class="modal-close" @onclick="() => _showCloneMealModal = false">✕</button>
+            </div>
+            <div class="modal-body">
+                <p>Clone <strong>@(_cloneMealSource.RecipeName ?? _cloneMealSource.CustomMealName)</strong> to another date.</p>
+                <div class="form-group">
+                    <label>Target Date</label>
+                    <input type="date" class="form-control"
+                           value="@_cloneTargetDate.ToString("yyyy-MM-dd")"
+                           @onchange="e => _cloneTargetDate = ParseDateInput(e.Value, _cloneTargetDate)" />
+                </div>
+                <div class="form-group">
+                    <label>Meal Type</label>
+                    <select class="form-control" @bind="_cloneTargetMealType">
+                        <option value="Breakfast">🍳 Breakfast</option>
+                        <option value="Lunch">🥗 Lunch</option>
+                        <option value="Dinner">🍽️ Dinner</option>
+                        <option value="Snack">🍿 Snack</option>
+                    </select>
+                </div>
+                @if (!string.IsNullOrEmpty(_cloneMealError))
+                {
+                    <div class="alert alert-error">@_cloneMealError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary-outline" @onclick="() => _showCloneMealModal = false">Cancel</button>
+                <button class="btn btn-primary" @onclick="ExecuteCloneMeal">📋 Clone</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Date { get; set; } = string.Empty;
+
+    private bool _isLoading = true;
+    private DateTime _parsedDate;
+    private List<MealPlanEntryDto> _dayMeals = new();
+    private MealPlanDto? _activePlan;
+
+    // Course state
+    private Dictionary<Guid, List<MealCourseDto>> _coursesMap = new();
+    private HashSet<Guid> _coursesLoading = new();
+    private bool _showAddCourseModal = false;
+    private MealPlanEntryDto? _courseTargetMeal;
+    private AddCourseRequest _newCourse = new();
+    private string _addCourseError = string.Empty;
+
+    // Attendee state
+    private Dictionary<Guid, List<MealAttendeeDto>> _attendeesMap = new();
+    private HashSet<Guid> _attendeesLoading = new();
+    private bool _showAttendeesModal = false;
+    private MealPlanEntryDto? _attendeeTargetMeal;
+    private List<string> _editAttendeeNames = new();
+    private string _attendeesError = string.Empty;
+
+    // Clone meal state
+    private bool _showCloneMealModal = false;
+    private MealPlanEntryDto? _cloneMealSource;
+    private DateTime _cloneTargetDate = DateTime.Today.AddDays(1);
+    private string _cloneTargetMealType = "Dinner";
+    private string _cloneMealError = string.Empty;
+
+    // Add meal state
+    private bool _showAddMealModal = false;
+    private AddMealPlanEntryRequest _newMealEntry = new();
+    private string _addMealError = string.Empty;
+    private string _recipeSearchTerm = string.Empty;
+    private List<RecipeDto>? _recipeSearchResults;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!DateTime.TryParseExact(Date, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out _parsedDate))
+        {
+            // Invalid date in route — fall back to today
+            _parsedDate = DateTime.Today;
+        }
+
+        await LoadDayViewAsync();
+    }
+
+    private async Task LoadDayViewAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        // Get the week containing this date to find meals for this day
+        DateTime weekStart = GetWeekStart(_parsedDate);
+        MealPlanWeekView? weekView = await MealPlanApi.GetWeekViewAsync(weekStart);
+
+        if (weekView != null)
+        {
+            MealPlanDayDto? dayDto = weekView.Days.FirstOrDefault(d => d.Date.Date == _parsedDate.Date);
+            _dayMeals = dayDto?.Meals ?? new();
+        }
+        else
+        {
+            _dayMeals = new();
+        }
+
+        // Get active plan for add-meal operations
+        MealPlanSearchResult? plansResult = await MealPlanApi.SearchMealPlansAsync(new MealPlanSearchRequest
+        {
+            Status = "Active",
+            Page = 1,
+            PageSize = 1
+        });
+        _activePlan = plansResult?.Plans.FirstOrDefault();
+
+        _isLoading = false;
+        StateHasChanged();
+
+        // Load courses and attendees for each meal in parallel then refresh
+        List<Task> loadTasks = new();
+        foreach (MealPlanEntryDto meal in _dayMeals)
+        {
+            loadTasks.Add(LoadCoursesAsync(meal.Id));
+            loadTasks.Add(LoadAttendeesAsync(meal.Id));
+        }
+        await Task.WhenAll(loadTasks);
+    }
+
+    private DateTime GetWeekStart(DateTime date)
+    {
+        int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        return date.AddDays(-diff).Date;
+    }
+
+    // ── Courses ────────────────────────────────────────────────────────────────
+
+    private async Task LoadCoursesAsync(Guid mealId)
+    {
+        _coursesLoading.Add(mealId);
+        StateHasChanged();
+
+        List<MealCourseDto>? courses = await MealPlanApi.GetMealCoursesAsync(mealId);
+        _coursesMap[mealId] = courses ?? new();
+        _coursesLoading.Remove(mealId);
+        StateHasChanged();
+    }
+
+    private void ShowAddCourseModal(MealPlanEntryDto meal)
+    {
+        _courseTargetMeal = meal;
+        _newCourse = new AddCourseRequest { CourseType = "Main", Servings = 1 };
+        _addCourseError = string.Empty;
+        _showAddCourseModal = true;
+    }
+
+    private async Task SaveCourse()
+    {
+        if (_courseTargetMeal == null)
+            return;
+
+        _addCourseError = string.Empty;
+        if (string.IsNullOrWhiteSpace(_newCourse.CustomName) && !_newCourse.RecipeId.HasValue)
+        {
+            _addCourseError = "Please enter a course name.";
+            return;
+        }
+
+        Guid? courseId = await MealPlanApi.AddMealCourseAsync(_courseTargetMeal.Id, _newCourse);
+        if (courseId.HasValue)
+        {
+            _showAddCourseModal = false;
+            await LoadCoursesAsync(_courseTargetMeal.Id);
+        }
+        else
+        {
+            _addCourseError = "Failed to add course. Please try again.";
+        }
+    }
+
+    private async Task DeleteCourse(Guid mealId, Guid courseId)
+    {
+        bool success = await MealPlanApi.DeleteMealCourseAsync(mealId, courseId);
+        if (success)
+        {
+            await LoadCoursesAsync(mealId);
+        }
+    }
+
+    // ── Attendees ──────────────────────────────────────────────────────────────
+
+    private async Task LoadAttendeesAsync(Guid mealId)
+    {
+        _attendeesLoading.Add(mealId);
+        StateHasChanged();
+
+        List<MealAttendeeDto>? attendees = await MealPlanApi.GetMealAttendeesAsync(mealId);
+        _attendeesMap[mealId] = attendees ?? new();
+        _attendeesLoading.Remove(mealId);
+        StateHasChanged();
+    }
+
+    private void ShowEditAttendeesModal(MealPlanEntryDto meal)
+    {
+        _attendeeTargetMeal = meal;
+        _editAttendeeNames = _attendeesMap.TryGetValue(meal.Id, out List<MealAttendeeDto>? existing)
+            ? existing.Select(a => a.DisplayName ?? string.Empty).Where(n => !string.IsNullOrEmpty(n)).ToList()
+            : new List<string>();
+        _attendeesError = string.Empty;
+        _showAttendeesModal = true;
+    }
+
+    private async Task SaveAttendees()
+    {
+        if (_attendeeTargetMeal == null)
+            return;
+
+        _attendeesError = string.Empty;
+        List<MealAttendeeDto> attendees = _editAttendeeNames
+            .Select(name => new MealAttendeeDto { GuestName = name, DisplayName = name })
+            .ToList();
+
+        bool success = await MealPlanApi.UpdateMealAttendeesAsync(_attendeeTargetMeal.Id, attendees);
+        if (success)
+        {
+            _showAttendeesModal = false;
+            await LoadAttendeesAsync(_attendeeTargetMeal.Id);
+        }
+        else
+        {
+            _attendeesError = "Failed to save attendees. Please try again.";
+        }
+    }
+
+    // ── Clone Meal ─────────────────────────────────────────────────────────────
+
+    private void ShowCloneMealModal(MealPlanEntryDto meal)
+    {
+        _cloneMealSource = meal;
+        _cloneTargetDate = _parsedDate.AddDays(1);
+        _cloneTargetMealType = meal.MealType;
+        _cloneMealError = string.Empty;
+        _showCloneMealModal = true;
+    }
+
+    private async Task ExecuteCloneMeal()
+    {
+        if (_cloneMealSource == null)
+            return;
+
+        _cloneMealError = string.Empty;
+        CloneMealRequest request = new()
+        {
+            TargetDate = DateOnly.FromDateTime(_cloneTargetDate),
+            TargetMealType = _cloneTargetMealType
+        };
+
+        Guid? newId = await MealPlanApi.CloneMealAsync(_cloneMealSource.Id, request);
+        if (newId.HasValue)
+        {
+            _showCloneMealModal = false;
+            _cloneMealSource = null;
+            // Navigate to the target day so the cloned meal is immediately visible
+            Navigation.NavigateTo($"/meal-planning/day/{_cloneTargetDate:yyyy-MM-dd}");
+        }
+        else
+        {
+            _cloneMealError = "Failed to clone meal. Please try again.";
+        }
+    }
+
+    // ── Add Meal ───────────────────────────────────────────────────────────────
+
+    private void ShowAddMealModal()
+    {
+        _newMealEntry = new AddMealPlanEntryRequest
+        {
+            MealPlanId = _activePlan?.Id ?? Guid.Empty,
+            Date = _parsedDate,
+            MealType = "Dinner",
+            Servings = 4
+        };
+        _recipeSearchResults = null;
+        _addMealError = string.Empty;
+        _showAddMealModal = true;
+    }
+
+    private async Task SearchRecipes()
+    {
+        if (string.IsNullOrWhiteSpace(_recipeSearchTerm))
+            return;
+
+        RecipeSearchRequest request = new()
+        {
+            SearchTerm = _recipeSearchTerm,
+            Page = 1,
+            PageSize = 10
+        };
+
+        RecipeSearchResult? result = await RecipeApi.SearchRecipesAsync(request);
+        _recipeSearchResults = result?.Recipes ?? new();
+        StateHasChanged();
+    }
+
+    private void SelectRecipe(RecipeDto recipe)
+    {
+        _newMealEntry.RecipeId = recipe.Id;
+        _newMealEntry.CustomMealName = null;
+        _recipeSearchResults = null;
+        _recipeSearchTerm = string.Empty;
+    }
+
+    private async Task SaveMeal()
+    {
+        _addMealError = string.Empty;
+
+        if (_activePlan == null)
+        {
+            _addMealError = "No active meal plan found. Please create a plan first.";
+            return;
+        }
+
+        if (!_newMealEntry.RecipeId.HasValue && string.IsNullOrWhiteSpace(_newMealEntry.CustomMealName))
+        {
+            _addMealError = "Please select a recipe or enter a custom meal name.";
+            return;
+        }
+
+        _newMealEntry.MealPlanId = _activePlan.Id;
+
+        Guid? entryId = await MealPlanApi.AddMealEntryAsync(_newMealEntry);
+        if (entryId.HasValue)
+        {
+            _showAddMealModal = false;
+            await LoadDayViewAsync();
+        }
+        else
+        {
+            _addMealError = "Failed to add meal. Please try again.";
+        }
+    }
+
+    // ── Mark Prepared ──────────────────────────────────────────────────────────
+
+    private async Task TogglePrepared(MealPlanEntryDto meal)
+    {
+        MarkMealPreparedRequest request = new()
+        {
+            EntryId = meal.Id,
+            IsPrepared = !meal.IsPrepared
+        };
+
+        bool success = await MealPlanApi.MarkMealPreparedAsync(request);
+        if (success)
+        {
+            await LoadDayViewAsync();
+        }
+    }
+
+    // ── Delete Meal ────────────────────────────────────────────────────────────
+
+    private async Task DeleteMeal(MealPlanEntryDto meal)
+    {
+        bool success = await MealPlanApi.DeleteMealEntryAsync(meal.Id);
+        if (success)
+        {
+            await LoadDayViewAsync();
+        }
+    }
+
+    private void NavigateBack()
+    {
+        Navigation.NavigateTo("/meal-planning");
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private int GetMealTypeOrder(string mealType) => mealType switch
+    {
+        "Breakfast" => 0,
+        "Lunch" => 1,
+        "Dinner" => 2,
+        "Snack" => 3,
+        _ => 4
+    };
+
+    private string GetMealTypeIcon(string mealType) => mealType switch
+    {
+        "Breakfast" => "🍳",
+        "Lunch" => "🥗",
+        "Dinner" => "🍽️",
+        "Snack" => "🍿",
+        _ => "🍴"
+    };
+
+    private string GetMealTypeClass(string mealType) => mealType.ToLower();
+
+    private void NavigatePrevDay() =>
+        Navigation.NavigateTo($"/meal-planning/day/{_parsedDate.AddDays(-1):yyyy-MM-dd}");
+
+    private void NavigateNextDay() =>
+        Navigation.NavigateTo($"/meal-planning/day/{_parsedDate.AddDays(1):yyyy-MM-dd}");
+
+    private static List<string> ParseAttendeeNames(string? input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return new List<string>();
+
+        return input
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(n => n.Trim())
+            .Where(n => !string.IsNullOrEmpty(n))
+            .ToList();
+    }
+
+    private static DateTime ParseDateInput(object? value, DateTime fallback)
+    {
+        string? str = value?.ToString();
+        if (string.IsNullOrEmpty(str))
+            return fallback;
+
+        if (DateTime.TryParseExact(str, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out DateTime result))
+        {
+            return result;
+        }
+
+        return fallback;
+    }
+}
