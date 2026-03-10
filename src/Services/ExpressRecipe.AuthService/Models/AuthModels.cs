@@ -59,4 +59,8 @@ public class AuthUser
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
+    /// <summary>Subscription tier name ("Free", "AdFree", "Plus", "Premium"). Defaults to "Free".</summary>
+    public string SubscriptionTier { get; set; } = "Free";
+    /// <summary>The user's household identifier, if assigned.</summary>
+    public Guid? HouseholdId { get; set; }
 }

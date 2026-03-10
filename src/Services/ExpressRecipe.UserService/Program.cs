@@ -1,5 +1,7 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services.FeatureGates;
 using ExpressRecipe.UserService.Data;
+using ExpressRecipe.UserService.Services;
 using ExpressRecipe.Shared.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -67,6 +69,12 @@ builder.Services.AddScoped<IReportsRepository>(sp => new ReportsRepository(conne
 builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionRepository(connectionString));
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
+
+// Feature flag services — override the HttpFeatureFlagService registered by ServiceDefaults
+builder.Services.AddScoped<IFeatureFlagRepository>(sp => new FeatureFlagRepository(connectionString));
+builder.Services.AddScoped<FeatureFlagService>();
+// Replace the HTTP proxy with the direct DB-backed implementation
+builder.Services.AddScoped<IFeatureFlagService>(sp => sp.GetRequiredService<FeatureFlagService>());
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>

@@ -1,4 +1,5 @@
 using ExpressRecipe.InventoryService.Logging;
+using ExpressRecipe.Shared.Attributes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -9,6 +10,7 @@ using ExpressRecipe.InventoryService.Data;
 namespace ExpressRecipe.InventoryService.Controllers;
 
 [Authorize]
+[RequiresTier("Plus")]
 [ApiController]
 [Route("api/[controller]")]
 public class InventoryController : ControllerBase

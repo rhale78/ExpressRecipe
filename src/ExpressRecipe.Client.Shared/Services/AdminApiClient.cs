@@ -12,6 +12,10 @@ public interface IAdminApiClient
     Task<ImportStatusDto?> ImportOpenFoodFactsAsync();
     Task<ImportStatusDto?> GetImportStatusAsync(Guid importId);
     Task<List<ImportHistoryDto>> GetImportHistoryAsync();
+
+    // Feature flags
+    Task<List<FeatureFlagAdminDto>> GetFeatureFlagsAsync();
+    Task<bool> PatchFeatureFlagAsync(string featureKey, PatchFeatureFlagAdminRequest request);
 }
 
 public class AdminApiClient : IAdminApiClient
@@ -110,6 +114,37 @@ public class AdminApiClient : IAdminApiClient
         return history.OrderByDescending(h => h.StartedAt).ToList();
     }
 
+    public async Task<List<FeatureFlagAdminDto>> GetFeatureFlagsAsync()
+    {
+        try
+        {
+            var client = await CreateClientAsync("UserService");
+            var response = await client.GetAsync("/api/featureflags");
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<List<FeatureFlagAdminDto>>()
+                       ?? new List<FeatureFlagAdminDto>();
+            }
+        }
+        catch { }
+
+        return new List<FeatureFlagAdminDto>();
+    }
+
+    public async Task<bool> PatchFeatureFlagAsync(string featureKey, PatchFeatureFlagAdminRequest request)
+    {
+        try
+        {
+            var client = await CreateClientAsync("UserService");
+            var response = await client.PatchAsJsonAsync(
+                $"/api/featureflags/{Uri.EscapeDataString(featureKey)}", request);
+            return response.IsSuccessStatusCode;
+        }
+        catch { }
+
+        return false;
+    }
+
     private async Task<HttpClient> CreateClientAsync(string serviceName)
     {
         var client = _httpClientFactory.CreateClient(serviceName);
@@ -149,4 +184,24 @@ public class ImportHistoryDto
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public TimeSpan? Duration => CompletedAt.HasValue ? CompletedAt.Value - StartedAt : null;
+}
+
+public class FeatureFlagAdminDto
+{
+    public Guid   Id                { get; set; }
+    public string FeatureKey        { get; set; } = string.Empty;
+    public string Description       { get; set; } = string.Empty;
+    public bool   IsEnabled         { get; set; }
+    public int    RolloutPercentage { get; set; }
+    public string? RequiredTier     { get; set; }
+    public DateTime CreatedAt       { get; set; }
+    public DateTime? UpdatedAt      { get; set; }
+}
+
+public class PatchFeatureFlagAdminRequest
+{
+    public bool?   IsEnabled         { get; init; }
+    public int?    RolloutPercentage { get; init; }
+    public string? RequiredTier      { get; init; }
+    public string? Description       { get; init; }
 }

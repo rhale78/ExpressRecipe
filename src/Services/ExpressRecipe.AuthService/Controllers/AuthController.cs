@@ -3,6 +3,7 @@ using ExpressRecipe.Shared.DTOs.Auth;
 using ExpressRecipe.AuthService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Net.Http.Json;
 
 namespace ExpressRecipe.AuthService.Controllers;
 
@@ -187,6 +188,9 @@ public class AuthController : ControllerBase
         // Update last login
         await _repository.UpdateLastLoginAsync(user.Id);
 
+        // Fetch subscription tier from UserService (fail-safe: defaults to "Free")
+        await EnrichWithSubscriptionTierAsync(user);
+
         // Generate tokens
         var accessToken = _tokenService.GenerateAccessToken(user);
         var refreshToken = _tokenService.GenerateRefreshToken();
@@ -232,6 +236,9 @@ public class AuthController : ControllerBase
 
         // Revoke old refresh token
         await _repository.RevokeRefreshTokenAsync(request.RefreshToken);
+
+        // Fetch subscription tier from UserService (fail-safe: defaults to "Free")
+        await EnrichWithSubscriptionTierAsync(user);
 
         // Generate new tokens
         var accessToken = _tokenService.GenerateAccessToken(user);
@@ -317,5 +324,42 @@ public class AuthController : ControllerBase
             _logger.LogError(ex, "Internal registration failed");
             return StatusCode(500, new { message = "Internal server error" });
         }
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Fetches the user's subscription tier from UserService and writes it onto
+    /// <paramref name="user"/>. Silently defaults to "Free" if UserService is unreachable.
+    /// </summary>
+    private async Task EnrichWithSubscriptionTierAsync(ExpressRecipe.AuthService.Models.AuthUser user)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("UserService");
+            var response = await client.GetAsync($"/api/subscriptions/user/{user.Id}/tier");
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content
+                    .ReadFromJsonAsync<SubscriptionTierResponse>();
+                if (result != null)
+                {
+                    user.SubscriptionTier = result.TierName ?? "Free";
+                    user.HouseholdId      = result.HouseholdId;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not fetch subscription tier for user {UserId}; defaulting to Free",
+                user.Id);
+        }
+    }
+
+    private sealed class SubscriptionTierResponse
+    {
+        public string TierName  { get; init; } = "Free";
+        public Guid?  HouseholdId { get; init; }
     }
 }

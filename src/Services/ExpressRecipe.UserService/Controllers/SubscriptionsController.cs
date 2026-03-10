@@ -291,4 +291,29 @@ public class SubscriptionsController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while retrieving feature access" });
         }
     }
+
+    /// <summary>
+    /// Internal endpoint used by AuthService to fetch tier name and household when
+    /// building a JWT. No user auth required — this is a service-to-service call.
+    /// </summary>
+    [HttpGet("user/{userId:guid}/tier")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetUserTier(Guid userId)
+    {
+        try
+        {
+            var subscription = await _subscriptionRepository.GetUserSubscriptionAsync(userId);
+            if (subscription == null)
+            {
+                return Ok(new { TierName = "Free", HouseholdId = (Guid?)null });
+            }
+
+            return Ok(new { TierName = subscription.TierName ?? "Free", HouseholdId = (Guid?)null });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving tier for user {UserId}", userId);
+            return StatusCode(500, new { message = "An error occurred while retrieving the user tier" });
+        }
+    }
 }
