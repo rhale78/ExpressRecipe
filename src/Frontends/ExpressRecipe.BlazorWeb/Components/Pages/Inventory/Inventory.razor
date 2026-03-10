@@ -3,6 +3,7 @@
 @using ExpressRecipe.Client.Shared.Models.Inventory
 @using ExpressRecipe.Client.Shared.Services
 @inject IInventoryApiClient InventoryApi
+@inject IToastService ToastService
 @inject NavigationManager Navigation
 <PageTitle>My Inventory - ExpressRecipe</PageTitle>
 
@@ -11,10 +12,12 @@
         <h1>🥫 My Inventory</h1>
         <div class="header-actions">
             <FeatureGuard FeatureKey="inventory-tracking" RequiredTier="Plus"
-                          Title="Scan Session requires Plus"
-                          Description="Start a barcode-scanning session to add items to your inventory instantly. Available on Plus and above.">
-                <button class="btn btn-secondary" @onclick="NavigateToScanSession">
-                    <span class="btn-icon">📷</span> Scan Session
+                          Title="Scan Mode requires Plus"
+                          Description="Start an inline barcode-scanning session to add, use or dispose items instantly. Available on Plus and above.">
+                <button class="btn btn-secondary" @onclick="StartScanSession"
+                        disabled="@(_activeScanSession != null)">
+                    <span class="btn-icon">📷</span>
+                    @(_activeScanSession != null ? $"Scanning ({_activeScanSession.ItemsScanned} scanned)" : "Scan Mode")
                 </button>
             </FeatureGuard>
             <button class="btn btn-primary" @onclick="NavigateToAdd">
@@ -26,6 +29,60 @@
     <p class="inventory-subtitle">
         Track what you have in your pantry, fridge, and freezer. Get alerts for expiring items and low stock.
     </p>
+
+    <!-- Context Bar — household + address scope -->
+    <div class="inventory-context-bar">
+        <div class="context-selector">
+            <HouseholdSwitcher OnHouseholdChanged="HandleHouseholdChanged" />
+        </div>
+        @if (_activeHouseholdId.HasValue)
+        {
+            <div class="context-selector">
+                <AddressSelector HouseholdId="_activeHouseholdId.Value"
+                                 OnAddressChanged="HandleAddressChanged" />
+            </div>
+        }
+        @if (_activeHouseholdId.HasValue || _activeAddressId.HasValue)
+        {
+            <button class="btn btn-outline btn-sm" @onclick="ClearContext">
+                ✕ Clear Scope
+            </button>
+        }
+    </div>
+
+    @if (_activeScanSession != null)
+    {
+        <div class="scan-session-banner">
+            <div class="scan-session-info">
+                <span class="scan-icon">📷</span>
+                <strong>Scan Session Active</strong>
+                <span class="scan-mode-label">@GetScanModeLabel(_scanMode)</span>
+                <span class="scan-count">@_activeScanSession.ItemsScanned items scanned</span>
+            </div>
+            <div class="scan-session-controls">
+                <!-- Mode switcher -->
+                <select class="scan-mode-select" @bind="_scanMode">
+                    <option value="Adding">➕ Adding to inventory</option>
+                    <option value="Using">🍳 Using/consuming</option>
+                    <option value="Disposing">🗑️ Disposing</option>
+                </select>
+                <!-- Quick barcode input for desktop -->
+                <input type="text" class="scan-barcode-input" placeholder="Scan barcode..."
+                       @ref="_barcodeInputRef"
+                       @bind="_manualBarcode" @bind:event="oninput"
+                       @onkeydown="HandleScanBarcode" />
+                <button class="btn btn-danger btn-sm" @onclick="EndScanSession">
+                    ✓ End Session
+                </button>
+            </div>
+            @if (_lastScanResult != null)
+            {
+                <div class="scan-last-result @(_lastScanResult.Success ? "scan-success" : "scan-error")">
+                    @(_lastScanResult.Success ? "✓" : "✗") @_lastScanResult.Message
+                </div>
+            }
+        </div>
+    }
 
     @if (_isLoading)
     {
@@ -62,6 +119,45 @@
                 <div class="summary-label">Low Stock</div>
             </div>
         </div>
+
+        @if (_allergenDiscoveries?.Any() == true)
+        {
+            <div class="allergen-discovery-panel">
+                <div class="discovery-header">
+                    <span class="discovery-icon">🔬</span>
+                    <h3>Allergen Discoveries</h3>
+                    <span class="discovery-count">@_allergenDiscoveries.Count new</span>
+                    <button class="btn-link" @onclick="ToggleDiscoveryPanel">
+                        @(_showDiscoveryPanel ? "Hide ▲" : "Show ▼")
+                    </button>
+                </div>
+                @if (_showDiscoveryPanel)
+                {
+                    <p class="discovery-subtitle">
+                        These ingredients were found when you disposed of items. Do any look like allergens for your household?
+                    </p>
+                    <div class="discovery-list">
+                        @foreach (AllergenDiscoveryDto discovery in _allergenDiscoveries)
+                        {
+                            <div class="discovery-item">
+                                <div class="discovery-ingredient">
+                                    <strong>@discovery.IngredientName</strong>
+                                    <span class="discovery-source">from @discovery.ProductName</span>
+                                </div>
+                                <div class="discovery-actions">
+                                    <button class="btn btn-warning btn-sm" @onclick="() => AddToAllergens(discovery)">
+                                        ⚠️ Add as Allergen
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" @onclick="() => DismissDiscovery(discovery)">
+                                        Dismiss
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
 
         <!-- Location Tabs -->
         <div class="location-tabs">
@@ -368,6 +464,21 @@
     private int _currentPage = 1;
     private const int PageSize = 24;
 
+    // Household / address context
+    private Guid? _activeHouseholdId;
+    private Guid? _activeAddressId;
+
+    // Scan session state
+    private ScanSessionDto? _activeScanSession;
+    private string _scanMode = "Adding";
+    private string _manualBarcode = string.Empty;
+    private ScanResult? _lastScanResult;
+    private ElementReference _barcodeInputRef;
+
+    // Allergen discoveries
+    private List<AllergenDiscoveryDto>? _allergenDiscoveries;
+    private bool _showDiscoveryPanel = true;
+
     // Modals
     private bool _showAdjustModal = false;
     private bool _showDeleteModal = false;
@@ -375,8 +486,15 @@
     private decimal _quantityChange = 0;
     private string _adjustmentReason = string.Empty;
 
+    private sealed record ScanResult(bool Success, string Message);
+
     protected override async Task OnInitializedAsync()
     {
+        _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
+        if (_activeScanSession != null)
+        {
+            _scanMode = _activeScanSession.SessionType;
+        }
         await LoadInventory();
     }
 
@@ -386,6 +504,7 @@
         StateHasChanged();
 
         _summary = await InventoryApi.GetInventorySummaryAsync();
+        _allergenDiscoveries = await InventoryApi.GetAllergenDiscoveriesAsync();
 
         await SearchInventory();
 
@@ -395,7 +514,7 @@
 
     private async Task SearchInventory()
     {
-        var request = new InventorySearchRequest
+        InventorySearchRequest request = new InventorySearchRequest
         {
             SearchTerm = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
             Locations = _selectedLocation == "All" ? null : new List<string> { _selectedLocation },
@@ -403,7 +522,9 @@
             Page = _currentPage,
             PageSize = PageSize,
             SortBy = _sortBy,
-            SortDescending = _sortBy == "CreatedAt"
+            SortDescending = _sortBy == "CreatedAt",
+            HouseholdId = _activeHouseholdId,
+            AddressId = _activeAddressId
         };
 
         // Apply quick filters
@@ -421,6 +542,137 @@
         }
 
         _searchResult = await InventoryApi.SearchInventoryAsync(request);
+        StateHasChanged();
+    }
+
+    private async Task HandleHouseholdChanged(HouseholdDto? household)
+    {
+        _activeHouseholdId = household?.Id;
+        _activeAddressId = null;
+        _currentPage = 1;
+        await LoadInventory();
+    }
+
+    private async Task HandleAddressChanged(AddressDto? address)
+    {
+        _activeAddressId = address?.Id;
+        _currentPage = 1;
+        await LoadInventory();
+    }
+
+    private async Task ClearContext()
+    {
+        _activeHouseholdId = null;
+        _activeAddressId = null;
+        _currentPage = 1;
+        await LoadInventory();
+    }
+
+    private async Task StartScanSession()
+    {
+        StartScanSessionRequest request = new StartScanSessionRequest
+        {
+            SessionType = _scanMode,
+            HouseholdId = _activeHouseholdId,
+            AddressId = _activeAddressId
+        };
+        await InventoryApi.StartInventoryScanSessionAsync(request);
+        _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
+        if (_activeScanSession != null)
+        {
+            _scanMode = _activeScanSession.SessionType;
+        }
+        StateHasChanged();
+    }
+
+    private async Task HandleScanBarcode(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || string.IsNullOrWhiteSpace(_manualBarcode))
+        {
+            return;
+        }
+
+        string barcode = _manualBarcode.Trim();
+        _manualBarcode = string.Empty;
+
+        if (_activeScanSession == null)
+        {
+            return;
+        }
+
+        bool success = _scanMode switch
+        {
+            "Adding" => await InventoryApi.ScanAddItemAsync(_activeScanSession.Id,
+                            new ScanAddItemRequest
+                            {
+                                Barcode = barcode,
+                                StorageLocationId = _activeScanSession.StorageLocationId
+                            }),
+            "Using" => await InventoryApi.ScanUseItemAsync(_activeScanSession.Id,
+                            new ScanUseItemRequest { Barcode = barcode }),
+            "Disposing" => await InventoryApi.ScanDisposeItemAsync(_activeScanSession.Id,
+                            new ScanDisposeItemRequest { Barcode = barcode }),
+            _ => false
+        };
+
+        _lastScanResult = new ScanResult(success,
+            success ? $"Barcode {barcode} recorded ({_scanMode})" : $"Could not process {barcode}");
+
+        _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
+        await SearchInventory();
+    }
+
+    private async Task EndScanSession()
+    {
+        if (_activeScanSession == null)
+        {
+            return;
+        }
+
+        Guid sessionId = _activeScanSession.Id;
+        int itemsScanned = _activeScanSession.ItemsScanned;
+        await InventoryApi.EndInventoryScanSessionAsync(sessionId);
+
+        // Refresh from server to confirm session has ended
+        _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
+        _lastScanResult = null;
+
+        if (_activeScanSession == null)
+        {
+            string summary = itemsScanned == 1 ? "1 item scanned" : $"{itemsScanned} items scanned";
+            ToastService.ShowSuccess($"Scan session complete — {summary}.");
+        }
+
+        await LoadInventory();
+    }
+
+    private string GetScanModeLabel(string mode) => mode switch
+    {
+        "Adding" => "➕ Adding",
+        "Using" => "🍳 Using",
+        "Disposing" => "🗑️ Disposing",
+        _ => mode
+    };
+
+    private void ToggleDiscoveryPanel()
+    {
+        _showDiscoveryPanel = !_showDiscoveryPanel;
+    }
+
+    private async Task AddToAllergens(AllergenDiscoveryDto discovery)
+    {
+        bool success = await InventoryApi.AddToUserAllergensAsync(discovery.Id);
+        if (success)
+        {
+            _allergenDiscoveries?.Remove(discovery);
+            ToastService.ShowSuccess($"{discovery.IngredientName} added to your allergens.");
+            StateHasChanged();
+        }
+    }
+
+    private void DismissDiscovery(AllergenDiscoveryDto discovery)
+    {
+        _allergenDiscoveries?.Remove(discovery);
         StateHasChanged();
     }
 
@@ -486,11 +738,6 @@
         Navigation.NavigateTo("/inventory/add");
     }
 
-    private void NavigateToScanSession()
-    {
-        Navigation.NavigateTo("/scanner");
-    }
-
     private void HandleNavigateToEdit(Guid id)
     {
         Navigation.NavigateTo($"/inventory/{id}/edit");
@@ -514,14 +761,14 @@
     {
         if (_selectedItem == null) return;
 
-        var request = new AdjustInventoryQuantityRequest
+        AdjustInventoryQuantityRequest request = new AdjustInventoryQuantityRequest
         {
             InventoryItemId = _selectedItem.Id,
             QuantityChange = _quantityChange,
             Reason = string.IsNullOrWhiteSpace(_adjustmentReason) ? null : _adjustmentReason
         };
 
-        var success = await InventoryApi.AdjustQuantityAsync(request);
+        bool success = await InventoryApi.AdjustQuantityAsync(request);
 
         if (success)
         {
@@ -546,7 +793,7 @@
     {
         if (_selectedItem == null) return;
 
-        var success = await InventoryApi.DeleteInventoryItemAsync(_selectedItem.Id);
+        bool success = await InventoryApi.DeleteInventoryItemAsync(_selectedItem.Id);
 
         if (success)
         {
