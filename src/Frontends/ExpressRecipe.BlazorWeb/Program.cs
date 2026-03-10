@@ -84,6 +84,19 @@ builder.Services.AddHttpClient<ISubscriptionApiClient, SubscriptionApiClient>(cl
 
 builder.Services.AddScoped<SubscriptionStateService>();
 
+// Ad service — disabled when ADS_DISABLED=true or AdSense:PublisherId is not set.
+if (string.Equals(builder.Configuration["ADS_DISABLED"], "true", StringComparison.OrdinalIgnoreCase)
+    || string.IsNullOrEmpty(builder.Configuration["AdSense:PublisherId"]))
+{
+    builder.Services.AddSingleton<ExpressRecipe.Shared.Services.IAdService,
+        ExpressRecipe.Shared.Services.DisabledAdService>();
+}
+else
+{
+    builder.Services.AddSingleton<ExpressRecipe.Shared.Services.IAdService,
+        ExpressRecipe.Shared.Services.AdSenseAdService>();
+}
+
 // IngredientService client - REST API only (gRPC disabled until HTTP/2 issues resolved)
 builder.Services.AddHttpClient<IngredientServiceClient>(client =>
 {

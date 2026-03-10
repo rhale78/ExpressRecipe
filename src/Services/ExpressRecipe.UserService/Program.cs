@@ -68,6 +68,10 @@ builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionReposi
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
 
+// Payment service — use mock in development / local mode; swap for StripePaymentService in production.
+builder.Services.AddSingleton<ExpressRecipe.UserService.Services.IPaymentService,
+    ExpressRecipe.UserService.Services.MockPaymentService>();
+
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
 {

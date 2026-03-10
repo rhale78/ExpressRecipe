@@ -19,6 +19,7 @@ public class UserProfileDto
     public string? CookingSkillLevel { get; set; }
     public string SubscriptionTier { get; set; } = "Free";
     public DateTime? SubscriptionExpiresAt { get; set; }
+    public string? StripeCustomerId { get; set; }
     
     // User's personal dietary restrictions
     public List<string> Allergens { get; set; } = new(); // Major allergen groups (Milk, Eggs, etc.)

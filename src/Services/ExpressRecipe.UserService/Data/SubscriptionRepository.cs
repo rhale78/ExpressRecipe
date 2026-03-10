@@ -89,7 +89,7 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
         const string sql = @"
             SELECT us.Id, us.UserId, us.SubscriptionTierId, us.Status, us.BillingCycle,
                    us.StartDate, us.EndDate, us.NextBillingDate, us.AutoRenew,
-                   us.PaymentMethodId, us.CancellationDate, us.CancellationReason,
+                   us.PaymentMethodId, us.StripeSubscriptionId, us.CancellationDate, us.CancellationReason,
                    st.TierName, st.DisplayName, st.MonthlyPrice, st.YearlyPrice
             FROM UserSubscription us
             INNER JOIN SubscriptionTier st ON us.SubscriptionTierId = st.Id
@@ -115,6 +115,9 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
             PaymentMethodId = reader.IsDBNull(reader.GetOrdinal("PaymentMethodId"))
                 ? null
                 : reader.GetString(reader.GetOrdinal("PaymentMethodId")),
+            StripeSubscriptionId = reader.IsDBNull(reader.GetOrdinal("StripeSubscriptionId"))
+                ? null
+                : reader.GetString(reader.GetOrdinal("StripeSubscriptionId")),
             CancellationDate = reader.IsDBNull(reader.GetOrdinal("CancellationDate"))
                 ? null
                 : reader.GetDateTime(reader.GetOrdinal("CancellationDate")),

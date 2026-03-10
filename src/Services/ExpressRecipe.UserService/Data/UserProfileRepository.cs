@@ -25,7 +25,7 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
         const string sql = @"
             SELECT Id, UserId, FirstName, LastName, DateOfBirth, Gender,
                    HeightCm, WeightKg, ActivityLevel, CookingSkillLevel,
-                   SubscriptionTier, SubscriptionExpiresAt
+                   SubscriptionTier, SubscriptionExpiresAt, StripeCustomerId
             FROM UserProfile
             WHERE UserId = @UserId AND IsDeleted = 0";
 
@@ -44,7 +44,8 @@ public class UserProfileRepository : SqlHelper, IUserProfileRepository
                 ActivityLevel = GetString(reader, "ActivityLevel"),
                 CookingSkillLevel = GetString(reader, "CookingSkillLevel"),
                 SubscriptionTier = GetString(reader, "SubscriptionTier") ?? "Free",
-                SubscriptionExpiresAt = GetNullableDateTime(reader, "SubscriptionExpiresAt")
+                SubscriptionExpiresAt = GetNullableDateTime(reader, "SubscriptionExpiresAt"),
+                StripeCustomerId = GetString(reader, "StripeCustomerId")
             },
             CreateParameter("@UserId", userId));
 

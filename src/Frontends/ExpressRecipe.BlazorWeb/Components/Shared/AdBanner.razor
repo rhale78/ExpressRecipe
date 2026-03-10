@@ -1,0 +1,32 @@
+@rendermode InteractiveServer
+@using ExpressRecipe.Shared.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IAdService Ads
+@inject AuthenticationStateProvider AuthStateProvider
+
+@if (_showAd && !string.IsNullOrEmpty(_slotHtml))
+{
+    <div class="ad-banner" aria-label="Advertisement">
+        @((MarkupString)_slotHtml)
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string PlacementId { get; set; } = string.Empty;
+
+    private bool _showAd;
+    private string? _slotHtml;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var tierClaim = authState.User.FindFirst("subscription_tier")?.Value ?? "Free";
+
+        _showAd = Ads.ShouldShowAds(tierClaim);
+        if (_showAd)
+        {
+            _slotHtml = Ads.GetBannerAdSlot(PlacementId);
+        }
+    }
+}

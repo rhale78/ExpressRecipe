@@ -1,0 +1,31 @@
+namespace ExpressRecipe.UserService.Services;
+
+/// <summary>
+/// Abstracts the external payment processor (Stripe in production).
+/// </summary>
+public interface IPaymentService
+{
+    /// <summary>
+    /// Creates a hosted Stripe Checkout Session and returns the redirect URL.
+    /// </summary>
+    Task<string> CreateCheckoutSessionAsync(
+        Guid userId,
+        string stripePriceId,
+        bool withTrial,
+        string successUrl,
+        string cancelUrl,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates a Stripe Billing Portal Session and returns the redirect URL.
+    /// </summary>
+    Task<string> CreateBillingPortalSessionAsync(
+        Guid userId,
+        string returnUrl,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Cancels an active Stripe subscription at the end of the current period.
+    /// </summary>
+    Task CancelSubscriptionAsync(string stripeSubscriptionId, CancellationToken ct = default);
+}
