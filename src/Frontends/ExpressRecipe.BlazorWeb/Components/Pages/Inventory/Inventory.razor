@@ -11,11 +11,15 @@
     <div class="inventory-header">
         <h1>🥫 My Inventory</h1>
         <div class="header-actions">
-            <button class="btn btn-secondary" @onclick="StartScanSession"
-                    disabled="@(_activeScanSession != null)">
-                <span class="btn-icon">📷</span>
-                @(_activeScanSession != null ? $"Scanning ({_activeScanSession.ItemsScanned} scanned)" : "Scan Mode")
-            </button>
+            <FeatureGuard FeatureKey="inventory-tracking" RequiredTier="Plus"
+                          Title="Scan Mode requires Plus"
+                          Description="Start an inline barcode-scanning session to add, use or dispose items instantly. Available on Plus and above.">
+                <button class="btn btn-secondary" @onclick="StartScanSession"
+                        disabled="@(_activeScanSession != null)">
+                    <span class="btn-icon">📷</span>
+                    @(_activeScanSession != null ? $"Scanning ({_activeScanSession.ItemsScanned} scanned)" : "Scan Mode")
+                </button>
+            </FeatureGuard>
             <button class="btn btn-primary" @onclick="NavigateToAdd">
                 <span class="btn-icon">➕</span> Add Item
             </button>
@@ -487,6 +491,10 @@
     protected override async Task OnInitializedAsync()
     {
         _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
+        if (_activeScanSession != null)
+        {
+            _scanMode = _activeScanSession.SessionType;
+        }
         await LoadInventory();
     }
 
@@ -568,12 +576,13 @@
             HouseholdId = _activeHouseholdId,
             AddressId = _activeAddressId
         };
-        Guid? sessionId = await InventoryApi.StartInventoryScanSessionAsync(request);
-        if (sessionId.HasValue)
+        await InventoryApi.StartInventoryScanSessionAsync(request);
+        _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
+        if (_activeScanSession != null)
         {
-            _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
-            StateHasChanged();
+            _scanMode = _activeScanSession.SessionType;
         }
+        StateHasChanged();
     }
 
     private async Task HandleScanBarcode(KeyboardEventArgs e)
@@ -594,7 +603,11 @@
         bool success = _scanMode switch
         {
             "Adding" => await InventoryApi.ScanAddItemAsync(_activeScanSession.Id,
-                            new ScanAddItemRequest { Barcode = barcode }),
+                            new ScanAddItemRequest
+                            {
+                                Barcode = barcode,
+                                StorageLocationId = _activeScanSession.StorageLocationId
+                            }),
             "Using" => await InventoryApi.ScanUseItemAsync(_activeScanSession.Id,
                             new ScanUseItemRequest { Barcode = barcode }),
             "Disposing" => await InventoryApi.ScanDisposeItemAsync(_activeScanSession.Id,
@@ -616,14 +629,18 @@
             return;
         }
 
-        ScanSessionResultDto? result = await InventoryApi.EndInventoryScanSessionAsync(_activeScanSession.Id);
-        _activeScanSession = null;
+        Guid sessionId = _activeScanSession.Id;
+        int itemsScanned = _activeScanSession.ItemsScanned;
+        await InventoryApi.EndInventoryScanSessionAsync(sessionId);
+
+        // Refresh from server to confirm session has ended
+        _activeScanSession = await InventoryApi.GetActiveScanSessionAsync();
         _lastScanResult = null;
 
-        if (result != null)
+        if (_activeScanSession == null)
         {
-            ToastService.ShowSuccess(
-                $"Session complete — {result.AddedCount} added, {result.UsedCount} used, {result.DisposedCount} disposed.");
+            string summary = itemsScanned == 1 ? "1 item scanned" : $"{itemsScanned} items scanned";
+            ToastService.ShowSuccess($"Scan session complete — {summary}.");
         }
 
         await LoadInventory();

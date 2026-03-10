@@ -693,12 +693,17 @@
 
     private async Task DispatchToEntryPoint(Guid productId)
     {
-        // If an active scan session exists, record inline instead of navigating
+        // If an active scan session exists with a storage location, record inline instead of navigating
         ScanSessionDto? session = await InventoryClient.GetActiveScanSessionAsync();
-        if (session != null && _entryPoint == ScannerEntryPoint.AddInventory)
+        if (session != null && _entryPoint == ScannerEntryPoint.AddInventory && session.StorageLocationId.HasValue)
         {
             bool addedSuccessfully = await InventoryClient.ScanAddItemAsync(session.Id,
-                new ScanAddItemRequest { ProductId = productId });
+                new ScanAddItemRequest
+                {
+                    Barcode = _currentResult?.Upc ?? string.Empty,
+                    ProductId = productId,
+                    StorageLocationId = session.StorageLocationId
+                });
             ToastService.ShowSuccess(addedSuccessfully ? "Added to inventory session." : "Could not add item.");
             return;
         }

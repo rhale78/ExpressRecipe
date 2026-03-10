@@ -703,7 +703,7 @@ public class InventoryApiClient : IInventoryApiClient
 
         try
         {
-            return await _httpClient.GetFromJsonAsync<List<AllergenDiscoveryDto>>("/api/inventory/allergen-discoveries");
+            return await _httpClient.GetFromJsonAsync<List<AllergenDiscoveryDto>>("/api/inventory/scan/allergens");
         }
         catch
         {
@@ -718,7 +718,7 @@ public class InventoryApiClient : IInventoryApiClient
 
         try
         {
-            var response = await _httpClient.PostAsync($"/api/inventory/allergen-discoveries/{discoveryId}/add-to-profile", null);
+            var response = await _httpClient.PostAsync($"/api/inventory/scan/allergens/{discoveryId}/add-to-profile", null);
             return response.IsSuccessStatusCode;
         }
         catch

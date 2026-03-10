@@ -88,12 +88,11 @@
                 </div>
             }
 
-            @if (_householdId.HasValue)
+            @if (_addressId.HasValue)
             {
                 <div class="form-group">
                     <label>Storage Location</label>
-                    <StorageLocationSelector HouseholdId="_householdId.Value"
-                                             AddressId="_addressId"
+                    <StorageLocationSelector AddressId="_addressId"
                                              OnLocationChanged="HandleLocationChanged" />
                 </div>
             }
@@ -290,6 +289,7 @@
     private void HandleAddressChanged(AddressDto? a)
     {
         _addressId = a?.Id;
+        _storageLocationId = null;
     }
 
     private void HandleLocationChanged(StorageLocationDto? loc)

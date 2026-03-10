@@ -305,12 +305,16 @@ public class AllergenDiscoveryDto
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
-    public Guid InventoryItemId { get; set; }
+    public Guid? HouseholdId { get; set; }
+    public Guid InventoryHistoryId { get; set; }
+    public Guid? ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public string AllergenDetected { get; set; } = string.Empty;
-    public string IngredientName => AllergenDetected;
-    public string Reaction { get; set; } = string.Empty;
+    public string AllergenName { get; set; } = string.Empty;
+    public string IngredientName => AllergenName;
+    public string Severity { get; set; } = string.Empty;
     public bool AddedToProfile { get; set; }
+    public DateTime? AddedToProfileAt { get; set; }
+    public string? Notes { get; set; }
     public DateTime DiscoveredAt { get; set; }
 }
 
@@ -359,6 +363,7 @@ public class ScanSessionDto : InventoryScanSessionDto
 
 public class ScanAddItemRequest : ScanItemRequest
 {
+    public Guid? StorageLocationId { get; set; }
 }
 
 public class ScanUseItemRequest : ScanItemRequest
