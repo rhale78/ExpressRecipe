@@ -68,6 +68,10 @@ builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionReposi
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
 
+// Register allergy incident engine repositories and analyzer
+builder.Services.AddScoped<IAllergyIncidentRepository>(sp => new AllergyIncidentRepository(connectionString));
+builder.Services.AddScoped<ExpressRecipe.UserService.Services.AllergyDifferentialAnalyzer>();
+
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
 {

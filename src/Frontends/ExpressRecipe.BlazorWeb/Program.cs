@@ -77,6 +77,11 @@ builder.Services.AddHttpClient<IUserSettingsApiClient, UserSettingsApiClient>(cl
     client.BaseAddress = new Uri("http://userservice");
 });
 
+builder.Services.AddHttpClient<IAllergyApiClient, AllergyApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://userservice");
+});
+
 builder.Services.AddHttpClient<ISubscriptionApiClient, SubscriptionApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://userservice");

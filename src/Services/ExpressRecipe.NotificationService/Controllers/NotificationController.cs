@@ -387,7 +387,7 @@ public class NotificationController : ControllerBase
 
     // Allowlist of valid entity types for action URL construction.
     private static readonly HashSet<string> AllowedEntityTypes =
-        new(StringComparer.OrdinalIgnoreCase) { "PlannedMeal", "InventoryItem", "Recipe", "CookingTimer" };
+        new(StringComparer.OrdinalIgnoreCase) { "PlannedMeal", "InventoryItem", "Recipe", "CookingTimer", "SuspectedAllergen" };
 
     /// <summary>
     /// Service-to-service endpoint for creating in-app notifications from other microservices.

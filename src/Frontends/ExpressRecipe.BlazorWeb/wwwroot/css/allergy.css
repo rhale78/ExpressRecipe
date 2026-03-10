@@ -1,0 +1,429 @@
+/* ─── Allergy Disclaimer ──────────────────────────────────────────────────── */
+.allergy-disclaimer {
+    background: #fff8e1;
+    border-left: 4px solid #f59e0b;
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin: 0 0 16px 0;
+    display: flex;
+    gap: 12px;
+    font-size: 0.875rem;
+    color: #78350f;
+}
+.allergy-disclaimer strong { color: #92400e; }
+.allergy-disclaimer .disclaimer-icon { font-size: 1.25rem; flex-shrink: 0; }
+
+/* ─── Allergy Dashboard ───────────────────────────────────────────────────── */
+.allergy-container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+}
+
+.allergy-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.allergy-header h1 { margin: 0; font-size: 1.75rem; }
+
+.member-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.member-tab {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.15s;
+}
+
+.member-tab.active {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
+}
+
+.suspect-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.suspect-card h2 {
+    margin: 0 0 16px;
+    font-size: 1.125rem;
+}
+
+.confidence-group { margin-bottom: 16px; }
+
+.confidence-group-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: #6b7280;
+    margin-bottom: 8px;
+}
+
+.suspect-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid #f3f4f6;
+    flex-wrap: wrap;
+}
+
+.suspect-row:last-child { border-bottom: none; }
+
+.suspect-name {
+    min-width: 140px;
+    font-weight: 500;
+}
+
+.confidence-bar-wrap {
+    flex: 1;
+    min-width: 100px;
+    background: #f3f4f6;
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+}
+
+.confidence-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.confidence-bar.high   { background: #ef4444; }
+.confidence-bar.medium { background: #f59e0b; }
+.confidence-bar.low    { background: #f97316; }
+
+.confidence-pct {
+    font-size: 0.875rem;
+    font-weight: 600;
+    min-width: 42px;
+    text-align: right;
+}
+
+.incident-count {
+    font-size: 0.8rem;
+    color: #6b7280;
+    min-width: 80px;
+}
+
+.suspect-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.cleared-card {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+.cleared-card summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #166534;
+}
+
+.cleared-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.cleared-chip {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 12px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    color: #14532d;
+}
+
+.incident-table-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.incident-table-card h2 {
+    margin: 0;
+    padding: 16px 20px;
+    font-size: 1.125rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.no-suspects {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6b7280;
+}
+
+.no-suspects p { margin: 8px 0; }
+
+/* ─── Log Reaction Modal ──────────────────────────────────────────────────── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+}
+
+.modal-dialog {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 0;
+}
+
+.modal-header h3 { margin: 0; font-size: 1.125rem; }
+
+.modal-step-indicator {
+    display: flex;
+    gap: 6px;
+    padding: 12px 24px;
+}
+
+.step-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d1d5db;
+}
+
+.step-dot.active { background: #1d4ed8; }
+.step-dot.done   { background: #10b981; }
+
+.modal-body { padding: 0 24px 24px; }
+
+.wizard-section { margin-bottom: 20px; }
+.wizard-section label { display: block; font-weight: 600; margin-bottom: 6px; }
+
+.product-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.product-row input[type="text"] { flex: 1; }
+
+.reaction-toggle {
+    display: flex;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+    font-size: 0.8rem;
+}
+
+.reaction-toggle button {
+    flex: 1;
+    padding: 5px 10px;
+    border: none;
+    background: #fff;
+    cursor: pointer;
+}
+
+.reaction-toggle button.selected-reaction { background: #fee2e2; color: #b91c1c; }
+.reaction-toggle button.selected-control  { background: #dcfce7; color: #15803d; }
+
+.severity-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.severity-btn {
+    padding: 6px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.15s;
+}
+
+.severity-btn.selected { border-color: #1d4ed8; background: #eff6ff; color: #1d4ed8; }
+.severity-btn.er       { border-color: #dc2626; }
+.severity-btn.er.selected { background: #fef2f2; color: #dc2626; border-color: #dc2626; }
+
+.chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.chip {
+    padding: 4px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    background: #fff;
+    transition: all 0.15s;
+}
+
+.chip.selected { background: #eff6ff; border-color: #1d4ed8; color: #1d4ed8; }
+
+.exposure-group {
+    display: flex;
+    gap: 10px;
+}
+
+.exposure-btn {
+    flex: 1;
+    padding: 14px 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    text-align: center;
+    font-size: 1.5rem;
+    transition: all 0.15s;
+}
+
+.exposure-btn span.label { display: block; font-size: 0.75rem; margin-top: 4px; color: #374151; }
+.exposure-btn.selected   { border-color: #1d4ed8; background: #eff6ff; }
+
+.latency-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.latency-btn {
+    padding: 7px 14px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+}
+
+.latency-btn.selected { background: #eff6ff; border-color: #1d4ed8; color: #1d4ed8; }
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid #f3f4f6;
+}
+
+/* ─── Allergy Report (print) ──────────────────────────────────────────────── */
+.report-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 24px;
+    font-family: Georgia, serif;
+    color: #111;
+}
+
+.report-header {
+    text-align: center;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #111;
+}
+
+.report-header h1 { font-size: 1.5rem; margin-bottom: 4px; }
+.report-header p  { margin: 2px 0; font-size: 0.9rem; color: #555; }
+
+.report-disclaimer-box {
+    border: 2px solid #b45309;
+    background: #fffbeb;
+    padding: 12px 16px;
+    border-radius: 4px;
+    margin-bottom: 24px;
+    font-size: 0.875rem;
+    color: #78350f;
+}
+
+.report-section { margin-bottom: 28px; }
+.report-section h2 {
+    font-size: 1.1rem;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+    margin-bottom: 12px;
+}
+
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.report-table th,
+.report-table td {
+    border: 1px solid #ddd;
+    padding: 7px 10px;
+    text-align: left;
+}
+
+.report-table th { background: #f5f5f5; font-weight: 600; }
+
+.report-footer {
+    margin-top: 32px;
+    padding-top: 12px;
+    border-top: 1px solid #ccc;
+    font-size: 0.75rem;
+    color: #666;
+    text-align: center;
+}
+
+.report-actions {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    justify-content: flex-end;
+}
+
+@media print {
+    .report-actions,
+    nav,
+    .sidebar,
+    .modal-overlay { display: none !important; }
+
+    .report-container { padding: 0; }
+
+    .report-footer::after {
+        content: "For healthcare provider review only. Not a medical document. Generated by ExpressRecipe.";
+    }
+}

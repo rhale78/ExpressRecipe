@@ -1,0 +1,318 @@
+@page "/allergy"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Shared.DTOs.User
+@inject IAllergyApiClient AllergyApi
+@inject IUserProfileApiClient UserProfileApi
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Allergy Tracker — ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="allergy-container">
+            <div class="allergy-header">
+                <h1>🩺 Allergy Tracker</h1>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="NavigateToReport">
+                        Print Report
+                    </button>
+                    <button class="btn btn-primary btn-sm" @onclick="OpenLogModal">
+                        + Log Reaction
+                    </button>
+                </div>
+            </div>
+
+            <AllergyDisclaimer />
+
+            <!-- Member selector tabs -->
+            <div class="member-tabs">
+                <button class="member-tab @(_selectedMemberId == null ? "active" : "")"
+                        @onclick="SelectMe">Me</button>
+                @foreach (var m in _familyMembers)
+                {
+                    var member = m;
+                    <button class="member-tab @(_selectedMemberId == member.Id ? "active" : "")"
+                            @onclick="() => SelectMember(member.Id, member.Name)">
+                        @member.Name
+                    </button>
+                }
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Loading allergy data…</p>
+                </div>
+            }
+            else
+            {
+                <!-- Suspected Allergens -->
+                <div class="suspect-card">
+                    <h2>🔬 Suspected Allergens</h2>
+
+                    @if (!_suspects.Any())
+                    {
+                        <div class="no-suspects">
+                            <p>🌿 No patterns detected yet — log more reactions to see analysis.</p>
+                            <p><small>We need at least 2 reactions to the same product before we can detect a pattern.</small></p>
+                        </div>
+                    }
+                    else
+                    {
+                        @RenderSuspectGroup("🔴 High confidence (>70%)",
+                            _suspects.Where(s => s.ConfidenceScore > 0.70m))
+                        @RenderSuspectGroup("🟡 Possible (50–70%)",
+                            _suspects.Where(s => s.ConfidenceScore is > 0.50m and <= 0.70m))
+                        @RenderSuspectGroup("🟠 Low confidence (15–50%)",
+                            _suspects.Where(s => s.ConfidenceScore is >= 0.15m and <= 0.50m))
+                    }
+                </div>
+
+                <!-- Cleared Ingredients -->
+                @if (_cleared.Any())
+                {
+                    <details class="cleared-card">
+                        <summary>✅ Confirmed Safe Ingredients (@_cleared.Count)</summary>
+                        <div class="cleared-chips">
+                            @foreach (var c in _cleared)
+                            {
+                                <span class="cleared-chip">@c.IngredientName</span>
+                            }
+                        </div>
+                    </details>
+                }
+
+                <!-- Incident History -->
+                <div class="incident-table-card">
+                    <h2>
+                        📋 Incident History
+                        <button class="btn btn-sm btn-primary" @onclick="OpenLogModal">+ Log Reaction</button>
+                    </h2>
+                    @if (!_incidents.Any())
+                    {
+                        <p class="text-muted p-4">No incidents logged yet.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Products</th>
+                                        <th>Who</th>
+                                        <th>Severity</th>
+                                        <th>Treatment</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var inc in _incidents)
+                                    {
+                                        <tr>
+                                            <td>@inc.IncidentDate.ToLocalTime().ToString("MMM dd, yyyy HH:mm")</td>
+                                            <td>@string.Join(", ", inc.Products.Where(p => p.HadReaction).Select(p => p.ProductName))</td>
+                                            <td>@string.Join(", ", inc.Members.Select(m => m.MemberName))</td>
+                                            <td>@(inc.Members.FirstOrDefault()?.Severity ?? "—")</td>
+                                            <td>@(inc.Members.FirstOrDefault()?.TreatmentType ?? "—")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Log Reaction Modal -->
+        <LogReactionModal @ref="_logModal" OnIncidentLogged="LoadDataAsync" />
+    </Authorized>
+    <NotAuthorized>
+        <div class="text-center py-5">
+            <p>Please <a href="/login">log in</a> to view your allergy tracker.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private List<SuspectedAllergenDto> _suspects  = new();
+    private List<ClearedIngredientDto> _cleared   = new();
+    private List<AllergyIncidentV2Dto> _incidents = new();
+    private List<ExpressRecipe.Client.Shared.Models.User.FamilyMemberDto> _familyMembers = new();
+
+    private Guid?  _selectedMemberId;
+    private bool   _isLoading = true;
+
+    private LogReactionModal? _logModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFamilyMembersAsync();
+        await LoadDataAsync();
+    }
+
+    private void NavigateToReport()
+    {
+        var route = _selectedMemberId.HasValue
+            ? $"/allergy/report/{_selectedMemberId}"
+            : "/allergy/report";
+        Navigation.NavigateTo(route);
+    }
+
+    private async Task SelectMe() => await SelectMember(null, "Me");
+
+    private async Task LoadFamilyMembersAsync()
+    {
+        try
+        {
+            _familyMembers = await UserProfileApi.GetFamilyMembersAsync() ?? new();
+        }
+        catch { _familyMembers = new(); }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var suspectTask  = AllergyApi.GetSuspectsAsync(_selectedMemberId);
+            var clearedTask  = AllergyApi.GetClearedIngredientsAsync(_selectedMemberId);
+            var incidentTask = AllergyApi.GetIncidentsAsync(_selectedMemberId, 50);
+
+            await Task.WhenAll(suspectTask, clearedTask, incidentTask);
+
+            _suspects  = suspectTask.Result  ?? new();
+            _cleared   = clearedTask.Result  ?? new();
+            _incidents = incidentTask.Result ?? new();
+        }
+        catch (Exception)
+        {
+            ToastService.ShowError("Failed to load allergy data.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SelectMember(Guid? memberId, string memberName)
+    {
+        _selectedMemberId = memberId;
+        await LoadDataAsync();
+    }
+
+    private async Task OpenLogModal()
+    {
+        if (_logModal != null)
+            await _logModal.ShowAsync();
+    }
+
+    private async Task ConfirmSuspect(Guid id)
+    {
+        var ok = await AllergyApi.ConfirmSuspectAsync(id);
+        if (ok)
+        {
+            ToastService.ShowSuccess("Allergen confirmed and added to your profile.");
+            await LoadDataAsync();
+        }
+        else
+        {
+            ToastService.ShowError("Failed to confirm allergen.");
+        }
+    }
+
+    private async Task ClearSuspect(Guid id)
+    {
+        var ok = await AllergyApi.ClearSuspectAsync(id);
+        if (ok)
+        {
+            ToastService.ShowSuccess("Ingredient cleared — it will no longer be suspected.");
+            await LoadDataAsync();
+        }
+        else
+        {
+            ToastService.ShowError("Failed to clear ingredient.");
+        }
+    }
+
+    private RenderFragment RenderSuspectGroup(string label, IEnumerable<SuspectedAllergenDto> suspects)
+    {
+        var list = suspects.ToList();
+        if (!list.Any()) return builder => { };
+
+        return builder =>
+        {
+            builder.OpenElement(0, "div");
+            builder.AddAttribute(1, "class", "confidence-group");
+
+            builder.OpenElement(2, "div");
+            builder.AddAttribute(3, "class", "confidence-group-label");
+            builder.AddContent(4, label);
+            builder.CloseElement();
+
+            foreach (var s in list)
+            {
+                var suspect = s;
+                var pct    = (int)(suspect.ConfidenceScore * 100);
+                var barCls = pct > 70 ? "high" : pct > 50 ? "medium" : "low";
+
+                builder.OpenElement(5, "div");
+                builder.AddAttribute(6, "class", "suspect-row");
+
+                // Name
+                builder.OpenElement(7, "span");
+                builder.AddAttribute(8, "class", "suspect-name");
+                builder.AddContent(9, suspect.IngredientName);
+                builder.CloseElement();
+
+                // Bar
+                builder.OpenElement(10, "div");
+                builder.AddAttribute(11, "class", "confidence-bar-wrap");
+                builder.OpenElement(12, "div");
+                builder.AddAttribute(13, "class", $"confidence-bar {barCls}");
+                builder.AddAttribute(14, "style", $"width:{pct}%");
+                builder.CloseElement();
+                builder.CloseElement();
+
+                // Pct text
+                builder.OpenElement(15, "span");
+                builder.AddAttribute(16, "class", "confidence-pct");
+                builder.AddContent(17, $"{pct}%");
+                builder.CloseElement();
+
+                // Incident count
+                builder.OpenElement(18, "span");
+                builder.AddAttribute(19, "class", "incident-count");
+                builder.AddContent(20, $"({suspect.IncidentCount} incident{(suspect.IncidentCount == 1 ? "" : "s")})");
+                builder.CloseElement();
+
+                // Actions
+                builder.OpenElement(21, "div");
+                builder.AddAttribute(22, "class", "suspect-actions");
+
+                builder.OpenElement(23, "button");
+                builder.AddAttribute(24, "class", "btn btn-sm btn-success");
+                builder.AddAttribute(25, "onclick", EventCallback.Factory.Create(this, () => ConfirmSuspect(suspect.Id)));
+                builder.AddContent(26, "Confirm as allergen");
+                builder.CloseElement();
+
+                builder.OpenElement(27, "button");
+                builder.AddAttribute(28, "class", "btn btn-sm btn-outline-secondary");
+                builder.AddAttribute(29, "onclick", EventCallback.Factory.Create(this, () => ClearSuspect(suspect.Id)));
+                builder.AddContent(30, "I can eat this — clear it");
+                builder.CloseElement();
+
+                builder.CloseElement(); // suspect-actions
+                builder.CloseElement(); // suspect-row
+            }
+
+            builder.CloseElement(); // confidence-group
+        };
+    }
+}
