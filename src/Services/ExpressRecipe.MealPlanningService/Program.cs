@@ -175,6 +175,19 @@ builder.Services.AddHttpClient("NotificationService", (sp, client) =>
 // Register background workers
 builder.Services.AddHostedService<HouseholdTaskEscalationWorker>();
 
+builder.Services.AddSingleton<ICookingTimerRepository>(
+    new CookingTimerRepository(connectionString));
+
+// Register HTTP client for NotificationService (used by CookingTimerWorker)
+builder.Services.AddHttpClient("NotificationService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:NotificationService"]
+        ?? "http://localhost:5009");
+});
+
+// Register background workers
+builder.Services.AddHostedService<CookingTimerWorker>();
+
 // Add controllers
 builder.Services.AddControllers();
 

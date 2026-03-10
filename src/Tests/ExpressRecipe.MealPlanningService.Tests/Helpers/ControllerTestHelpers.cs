@@ -12,6 +12,7 @@ public static class ControllerTestHelpers
         [
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim(ClaimTypes.Name, "testuser"),
+            new Claim(ClaimTypes.Email, "testuser@example.com"),
         ];
 
         if (householdId.HasValue)
@@ -19,7 +20,7 @@ public static class ControllerTestHelpers
             claims.Add(new Claim("household_id", householdId.Value.ToString()));
         }
 
-        ClaimsIdentity identity       = new(claims, "TestAuthentication");
+        ClaimsIdentity identity        = new(claims, "TestAuthentication");
         ClaimsPrincipal claimsPrincipal = new(identity);
 
         DefaultHttpContext httpContext = new() { User = claimsPrincipal };

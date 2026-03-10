@@ -178,7 +178,7 @@ public class NotificationController : ControllerBase
 
     // Allowlist of valid entity types for action URL construction.
     private static readonly HashSet<string> AllowedEntityTypes =
-        new(StringComparer.OrdinalIgnoreCase) { "PlannedMeal", "InventoryItem", "Recipe" };
+        new(StringComparer.OrdinalIgnoreCase) { "PlannedMeal", "InventoryItem", "Recipe", "CookingTimer" };
 
     /// <summary>
     /// Service-to-service endpoint for creating in-app notifications from other microservices.
@@ -204,21 +204,27 @@ public class NotificationController : ControllerBase
             if (request.UserId == Guid.Empty)
                 return BadRequest(new { error = "UserId is required" });
 
-            // Require both a validated entity type and an entity ID to build a well-formed action URL.
-            string? actionUrl = null;
+            // Build action URL — prefer an explicit ActionUrl, fall back to entity-type routing.
+            string? actionUrl = request.ActionUrl;
             Dictionary<string, string>? metadata = null;
 
-            if (!string.IsNullOrEmpty(request.RelatedEntityType) && request.RelatedEntityId.HasValue)
+            if (!string.IsNullOrEmpty(request.Priority)
+                || !string.IsNullOrEmpty(request.RelatedEntityType)
+                || request.RelatedEntityId.HasValue)
             {
-                if (!AllowedEntityTypes.Contains(request.RelatedEntityType))
-                    return BadRequest(new { error = "Invalid RelatedEntityType" });
-
-                actionUrl = $"/{request.RelatedEntityType.ToLowerInvariant()}/{request.RelatedEntityId}";
-                metadata  = new Dictionary<string, string>
+                metadata = new Dictionary<string, string>();
+                if (!string.IsNullOrEmpty(request.Priority))
+                    metadata["priority"] = request.Priority;
+                if (!string.IsNullOrEmpty(request.RelatedEntityType))
                 {
-                    ["relatedEntityType"] = request.RelatedEntityType,
-                    ["relatedEntityId"]   = request.RelatedEntityId.Value.ToString()
-                };
+                    if (!AllowedEntityTypes.Contains(request.RelatedEntityType))
+                        return BadRequest(new { error = "Invalid RelatedEntityType" });
+                    metadata["relatedEntityType"] = request.RelatedEntityType;
+                    if (actionUrl == null && request.RelatedEntityId.HasValue)
+                        actionUrl = $"/{request.RelatedEntityType.ToLowerInvariant()}/{request.RelatedEntityId}";
+                }
+                if (request.RelatedEntityId.HasValue)
+                    metadata["relatedEntityId"] = request.RelatedEntityId.Value.ToString();
             }
 
             Guid notificationId = await _repository.CreateNotificationAsync(
@@ -232,6 +238,7 @@ public class NotificationController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while creating the notification" });
         }
     }
+
 
     // Constant-time comparison to guard against timing attacks when comparing API keys.
     private static bool IsValidApiKey(string? provided, string configured)
@@ -264,8 +271,10 @@ public class InternalNotificationRequest
 {
     public Guid UserId { get; set; }
     public string Type { get; set; } = string.Empty;
+    public string Priority { get; set; } = "Normal";
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
+    public string? ActionUrl { get; set; }
     public string? RelatedEntityType { get; set; }
     public Guid? RelatedEntityId { get; set; }
 }
