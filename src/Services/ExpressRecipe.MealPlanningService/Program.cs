@@ -85,6 +85,13 @@ builder.Services.AddScoped<IMealSuggestionService, MealSuggestionService>();
 builder.Services.AddHostedService<RecipeCookedEventPublisherWorker>();
 builder.Services.AddHostedService<CookingRatingPromptWorker>();
 
+builder.Services.AddScoped<IMealCourseRepository>(_ => new MealCourseRepository(connectionString));
+builder.Services.AddScoped<IMealAttendeeRepository>(_ => new MealAttendeeRepository(connectionString));
+
+// Register services
+builder.Services.AddScoped<IMealPlanCopyService, MealPlanCopyService>();
+builder.Services.AddScoped<IMealPlanTemplateService, MealPlanTemplateService>();
+
 // Add controllers
 builder.Services.AddControllers();
 

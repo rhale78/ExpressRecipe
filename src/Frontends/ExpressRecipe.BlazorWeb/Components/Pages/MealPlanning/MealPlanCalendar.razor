@@ -1,0 +1,98 @@
+@page "/meal-planning/calendar"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+@using ExpressRecipe.Client.Shared.Services
+@inject IMealPlanApiClient MealPlanApi
+@inject NavigationManager Navigation
+
+<PageTitle>Meal Calendar - ExpressRecipe</PageTitle>
+
+<div class="calendar-container">
+    <div class="calendar-header">
+        <button class="nav-btn" @onclick="PrevMonth">‹</button>
+        <h2>@_current.ToString("MMMM yyyy")</h2>
+        <button class="nav-btn" @onclick="NextMonth">›</button>
+        <button class="btn btn-secondary ms-3" @onclick="NavigateToWeekView">
+            ← Week View
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading calendar...</p>
+        </div>
+    }
+    else
+    {
+        <div class="calendar-grid">
+            @foreach (string dow in new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" })
+            {
+                <div class="cal-dow-header">@dow</div>
+            }
+
+            @for (int i = 0; i < _leadingBlanks; i++)
+            {
+                <div class="cal-cell empty"></div>
+            }
+
+            @foreach (MealPlanCalendarDay day in _days)
+            {
+                DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+                <div class="cal-cell @(day.Date == today ? "today" : "")
+                                      @(day.MealCount > 0 ? "has-meals" : "")
+                                      @(day.HasFuturePlan ? "future-plan" : "")"
+                     @onclick="() => NavigateToDay(day.Date)">
+                    <span class="cal-day-num">@day.Date.Day</span>
+                    @if (!string.IsNullOrEmpty(day.HolidayLabel))
+                    {
+                        <span class="cal-holiday">@day.HolidayLabel</span>
+                    }
+                    @if (day.MealCount > 0)
+                    {
+                        <span class="cal-meal-count">@day.MealCount meal@(day.MealCount != 1 ? "s" : "")</span>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private DateOnly _current = DateOnly.FromDateTime(DateTime.Today);
+    private List<MealPlanCalendarDay> _days = new();
+    private int _leadingBlanks;
+    private bool _isLoading = true;
+
+    private void NavigateToWeekView() => Navigation.NavigateTo("/meal-planning");
+
+    protected override async Task OnInitializedAsync() => await LoadMonthAsync();
+
+    private async Task LoadMonthAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _days = await MealPlanApi.GetCalendarAsync(_current.Year, _current.Month) ?? new();
+        _leadingBlanks = (int)new DateTime(_current.Year, _current.Month, 1).DayOfWeek;
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task PrevMonth()
+    {
+        _current = _current.AddMonths(-1);
+        await LoadMonthAsync();
+    }
+
+    private async Task NextMonth()
+    {
+        _current = _current.AddMonths(1);
+        await LoadMonthAsync();
+    }
+
+    private void NavigateToDay(DateOnly date)
+        => Navigation.NavigateTo($"/meal-planning/day/{date:yyyy-MM-dd}");
+}

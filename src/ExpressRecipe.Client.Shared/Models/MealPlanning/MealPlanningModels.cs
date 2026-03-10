@@ -191,3 +191,12 @@ public class MealSuggestionResult
     public List<string> MissingIngredients { get; set; } = new();
     public List<string> Tags { get; set; } = new();
 }
+
+/// <summary>Single day entry returned by the month-calendar endpoint.</summary>
+public class MealPlanCalendarDay
+{
+    public DateOnly Date { get; set; }
+    public int MealCount { get; set; }
+    public bool HasFuturePlan { get; set; }
+    public string? HolidayLabel { get; set; }
+}
