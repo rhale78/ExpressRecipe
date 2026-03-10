@@ -58,7 +58,7 @@ public sealed class HolidayService : IHolidayService
         Add(NthWeekday(year, 9,  DayOfWeek.Monday, 1),         "Labor Day",        "Federal");
         Add(NthWeekday(year, 10, DayOfWeek.Monday, 2),         "Columbus Day",     "Federal");
         Add(new DateOnly(year, 11, 11),                        "Veterans Day",     "Federal");
-        Add(NthWeekday(year, 11, DayOfWeek.Thursday, 4),       "Thanksgiving",     "Federal");
+        Add(NthWeekday(year, 11, DayOfWeek.Thursday, 4),       "Thanksgiving Day", "Federal");
         Add(new DateOnly(year, 12, 25),                        "Christmas Day",    "Federal");
     }
 
@@ -81,16 +81,23 @@ public sealed class HolidayService : IHolidayService
 
     private void Add(DateOnly date, string name, string category)
     {
+        // Always store the actual calendar date so callers can look up a holiday by its traditional date.
+        _cache[date] = (name, category);
+
         if (category == "Federal")
         {
-            date = date.DayOfWeek switch
+            // Also store the federally observed date when the holiday falls on a weekend.
+            DateOnly observed = date.DayOfWeek switch
             {
                 DayOfWeek.Saturday => date.AddDays(-1),
                 DayOfWeek.Sunday   => date.AddDays(1),
                 _                  => date
             };
+            if (observed != date)
+            {
+                _cache[observed] = (name, category);
+            }
         }
-        _cache[date] = (name, category);
     }
 
     private static DateOnly NthWeekday(int year, int month, DayOfWeek dow, int n)

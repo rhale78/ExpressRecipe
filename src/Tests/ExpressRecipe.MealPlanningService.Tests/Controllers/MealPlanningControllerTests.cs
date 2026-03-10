@@ -1,4 +1,6 @@
 using ExpressRecipe.MealPlanningService.Controllers;
+using ExpressRecipe.MealPlanningService.Services.Printing;
+using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
 using ExpressRecipe.MealPlanningService.Data;
 using ExpressRecipe.MealPlanningService.Services;
 using FluentAssertions;
@@ -22,6 +24,20 @@ public class MealPlanningControllerTests
     private readonly IConfiguration _config = new ConfigurationBuilder().Build();
     private readonly Guid _userId = Guid.NewGuid();
 
+    private readonly Mock<INutritionLogRepository>      _nutritionLogRepoMock     = new();
+    private readonly Mock<INutritionLoggingService>     _nutritionLoggingMock     = new();
+    private readonly Mock<ICookingHistoryRepository>    _cookingHistoryMock       = new();
+    private readonly Mock<IMealCourseRepository>        _courseMock               = new();
+    private readonly Mock<IMealAttendeeRepository>      _attendeeMock             = new();
+    private readonly Mock<IMealPlanCopyService>         _copyServiceMock          = new();
+    private readonly Mock<IMealPlanTemplateService>     _templateServiceMock      = new();
+    private readonly Mock<IMealPlanHistoryService>      _historyMock              = new();
+    private readonly Mock<IMealVotingRepository>        _votingMock               = new();
+    private readonly Mock<IMealPlanPdfService>          _pdfServiceMock           = new();
+    private readonly Mock<IMealScheduleConfigRepository> _scheduleRepoMock        = new();
+    private readonly Mock<IGoogleCalendarService>       _googleCalMock            = new();
+    private readonly Mock<IHolidayService>              _holidaysMock             = new();
+
     private MealPlanningController CreateController()
     {
         MealPlanningController controller = new(
@@ -29,7 +45,20 @@ public class MealPlanningControllerTests
             _repoMock.Object,
             _suggestionMock.Object,
             _httpClientFactoryMock.Object,
-            _config);
+            _config,
+            _nutritionLogRepoMock.Object,
+            _nutritionLoggingMock.Object,
+            _cookingHistoryMock.Object,
+            _courseMock.Object,
+            _attendeeMock.Object,
+            _copyServiceMock.Object,
+            _templateServiceMock.Object,
+            _historyMock.Object,
+            _votingMock.Object,
+            _pdfServiceMock.Object,
+            _scheduleRepoMock.Object,
+            _googleCalMock.Object,
+            _holidaysMock.Object);
 
         controller.ControllerContext = MealPlanningControllerHelpers.CreateAuthenticatedContext(_userId);
         return controller;
@@ -198,14 +227,14 @@ public class MealPlanningControllerTests
         AddMealRequest request = new()
         {
             RecipeId   = Guid.NewGuid(),
-            PlannedFor = DateTime.UtcNow.AddDays(1),
+            PlannedDate = DateTime.UtcNow.AddDays(1),
             MealType   = "Lunch",
             Servings   = 2
         };
 
         _repoMock.Setup(r => r.AddPlannedMealAsync(
                 planId, _userId,
-                request.RecipeId, request.PlannedFor,
+                request.RecipeId, request.PlannedDate,
                 request.MealType, request.Servings))
             .ReturnsAsync(mealId);
 
@@ -222,11 +251,11 @@ public class MealPlanningControllerTests
     {
         Guid planId  = Guid.NewGuid();
         Guid recipeId = Guid.NewGuid();
-        AddMealRequest request = new() { RecipeId = recipeId, PlannedFor = DateTime.UtcNow.AddDays(2) };
+        AddMealRequest request = new() { RecipeId = recipeId, PlannedDate = DateTime.UtcNow.AddDays(2) };
 
         _repoMock.Setup(r => r.AddPlannedMealAsync(
                 planId, _userId,
-                recipeId, request.PlannedFor,
+                recipeId, request.PlannedDate,
                 request.MealType, request.Servings))
             .ReturnsAsync(Guid.NewGuid());
 
@@ -236,7 +265,7 @@ public class MealPlanningControllerTests
 
         _repoMock.Verify(r => r.AddPlannedMealAsync(
             planId, _userId,
-            recipeId, request.PlannedFor,
+            recipeId, request.PlannedDate,
             request.MealType, request.Servings), Times.Once);
     }
 
@@ -301,7 +330,7 @@ public class MealPlanningControllerTests
         };
         MealPlanDto plan = new() { Id = planId, UserId = _userId };
 
-        _repoMock.Setup(r => r.GetPlannedMealAsync(mealId)).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
         _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId)).ReturnsAsync(plan);
         _repoMock.Setup(r => r.MarkMealAsCompletedAsync(mealId)).Returns(Task.CompletedTask);
         _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
@@ -322,7 +351,7 @@ public class MealPlanningControllerTests
         Guid planId = Guid.NewGuid();
         Guid mealId = Guid.NewGuid();
 
-        _repoMock.Setup(r => r.GetPlannedMealAsync(mealId))
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((PlannedMealDto?)null);
 
         MealPlanningController controller = CreateController();
@@ -347,7 +376,7 @@ public class MealPlanningControllerTests
             RecipeName = "Tacos"
         };
 
-        _repoMock.Setup(r => r.GetPlannedMealAsync(mealId)).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
 
         MealPlanningController controller = CreateController();
 
@@ -370,7 +399,7 @@ public class MealPlanningControllerTests
             RecipeName = "Tacos"
         };
 
-        _repoMock.Setup(r => r.GetPlannedMealAsync(mealId)).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
         // Returning null simulates the plan not belonging to the authenticated user
         _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId))
             .ReturnsAsync((MealPlanDto?)null);
@@ -401,7 +430,7 @@ public class MealPlanningControllerTests
         };
         MealPlanDto plan = new() { Id = planId, UserId = _userId };
 
-        _repoMock.Setup(r => r.GetPlannedMealAsync(mealId)).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
         _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId)).ReturnsAsync(plan);
         _repoMock.Setup(r => r.MarkMealAsCompletedAsync(mealId)).Returns(Task.CompletedTask);
         _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))
@@ -434,7 +463,7 @@ public class MealPlanningControllerTests
         };
         MealPlanDto plan = new() { Id = planId, UserId = _userId };
 
-        _repoMock.Setup(r => r.GetPlannedMealAsync(mealId)).ReturnsAsync(meal);
+        _repoMock.Setup(r => r.GetPlannedMealByIdAsync(mealId, It.IsAny<CancellationToken>())).ReturnsAsync(meal);
         _repoMock.Setup(r => r.GetMealPlanAsync(planId, _userId)).ReturnsAsync(plan);
         _repoMock.Setup(r => r.MarkMealAsCompletedAsync(mealId)).Returns(Task.CompletedTask);
         _repoMock.Setup(r => r.RecordCookingHistoryAsync(It.IsAny<CookingHistoryRecord>(), default))

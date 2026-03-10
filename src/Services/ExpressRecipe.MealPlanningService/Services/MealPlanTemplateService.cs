@@ -64,7 +64,7 @@ public sealed class MealPlanTemplateService : IMealPlanTemplateService
                 MealType = meal.MealType,
                 RecipeId = meal.RecipeId,
                 RecipeName = meal.RecipeName,
-                Servings = meal.Servings,
+                Servings = meal.Servings ?? 1,
                 Courses = courses.Select(c => new TemplateCourseEntry
                 {
                     CourseType = c.CourseType,

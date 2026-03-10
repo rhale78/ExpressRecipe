@@ -83,7 +83,7 @@ public class MealPlanningController : ControllerBase
     // ── Meal Plans ────────────────────────────────────────────────────────────
 
     [HttpPost("plans")]
-    public async Task<IActionResult> CreateMealPlan([FromBody] CreatePlanRequest request, CancellationToken ct)
+    public async Task<IActionResult> CreateMealPlan([FromBody] CreatePlanRequest request, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         _logger.LogCreatingMealPlan(userId, request.StartDate, request.EndDate);
@@ -93,7 +93,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpGet("plans")]
-    public async Task<IActionResult> GetMealPlans(CancellationToken ct)
+    public async Task<IActionResult> GetMealPlans(CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         _logger.LogGettingMealPlans(userId);
@@ -102,7 +102,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpGet("plans/{id}")]
-    public async Task<IActionResult> GetMealPlan(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetMealPlan(Guid id, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         _logger.LogGettingMealPlan(userId, id);
@@ -112,7 +112,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpDelete("plans/{id}")]
-    public async Task<IActionResult> DeletePlan(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeletePlan(Guid id, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         await _repository.DeleteMealPlanAsync(id, userId, ct);
@@ -123,17 +123,17 @@ public class MealPlanningController : ControllerBase
     // ── Planned Meals ──────────────────────────────────────────────────────────
 
     [HttpPost("plans/{id}/meals")]
-    public async Task<IActionResult> AddPlannedMeal(Guid id, [FromBody] AddMealRequest request, CancellationToken ct)
+    public async Task<IActionResult> AddPlannedMeal(Guid id, [FromBody] AddMealRequest request, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
-        _logger.LogAddingPlannedMeal(userId, id, request.RecipeId);
+        _logger.LogAddingPlannedMeal(userId, id, request.RecipeId.GetValueOrDefault());
         Guid mealId = await _repository.AddPlannedMealAsync(
             id, userId, request.RecipeId, request.PlannedDate, request.MealType, request.Servings, ct);
         return Ok(new { id = mealId });
     }
 
     [HttpGet("plans/{id}/meals")]
-    public async Task<IActionResult> GetPlannedMeals(Guid id, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, CancellationToken ct)
+    public async Task<IActionResult> GetPlannedMeals(Guid id, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate, CancellationToken ct = default)
     {
         _logger.LogGettingPlannedMeals(id);
         List<PlannedMealDto> meals = await _repository.GetPlannedMealsAsync(id, startDate, endDate, ct);
@@ -142,12 +142,12 @@ public class MealPlanningController : ControllerBase
 
 
     [HttpPost("plans/{id}/meals/{mealId}/complete")]
-    public async Task<IActionResult> CompletePlannedMeal(Guid id, Guid mealId, [FromBody] CompleteMealRequest? request = null)
+    public async Task<IActionResult> CompletePlannedMeal(Guid id, Guid mealId, [FromBody] CompleteMealRequest? request = null, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         _logger.LogCompletingPlannedMeal(userId, id, mealId);
 
-        PlannedMealDto? meal = await _repository.GetPlannedMealAsync(mealId);
+        PlannedMealDto? meal = await _repository.GetPlannedMealByIdAsync(mealId, ct);
         if (meal == null) return NotFound();
 
         // Verify the meal belongs to the plan in the route and to the authenticated user
@@ -164,10 +164,10 @@ public class MealPlanningController : ControllerBase
         CookingHistoryRecord record = new()
         {
             UserId      = userId,
-            RecipeId    = meal.RecipeId,
+            RecipeId    = meal.RecipeId.GetValueOrDefault(),
             RecipeName  = recipeName,
             CookedAt    = DateTime.UtcNow,
-            Servings    = meal.Servings,
+            Servings    = meal.Servings ?? 1,
             MealType    = meal.MealType,
             Source      = "PlannedMeal",
             PlannedMealId = mealId
@@ -185,9 +185,9 @@ public class MealPlanningController : ControllerBase
     public async Task<IActionResult> CompleteMeal(Guid id, [FromBody] CompleteMealRequest? request = null)
     {
         Guid userId = GetUserId();
-        PlannedMealDto? plannedMeal = await _repository.GetPlannedMealByIdAsync(id, userId);
-
+        PlannedMealDto? plannedMeal = await _repository.GetPlannedMealByIdAsync(id);
         if (plannedMeal is null) { return NotFound(); }
+        if (plannedMeal.UserId != userId) { return Forbid(); }
 
         await _repository.MarkMealAsCompletedAsync(id);
 
@@ -228,7 +228,7 @@ public class MealPlanningController : ControllerBase
     // ── Move (DnD) ─────────────────────────────────────────────────────────────
 
     [HttpPut("meals/{id}/move")]
-    public async Task<IActionResult> MoveMeal(Guid id, [FromBody] MoveMealRequest req, CancellationToken ct)
+    public async Task<IActionResult> MoveMeal(Guid id, [FromBody] MoveMealRequest req, CancellationToken ct = default)
     {
         await _repository.UpdatePlannedMealAsync(id, req.NewDate.ToDateTime(TimeOnly.MinValue), req.NewMealType, null, ct);
         return NoContent();
@@ -237,11 +237,11 @@ public class MealPlanningController : ControllerBase
     // ── Multi-course ───────────────────────────────────────────────────────────
 
     [HttpGet("meals/{id}/courses")]
-    public async Task<IActionResult> GetCourses(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetCourses(Guid id, CancellationToken ct = default)
         => Ok(await _courseRepo.GetCoursesAsync(id, ct));
 
     [HttpPost("meals/{id}/courses")]
-    public async Task<IActionResult> AddCourse(Guid id, [FromBody] AddCourseRequest req, CancellationToken ct)
+    public async Task<IActionResult> AddCourse(Guid id, [FromBody] AddCourseRequest req, CancellationToken ct = default)
     {
         // Use max existing sort order + 1 so new courses naturally append to the end
         List<MealCourseDto> existing = await _courseRepo.GetCoursesAsync(id, ct);
@@ -251,21 +251,21 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpPut("meals/{id}/courses/{courseId}")]
-    public async Task<IActionResult> UpdateCourse(Guid id, Guid courseId, [FromBody] UpdateCourseRequest req, CancellationToken ct)
+    public async Task<IActionResult> UpdateCourse(Guid id, Guid courseId, [FromBody] UpdateCourseRequest req, CancellationToken ct = default)
     {
         await _courseRepo.UpdateCourseAsync(courseId, req.RecipeId, req.CustomName, req.Servings, req.SortOrder, ct);
         return NoContent();
     }
 
     [HttpDelete("meals/{id}/courses/{courseId}")]
-    public async Task<IActionResult> DeleteCourse(Guid id, Guid courseId, CancellationToken ct)
+    public async Task<IActionResult> DeleteCourse(Guid id, Guid courseId, CancellationToken ct = default)
     {
         await _courseRepo.DeleteCourseAsync(courseId, ct);
         return NoContent();
     }
 
     [HttpPut("meals/{id}/courses/reorder")]
-    public async Task<IActionResult> ReorderCourses(Guid id, [FromBody] List<CourseOrderItem> order, CancellationToken ct)
+    public async Task<IActionResult> ReorderCourses(Guid id, [FromBody] List<CourseOrderItem> order, CancellationToken ct = default)
     {
         await _courseRepo.ReorderCoursesAsync(order.Select(o => (o.CourseId, o.SortOrder)).ToList(), ct);
         return NoContent();
@@ -274,48 +274,48 @@ public class MealPlanningController : ControllerBase
     // ── Copy / Clone ───────────────────────────────────────────────────────────
 
     [HttpPost("meals/{id}/clone")]
-    public async Task<IActionResult> CloneMeal(Guid id, [FromBody] CloneMealRequest req, CancellationToken ct)
+    public async Task<IActionResult> CloneMeal(Guid id, [FromBody] CloneMealRequest req, CancellationToken ct = default)
         => Ok(new { id = await _copyService.CloneMealAsync(id, req.TargetDate, req.TargetMealType, ct) });
 
     [HttpPost("plans/{id}/copy-day")]
-    public async Task<IActionResult> CopyDay(Guid id, [FromBody] CopyDayRequest req, CancellationToken ct)
+    public async Task<IActionResult> CopyDay(Guid id, [FromBody] CopyDayRequest req, CancellationToken ct = default)
     {
         await _copyService.CopyDayAsync(id, req.SourceDate, req.TargetDate, ct);
         return NoContent();
     }
 
     [HttpPost("plans/{id}/copy-week")]
-    public async Task<IActionResult> CopyWeek(Guid id, [FromBody] CopyWeekRequest req, CancellationToken ct)
+    public async Task<IActionResult> CopyWeek(Guid id, [FromBody] CopyWeekRequest req, CancellationToken ct = default)
     {
         await _copyService.CopyWeekAsync(id, req.SourceWeekStart, req.TargetWeekStart, ct);
         return NoContent();
     }
 
     [HttpPost("plans/{id}/copy-month")]
-    public async Task<IActionResult> CopyMonth(Guid id, [FromBody] CopyMonthRequest req, CancellationToken ct)
+    public async Task<IActionResult> CopyMonth(Guid id, [FromBody] CopyMonthRequest req, CancellationToken ct = default)
     {
         await _copyService.CopyMonthAsync(id, req.SourceYear, req.SourceMonth, req.TargetYear, req.TargetMonth, ct);
         return NoContent();
     }
 
     [HttpPost("plans/{id}/copy")]
-    public async Task<IActionResult> CopyPlan(Guid id, [FromBody] CopyPlanRequest req, CancellationToken ct)
+    public async Task<IActionResult> CopyPlan(Guid id, [FromBody] CopyPlanRequest req, CancellationToken ct = default)
         => Ok(new { id = await _copyService.CopyPlanAsync(id, req.NewName, req.NewStartDate, ct) });
 
     // ── Calendar ───────────────────────────────────────────────────────────────
 
     [HttpGet("calendar")]
-    public async Task<IActionResult> GetCalendar([FromQuery] int year, [FromQuery] int month, CancellationToken ct)
+    public async Task<IActionResult> GetCalendar([FromQuery] int year, [FromQuery] int month, CancellationToken ct = default)
         => Ok(await _repository.GetCalendarAsync(GetUserId(), year, month, ct));
 
     // ── Attendees ──────────────────────────────────────────────────────────────
 
     [HttpGet("meals/{id}/attendees")]
-    public async Task<IActionResult> GetAttendees(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetAttendees(Guid id, CancellationToken ct = default)
         => Ok(await _attendeeRepo.GetAttendeesAsync(id, ct));
 
     [HttpPut("meals/{id}/attendees")]
-    public async Task<IActionResult> SetAttendees(Guid id, [FromBody] List<MealAttendeeDto> attendees, CancellationToken ct)
+    public async Task<IActionResult> SetAttendees(Guid id, [FromBody] List<MealAttendeeDto> attendees, CancellationToken ct = default)
     {
         await _attendeeRepo.SetAttendeesAsync(id, attendees, ct);
         return NoContent();
@@ -328,7 +328,7 @@ public class MealPlanningController : ControllerBase
         => Ok(await _templateService.GetTemplatesAsync(GetUserId(), includePublic, ct));
 
     [HttpPost("templates")]
-    public async Task<IActionResult> SaveTemplate([FromBody] SaveTemplateRequest req, CancellationToken ct)
+    public async Task<IActionResult> SaveTemplate([FromBody] SaveTemplateRequest req, CancellationToken ct = default)
     {
         Guid id = await _templateService.SaveTemplateFromPlanAsync(GetUserId(), req.PlanId,
             req.FromDate, req.ToDate, req.Name, req.Description, req.Category, req.IsPublic, ct);
@@ -336,7 +336,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpPost("templates/{id}/apply")]
-    public async Task<IActionResult> ApplyTemplate(Guid id, [FromBody] ApplyTemplateRequest req, CancellationToken ct)
+    public async Task<IActionResult> ApplyTemplate(Guid id, [FromBody] ApplyTemplateRequest req, CancellationToken ct = default)
     {
         Guid planId = await _templateService.ApplyTemplateAsync(id, GetUserId(), req.TargetPlanId, req.StartDate, ct);
         return Ok(new { planId });
@@ -345,7 +345,7 @@ public class MealPlanningController : ControllerBase
     // ── Nutritional Goals ──────────────────────────────────────────────────────
 
     [HttpPost("goals")]
-    public async Task<IActionResult> SetGoal([FromBody] SetGoalRequest request, CancellationToken ct)
+    public async Task<IActionResult> SetGoal([FromBody] SetGoalRequest request, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         _logger.LogSettingGoal(userId, request.GoalType);
@@ -364,7 +364,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpGet("nutrition/summary")]
-    public async Task<IActionResult> GetNutritionSummary([FromQuery] DateTime date, CancellationToken ct)
+    public async Task<IActionResult> GetNutritionSummary([FromQuery] DateTime date, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         _logger.LogNutritionSummaryRequest(userId, date);
@@ -519,12 +519,12 @@ public class MealPlanningController : ControllerBase
                 string key = ing.Name.ToLowerInvariant();
                 if (aggregated.TryGetValue(key, out AggregatedIngredient? existing))
                 {
-                    aggregated[key] = existing with { TotalQuantity = existing.TotalQuantity + (ing.Quantity * meal.Servings) };
+                    aggregated[key] = existing with { TotalQuantity = existing.TotalQuantity + (ing.Quantity * (meal.Servings ?? 1)) };
                 }
                 else
                 {
                     aggregated[key] = new AggregatedIngredient(
-                        ing.IngredientId, ing.Name, ing.Quantity * meal.Servings, ing.Unit);
+                        ing.IngredientId, ing.Name, ing.Quantity * (meal.Servings ?? 1), ing.Unit);
                 }
             }
         }
@@ -660,7 +660,7 @@ public class MealPlanningController : ControllerBase
     // ── Snapshots / History ───────────────────────────────────────────────────────
 
     [HttpGet("plans/{id}/history")]
-    public async Task<IActionResult> GetPlanHistory(Guid id, [FromQuery] string? scope, CancellationToken ct)
+    public async Task<IActionResult> GetPlanHistory(Guid id, [FromQuery] string? scope, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (await _repository.GetMealPlanAsync(id, userId) is null) { return NotFound(); }
@@ -668,7 +668,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpPost("plans/{id}/snapshot")]
-    public async Task<IActionResult> TakeSnapshot(Guid id, [FromBody] TakeSnapshotRequest request, CancellationToken ct)
+    public async Task<IActionResult> TakeSnapshot(Guid id, [FromBody] TakeSnapshotRequest request, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (await _repository.GetMealPlanAsync(id, userId) is null) { return NotFound(); }
@@ -676,14 +676,14 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpPost("snapshots/{id}/restore")]
-    public async Task<IActionResult> RestoreSnapshot(Guid id, CancellationToken ct)
+    public async Task<IActionResult> RestoreSnapshot(Guid id, CancellationToken ct = default)
     {
         await _history.RestoreSnapshotAsync(id, GetUserId(), ct);
         return NoContent();
     }
 
     [HttpGet("meals/{id}/history")]
-    public async Task<IActionResult> GetMealHistory(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetMealHistory(Guid id, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
@@ -693,7 +693,7 @@ public class MealPlanningController : ControllerBase
     // ── Voting ────────────────────────────────────────────────────────────────────
 
     [HttpPost("meals/{id}/vote")]
-    public async Task<IActionResult> Vote(Guid id, [FromBody] VoteRequest request, CancellationToken ct)
+    public async Task<IActionResult> Vote(Guid id, [FromBody] VoteRequest request, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
@@ -702,7 +702,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpDelete("meals/{id}/vote")]
-    public async Task<IActionResult> RemoveVote(Guid id, CancellationToken ct)
+    public async Task<IActionResult> RemoveVote(Guid id, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
@@ -711,7 +711,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpGet("meals/{id}/votes")]
-    public async Task<IActionResult> GetVotes(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetVotes(Guid id, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
@@ -719,7 +719,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpPost("meals/{id}/review")]
-    public async Task<IActionResult> PostReview(Guid id, [FromBody] PostMealReviewRequest request, CancellationToken ct)
+    public async Task<IActionResult> PostReview(Guid id, [FromBody] PostMealReviewRequest request, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
@@ -728,7 +728,7 @@ public class MealPlanningController : ControllerBase
     }
 
     [HttpPost("meals/{id}/course-reviews")]
-    public async Task<IActionResult> PostCourseReviews(Guid id, [FromBody] List<CourseReviewRequest> reviews, CancellationToken ct)
+    public async Task<IActionResult> PostCourseReviews(Guid id, [FromBody] List<CourseReviewRequest> reviews, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
@@ -737,9 +737,10 @@ public class MealPlanningController : ControllerBase
             await _voting.UpsertCourseReviewAsync(id, r.RecipeId, r.CourseType, userId, r.Rating, r.Comment, ct);
         }
         return NoContent();
+    }
 
     [HttpPost("plans/{id}/print")]
-    public async Task<IActionResult> PrintPlan(Guid id, [FromBody] MealPlanPrintOptions options, CancellationToken ct)
+    public async Task<IActionResult> PrintPlan(Guid id, [FromBody] MealPlanPrintOptions options, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         // Verify ownership and get plan name via the user-scoped lookup before generating the PDF
@@ -767,6 +768,7 @@ public class MealPlanningController : ControllerBase
             GroceryGrouping = grouping
         };
         return Ok(await _pdfService.AssemblePrintDataAsync(options, GetUserId(), ct));
+    }
 
     // ── Schedule config ───────────────────────────────────────────────────────
 
@@ -775,7 +777,7 @@ public class MealPlanningController : ControllerBase
         => Ok(await _scheduleRepo.GetConfigsAsync(GetUserId(), ct));
 
     [HttpPut("schedule-config")]
-    public async Task<IActionResult> SetScheduleConfig([FromBody] List<MealScheduleConfigDto> configs, CancellationToken ct)
+    public async Task<IActionResult> SetScheduleConfig([FromBody] List<MealScheduleConfigDto> configs, CancellationToken ct = default)
     {
         await _scheduleRepo.SetConfigsAsync(GetUserId(), configs, ct);
         return NoContent();
@@ -788,7 +790,7 @@ public class MealPlanningController : ControllerBase
         => Ok(new { connected = await _googleCal.IsConnectedAsync(GetUserId(), ct) });
 
     [HttpGet("calendar/events")]
-    public async Task<IActionResult> GetCalendarEvents([FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
+    public async Task<IActionResult> GetCalendarEvents([FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct = default)
         => Ok(await _googleCal.GetEventsAsync(GetUserId(), from, to, ct));
 
     // ── Holidays ─────────────────────────────────────────────────────────────
@@ -804,7 +806,7 @@ public class MealPlanningController : ControllerBase
     // ── Auto-fill ─────────────────────────────────────────────────────────────
 
     [HttpPost("plans/{id}/auto-fill")]
-    public async Task<IActionResult> AutoFill(Guid id, [FromBody] AutoFillRequest request, CancellationToken ct)
+    public async Task<IActionResult> AutoFill(Guid id, [FromBody] AutoFillRequest request, CancellationToken ct = default)
     {
         Guid userId = GetUserId();
         List<CalendarEventDto> calEvents = request.RespectCalendar
@@ -919,6 +921,8 @@ public sealed record UpsertGoalRequest
     public decimal? TargetFiber { get; init; }
     public decimal? TargetSodium { get; init; }
     public string? Notes { get; init; }
+}
+
 public class MoveMealRequest
 {
     public DateOnly NewDate { get; set; }
@@ -994,6 +998,8 @@ public class ApplyTemplateRequest
 {
     public Guid TargetPlanId { get; set; }
     public DateOnly StartDate { get; set; }
+}
+
 public class TakeSnapshotRequest
 {
     public string? Label { get; set; }
@@ -1027,6 +1033,8 @@ public class CourseReviewRequest
     public byte Rating { get; set; }
     [MaxLength(500)]
     public string? Comment { get; set; }
+}
+
 public sealed class AutoFillRequest
 {
     public DateOnly FromDate       { get; set; }

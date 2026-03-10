@@ -44,7 +44,7 @@ public sealed class MealPlanCopyService : IMealPlanCopyService
 
         Guid destinationPlanId = targetPlanId ?? source.MealPlanId;
         Guid newMealId = await _plans.AddPlannedMealAsync(destinationPlanId, source.UserId,
-            source.RecipeId, targetDate.ToDateTime(TimeOnly.MinValue), targetMealType, source.Servings, ct);
+            source.RecipeId, targetDate.ToDateTime(TimeOnly.MinValue), targetMealType, source.Servings ?? 1, ct);
 
         List<MealCourseDto> courses = await _courses.GetCoursesAsync(mealId, ct);
         foreach (MealCourseDto course in courses)

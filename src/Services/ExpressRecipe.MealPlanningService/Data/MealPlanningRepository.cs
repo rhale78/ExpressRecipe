@@ -298,7 +298,7 @@ public class MealPlanningRepository : IMealPlanningRepository
                 MealPlanId = reader.GetGuid(1),
                 RecipeId = reader.IsDBNull(2) ? null : reader.GetGuid(2),
                 RecipeName = reader.GetString(3),
-                PlannedFor = reader.GetDateTime(4),
+                PlannedDate = reader.GetDateTime(4),
                 MealType = reader.GetString(5),
                 Servings = reader.IsDBNull(6) ? 1 : reader.GetInt32(6),
                 IsCompleted = reader.GetBoolean(7),
@@ -307,10 +307,6 @@ public class MealPlanningRepository : IMealPlanningRepository
         }
 
         return null;
-
-    public async Task<List<PlannedMealDto>> GetMealsByDateAsync(Guid mealPlanId, DateOnly date, CancellationToken ct = default)
-    {
-        return await GetPlannedMealsAsync(mealPlanId, date.ToDateTime(TimeOnly.MinValue), date.ToDateTime(TimeOnly.MaxValue), ct);
     }
 
     public async Task<bool> UserCanAccessPlannedMealAsync(Guid plannedMealId, Guid userId, CancellationToken ct = default)
@@ -330,8 +326,6 @@ public class MealPlanningRepository : IMealPlanningRepository
         command.Parameters.AddWithValue("@PlannedMealId", plannedMealId);
         command.Parameters.AddWithValue("@UserId", userId);
         return ((int?)await command.ExecuteScalarAsync(ct) ?? 0) > 0;
-    }
-
     }
 
     public async Task<Guid> SetNutritionalGoalAsync(Guid userId, string goalType, decimal targetValue, string? unit, DateTime? startDate, DateTime? endDate)
@@ -465,7 +459,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         return goals;
     }
 
-    public Task<NutritionSummaryDto> GetNutritionSummaryAsync(Guid userId, DateTime date, CancellationToken ct = default)
+    public async Task<NutritionSummaryDto> GetNutritionSummaryAsync(Guid userId, DateTime date, CancellationToken ct = default)
     {
         DateOnly logDate = DateOnly.FromDateTime(date);
         DailySummaryRow summary = await _nutritionLogRepo.GetDailySummaryAsync(userId, logDate, CancellationToken.None);
@@ -492,7 +486,7 @@ public class MealPlanningRepository : IMealPlanningRepository
             MealCount             = summary.MealCount,
             MealsWithoutNutrition = summary.MealsWithoutNutrition
         };
-
+    }
 
     public async Task<Guid> SavePlanTemplateAsync(Guid userId, string name, string? description, List<TemplateMealDto> meals, string templateJson, string? category, bool isPublic, int spanDays, CancellationToken ct = default)
     {

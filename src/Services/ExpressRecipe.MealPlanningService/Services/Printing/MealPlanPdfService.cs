@@ -88,7 +88,7 @@ public sealed class MealPlanPdfService : IMealPlanPdfService
                     {
                         MealType      = m.MealType,
                         DisplayName   = recipe?.Name ?? m.CustomMealName ?? "Custom Meal",
-                        Servings      = m.Servings,
+                        Servings = m.Servings ?? 1,
                         EstimatedCost = m.RecipeId.HasValue && recipe is not null ? recipe.EstimatedCost : null,
                         RecipeData    = options.IncludeRecipes && m.RecipeId.HasValue ? recipe : null
                     };
