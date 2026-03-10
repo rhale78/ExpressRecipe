@@ -1,0 +1,132 @@
+/* ── Inventory Context Bar ──────────────────────────────────── */
+.inventory-context-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: #f0f4ff;
+    border: 1px solid #c7d7ff;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.context-selector { flex: 1; min-width: 180px; }
+
+/* ── Scan Session Banner ────────────────────────────────────── */
+.scan-session-banner {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scan-session-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.scan-icon { font-size: 1.4rem; }
+
+.scan-mode-label {
+    background: rgba(255,255,255,0.15);
+    border-radius: 20px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.85rem;
+}
+
+.scan-count { color: rgba(255,255,255,0.75); font-size: 0.9rem; }
+
+.scan-session-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.scan-mode-select {
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.9rem;
+    min-width: 160px;
+}
+
+.scan-mode-select option { background: #1a1a2e; color: #fff; }
+
+.scan-barcode-input {
+    flex: 1;
+    min-width: 180px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.95rem;
+}
+
+.scan-barcode-input::placeholder { color: rgba(255,255,255,0.5); }
+
+.scan-last-result {
+    font-size: 0.9rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+}
+
+.scan-success { background: rgba(40,167,69,0.25); color: #7fff9a; }
+.scan-error   { background: rgba(220,53,69,0.25); color: #ffb3ba; }
+
+/* ── Allergen Discovery Panel ───────────────────────────────── */
+.allergen-discovery-panel {
+    background: #fff8e1;
+    border: 1px solid #f59e0b;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.discovery-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.discovery-header h3 { margin: 0; font-size: 1rem; color: #92400e; }
+
+.discovery-count {
+    background: #f59e0b;
+    color: #fff;
+    border-radius: 12px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.discovery-subtitle { font-size: 0.85rem; color: #78350f; margin: 0.5rem 0; }
+
+.discovery-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+
+.discovery-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.discovery-ingredient strong { display: block; font-size: 0.95rem; }
+.discovery-source { font-size: 0.8rem; color: #92400e; }
+.discovery-actions { display: flex; gap: 0.4rem; }

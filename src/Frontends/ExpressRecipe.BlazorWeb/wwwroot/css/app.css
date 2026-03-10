@@ -470,3 +470,5 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+@import url('inventory-enhancements.css');

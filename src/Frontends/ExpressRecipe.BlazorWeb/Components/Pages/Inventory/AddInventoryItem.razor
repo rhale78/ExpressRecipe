@@ -73,6 +73,31 @@
         <div class="manual-entry-section">
             <h3>Manual Entry</h3>
 
+            <!-- Storage context (household → address → location) -->
+            <div class="form-group">
+                <label>Household (optional)</label>
+                <HouseholdSwitcher OnHouseholdChanged="HandleHouseholdChanged" />
+            </div>
+
+            @if (_householdId.HasValue)
+            {
+                <div class="form-group">
+                    <label>Address / Property</label>
+                    <AddressSelector HouseholdId="_householdId.Value"
+                                     OnAddressChanged="HandleAddressChanged" />
+                </div>
+            }
+
+            @if (_householdId.HasValue)
+            {
+                <div class="form-group">
+                    <label>Storage Location</label>
+                    <StorageLocationSelector HouseholdId="_householdId.Value"
+                                             AddressId="_addressId"
+                                             OnLocationChanged="HandleLocationChanged" />
+                </div>
+            }
+
             @if (_selectedProduct != null)
             {
                 <div class="alert alert-success">
@@ -247,9 +272,30 @@
     private List<ProductDto>? _productSearchResults;
     private ProductDto? _selectedProduct;
 
+    private Guid? _householdId;
+    private Guid? _addressId;
+    private Guid? _storageLocationId;
+
     private bool _isSaving = false;
     private string _errorMessage = string.Empty;
     private string _successMessage = string.Empty;
+
+    private void HandleHouseholdChanged(HouseholdDto? h)
+    {
+        _householdId = h?.Id;
+        _addressId = null;
+        _storageLocationId = null;
+    }
+
+    private void HandleAddressChanged(AddressDto? a)
+    {
+        _addressId = a?.Id;
+    }
+
+    private void HandleLocationChanged(StorageLocationDto? loc)
+    {
+        _storageLocationId = loc?.Id;
+    }
 
     private async Task SearchProducts()
     {
@@ -259,14 +305,14 @@
         _searchingProducts = true;
         StateHasChanged();
 
-        var request = new ProductSearchRequest
+        ProductSearchRequest request = new ProductSearchRequest
         {
             SearchTerm = _productSearchTerm,
             Page = 1,
             PageSize = 10
         };
 
-        var result = await ProductApi.SearchProductsAsync(request);
+        ProductSearchResult? result = await ProductApi.SearchProductsAsync(request);
         _productSearchResults = result?.Products ?? new();
 
         _searchingProducts = false;
@@ -332,10 +378,14 @@
                 .ToList();
         }
 
+        _item.HouseholdId = _householdId;
+        _item.AddressId = _addressId;
+        _item.StorageLocationId = _storageLocationId;
+
         _isSaving = true;
         StateHasChanged();
 
-        var itemId = await InventoryApi.CreateInventoryItemAsync(_item);
+        Guid? itemId = await InventoryApi.CreateInventoryItemAsync(_item);
 
         _isSaving = false;
 

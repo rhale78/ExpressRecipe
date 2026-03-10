@@ -57,6 +57,11 @@ public class CreateInventoryItemRequest
     public string Unit { get; set; } = string.Empty;
     public string Location { get; set; } = "Pantry";
 
+    // Household context
+    public Guid? HouseholdId { get; set; }
+    public Guid? AddressId { get; set; }
+    public Guid? StorageLocationId { get; set; }
+
     // Dates
     public DateTime? PurchaseDate { get; set; }
     public DateTime? ExpirationDate { get; set; }
@@ -85,6 +90,9 @@ public class InventorySearchRequest
     public bool? IsLowStock { get; set; } // Show low stock items
     public bool? HasAllergens { get; set; } // Show items with allergens
     public List<string>? ExcludeAllergens { get; set; } // Exclude items with specific allergens
+
+    public Guid? HouseholdId { get; set; }
+    public Guid? AddressId { get; set; }
 
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;
@@ -258,6 +266,7 @@ public class InventoryScanSessionDto
 
 public class StartInventoryScanRequest
 {
+    public Guid? HouseholdId { get; set; }
     public Guid? AddressId { get; set; }
     public Guid? StorageLocationId { get; set; }
     public string SessionType { get; set; } = "Adding";
@@ -266,6 +275,7 @@ public class StartInventoryScanRequest
 public class ScanItemRequest
 {
     public Guid SessionId { get; set; }
+    public Guid? ProductId { get; set; }
     public string Barcode { get; set; } = string.Empty;
     public decimal? Quantity { get; set; }
 }
@@ -273,7 +283,8 @@ public class ScanItemRequest
 public class DisposeItemRequest
 {
     public Guid SessionId { get; set; }
-    public Guid InventoryItemId { get; set; }
+    public Guid? InventoryItemId { get; set; }
+    public string? Barcode { get; set; }
     public string Reason { get; set; } = string.Empty; // Bad, Expired, Allergy, Other
     public string? Notes { get; set; }
 }
@@ -282,6 +293,9 @@ public class ScanSessionResultDto
 {
     public Guid SessionId { get; set; }
     public int TotalItemsScanned { get; set; }
+    public int AddedCount { get; set; }
+    public int UsedCount { get; set; }
+    public int DisposedCount { get; set; }
     public DateTime CompletedAt { get; set; }
     public List<string> ProcessedItems { get; set; } = new();
 }
@@ -294,6 +308,7 @@ public class AllergenDiscoveryDto
     public Guid InventoryItemId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string AllergenDetected { get; set; } = string.Empty;
+    public string IngredientName => AllergenDetected;
     public string Reaction { get; set; } = string.Empty;
     public bool AddedToProfile { get; set; }
     public DateTime DiscoveredAt { get; set; }

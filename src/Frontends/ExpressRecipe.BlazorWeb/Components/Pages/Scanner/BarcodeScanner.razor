@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Product
+@using ExpressRecipe.Client.Shared.Models.Inventory
 @inject IScannerApiClient ScannerClient
 @inject IVisionApiClient VisionClient
 @inject IProductApiClient ProductApi
@@ -687,11 +688,21 @@
         }
 
         await StopCameraAsync();
-        DispatchToEntryPoint(_currentResult.ProductId.Value);
+        await DispatchToEntryPoint(_currentResult.ProductId.Value);
     }
 
-    private void DispatchToEntryPoint(Guid productId)
+    private async Task DispatchToEntryPoint(Guid productId)
     {
+        // If an active scan session exists, record inline instead of navigating
+        ScanSessionDto? session = await InventoryClient.GetActiveScanSessionAsync();
+        if (session != null && _entryPoint == ScannerEntryPoint.AddInventory)
+        {
+            bool addedSuccessfully = await InventoryClient.ScanAddItemAsync(session.Id,
+                new ScanAddItemRequest { ProductId = productId });
+            ToastService.ShowSuccess(addedSuccessfully ? "Added to inventory session." : "Could not add item.");
+            return;
+        }
+
         string destination = _entryPoint switch
         {
             ScannerEntryPoint.AddInventory => $"/inventory/add?productId={productId}",
@@ -781,7 +792,7 @@
         }
         else
         {
-            DispatchToEntryPoint(first.ProductId!.Value);
+            await DispatchToEntryPoint(first.ProductId!.Value);
         }
     }
 
