@@ -20,6 +20,7 @@ public interface IMealPlanningRepository
 
     // Calendar
     Task<List<MealPlanCalendarDay>> GetCalendarAsync(Guid userId, int year, int month, CancellationToken ct = default);
+    Task<bool> UserCanAccessPlannedMealAsync(Guid plannedMealId, Guid userId, CancellationToken ct = default);
 
     // Nutritional Goals
     Task<Guid> SetNutritionalGoalAsync(Guid userId, string goalType, decimal targetValue, string? unit, DateTime? startDate, DateTime? endDate, CancellationToken ct = default);
@@ -67,6 +68,7 @@ public class PlannedMealDto
     public Guid MealPlanId { get; set; }
     public Guid UserId { get; set; }
     public Guid? RecipeId { get; set; }
+    public string? CustomMealName { get; set; }
     public string RecipeName { get; set; } = string.Empty;
     public DateTime PlannedDate { get; set; }
     public string MealType { get; set; } = string.Empty;

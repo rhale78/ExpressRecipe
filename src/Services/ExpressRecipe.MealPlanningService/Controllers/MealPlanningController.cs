@@ -27,6 +27,10 @@ public class MealPlanningController : ControllerBase
     private readonly IMealPlanCopyService _copyService;
     private readonly IMealPlanTemplateService _templateService;
 
+    private readonly IMealPlanHistoryService _history;
+    private readonly IMealVotingRepository _voting;
+
+
     public MealPlanningController(
         ILogger<MealPlanningController> logger,
         IMealPlanningRepository repository,
@@ -39,7 +43,8 @@ public class MealPlanningController : ControllerBase
         IMealCourseRepository courseRepo,
         IMealAttendeeRepository attendeeRepo,
         IMealPlanCopyService copyService,
-        IMealPlanTemplateService templateService)
+        IMealPlanTemplateService templateService,
+        IMealPlanHistoryService history, IMealVotingRepository voting)
     {
         _logger = logger;
         _repository = repository;
@@ -53,6 +58,8 @@ public class MealPlanningController : ControllerBase
         _attendeeRepo = attendeeRepo;
         _copyService = copyService;
         _templateService = templateService;
+        _history = history;
+        _voting = voting;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -633,6 +640,87 @@ public class MealPlanningController : ControllerBase
         await _nutritionLogRepo.EndGoalAsync(id, GetUserId(), ct);
         return NoContent();
     }
+
+    // ── Snapshots / History ───────────────────────────────────────────────────────
+
+    [HttpGet("plans/{id}/history")]
+    public async Task<IActionResult> GetPlanHistory(Guid id, [FromQuery] string? scope, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (await _repository.GetMealPlanAsync(id, userId) is null) { return NotFound(); }
+        return Ok(await _history.GetSnapshotsAsync(id, scope, ct));
+    }
+
+    [HttpPost("plans/{id}/snapshot")]
+    public async Task<IActionResult> TakeSnapshot(Guid id, [FromBody] TakeSnapshotRequest request, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (await _repository.GetMealPlanAsync(id, userId) is null) { return NotFound(); }
+        return Ok(new { id = await _history.TakePlanSnapshotAsync(id, userId, "Manual", request.Label, ct) });
+    }
+
+    [HttpPost("snapshots/{id}/restore")]
+    public async Task<IActionResult> RestoreSnapshot(Guid id, CancellationToken ct)
+    {
+        await _history.RestoreSnapshotAsync(id, GetUserId(), ct);
+        return NoContent();
+    }
+
+    [HttpGet("meals/{id}/history")]
+    public async Task<IActionResult> GetMealHistory(Guid id, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        return Ok(await _history.GetMealHistoryAsync(id, ct));
+    }
+
+    // ── Voting ────────────────────────────────────────────────────────────────────
+
+    [HttpPost("meals/{id}/vote")]
+    public async Task<IActionResult> Vote(Guid id, [FromBody] VoteRequest request, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        await _voting.UpsertVoteAsync(id, userId, request.Reaction, request.Comment, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("meals/{id}/vote")]
+    public async Task<IActionResult> RemoveVote(Guid id, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        await _voting.DeleteVoteAsync(id, userId, ct);
+        return NoContent();
+    }
+
+    [HttpGet("meals/{id}/votes")]
+    public async Task<IActionResult> GetVotes(Guid id, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        return Ok(await _voting.GetVoteSummaryAsync(id, ct));
+    }
+
+    [HttpPost("meals/{id}/review")]
+    public async Task<IActionResult> PostReview(Guid id, [FromBody] PostMealReviewRequest request, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        await _voting.UpsertPostMealReviewAsync(id, userId, request.MealRating, request.Comment, request.WouldHaveAgain, ct);
+        return NoContent();
+    }
+
+    [HttpPost("meals/{id}/course-reviews")]
+    public async Task<IActionResult> PostCourseReviews(Guid id, [FromBody] List<CourseReviewRequest> reviews, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        if (!await _repository.UserCanAccessPlannedMealAsync(id, userId, ct)) { return NotFound(); }
+        foreach (CourseReviewRequest r in reviews)
+        {
+            await _voting.UpsertCourseReviewAsync(id, r.RecipeId, r.CourseType, userId, r.Rating, r.Comment, ct);
+        }
+        return NoContent();
     }
 }
 
@@ -815,4 +903,37 @@ public class ApplyTemplateRequest
 {
     public Guid TargetPlanId { get; set; }
     public DateOnly StartDate { get; set; }
+public class TakeSnapshotRequest
+{
+    public string? Label { get; set; }
+}
+
+public class VoteRequest
+{
+    [Required]
+    [RegularExpression("^(Love|Like|Neutral|Dislike|Veto)$", ErrorMessage = "Reaction must be one of: Love, Like, Neutral, Dislike, Veto")]
+    public string Reaction { get; set; } = string.Empty;
+    [MaxLength(300)]
+    public string? Comment { get; set; }
+}
+
+public class PostMealReviewRequest
+{
+    [Range(1, 5)]
+    public byte MealRating { get; set; }
+    [MaxLength(500)]
+    public string? Comment { get; set; }
+    public bool? WouldHaveAgain { get; set; }
+}
+
+public class CourseReviewRequest
+{
+    [Required]
+    public Guid RecipeId { get; set; }
+    [MaxLength(50)]
+    public string? CourseType { get; set; }
+    [Range(1, 5)]
+    public byte Rating { get; set; }
+    [MaxLength(500)]
+    public string? Comment { get; set; }
 }

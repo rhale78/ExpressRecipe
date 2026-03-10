@@ -92,6 +92,14 @@ builder.Services.AddScoped<IMealAttendeeRepository>(_ => new MealAttendeeReposit
 builder.Services.AddScoped<IMealPlanCopyService, MealPlanCopyService>();
 builder.Services.AddScoped<IMealPlanTemplateService, MealPlanTemplateService>();
 
+builder.Services.AddSingleton<IMealVotingRepository>(new MealVotingRepository(connectionString));
+
+builder.Services.AddScoped<IMealPlanHistoryService>(sp =>
+    new MealPlanHistoryService(connectionString, sp.GetRequiredService<IMealPlanningRepository>()));
+
+builder.Services.AddHostedService(sp =>
+    new MealPlanSnapshotPruningWorker(connectionString, sp.GetRequiredService<ILogger<MealPlanSnapshotPruningWorker>>()));
+
 // Add controllers
 builder.Services.AddControllers();
 
