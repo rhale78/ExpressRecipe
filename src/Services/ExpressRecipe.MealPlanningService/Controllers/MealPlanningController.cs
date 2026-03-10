@@ -6,6 +6,7 @@ using System.Security.Claims;
 using ExpressRecipe.MealPlanningService.Data;
 using ExpressRecipe.MealPlanningService.Logging;
 using ExpressRecipe.MealPlanningService.Services;
+using ExpressRecipe.MealPlanningService.Services.Printing;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
 
@@ -31,6 +32,8 @@ public class MealPlanningController : ControllerBase
     private readonly IMealVotingRepository _voting;
 
 
+    private readonly IMealPlanPdfService _pdfService;
+
     public MealPlanningController(
         ILogger<MealPlanningController> logger,
         IMealPlanningRepository repository,
@@ -44,7 +47,8 @@ public class MealPlanningController : ControllerBase
         IMealAttendeeRepository attendeeRepo,
         IMealPlanCopyService copyService,
         IMealPlanTemplateService templateService,
-        IMealPlanHistoryService history, IMealVotingRepository voting)
+        IMealPlanHistoryService history, IMealVotingRepository voting,
+        IMealPlanPdfService pdfService)
     {
         _logger = logger;
         _repository = repository;
@@ -60,6 +64,7 @@ public class MealPlanningController : ControllerBase
         _templateService = templateService;
         _history = history;
         _voting = voting;
+        _pdfService = pdfService;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -721,6 +726,36 @@ public class MealPlanningController : ControllerBase
             await _voting.UpsertCourseReviewAsync(id, r.RecipeId, r.CourseType, userId, r.Rating, r.Comment, ct);
         }
         return NoContent();
+
+    [HttpPost("plans/{id}/print")]
+    public async Task<IActionResult> PrintPlan(Guid id, [FromBody] MealPlanPrintOptions options, CancellationToken ct)
+    {
+        Guid userId = GetUserId();
+        // Verify ownership and get plan name via the user-scoped lookup before generating the PDF
+        MealPlanDto? plan = await _repository.GetMealPlanAsync(id, userId);
+        if (plan is null) { return NotFound(); }
+        byte[] pdf = await _pdfService.GeneratePdfAsync(options with { MealPlanId = id }, userId, ct);
+        string rawName = plan.Name ?? "MealPlan";
+        string safeName = string.Concat(rawName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Replace(' ', '_');
+        return File(pdf, "application/pdf", $"MealPlan_{safeName}_{DateTime.UtcNow:yyyyMMdd}.pdf");
+    }
+
+    [HttpGet("plans/{id}/print/preview")]
+    public async Task<IActionResult> PrintPreview(Guid id,
+        [FromQuery] DateOnly? fromDate, [FromQuery] DateOnly? toDate,
+        [FromQuery] bool includeRecipes = false, [FromQuery] bool includeGrocery = false,
+        [FromQuery] GroceryListGrouping grouping = GroceryListGrouping.Aggregated, CancellationToken ct = default)
+    {
+        MealPlanPrintOptions options = new()
+        {
+            MealPlanId = id,
+            FromDate = fromDate,
+            ToDate = toDate,
+            IncludeRecipes = includeRecipes,
+            IncludeGroceryList = includeGrocery,
+            GroceryGrouping = grouping
+        };
+        return Ok(await _pdfService.AssemblePrintDataAsync(options, GetUserId(), ct));
     }
 }
 

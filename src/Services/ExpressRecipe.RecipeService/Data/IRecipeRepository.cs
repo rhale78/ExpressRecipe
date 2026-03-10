@@ -66,4 +66,5 @@ public interface IRecipeRepository
     // Household favorites
     Task SetFavoriteHouseholdShareAsync(Guid favoriteId, Guid userId, bool shared, Guid? householdId, CancellationToken ct = default);
     Task<List<RecipeDto>> GetHouseholdSharedFavoritesAsync(Guid householdId, CancellationToken ct = default);
+    Task UpdateEstimatedCostAsync(Guid recipeId, decimal costPerServing, CancellationToken ct = default);
 }

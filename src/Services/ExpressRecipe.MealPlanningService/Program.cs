@@ -4,6 +4,7 @@ using ExpressRecipe.MealPlanningService.Services;
 using ExpressRecipe.MealPlanningService.Workers;
 using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
+using ExpressRecipe.MealPlanningService.Services.Printing;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
 using Microsoft.Extensions.Caching.Hybrid;
@@ -99,6 +100,20 @@ builder.Services.AddScoped<IMealPlanHistoryService>(sp =>
 
 builder.Services.AddHostedService(sp =>
     new MealPlanSnapshotPruningWorker(connectionString, sp.GetRequiredService<ILogger<MealPlanSnapshotPruningWorker>>()));
+
+// Register services
+builder.Services.AddSingleton<IHolidayService, HolidayService>();
+builder.Services.AddScoped<IMealPlanPdfService, MealPlanPdfService>();
+
+// HTTP clients for inter-service communication
+builder.Services.AddHttpClient("RecipeService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["services:recipeservice:https:0"] ?? builder.Configuration["services:recipeservice:http:0"] ?? "http://recipeservice");
+});
+builder.Services.AddHttpClient("ShoppingService", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["services:shoppingservice:https:0"] ?? builder.Configuration["services:shoppingservice:http:0"] ?? "http://shoppingservice");
+});
 
 // Add controllers
 builder.Services.AddControllers();

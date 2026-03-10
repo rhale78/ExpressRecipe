@@ -300,7 +300,7 @@ public class MealPlanningRepository : IMealPlanningRepository
                 RecipeName = reader.GetString(3),
                 PlannedFor = reader.GetDateTime(4),
                 MealType = reader.GetString(5),
-                Servings = reader.GetInt32(6),
+                Servings = reader.IsDBNull(6) ? 1 : reader.GetInt32(6),
                 IsCompleted = reader.GetBoolean(7),
                 CompletedAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8)
             };

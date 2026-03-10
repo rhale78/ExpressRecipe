@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" />
     <PackageReference Include="Microsoft.OpenApi" />
+    <PackageReference Include="QuestPDF" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\ExpressRecipe.ServiceDefaults\ExpressRecipe.ServiceDefaults.csproj" />
