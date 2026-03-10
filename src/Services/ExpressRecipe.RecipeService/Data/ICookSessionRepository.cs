@@ -134,7 +134,7 @@ public sealed class CookSessionRepository : ICookSessionRepository
             "SELECT COUNT(*) FROM UserCookSession WHERE UserId=@U AND RecipeId=@R", conn);
         cmd.Parameters.AddWithValue("@U", userId);
         cmd.Parameters.AddWithValue("@R", recipeId);
-        return (int)(await cmd.ExecuteScalarAsync(ct))!;
+        return (int?)await cmd.ExecuteScalarAsync(ct) ?? 0;
     }
 
     public async Task<Guid> SaveNoteAsync(Guid userId, SaveRecipeNoteRequest req,
