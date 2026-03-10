@@ -151,6 +151,21 @@ public abstract class ApiClientBase
         }
     }
 
+    protected async Task<bool> PatchAsync(string endpoint)
+    {
+        await SetAuthorizationHeaderAsync();
+
+        try
+        {
+            var response = await HttpClient.PatchAsync(endpoint, new StringContent(string.Empty));
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ApiException("Network error occurred", ex);
+        }
+    }
+
     private async Task SetAuthorizationHeaderAsync()
     {
         var token = await _tokenProvider.GetAccessTokenAsync();

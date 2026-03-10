@@ -72,6 +72,7 @@ builder.Services.AddScoped<IRecipeStagingRepository>(sp =>
     new RecipeStagingRepository(connectionString, sp.GetRequiredService<ILogger<RecipeStagingRepository>>()));
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Data.IRatingRepository>(sp => 
     new ExpressRecipe.RecipeService.Data.RatingRepository(connectionString));
+builder.Services.AddScoped<ICookSessionRepository>(sp => new CookSessionRepository(connectionString));
 
 // Register Background Workers
 builder.Services.AddHostedService<ExpressRecipe.RecipeService.Workers.RecipeImportWorker>();

@@ -33,6 +33,10 @@ public interface IRecipeApiClient
     Task<bool> SetHouseholdShareAsync(Guid favoriteId, HouseholdShareRequest request);
     Task<List<RecipeDto>?> GetHouseholdSharedRecipesAsync(Guid householdId);
     Task<bool> ShareByEmailAsync(Guid recipeId, ShareRecipeEmailRequest request);
+
+    // Recipe notes
+    Task<List<RecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId);
+    Task<bool> DismissRecipeNoteAsync(Guid recipeId, Guid noteId);
 }
 
 public class RecipeApiClient : ApiClientBase, IRecipeApiClient
@@ -172,5 +176,15 @@ public class RecipeApiClient : ApiClientBase, IRecipeApiClient
     public async Task<bool> ShareByEmailAsync(Guid recipeId, ShareRecipeEmailRequest request)
     {
         return await PostAsync($"/api/recipes/{recipeId}/share", request);
+    }
+
+    public async Task<List<RecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId)
+    {
+        return await GetAsync<List<RecipeNoteDto>>($"/api/recipes/{recipeId}/notes");
+    }
+
+    public async Task<bool> DismissRecipeNoteAsync(Guid recipeId, Guid noteId)
+    {
+        return await PatchAsync($"/api/recipes/{recipeId}/notes/{noteId}/dismiss");
     }
 }

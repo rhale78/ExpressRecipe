@@ -259,3 +259,23 @@ public class ShareRecipeEmailRequest
     public string? Message { get; set; }
     public string? ShareUrl { get; set; }
 }
+
+public class RecipeNoteDto
+{
+    public Guid Id { get; set; }
+    public Guid RecipeId { get; set; }
+    public string NoteType { get; set; } = string.Empty;
+    public string NoteText { get; set; } = string.Empty;
+    public bool IsFromAI { get; set; }
+    public bool IsDismissed { get; set; }
+    public int DisplayOrder { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class SaveRecipeNoteClientRequest
+{
+    public string NoteType { get; set; } = "General";
+    public string NoteText { get; set; } = string.Empty;
+    public bool IsFromAI { get; set; }
+    public int DisplayOrder { get; set; }
+}
