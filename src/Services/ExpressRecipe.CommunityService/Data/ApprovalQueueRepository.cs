@@ -31,7 +31,7 @@ public interface IApprovalQueueRepository
     Task<List<ApprovalQueueItemDto>> GetItemsAsync(string? entityType, string status, int limit, CancellationToken ct = default);
     Task<ApprovalQueueItemDto?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Guid> EnqueueAsync(string entityType, Guid entityId, Guid submittedBy, int humanTimeoutMins = 60, CancellationToken ct = default);
-    Task ApproveAsync(Guid id, string reviewerId, string? notes, CancellationToken ct = default);
+    Task ApproveAsync(Guid id, Guid reviewerId, string? notes, CancellationToken ct = default);
     Task RejectAsync(Guid id, string reason, CancellationToken ct = default);
     Task SetAiScoreAsync(Guid id, decimal score, string? flags, CancellationToken ct = default);
     Task SetStatusAsync(Guid id, string status, CancellationToken ct = default);
@@ -94,7 +94,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
         return id;
     }
 
-    public async Task ApproveAsync(Guid id, string reviewerId, string? notes, CancellationToken ct = default)
+    public async Task ApproveAsync(Guid id, Guid reviewerId, string? notes, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE ApprovalQueue
@@ -106,7 +106,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
 
         await ExecuteNonQueryAsync(sql,
             CreateParameter("@Id", id),
-            CreateParameter("@ReviewedBy", Guid.TryParse(reviewerId, out var rid) ? rid : Guid.Empty),
+            CreateParameter("@ReviewedBy", reviewerId),
             CreateParameter("@Notes", (object?)notes ?? DBNull.Value));
     }
 
@@ -151,7 +151,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
         EntityType = GetString(reader, "EntityType") ?? string.Empty,
         EntityId = GetGuid(reader, "EntityId"),
         SubmittedBy = GetGuid(reader, "SubmittedBy"),
-        SubmittedAt = reader.GetDateTime(reader.GetOrdinal("SubmittedAt")),
+        SubmittedAt = GetDateTime(reader, "SubmittedAt"),
         Status = GetString(reader, "Status") ?? string.Empty,
         ReviewedBy = GetGuidNullable(reader, "ReviewedBy"),
         ReviewedAt = GetNullableDateTime(reader, "ReviewedAt"),
@@ -159,7 +159,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
         RejectionReason = GetString(reader, "RejectionReason"),
         AiScore = GetNullableDecimal(reader, "AiScore"),
         AiFlags = GetString(reader, "AiFlags"),
-        HumanTimeoutMins = reader.GetInt32(reader.GetOrdinal("HumanTimeoutMins")),
+        HumanTimeoutMins = GetInt32(reader, "HumanTimeoutMins"),
         EscalatedAt = GetNullableDateTime(reader, "EscalatedAt")
     };
 }

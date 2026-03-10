@@ -57,7 +57,7 @@ public sealed class AuditRepository : SqlHelper, IAuditRepository
                 TargetId = GetGuidNullable(reader, "TargetId"),
                 TargetType = GetString(reader, "TargetType"),
                 Notes = GetString(reader, "Notes"),
-                OccurredAt = reader.GetDateTime(reader.GetOrdinal("OccurredAt"))
+                OccurredAt = GetDateTime(reader, "OccurredAt")
             },
             CreateParameter("@TargetId", targetId),
             CreateParameter("@Limit", limit));

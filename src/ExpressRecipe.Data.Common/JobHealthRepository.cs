@@ -27,14 +27,9 @@ public sealed class JobHealthCheckDto
 /// SQL Server–backed job health repository.
 /// Requires the <c>JobHealthCheck</c> table to exist (created via migration or EnsureTableAsync).
 /// </summary>
-public sealed class JobHealthRepository : IJobHealthRepository
+public sealed class JobHealthRepository : SqlHelper, IJobHealthRepository
 {
-    private readonly string _connectionString;
-
-    public JobHealthRepository(string connectionString)
-    {
-        _connectionString = connectionString;
-    }
+    public JobHealthRepository(string connectionString) : base(connectionString) { }
 
     /// <summary>
     /// Creates the <c>JobHealthCheck</c> table if it does not yet exist.
@@ -54,10 +49,7 @@ public sealed class JobHealthRepository : IJobHealthRepository
                 );
             END";
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        await cmd.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(sql);
     }
 
     public async Task UpdateAsync(string jobName, bool success, string? errorMessage = null, CancellationToken ct = default)
@@ -74,13 +66,10 @@ public sealed class JobHealthRepository : IJobHealthRepository
                 INSERT INTO JobHealthCheck (JobName, LastRunAt, LastSuccess, ErrorMessage, RunCount)
                 VALUES (@JobName, GETUTCDATE(), @Success, @ErrorMessage, 1)";
 
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@JobName", jobName);
-        cmd.Parameters.AddWithValue("@Success", success ? 1 : 0);
-        cmd.Parameters.AddWithValue("@ErrorMessage", (object?)errorMessage ?? DBNull.Value);
-        await cmd.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@JobName", jobName),
+            CreateParameter("@Success", success),
+            CreateParameter("@ErrorMessage", (object?)errorMessage ?? DBNull.Value));
     }
 
     public async Task<List<JobHealthCheckDto>> GetAllAsync(CancellationToken ct = default)
@@ -90,27 +79,13 @@ public sealed class JobHealthRepository : IJobHealthRepository
             FROM JobHealthCheck
             ORDER BY JobName";
 
-        var results = new List<JobHealthCheckDto>();
-
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-
-        while (await reader.ReadAsync(ct))
+        return await ExecuteReaderAsync(sql, reader => new JobHealthCheckDto
         {
-            results.Add(new JobHealthCheckDto
-            {
-                JobName = reader.GetString(reader.GetOrdinal("JobName")),
-                LastRunAt = reader.GetDateTime(reader.GetOrdinal("LastRunAt")),
-                LastSuccess = reader.GetBoolean(reader.GetOrdinal("LastSuccess")),
-                ErrorMessage = reader.IsDBNull(reader.GetOrdinal("ErrorMessage"))
-                    ? null
-                    : reader.GetString(reader.GetOrdinal("ErrorMessage")),
-                RunCount = reader.GetInt32(reader.GetOrdinal("RunCount"))
-            });
-        }
-
-        return results;
+            JobName = GetString(reader, "JobName") ?? string.Empty,
+            LastRunAt = GetDateTime(reader, "LastRunAt"),
+            LastSuccess = GetBoolean(reader, "LastSuccess"),
+            ErrorMessage = GetString(reader, "ErrorMessage"),
+            RunCount = GetInt32(reader, "RunCount")
+        });
     }
 }

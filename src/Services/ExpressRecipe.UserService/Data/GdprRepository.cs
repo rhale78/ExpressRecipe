@@ -59,7 +59,7 @@ public sealed class GdprRepository : SqlHelper, IGdprRepository
                 UserId = GetGuid(reader, "UserId"),
                 RequestType = GetString(reader, "RequestType") ?? string.Empty,
                 Status = GetString(reader, "Status") ?? string.Empty,
-                RequestedAt = reader.GetDateTime(reader.GetOrdinal("RequestedAt")),
+                RequestedAt = GetDateTime(reader, "RequestedAt"),
                 CompletedAt = GetNullableDateTime(reader, "CompletedAt"),
                 DownloadUrl = GetString(reader, "DownloadUrl"),
                 Notes = GetString(reader, "Notes")

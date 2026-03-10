@@ -30,6 +30,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Shared\ExpressRecipe.Shared.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Core\ExpressRecipe.Messaging.Core.csproj" />
   </ItemGroup>
 
 </Project>

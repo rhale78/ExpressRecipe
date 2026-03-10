@@ -26,6 +26,23 @@ public static class ControllerTestHelpers
     }
 
     /// <summary>
+    /// Creates an authenticated ClaimsPrincipal with the specified user ID and role.
+    /// </summary>
+    public static ClaimsPrincipal CreateAuthenticatedUserWithRole(Guid userId, string role)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Name, $"TestUser{userId}"),
+            new Claim(ClaimTypes.Email, $"test{userId}@example.com"),
+            new Claim(ClaimTypes.Role, role)
+        };
+
+        var identity = new ClaimsIdentity(claims, "TestAuth");
+        return new ClaimsPrincipal(identity);
+    }
+
+    /// <summary>
     /// Creates an unauthenticated ClaimsPrincipal
     /// </summary>
     public static ClaimsPrincipal CreateUnauthenticatedUser()
@@ -40,6 +57,18 @@ public static class ControllerTestHelpers
     public static void SetupControllerContext<T>(T controller, Guid userId) where T : ControllerBase
     {
         var user = CreateAuthenticatedUser(userId);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = user }
+        };
+    }
+
+    /// <summary>
+    /// Sets up the HttpContext for a controller with authentication and a role claim.
+    /// </summary>
+    public static void SetupControllerContextWithRole<T>(T controller, Guid userId, string role) where T : ControllerBase
+    {
+        var user = CreateAuthenticatedUserWithRole(userId, role);
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = user }
