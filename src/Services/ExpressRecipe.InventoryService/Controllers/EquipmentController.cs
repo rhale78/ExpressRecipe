@@ -30,7 +30,7 @@ public class EquipmentController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Failed to retrieve equipment templates: {ex.Message}");
+            return StatusCode(500, "An unexpected error occurred.");
         }
     }
 
@@ -50,7 +50,7 @@ public class EquipmentController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Failed to retrieve equipment instances: {ex.Message}");
+            return StatusCode(500, "An unexpected error occurred.");
         }
     }
 
@@ -100,7 +100,7 @@ public class EquipmentController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Failed to add equipment instance: {ex.Message}");
+            return StatusCode(500, "An unexpected error occurred.");
         }
     }
 
@@ -123,7 +123,7 @@ public class EquipmentController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Failed to set capabilities: {ex.Message}");
+            return StatusCode(500, "An unexpected error occurred.");
         }
     }
 
@@ -133,7 +133,7 @@ public class EquipmentController : ControllerBase
     {
         Guid? householdId = GetHouseholdId();
         if (householdId is null)
-            return BadRequest("HouseholdId claim required");
+            return Unauthorized();
 
         try
         {
@@ -146,7 +146,7 @@ public class EquipmentController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Failed to deactivate equipment instance: {ex.Message}");
+            return StatusCode(500, "An unexpected error occurred.");
         }
     }
 
@@ -166,7 +166,7 @@ public class EquipmentController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Failed to resolve equipment by capability: {ex.Message}");
+            return StatusCode(500, "An unexpected error occurred.");
         }
     }
 
@@ -185,7 +185,7 @@ public class EquipmentController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Failed to find equipment substitutes: {ex.Message}");
+            return StatusCode(500, "An unexpected error occurred.");
         }
     }
 

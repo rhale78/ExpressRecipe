@@ -11,13 +11,16 @@ public class StorageController : ControllerBase
 {
     private readonly IStorageLocationExtendedRepository _repository;
     private readonly IInventoryRepository _inventoryRepository;
+    private readonly ILogger<StorageController>? _logger;
 
     public StorageController(
         IStorageLocationExtendedRepository repository,
-        IInventoryRepository inventoryRepository)
+        IInventoryRepository inventoryRepository,
+        ILogger<StorageController>? logger = null)
     {
         _repository          = repository;
         _inventoryRepository = inventoryRepository;
+        _logger              = logger;
     }
 
     /// <summary>GET /api/storage — list storage locations for the authenticated household</summary>
@@ -36,7 +39,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to retrieve storage locations");
         }
     }
@@ -57,7 +60,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to suggest storage locations");
         }
     }
@@ -78,7 +81,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to retrieve active outages");
         }
     }
@@ -100,7 +103,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to update storage type");
         }
     }
@@ -122,7 +125,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to set food categories");
         }
     }
@@ -144,7 +147,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to mark outage");
         }
     }
@@ -166,7 +169,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to clear outage");
         }
     }
@@ -183,7 +186,7 @@ public class StorageController : ControllerBase
         }
         catch (Exception ex)
         {
-            // log error
+            _logger?.LogError(ex, "Unhandled error in StorageController");
             return StatusCode(500, "Failed to retrieve storage items");
         }
     }

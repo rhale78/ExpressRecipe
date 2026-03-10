@@ -15,17 +15,16 @@ public class InventoryController : ControllerBase
 {
     private readonly ILogger<InventoryController> _logger;
     private readonly IInventoryRepository _repository;
-    private readonly IInventorySaleRepository _saleRepository;
-
-    private readonly IConfiguration _configuration;
+    private readonly IInventorySaleRepository? _saleRepository;
+    private readonly IConfiguration? _configuration;
 
     public InventoryController(ILogger<InventoryController> logger, IInventoryRepository repository,
         IInventorySaleRepository? saleRepository = null, IConfiguration? configuration = null)
     {
         _logger         = logger;
         _repository     = repository;
-        _saleRepository = saleRepository!;
-        _configuration  = configuration!;
+        _saleRepository = saleRepository;
+        _configuration  = configuration;
     }
 
     private Guid? GetUserId()
@@ -470,7 +469,7 @@ public class InventoryController : ControllerBase
         Guid householdId, Guid recipeId, CancellationToken ct)
     {
         // Validate service-to-service API key when one is configured.
-        string? configuredKey = _configuration["InternalApi:Key"];
+        string? configuredKey = _configuration?["InternalApi:Key"];
         if (!string.IsNullOrEmpty(configuredKey))
         {
             string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
@@ -874,6 +873,9 @@ public class InventoryController : ControllerBase
             _logger.LogInformation(
                 "Recording sale of {Quantity} {Unit} from item {ItemId}", request.Quantity, request.Unit, id);
 
+            if (_saleRepository is null)
+                return StatusCode(503, new { message = "Sales service is not available." });
+
             Guid saleId = await _saleRepository.RecordSaleAsync(
                 householdId,
                 id,
@@ -922,6 +924,9 @@ public class InventoryController : ControllerBase
             {
                 return Forbid();
             }
+
+            if (_saleRepository is null)
+                return StatusCode(503, new { message = "Sales service is not available." });
 
             if (itemId.HasValue)
             {
