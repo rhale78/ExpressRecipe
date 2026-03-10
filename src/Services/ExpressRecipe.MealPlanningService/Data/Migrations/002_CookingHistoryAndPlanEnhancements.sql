@@ -18,6 +18,12 @@ CREATE TABLE CookingHistory (
     PlannedMealId           UNIQUEIDENTIFIER NULL,
     InventoryDeductionSent  BIT NOT NULL DEFAULT 0,
     RatingPromptSent        BIT NOT NULL DEFAULT 0,
+    ServingsCooked          DECIMAL(5,2) NOT NULL DEFAULT 1,
+    ServingsEaten           DECIMAL(5,2) NULL,
+    UserRating              TINYINT NULL CHECK (UserRating BETWEEN 1 AND 5),
+    WasSubstituted          BIT NOT NULL DEFAULT 0,
+    InventoryUpdated        BIT NOT NULL DEFAULT 0,
+    NutritionLogged         BIT NOT NULL DEFAULT 0,
     CreatedAt               DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
     CreatedBy               UNIQUEIDENTIFIER NULL,
     UpdatedAt               DATETIME2 NULL,
@@ -28,6 +34,7 @@ CREATE TABLE CookingHistory (
 );
 CREATE INDEX IX_CookingHistory_UserId_CookedAt ON CookingHistory(UserId, CookedAt DESC);
 CREATE INDEX IX_CookingHistory_RecipeId ON CookingHistory(RecipeId);
+CREATE INDEX IX_CookingHistory_PlannedMealId ON CookingHistory(PlannedMealId);
 CREATE INDEX IX_CookingHistory_InventoryDeduction ON CookingHistory(InventoryDeductionSent)
     WHERE InventoryDeductionSent = 0;
 GO
