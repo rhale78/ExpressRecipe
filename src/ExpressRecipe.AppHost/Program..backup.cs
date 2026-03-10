@@ -47,8 +47,9 @@ var groceryStoreDb = sqlServer.AddDatabase("grocerystoredb", "ExpressRecipe.Groc
 var safeForkDb = sqlServer.AddDatabase("safeforkdb", "ExpressRecipe.SafeFork");
 var profilesDb = sqlServer.AddDatabase("profilesdb", "ExpressRecipe.Profiles");
 var preferencesDb = sqlServer.AddDatabase("preferencesdb", "ExpressRecipe.Preferences");
+var aiDb = sqlServer.AddDatabase("aidb", "ExpressRecipe.AI");
 
-logger.LogInformation("21 databases configured");
+logger.LogInformation("22 databases configured");
 
 // Redis - Caching layer
 var redis = builder.AddRedis("redis")
@@ -217,8 +218,9 @@ var groceryStoreLocationService = builder.AddProject<Projects.ExpressRecipe_Groc
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
 
-// AI Service - Ollama-backed AI recipe extraction and recommendations (no database)
+// AI Service - Ollama-backed AI recipe extraction, recommendations, and cooking assistant
 var aiService = builder.AddProject<Projects.ExpressRecipe_AIService>("aiservice", launchProfileName: null)
+    .WithReference(aiDb)
     .WithExternalHttpEndpoints()
     .WithEnvironment("ASPNETCORE_ENVIRONMENT", builder.Environment.EnvironmentName);
 
