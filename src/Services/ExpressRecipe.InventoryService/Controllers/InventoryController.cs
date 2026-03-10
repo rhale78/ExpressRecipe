@@ -449,6 +449,14 @@ public class InventoryController : ControllerBase
         [FromQuery] int daysAhead = 7,
         CancellationToken ct = default)
     {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
         try
         {
             if (householdId == Guid.Empty)
@@ -683,6 +691,14 @@ public class InventoryController : ControllerBase
         [FromQuery] int daysBack = 180,
         CancellationToken ct = default)
     {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
         try
         {
             if (householdId == Guid.Empty)

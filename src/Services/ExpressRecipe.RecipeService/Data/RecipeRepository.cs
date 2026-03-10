@@ -439,8 +439,10 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         if (ingredientNames == null || ingredientNames.Count == 0)
             return new List<RecipeDto>();
 
-        // Build a table-valued parameter-style query using a temp table so we avoid
-        // dynamic IN-clause injection while still using parameterized queries.
+        // Build a parameterized IN-clause: @ing0, @ing1, … are sequential integer-named parameters
+        // whose values are the user-supplied ingredient names. The only string interpolated into the
+        // SQL is the comma-separated list of these parameter *names* (derived from integer indices),
+        // never the user data itself — so this is not a SQL injection risk.
         var paramNames = ingredientNames
             .Select((_, i) => $"@ing{i}")
             .ToList();

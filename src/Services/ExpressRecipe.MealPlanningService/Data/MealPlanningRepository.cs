@@ -626,10 +626,40 @@ public class MealPlanningRepository : IMealPlanningRepository
             Servings = reader.GetInt32(7),
             IsCompleted = reader.GetBoolean(8),
             CompletedAt = reader.IsDBNull(9) ? null : reader.GetDateTime(9),
-            CookedStatus = reader.FieldCount > 10 && !reader.IsDBNull(10) ? reader.GetString(10) : "Pending",
-            CookedAt = reader.FieldCount > 11 && !reader.IsDBNull(11) ? reader.GetDateTime(11) : null,
-            CookedByTimerId = reader.FieldCount > 12 && !reader.IsDBNull(12) ? reader.GetGuid(12) : null
+            CookedStatus = SafeReadString(reader, "CookedStatus") ?? "Pending",
+            CookedAt = SafeReadDateTime(reader, "CookedAt"),
+            CookedByTimerId = SafeReadGuid(reader, "CookedByTimerId")
         };
+
+    private static string? SafeReadString(SqlDataReader r, string column)
+    {
+        try
+        {
+            int ordinal = r.GetOrdinal(column);
+            return r.IsDBNull(ordinal) ? null : r.GetString(ordinal);
+        }
+        catch (IndexOutOfRangeException) { return null; }
+    }
+
+    private static DateTime? SafeReadDateTime(SqlDataReader r, string column)
+    {
+        try
+        {
+            int ordinal = r.GetOrdinal(column);
+            return r.IsDBNull(ordinal) ? null : r.GetDateTime(ordinal);
+        }
+        catch (IndexOutOfRangeException) { return null; }
+    }
+
+    private static Guid? SafeReadGuid(SqlDataReader r, string column)
+    {
+        try
+        {
+            int ordinal = r.GetOrdinal(column);
+            return r.IsDBNull(ordinal) ? null : r.GetGuid(ordinal);
+        }
+        catch (IndexOutOfRangeException) { return null; }
+    }
 
     // ── Cooking History ───────────────────────────────────────────────────────
 

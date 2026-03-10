@@ -86,14 +86,14 @@ public class OllamaService : IOllamaService
     {
         var prompt = BuildRecipeSuggestionPrompt(request);
         var response = await GenerateCompletionAsync(prompt, temperature: 0.8);
-        return ParseRecipeSuggestions(response, request.SuggestionsCount);
+        return ParseRecipeSuggestions(response, request.SuggestionsCount, _logger);
     }
 
     public async Task<IngredientSubstitutionDto> GenerateSubstitutionsAsync(IngredientSubstitutionRequest request)
     {
         var prompt = BuildSubstitutionPrompt(request);
         var response = await GenerateCompletionAsync(prompt, temperature: 0.7);
-        return ParseSubstitutions(response, request.OriginalIngredient);
+        return ParseSubstitutions(response, request.OriginalIngredient, _logger);
     }
 
     /// <summary>
@@ -151,7 +151,7 @@ public class OllamaService : IOllamaService
     {
         var prompt = BuildMealPlanPrompt(request);
         var response = await GenerateCompletionAsync(prompt, temperature: 0.8);
-        return ParseMealPlan(response, request.DaysToPlans);
+        return ParseMealPlan(response, request.DaysToPlans, _logger);
     }
 
     public async Task<AllergenDetectionResult> DetectAllergensAsync(AllergenDetectionRequest request)
@@ -306,7 +306,7 @@ User: {request.Message}";
     // Response parsers
     // ──────────────────────────────────────────────────────────────────────────
 
-    private static List<RecipeSuggestionDto> ParseRecipeSuggestions(string response, int count)
+    private static List<RecipeSuggestionDto> ParseRecipeSuggestions(string response, int count, ILogger? logger = null)
     {
         try
         {
@@ -339,7 +339,7 @@ User: {request.Message}";
                 }
             }
         }
-        catch { /* fall through to fallback */ }
+        catch (Exception ex) { logger?.LogWarning(ex, "Failed to parse recipe suggestions from AI response"); }
 
         // Fallback: return placeholder items
         return Enumerable.Range(1, Math.Min(count, 3)).Select(i => new RecipeSuggestionDto
@@ -353,7 +353,7 @@ User: {request.Message}";
         }).ToList();
     }
 
-    private static IngredientSubstitutionDto ParseSubstitutions(string response, string original)
+    private static IngredientSubstitutionDto ParseSubstitutions(string response, string original, ILogger? logger = null)
     {
         try
         {
@@ -413,12 +413,12 @@ User: {request.Message}";
                 }
             }
         }
-        catch { /* fall through */ }
+        catch (Exception ex) { logger?.LogWarning(ex, "Failed to parse substitutions from AI response for ingredient '{Ingredient}'", original); }
 
         return new() { OriginalIngredient = original, Substitutions = new List<SubstitutionOptionDto>() };
     }
 
-    private static MealPlanSuggestionDto ParseMealPlan(string response, int days)
+    private static MealPlanSuggestionDto ParseMealPlan(string response, int days, ILogger? logger = null)
     {
         try
         {
@@ -450,7 +450,7 @@ User: {request.Message}";
                 }
             }
         }
-        catch { /* fall through */ }
+        catch (Exception ex) { logger?.LogWarning(ex, "Failed to parse meal plan from AI response"); }
 
         return new() { Days = new List<DayMealPlanDto>() };
     }

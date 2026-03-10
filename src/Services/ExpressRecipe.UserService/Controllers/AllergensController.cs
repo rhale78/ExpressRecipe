@@ -3,6 +3,8 @@ using ExpressRecipe.UserService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ExpressRecipe.UserService.Controllers;
 
@@ -13,17 +15,20 @@ public class AllergensController : ControllerBase
     private readonly IAllergenRepository _repository;
     private readonly IEnhancedAllergenRepository _enhancedRepository;
     private readonly IFamilyMemberRepository _familyMemberRepository;
+    private readonly IConfiguration? _configuration;
     private readonly ILogger<AllergensController> _logger;
 
     public AllergensController(
         IAllergenRepository repository,
         IEnhancedAllergenRepository enhancedRepository,
         IFamilyMemberRepository familyMemberRepository,
-        ILogger<AllergensController> logger)
+        ILogger<AllergensController> logger,
+        IConfiguration? configuration = null)
     {
         _repository = repository;
         _enhancedRepository = enhancedRepository;
         _familyMemberRepository = familyMemberRepository;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -237,6 +242,14 @@ public class AllergensController : ControllerBase
     [HttpGet("/api/users/{userId:guid}/household/{householdId:guid}/allergen-names")]
     public async Task<ActionResult> GetHouseholdAllergenNames(Guid userId, Guid householdId)
     {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
         try
         {
             // Collect allergens from the primary user
@@ -278,5 +291,19 @@ public class AllergensController : ControllerBase
             _logger.LogError(ex, "Error retrieving household allergen names for user {UserId} household {HouseholdId}", userId, householdId);
             return StatusCode(500, new { message = "An error occurred while retrieving household allergen names" });
         }
+    }
+
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) return false;
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 }

@@ -2,6 +2,8 @@ using ExpressRecipe.MealPlanningService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
 
@@ -16,11 +18,16 @@ public class WorkQueueController : ControllerBase
 {
     private readonly IWorkQueueRepository _repo;
     private readonly ILogger<WorkQueueController> _logger;
+    private readonly IConfiguration? _configuration;
 
-    public WorkQueueController(IWorkQueueRepository repo, ILogger<WorkQueueController> logger)
+    public WorkQueueController(
+        IWorkQueueRepository repo,
+        ILogger<WorkQueueController> logger,
+        IConfiguration? configuration = null)
     {
         _repo = repo;
         _logger = logger;
+        _configuration = configuration;
     }
 
     private Guid? GetUserId()
@@ -104,6 +111,14 @@ public class WorkQueueController : ControllerBase
         [FromBody] UpsertWorkQueueItemRequest request,
         CancellationToken ct = default)
     {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
         try
         {
             if (request.HouseholdId == Guid.Empty)
@@ -127,6 +142,20 @@ public class WorkQueueController : ControllerBase
             _logger.LogError(ex, "Error upserting work-queue item for household {HouseholdId}", request.HouseholdId);
             return StatusCode(500, new { message = "An error occurred while upserting work-queue item" });
         }
+    }
+
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) return false;
+        byte[] a = System.Text.Encoding.UTF8.GetBytes(provided);
+        byte[] b = System.Text.Encoding.UTF8.GetBytes(configured);
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 }
 
