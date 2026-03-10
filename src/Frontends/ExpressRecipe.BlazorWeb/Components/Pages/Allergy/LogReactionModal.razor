@@ -243,7 +243,9 @@
     private void SetSeverity(MemberReactionDetail d, string severity)
     {
         d.Severity = severity;
-        // Pre-fill epi-pen/ER for high-severity selections — user can override these checkboxes
+        // Pre-fill epi-pen/ER for high-severity selections as a safety default.
+        // Intentionally does NOT reset to false when switching to lower severity —
+        // the user should explicitly uncheck if the treatment was not used.
         if (severity == "ThroatClosing" || severity == "ERVisit")
         {
             d.RequiredEpipen = true;
