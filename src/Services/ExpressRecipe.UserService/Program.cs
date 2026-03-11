@@ -101,10 +101,6 @@ builder.Services.AddScoped<FeatureFlagService>();
 // Replace the HTTP proxy with the direct DB-backed implementation
 builder.Services.AddScoped<IFeatureFlagService>(sp => sp.GetRequiredService<FeatureFlagService>());
 
-// Register allergy incident engine repositories and analyzer
-builder.Services.AddScoped<IAllergyIncidentRepository>(sp => new AllergyIncidentRepository(connectionString));
-builder.Services.AddScoped<ExpressRecipe.UserService.Services.AllergyDifferentialAnalyzer>();
-
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
 {
