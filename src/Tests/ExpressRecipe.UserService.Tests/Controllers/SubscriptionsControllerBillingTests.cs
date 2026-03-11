@@ -13,50 +13,58 @@ namespace ExpressRecipe.UserService.Tests.Controllers;
 
 public class SubscriptionsControllerBillingTests
 {
-    private readonly Mock<ISubscriptionRepository> _mockSubRepo;
-    private readonly Mock<IPaymentService> _mockPayment;
+    private readonly Mock<ISubscriptionRepository>  _mockSubRepo;
+    private readonly Mock<IUserProfileRepository>   _mockProfileRepo;
+    private readonly Mock<IPaymentService>          _mockPayment;
     private readonly Mock<ILogger<SubscriptionsController>> _mockLogger;
     private readonly SubscriptionsController _controller;
-    private readonly Guid _testUserId;
+    private readonly Guid   _testUserId;
+    private readonly string _stripeCustomerId = "cus_test123";
 
     public SubscriptionsControllerBillingTests()
     {
-        _mockSubRepo = new Mock<ISubscriptionRepository>();
-        _mockPayment = new Mock<IPaymentService>();
-        _mockLogger  = new Mock<ILogger<SubscriptionsController>>();
+        _mockSubRepo     = new Mock<ISubscriptionRepository>();
+        _mockProfileRepo = new Mock<IUserProfileRepository>();
+        _mockPayment     = new Mock<IPaymentService>();
+        _mockLogger      = new Mock<ILogger<SubscriptionsController>>();
 
         _controller = new SubscriptionsController(
             _mockSubRepo.Object,
+            _mockProfileRepo.Object,
             _mockPayment.Object,
             _mockLogger.Object);
 
         _testUserId = Guid.NewGuid();
         ControllerTestHelpers.SetupControllerContext(_controller, _testUserId);
+
+        // Default profile with a Stripe customer ID
+        _mockProfileRepo
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
+            .ReturnsAsync(new UserProfileDto { UserId = _testUserId, StripeCustomerId = _stripeCustomerId });
     }
 
-    #region CreateCheckoutSession
+    #region StartCheckout
 
     [Fact]
-    public async Task CreateCheckoutSession_WhenAuthenticated_ReturnsOkWithUrl()
+    public async Task StartCheckout_WhenAuthenticated_ReturnsOkWithUrl()
     {
         // Arrange
-        CreateCheckoutSessionRequest request = new()
+        CheckoutRequest request = new()
         {
             StripePriceId = "price_plus_monthly",
             WithTrial     = false,
-            SuccessUrl    = "https://example.com/success",
-            CancelUrl     = "https://example.com/cancel"
+            BaseUrl       = "https://example.com"
         };
 
         string expectedUrl = "https://checkout.stripe.com/session/abc123";
         _mockPayment
             .Setup(p => p.CreateCheckoutSessionAsync(
                 _testUserId, request.StripePriceId, request.WithTrial,
-                request.SuccessUrl, request.CancelUrl, It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedUrl);
 
         // Act
-        IActionResult result = await _controller.CreateCheckoutSession(request, CancellationToken.None);
+        IActionResult result = await _controller.StartCheckout(request, CancellationToken.None);
 
         // Assert
         OkObjectResult ok = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -64,20 +72,19 @@ public class SubscriptionsControllerBillingTests
     }
 
     [Fact]
-    public async Task CreateCheckoutSession_WhenUnauthenticated_ReturnsUnauthorized()
+    public async Task StartCheckout_WhenUnauthenticated_ReturnsUnauthorized()
     {
         // Arrange
         ControllerTestHelpers.SetupUnauthenticatedControllerContext(_controller);
 
-        CreateCheckoutSessionRequest request = new()
+        CheckoutRequest request = new()
         {
             StripePriceId = "price_plus_monthly",
-            SuccessUrl    = "https://example.com/success",
-            CancelUrl     = "https://example.com/cancel"
+            BaseUrl       = "https://example.com"
         };
 
         // Act
-        IActionResult result = await _controller.CreateCheckoutSession(request, CancellationToken.None);
+        IActionResult result = await _controller.StartCheckout(request, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<UnauthorizedObjectResult>();
@@ -89,14 +96,13 @@ public class SubscriptionsControllerBillingTests
     }
 
     [Fact]
-    public async Task CreateCheckoutSession_WhenPaymentServiceThrows_Returns500()
+    public async Task StartCheckout_WhenPaymentServiceThrows_Returns500()
     {
         // Arrange
-        CreateCheckoutSessionRequest request = new()
+        CheckoutRequest request = new()
         {
             StripePriceId = "price_plus_monthly",
-            SuccessUrl    = "https://example.com/success",
-            CancelUrl     = "https://example.com/cancel"
+            BaseUrl       = "https://example.com"
         };
 
         _mockPayment
@@ -106,7 +112,7 @@ public class SubscriptionsControllerBillingTests
             .ThrowsAsync(new Exception("Stripe unavailable"));
 
         // Act
-        IActionResult result = await _controller.CreateCheckoutSession(request, CancellationToken.None);
+        IActionResult result = await _controller.StartCheckout(request, CancellationToken.None);
 
         // Assert
         ObjectResult statusResult = result.Should().BeOfType<ObjectResult>().Subject;
@@ -115,13 +121,13 @@ public class SubscriptionsControllerBillingTests
 
     #endregion
 
-    #region CreateBillingPortalSession
+    #region BillingPortal
 
     [Fact]
-    public async Task CreateBillingPortalSession_WhenAuthenticated_ReturnsOkWithUrl()
+    public async Task BillingPortal_WhenAuthenticated_ReturnsOkWithUrl()
     {
         // Arrange
-        BillingPortalSessionRequest request = new()
+        BillingPortalRequest request = new()
         {
             ReturnUrl = "https://example.com/account"
         };
@@ -129,11 +135,11 @@ public class SubscriptionsControllerBillingTests
         string expectedUrl = "https://billing.stripe.com/session/def456";
         _mockPayment
             .Setup(p => p.CreateBillingPortalSessionAsync(
-                _testUserId, request.ReturnUrl, It.IsAny<CancellationToken>()))
+                _testUserId, _stripeCustomerId, request.ReturnUrl, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedUrl);
 
         // Act
-        IActionResult result = await _controller.CreateBillingPortalSession(request, CancellationToken.None);
+        IActionResult result = await _controller.BillingPortal(request, CancellationToken.None);
 
         // Assert
         OkObjectResult ok = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -141,50 +147,49 @@ public class SubscriptionsControllerBillingTests
     }
 
     [Fact]
-    public async Task CreateBillingPortalSession_WhenUnauthenticated_ReturnsUnauthorized()
+    public async Task BillingPortal_WhenUnauthenticated_ReturnsUnauthorized()
     {
         // Arrange
         ControllerTestHelpers.SetupUnauthenticatedControllerContext(_controller);
-        BillingPortalSessionRequest request = new() { ReturnUrl = "https://example.com/account" };
+        BillingPortalRequest request = new() { ReturnUrl = "https://example.com/account" };
 
         // Act
-        IActionResult result = await _controller.CreateBillingPortalSession(request, CancellationToken.None);
+        IActionResult result = await _controller.BillingPortal(request, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
     [Fact]
-    public async Task CreateBillingPortalSession_WhenNoStripeCustomer_ReturnsBadRequest()
+    public async Task BillingPortal_WhenNoStripeCustomer_ReturnsBadRequest()
     {
-        // Arrange — InvalidOperationException when no StripeCustomerId found
-        BillingPortalSessionRequest request = new() { ReturnUrl = "https://example.com/account" };
+        // Arrange — profile has no StripeCustomerId
+        _mockProfileRepo
+            .Setup(r => r.GetByUserIdAsync(_testUserId))
+            .ReturnsAsync(new UserProfileDto { UserId = _testUserId, StripeCustomerId = null });
 
-        _mockPayment
-            .Setup(p => p.CreateBillingPortalSessionAsync(
-                _testUserId, request.ReturnUrl, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("No Stripe customer ID found for user"));
+        BillingPortalRequest request = new() { ReturnUrl = "https://example.com/account" };
 
         // Act
-        IActionResult result = await _controller.CreateBillingPortalSession(request, CancellationToken.None);
+        IActionResult result = await _controller.BillingPortal(request, CancellationToken.None);
 
         // Assert
         result.Should().BeOfType<BadRequestObjectResult>();
     }
 
     [Fact]
-    public async Task CreateBillingPortalSession_WhenPaymentServiceThrows_Returns500()
+    public async Task BillingPortal_WhenPaymentServiceThrows_Returns500()
     {
         // Arrange
-        BillingPortalSessionRequest request = new() { ReturnUrl = "https://example.com/account" };
+        BillingPortalRequest request = new() { ReturnUrl = "https://example.com/account" };
 
         _mockPayment
             .Setup(p => p.CreateBillingPortalSessionAsync(
-                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new Exception("Stripe unavailable"));
 
         // Act
-        IActionResult result = await _controller.CreateBillingPortalSession(request, CancellationToken.None);
+        IActionResult result = await _controller.BillingPortal(request, CancellationToken.None);
 
         // Assert
         ObjectResult statusResult = result.Should().BeOfType<ObjectResult>().Subject;

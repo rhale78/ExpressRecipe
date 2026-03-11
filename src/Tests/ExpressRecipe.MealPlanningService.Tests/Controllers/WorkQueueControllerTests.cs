@@ -22,6 +22,20 @@ public class WorkQueueControllerTests
         _testHouseholdId = Guid.NewGuid();
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(
             _testUserId, _testHouseholdId);
+
+        // Default: GetByIdAsync returns an item belonging to the test household
+        _mockRepo
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => new WorkQueueItemDto
+            {
+                Id          = id,
+                HouseholdId = _testHouseholdId,
+                ItemType    = "Test",
+                Status      = "Pending",
+                Title       = "Test item",
+                Priority    = WorkQueuePriority.RateRecipe,
+                CreatedAt   = DateTime.UtcNow
+            });
     }
 
     #region GetQueue
@@ -185,14 +199,14 @@ public class WorkQueueControllerTests
         SnoozeWorkQueueItemRequest req = new() { ResumeAt = DateTime.UtcNow.AddHours(4) };
 
         _mockRepo
-            .Setup(r => r.SnoozeItemAsync(itemId, _testUserId, It.IsAny<DateTime>(), default))
+            .Setup(r => r.SnoozeAsync(itemId, _testUserId, It.IsAny<DateTime>(), It.IsAny<string?>(), default))
             .Returns(Task.CompletedTask);
 
         IActionResult result = await _controller.Snooze(itemId, req, default);
 
         result.Should().BeOfType<NoContentResult>();
-        _mockRepo.Verify(r => r.SnoozeItemAsync(
-            itemId, _testUserId, It.Is<DateTime>(d => d > DateTime.UtcNow), default), Times.Once);
+        _mockRepo.Verify(r => r.SnoozeAsync(
+            itemId, _testUserId, It.Is<DateTime>(d => d > DateTime.UtcNow), It.IsAny<string?>(), default), Times.Once);
     }
 
     [Fact]
@@ -202,7 +216,7 @@ public class WorkQueueControllerTests
         SnoozeWorkQueueItemRequest req = new() { ResumeAt = DateTime.UtcNow };
 
         _mockRepo
-            .Setup(r => r.SnoozeItemAsync(itemId, _testUserId, It.IsAny<DateTime>(), default))
+            .Setup(r => r.SnoozeAsync(itemId, _testUserId, It.IsAny<DateTime>(), It.IsAny<string?>(), default))
             .Returns(Task.CompletedTask);
 
         DateTime beforeCall = DateTime.UtcNow.Date.AddDays(1);
@@ -210,8 +224,8 @@ public class WorkQueueControllerTests
         IActionResult result = await _controller.Snooze(itemId, req, default);
 
         result.Should().BeOfType<NoContentResult>();
-        _mockRepo.Verify(r => r.SnoozeItemAsync(
-            itemId, _testUserId, It.Is<DateTime>(d => d >= beforeCall), default), Times.Once);
+        _mockRepo.Verify(r => r.SnoozeAsync(
+            itemId, _testUserId, It.Is<DateTime>(d => d >= beforeCall), It.IsAny<string?>(), default), Times.Once);
     }
 
     [Fact]

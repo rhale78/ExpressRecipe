@@ -7,6 +7,7 @@ namespace ExpressRecipe.UserService.Services;
 public sealed class MockPaymentService : IPaymentService
 {
     private readonly ILogger<MockPaymentService> _logger;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _processedEvents = new();
 
     public MockPaymentService(ILogger<MockPaymentService> logger)
     {
@@ -55,9 +56,12 @@ public sealed class MockPaymentService : IPaymentService
 
     /// <inheritdoc/>
     public Task<bool> EventAlreadyProcessedAsync(string stripeEventId, CancellationToken ct = default)
-        => Task.FromResult(false);
+        => Task.FromResult(_processedEvents.ContainsKey(stripeEventId));
 
     /// <inheritdoc/>
     public Task MarkEventProcessedAsync(string stripeEventId, string eventType, CancellationToken ct = default)
-        => Task.CompletedTask;
+    {
+        _processedEvents.TryAdd(stripeEventId, true);
+        return Task.CompletedTask;
+    }
 }

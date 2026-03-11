@@ -2,8 +2,8 @@ using System.Net;
 using System.Text.Json;
 using ExpressRecipe.AIService.Configuration;
 using ExpressRecipe.AIService.Data;
-using Providers = ExpressRecipe.AIService.Providers;
-using Services = ExpressRecipe.AIService.Services;
+using ExpressRecipe.AIService.Providers;
+using ExpressRecipe.AIService.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Caching.Memory;
@@ -279,7 +279,7 @@ public class AIProviderTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Providers.AIProviderFactory — use-case routing
+    // AIProviderFactory — use-case routing
     // ─────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -298,7 +298,7 @@ public class AIProviderTests
         OllamaProvider ollamaProvider = new(httpMock.Object, config,
             NullLogger<OllamaProvider>.Instance);
 
-        Providers.AIProviderFactory factory = new(
+        ExpressRecipe.AIService.Providers.AIProviderFactory factory = new(
             [ollamaProvider],
             BuildHybridCache(),
             configRepo.Object);
@@ -328,7 +328,7 @@ public class AIProviderTests
         OllamaProvider ollamaProvider = new(httpMock.Object, config,
             NullLogger<OllamaProvider>.Instance);
 
-        Providers.AIProviderFactory factory = new(
+        ExpressRecipe.AIService.Providers.AIProviderFactory factory = new(
             [ollamaProvider],
             BuildHybridCache(),
             configRepo.Object);
@@ -356,7 +356,7 @@ public class AIProviderTests
         OllamaProvider ollamaProvider = new(httpMock.Object, config,
             NullLogger<OllamaProvider>.Instance);
 
-        Providers.AIProviderFactory factory = new(
+        ExpressRecipe.AIService.Providers.AIProviderFactory factory = new(
             [ollamaProvider],
             BuildHybridCache(),
             configRepo.Object);

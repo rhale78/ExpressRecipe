@@ -168,7 +168,12 @@ public class WorkQueueController : ControllerBase
             if (item == null) return NotFound();
             if (item.HouseholdId != householdId) return Forbid();
 
-            await _repo.SnoozeAsync(id, userId, request.ResumeAt, request.Notes, ct);
+            // Enforce a minimum snooze: if ResumeAt is in the past or present, snooze until tomorrow.
+            DateTime resumeAt = request.ResumeAt > DateTime.UtcNow
+                ? request.ResumeAt
+                : DateTime.UtcNow.Date.AddDays(1);
+
+            await _repo.SnoozeAsync(id, userId, resumeAt, request.Notes, ct);
             return NoContent();
         }
         catch (Exception ex)
@@ -238,7 +243,6 @@ public class WorkQueueController : ControllerBase
     }
 }
 
-public sealed record SnoozeRequest { public int Hours { get; init; } = 24; }
 public sealed record SnoozeWorkQueueItemRequest
 {
     public DateTime ResumeAt { get; init; }
