@@ -3,6 +3,7 @@
 @inject IAllergyApiClient AllergyApi
 @inject IUserProfileApiClient UserProfileApi
 @inject IToastService ToastService
+@inject ILogger<LogReactionModal> _logger
 
 @if (_visible)
 {
@@ -342,7 +343,8 @@
         }
         catch (Exception ex)
         {
-            ToastService.ShowError($"Error: {ex.Message}");
+            _logger.LogError(ex, "Error submitting allergy incident");
+            ToastService.ShowError("An unexpected error occurred. Please try again.");
         }
         finally { _submitting = false; }
     }
