@@ -45,6 +45,7 @@
                             <td>
                                 <label class="toggle-switch" title="Toggle @flag.FeatureKey">
                                     <input type="checkbox"
+                                           aria-label="Enable @flag.FeatureKey"
                                            checked="@flag.IsEnabled"
                                            @onchange="e => ToggleFlagAsync(flag, (bool)(e.Value ?? false))" />
                                     <span class="toggle-slider"></span>
@@ -78,7 +79,7 @@
                                 }
                                 else if (!string.IsNullOrEmpty(flag.RequiredTier))
                                 {
-                                    <span class="tier-badge tier-@flag.RequiredTier.ToLower()">@flag.RequiredTier</span>
+                                    <span class="tier-badge tier-@flag.RequiredTier.ToLowerInvariant()">@flag.RequiredTier</span>
                                 }
                                 else
                                 {

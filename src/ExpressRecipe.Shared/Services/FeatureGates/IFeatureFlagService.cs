@@ -7,10 +7,11 @@ namespace ExpressRecipe.Shared.Services.FeatureGates;
 public interface IFeatureFlagService
 {
     /// <summary>
-    /// Returns <c>true</c> when the feature is accessible to the given user and tier.
-    /// Applies all layers: global flag → user override → tier requirement.
+    /// Evaluates all layers and returns a <see cref="FeatureCheckResult"/> that includes
+    /// both the access decision and the specific reason.  Use <see cref="FeatureCheckReason"/>
+    /// to distinguish 402 (tier) from 403 (disabled / not rolled out / user revoked) responses.
     /// </summary>
-    Task<bool> IsEnabledAsync(string featureKey, Guid userId, string userTier,
+    Task<FeatureCheckResult> IsEnabledAsync(string featureKey, Guid userId, string userTier,
         CancellationToken ct = default);
 
     /// <summary>

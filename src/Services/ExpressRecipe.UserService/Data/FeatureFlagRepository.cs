@@ -17,7 +17,7 @@ public class FeatureFlagRepository : SqlHelper, IFeatureFlagRepository
             FROM FeatureFlag
             WHERE FeatureKey = @FeatureKey";
 
-        var rows = await ExecuteReaderAsync(sql, MapFlag,
+        var rows = await ExecuteReaderAsync(sql, MapFlag, ct,
             new SqlParameter("@FeatureKey", featureKey));
         return rows.FirstOrDefault();
     }
@@ -30,7 +30,7 @@ public class FeatureFlagRepository : SqlHelper, IFeatureFlagRepository
             FROM FeatureFlag
             ORDER BY FeatureKey";
 
-        return await ExecuteReaderAsync(sql, MapFlag);
+        return await ExecuteReaderAsync(sql, MapFlag, ct);
     }
 
     public async Task UpsertFlagAsync(FeatureFlagDto flag, CancellationToken ct = default)
@@ -72,7 +72,7 @@ public class FeatureFlagRepository : SqlHelper, IFeatureFlagRepository
               AND FeatureKey = @FeatureKey
               AND (ExpiresAt IS NULL OR ExpiresAt > GETUTCDATE())";
 
-        var rows = await ExecuteReaderAsync(sql, MapOverride,
+        var rows = await ExecuteReaderAsync(sql, MapOverride, ct,
             new SqlParameter("@UserId",     userId),
             new SqlParameter("@FeatureKey", featureKey));
         return rows.FirstOrDefault();
@@ -87,7 +87,7 @@ public class FeatureFlagRepository : SqlHelper, IFeatureFlagRepository
             WHERE FeatureKey = @FeatureKey
             ORDER BY CreatedAt DESC";
 
-        return await ExecuteReaderAsync(sql, MapOverride,
+        return await ExecuteReaderAsync(sql, MapOverride, ct,
             new SqlParameter("@FeatureKey", featureKey));
     }
 

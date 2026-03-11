@@ -9,10 +9,12 @@ namespace ExpressRecipe.Shared.Attributes;
 /// <summary>
 /// Action filter that enforces a feature flag gate.
 /// Checks the global admin toggle (Layer 1), per-user override (Layer 2),
-/// and the flag's subscription tier requirement (Layer 3).
+/// the rollout percentage (Layer 3a) and the flag's subscription tier requirement (Layer 3b).
 /// <para>
-/// Returns 402 PaymentRequired with an upgrade payload when the feature is globally on
-/// but the user's tier is insufficient, or 403 Forbidden when the feature is globally disabled.
+/// Returns 402 PaymentRequired when <see cref="FeatureCheckReason.TierInsufficient"/>;
+/// returns 403 Forbidden for all other disabled reasons
+/// (<see cref="FeatureCheckReason.GloballyDisabled"/>, <see cref="FeatureCheckReason.UserDisabled"/>,
+/// <see cref="FeatureCheckReason.NotInRollout"/>).
 /// </para>
 /// <para>
 /// Bypassed entirely when <see cref="ILocalModeConfig.IsLocalMode"/> is <c>true</c>.
@@ -62,17 +64,14 @@ public sealed class RequiresFeatureAttribute : ActionFilterAttribute
 
         string userTier = user.FindFirstValue("subscription_tier") ?? "Free";
 
-        bool enabled = await flagService.IsEnabledAsync(_featureKey, userId, userTier,
+        var evaluation = await flagService.IsEnabledAsync(_featureKey, userId, userTier,
             context.HttpContext.RequestAborted);
 
-        if (!enabled)
+        if (!evaluation.IsEnabled)
         {
-            bool globallyOn = await flagService.IsGloballyEnabledAsync(_featureKey,
-                context.HttpContext.RequestAborted);
-
-            if (globallyOn)
+            if (evaluation.Reason == FeatureCheckReason.TierInsufficient)
             {
-                // Globally on but this user's tier doesn't qualify → 402
+                // Tier too low — prompt the user to upgrade
                 context.Result = new ObjectResult(new FeatureGateResult
                 {
                     FeatureKey = _featureKey,
@@ -83,7 +82,7 @@ public sealed class RequiresFeatureAttribute : ActionFilterAttribute
             }
             else
             {
-                // Globally disabled → 403
+                // Globally disabled, user revoked, not in rollout, etc.
                 context.Result = new ObjectResult(new FeatureGateResult
                 {
                     FeatureKey = _featureKey,

@@ -84,7 +84,7 @@ public class TokenService : ITokenService
         };
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
@@ -92,9 +92,12 @@ public class TokenService : ITokenService
             new Claim(JwtRegisteredClaimNames.FamilyName, user.LastName),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim("subscription_tier", user.SubscriptionTier),
-            new Claim("household_id", user.HouseholdId?.ToString() ?? string.Empty)
+            new Claim("subscription_tier", user.SubscriptionTier)
         };
+
+        // Only emit household_id when set — consumers parse this as a GUID
+        if (user.HouseholdId.HasValue)
+            claims.Add(new Claim("household_id", user.HouseholdId.Value.ToString()));
 
         var token = new JwtSecurityToken(
             issuer: issuer,

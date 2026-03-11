@@ -1,6 +1,6 @@
 @if (!string.IsNullOrEmpty(RequiredTier))
 {
-    <span class="tier-badge tier-@RequiredTier.ToLower()">@RequiredTier</span>
+    <span class="tier-badge tier-@RequiredTier.ToLowerInvariant()">@RequiredTier</span>
 }
 
 @code {

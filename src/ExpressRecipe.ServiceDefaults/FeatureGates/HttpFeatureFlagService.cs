@@ -8,8 +8,8 @@ namespace ExpressRecipe.ServiceDefaults.FeatureGates;
 /// <summary>
 /// <see cref="IFeatureFlagService"/> implementation for services other than UserService.
 /// Delegates to UserService's feature-flag check endpoint with in-process caching.
-/// Falls back to <c>true</c> (fail-open) if UserService is unreachable, so that a
-/// temporary UserService outage does not block all gated actions.
+/// Falls back to <see cref="FeatureCheckReason.Enabled"/> (fail-open) if UserService is
+/// unreachable, so a temporary UserService outage does not block all gated actions.
 /// </summary>
 public sealed class HttpFeatureFlagService : IFeatureFlagService
 {
@@ -31,11 +31,12 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> IsEnabledAsync(string featureKey, Guid userId, string userTier,
-        CancellationToken ct = default)
+    public async Task<FeatureCheckResult> IsEnabledAsync(string featureKey, Guid userId,
+        string userTier, CancellationToken ct = default)
     {
         string cacheKey = $"ff:enabled:{featureKey}:{userId}:{userTier}";
-        if (_cache.TryGetValue(cacheKey, out bool cached)) return cached;
+        if (_cache.TryGetValue(cacheKey, out FeatureCheckResult? cached) && cached != null)
+            return cached;
 
         try
         {
@@ -47,11 +48,18 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
 
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<FeatureFlagCheckResult>(
+                var dto = await response.Content.ReadFromJsonAsync<FeatureFlagCheckDto>(
                     cancellationToken: ct);
-                bool enabled = result?.IsEnabled ?? true;
-                _cache.Set(cacheKey, enabled, CacheTtl);
-                return enabled;
+                if (dto != null)
+                {
+                    var result = new FeatureCheckResult(
+                        dto.IsEnabled,
+                        Enum.TryParse<FeatureCheckReason>(dto.Reason, out var reason)
+                            ? reason
+                            : (dto.IsEnabled ? FeatureCheckReason.Enabled : FeatureCheckReason.GloballyDisabled));
+                    _cache.Set(cacheKey, result, CacheTtl);
+                    return result;
+                }
             }
         }
         catch (Exception ex)
@@ -61,7 +69,7 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
                 featureKey);
         }
 
-        return true; // fail-open
+        return new FeatureCheckResult(true, FeatureCheckReason.Enabled); // fail-open
     }
 
     /// <inheritdoc/>
@@ -80,9 +88,9 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
 
             if (response.IsSuccessStatusCode)
             {
-                var result = await response.Content.ReadFromJsonAsync<FeatureFlagCheckResult>(
+                var dto = await response.Content.ReadFromJsonAsync<FeatureFlagCheckDto>(
                     cancellationToken: ct);
-                bool enabled = result?.IsEnabled ?? true;
+                bool enabled = dto?.IsEnabled ?? true;
                 _cache.Set(cacheKey, enabled, CacheTtl);
                 return enabled;
             }
@@ -97,8 +105,9 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
         return true; // fail-open
     }
 
-    private sealed class FeatureFlagCheckResult
+    private sealed class FeatureFlagCheckDto
     {
-        public bool IsEnabled { get; init; }
+        public bool   IsEnabled { get; init; }
+        public string Reason    { get; init; } = nameof(FeatureCheckReason.Enabled);
     }
 }

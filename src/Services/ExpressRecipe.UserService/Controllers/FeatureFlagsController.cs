@@ -3,15 +3,19 @@ using ExpressRecipe.UserService.Data;
 using ExpressRecipe.UserService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
-using System.Security.Claims;
 
 namespace ExpressRecipe.UserService.Controllers;
 
 /// <summary>
 /// Admin API for managing feature flags and per-user overrides.
-/// Also exposes an internal (unauthenticated) endpoint used by
+/// Also exposes internal (unauthenticated) endpoints consumed by
 /// <c>HttpFeatureFlagService</c> in other microservices.
+/// <para>
+/// <b>Security note:</b> The internal check endpoints follow the existing codebase pattern
+/// of service-to-service <c>[AllowAnonymous]</c> calls (consistent with ShoppingService,
+/// NotificationService, etc.). Network-level access control (service mesh / ingress policy)
+/// should restrict these endpoints to internal traffic only in production.
+/// </para>
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -32,17 +36,11 @@ public class FeatureFlagsController : ControllerBase
         _logger  = logger;
     }
 
-    private Guid? GetCurrentUserId()
-    {
-        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(claim, out var id) ? id : null;
-    }
-
     // ── Internal endpoints (called by HttpFeatureFlagService in other services) ──────
 
     /// <summary>
-    /// Checks whether a feature is enabled for the given user/tier.
-    /// Intentionally unauthenticated — called service-to-service.
+    /// Evaluates whether a feature is enabled for the given user/tier and returns the reason.
+    /// Intentionally unauthenticated — called service-to-service on the internal network.
     /// </summary>
     [HttpGet("check")]
     [AllowAnonymous]
@@ -55,13 +53,13 @@ public class FeatureFlagsController : ControllerBase
         if (string.IsNullOrWhiteSpace(featureKey))
             return BadRequest("featureKey is required");
 
-        bool enabled = await _service.IsEnabledAsync(featureKey, userId, userTier, ct);
-        return Ok(new { IsEnabled = enabled });
+        var result = await _service.IsEnabledAsync(featureKey, userId, userTier, ct);
+        return Ok(new { result.IsEnabled, Reason = result.Reason.ToString() });
     }
 
     /// <summary>
     /// Returns whether the global admin toggle for a feature key is on.
-    /// Intentionally unauthenticated — called service-to-service.
+    /// Intentionally unauthenticated — called service-to-service on the internal network.
     /// </summary>
     [HttpGet("{featureKey}/isglobal")]
     [AllowAnonymous]

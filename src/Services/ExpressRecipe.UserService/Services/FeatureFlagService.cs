@@ -2,16 +2,20 @@ using ExpressRecipe.Shared.Services.FeatureGates;
 using ExpressRecipe.UserService.Data;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ExpressRecipe.UserService.Services;
 
 /// <summary>
 /// DB-backed implementation of <see cref="IFeatureFlagService"/> for UserService.
-/// Checks the three-layer gate:
+/// Evaluates the three-layer gate and returns a <see cref="FeatureCheckResult"/>
+/// with the precise reason so callers can map to the correct HTTP status code.
 /// <list type="number">
-///   <item>Global admin toggle (FeatureFlag.IsEnabled)</item>
-///   <item>Per-user override (UserFeatureFlagOverride)</item>
-///   <item>Subscription tier requirement (FeatureFlag.RequiredTier)</item>
+///   <item>Layer 1 — Global admin toggle (FeatureFlag.IsEnabled)</item>
+///   <item>Layer 2 — Per-user override (UserFeatureFlagOverride) — can override Layer 1</item>
+///   <item>Layer 3a — Rollout percentage (deterministic hash of featureKey:userId)</item>
+///   <item>Layer 3b — Subscription tier requirement (FeatureFlag.RequiredTier)</item>
 /// </list>
 /// Results are cached in-process for 30 seconds to reduce DB load.
 /// </summary>
@@ -43,60 +47,28 @@ public sealed class FeatureFlagService : IFeatureFlagService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> IsEnabledAsync(string featureKey, Guid userId, string userTier,
-        CancellationToken ct = default)
+    public async Task<FeatureCheckResult> IsEnabledAsync(string featureKey, Guid userId,
+        string userTier, CancellationToken ct = default)
     {
         string cacheKey = $"ff:enabled:{featureKey}:{userId}:{userTier}";
-        if (_cache.TryGetValue(cacheKey, out bool cached)) return cached;
+        if (_cache.TryGetValue(cacheKey, out FeatureCheckResult? cached) && cached != null)
+            return cached;
 
+        FeatureCheckResult result;
         try
         {
-            var flag = await _repo.GetFlagAsync(featureKey, ct);
-
-            // Unknown feature keys are treated as globally disabled
-            if (flag == null)
-            {
-                _cache.Set(cacheKey, false, CacheTtl);
-                return false;
-            }
-
-            // Layer 2 — user override (checked first so it can re-enable a globally-off flag)
-            var userOverride = await _repo.GetActiveUserOverrideAsync(userId, featureKey, ct);
-            if (userOverride != null)
-            {
-                bool overrideResult = userOverride.IsEnabled;
-                _cache.Set(cacheKey, overrideResult, CacheTtl);
-                return overrideResult;
-            }
-
-            // Layer 1 — global admin toggle
-            if (!flag.IsEnabled)
-            {
-                _cache.Set(cacheKey, false, CacheTtl);
-                return false;
-            }
-
-            // Layer 3 — tier requirement
-            if (!string.IsNullOrEmpty(flag.RequiredTier))
-            {
-                int required = TierRank.GetValueOrDefault(flag.RequiredTier, 99);
-                int actual   = TierRank.GetValueOrDefault(userTier, 0);
-                if (actual < required)
-                {
-                    _cache.Set(cacheKey, false, CacheTtl);
-                    return false;
-                }
-            }
-
-            _cache.Set(cacheKey, true, CacheTtl);
-            return true;
+            result = await EvaluateCoreAsync(featureKey, userId, userTier, ct);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex,
-                "Error evaluating feature flag {FeatureKey} for user {UserId}", featureKey, userId);
-            return true; // fail-open
+                "Error evaluating feature flag {FeatureKey} for user {UserId}; defaulting to enabled (fail-open)",
+                featureKey, userId);
+            result = new FeatureCheckResult(true, FeatureCheckReason.Enabled);
         }
+
+        _cache.Set(cacheKey, result, CacheTtl);
+        return result;
     }
 
     /// <inheritdoc/>
@@ -135,5 +107,61 @@ public sealed class FeatureFlagService : IFeatureFlagService
     {
         _cache.Remove($"ff:global:{featureKey}");
         _logger.LogInformation("Feature flag cache invalidated for {FeatureKey}", featureKey);
+    }
+
+    // ── evaluation core ──────────────────────────────────────────────────────
+
+    private async Task<FeatureCheckResult> EvaluateCoreAsync(string featureKey, Guid userId,
+        string userTier, CancellationToken ct)
+    {
+        var flag = await _repo.GetFlagAsync(featureKey, ct);
+
+        // Unknown feature keys are treated as globally disabled
+        if (flag == null)
+            return new FeatureCheckResult(false, FeatureCheckReason.GloballyDisabled);
+
+        // Layer 2 — per-user override (wins over global toggle in both directions,
+        // allowing beta access or explicit revocations per the product spec).
+        var userOverride = await _repo.GetActiveUserOverrideAsync(userId, featureKey, ct);
+        if (userOverride != null)
+        {
+            return userOverride.IsEnabled
+                ? new FeatureCheckResult(true,  FeatureCheckReason.Enabled)
+                : new FeatureCheckResult(false, FeatureCheckReason.UserDisabled);
+        }
+
+        // Layer 1 — global admin toggle
+        if (!flag.IsEnabled)
+            return new FeatureCheckResult(false, FeatureCheckReason.GloballyDisabled);
+
+        // Layer 3a — rollout percentage (deterministic per-user bucket)
+        if (flag.RolloutPercentage < 100)
+        {
+            int bucket = ComputeRolloutBucket(featureKey, userId);
+            if (bucket >= flag.RolloutPercentage)
+                return new FeatureCheckResult(false, FeatureCheckReason.NotInRollout);
+        }
+
+        // Layer 3b — subscription tier requirement
+        if (!string.IsNullOrEmpty(flag.RequiredTier))
+        {
+            int required = TierRank.GetValueOrDefault(flag.RequiredTier, 99);
+            int actual   = TierRank.GetValueOrDefault(userTier, 0);
+            if (actual < required)
+                return new FeatureCheckResult(false, FeatureCheckReason.TierInsufficient);
+        }
+
+        return new FeatureCheckResult(true, FeatureCheckReason.Enabled);
+    }
+
+    /// <summary>
+    /// Computes a deterministic 0-99 bucket for gradual rollouts using
+    /// SHA-256 of <c>"{featureKey}:{userId}"</c>.  Stable across service restarts.
+    /// </summary>
+    private static int ComputeRolloutBucket(string featureKey, Guid userId)
+    {
+        var input     = $"{featureKey}:{userId:N}";
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return (int)(BitConverter.ToUInt32(hashBytes, 0) % 100);
     }
 }
