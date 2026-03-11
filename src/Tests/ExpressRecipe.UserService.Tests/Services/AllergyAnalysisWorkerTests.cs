@@ -39,9 +39,10 @@ public class AllergyAnalysisWorkerTests
         Guid id1 = Guid.NewGuid();
         Guid id2 = Guid.NewGuid();
         Guid id3 = Guid.NewGuid();
+        List<Guid> pendingIds = new() { id1, id2, id3 };
 
         _repoMock.Setup(r => r.GetUnanalyzedIncidentIdsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Guid> { id1, id2, id3 });
+            .ReturnsAsync(pendingIds);
 
         // Each incident has one member
         _repoMock.Setup(r => r.GetIncidentByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -56,13 +57,27 @@ public class AllergyAnalysisWorkerTests
                     }
                 }));
 
+        // Use a countdown semaphore to detect completion deterministically
+        int markCount = 0;
+        TaskCompletionSource allDone = new();
+        _repoMock
+            .Setup(r => r.MarkAnalysisRunAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask)
+            .Callback<Guid, CancellationToken>((_, _) =>
+            {
+                if (Interlocked.Increment(ref markCount) == pendingIds.Count)
+                {
+                    allDone.TrySetResult();
+                }
+            });
+
         AllergyAnalysisWorker worker = CreateWorker();
 
         using CancellationTokenSource cts = new();
         await worker.StartAsync(cts.Token);
 
-        // Give the worker time to drain the re-queued incidents
-        await Task.Delay(500);
+        // Wait until all 3 incidents have been processed (with a safety timeout)
+        await Task.WhenAny(allDone.Task, Task.Delay(TimeSpan.FromSeconds(5)));
         await worker.StopAsync(CancellationToken.None);
 
         // Assert — analyzer called 3 times (once per incident)
@@ -116,11 +131,19 @@ public class AllergyAnalysisWorkerTests
         AllergyAnalysisWorker worker = CreateWorker();
         await worker.StartAsync(CancellationToken.None);
 
+        // Use TaskCompletionSource to detect when successId has been processed (deterministic)
+        TaskCompletionSource successProcessed = new();
+        _repoMock
+            .Setup(r => r.MarkAnalysisRunAsync(successId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask)
+            .Callback<Guid, CancellationToken>((_, _) => successProcessed.TrySetResult());
+
         // Enqueue failing incident, then successful one
         _queue.Enqueue(failId);
         _queue.Enqueue(successId);
 
-        await Task.Delay(500);  // let worker drain
+        // Wait until successId has been processed (with a safety timeout)
+        await Task.WhenAny(successProcessed.Task, Task.Delay(TimeSpan.FromSeconds(5)));
         await worker.StopAsync(CancellationToken.None);
 
         // failId: MarkAnalysisRunAsync NOT called (exception was swallowed)

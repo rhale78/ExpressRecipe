@@ -65,7 +65,7 @@ public sealed class IngredientFetchService : IIngredientFetchService
     public async Task<HashSet<string>> GetSafeIngredientSetAsync(
         Guid householdId, Guid? memberId, int minUsageCount, CancellationToken ct = default)
     {
-        string cacheKey = $"safe-ing:{householdId}:{memberId?.ToString() ?? "primary"}";
+        string cacheKey = $"safe-ing:{householdId}:{memberId?.ToString() ?? "primary"}:min-{minUsageCount}";
 
         return await _cache.GetOrCreateAsync(
             cacheKey,
@@ -84,11 +84,14 @@ public sealed class IngredientFetchService : IIngredientFetchService
                         return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     }
 
+                    // Parallelize per-product ingredient fetches to avoid sequential N+1 latency.
+                    IEnumerable<Task<List<string>>> tasks = usages
+                        .Select(u => GetNormalizedIngredientsAsync(u.ProductId, innerCt));
+                    List<string>[] results = await Task.WhenAll(tasks);
+
                     HashSet<string> safeSet = new(StringComparer.OrdinalIgnoreCase);
-                    foreach (SafeProductUsage usage in usages)
+                    foreach (List<string> ingredients in results)
                     {
-                        List<string> ingredients =
-                            await GetNormalizedIngredientsAsync(usage.ProductId, innerCt);
                         foreach (string ingredient in ingredients) { safeSet.Add(ingredient); }
                     }
 

@@ -519,6 +519,17 @@ public class InventoryController : ControllerBase
     public async Task<IActionResult> GetSafeProductHistory(
         Guid householdId, [FromQuery] int minCount = 3, CancellationToken ct = default)
     {
+        // Validate service-to-service API key when one is configured.
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
         try
         {
             List<SafeProductUsageResult> results =

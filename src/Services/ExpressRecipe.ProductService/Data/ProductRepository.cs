@@ -1325,6 +1325,7 @@ public class ProductRepository : SqlHelper, IProductRepository
         List<string?> rawStrings = await ExecuteReaderAsync(
             sql,
             reader => reader.IsDBNull(0) ? null : reader.GetString(0),
+            ct,
             CreateParameter("@ProductId", productId));
 
         return Services.IngredientNormalizer.NormalizeAll(rawStrings);

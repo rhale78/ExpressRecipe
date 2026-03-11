@@ -552,7 +552,7 @@ public partial class InventoryRepository
     {
         // Returns products consumed from this household's inventory in the last 180 days
         // that have at least minUsageCount "Used" history records, and whose ProductId is not null,
-        // excluding any products that appeared in an allergen discovery record with a reaction.
+        // excluding any products that have an associated allergen discovery record for this household.
         const string sql = @"
             SELECT i.ProductId, COUNT(*) AS UsageCount
             FROM   InventoryHistory ih

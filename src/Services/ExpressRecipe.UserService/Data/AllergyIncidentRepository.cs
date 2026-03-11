@@ -35,6 +35,7 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
                 HadReaction   = reader.GetBoolean(reader.GetOrdinal("HadReaction")),
                 SeverityLevel = GetString(reader, "SeverityLevel") ?? string.Empty
             },
+            ct,
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@MemberId", memberId.HasValue ? memberId.Value : DBNull.Value));
     }
@@ -48,7 +49,8 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
 
         return await ExecuteReaderAsync(
             sql,
-            reader => reader.GetGuid(0));
+            reader => reader.GetGuid(0),
+            ct);
     }
 
     public async Task<AllergyIncidentEngineDto?> GetIncidentByIdAsync(
@@ -66,6 +68,7 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
                 Id          = GetGuid(reader, "Id"),
                 HouseholdId = GetGuid(reader, "HouseholdId")
             },
+            ct,
             CreateParameter("@Id", incidentId));
 
         AllergyIncidentEngineDto? incident = incidents.FirstOrDefault();
@@ -85,6 +88,7 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
                                  : reader.GetGuid(reader.GetOrdinal("MemberId")),
                 MemberName = GetString(reader, "MemberName") ?? string.Empty
             },
+            ct,
             CreateParameter("@IncidentId", incidentId));
 
         incident.Members.AddRange(members);
@@ -103,6 +107,7 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", incidentId));
     }
 
@@ -137,6 +142,7 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@HouseholdId",    householdId),
             CreateParameter("@MemberId",        memberId.HasValue ? memberId.Value : DBNull.Value),
             CreateParameter("@MemberName",      memberName),
@@ -151,7 +157,15 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
         string ingredientName, Guid? ingredientId,
         CancellationToken ct = default)
     {
+        // Guard against duplicate cleared rows produced by re-analysis runs.
         const string sql = @"
+            IF NOT EXISTS (
+                SELECT 1 FROM ClearedIngredient
+                WHERE HouseholdId    = @HouseholdId
+                  AND IngredientName = @IngredientName
+                  AND (MemberId = @MemberId
+                       OR (MemberId IS NULL AND @MemberId IS NULL))
+            )
             INSERT INTO ClearedIngredient
                 (HouseholdId, MemberId, MemberName, IngredientName, IngredientId, ClearedAt)
             VALUES
@@ -159,6 +173,7 @@ public sealed class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepos
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@HouseholdId",   householdId),
             CreateParameter("@MemberId",       memberId.HasValue ? memberId.Value : DBNull.Value),
             CreateParameter("@MemberName",     memberName),
