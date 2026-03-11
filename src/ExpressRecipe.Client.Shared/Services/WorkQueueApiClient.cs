@@ -39,7 +39,11 @@ public interface IWorkQueueClientService
         CancellationToken ct = default);
     Task DismissItemAsync(Guid itemId, CancellationToken ct = default);
     Task SnoozeItemAsync(Guid itemId, int hours = 24, CancellationToken ct = default);
-    Task<int> GetPendingCountAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Returns count + hasCritical from the lightweight /count endpoint.
+    /// Use this for badge refreshes to avoid fetching the full item list.
+    /// </summary>
+    Task<(int Count, bool HasCritical)> GetSummaryAsync(CancellationToken ct = default);
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
@@ -122,24 +126,25 @@ public class WorkQueueApiClient : IWorkQueueClientService
         catch { /* best-effort */ }
     }
 
-    public async Task<int> GetPendingCountAsync(CancellationToken ct = default)
+    public async Task<(int Count, bool HasCritical)> GetSummaryAsync(CancellationToken ct = default)
     {
-        if (!await EnsureAuthenticatedAsync()) return 0;
+        if (!await EnsureAuthenticatedAsync()) return (0, false);
 
         try
         {
-            var result = await _httpClient.GetFromJsonAsync<WorkQueueCountDto>(
+            var result = await _httpClient.GetFromJsonAsync<WorkQueueSummaryDto>(
                 "/api/work-queue/count", ct);
-            return result?.Count ?? 0;
+            return (result?.Count ?? 0, result?.HasCritical ?? false);
         }
         catch
         {
-            return 0;
+            return (0, false);
         }
     }
 
-    private sealed class WorkQueueCountDto
+    private sealed class WorkQueueSummaryDto
     {
-        public int Count { get; set; }
+        public int  Count       { get; set; }
+        public bool HasCritical { get; set; }
     }
 }

@@ -34,4 +34,12 @@ CREATE INDEX IX_WorkQueueItem_User     ON WorkQueueItem(UserId, Status) WHERE Is
 CREATE INDEX IX_WorkQueueItem_Household ON WorkQueueItem(HouseholdId, Status) WHERE IsDeleted = 0;
 CREATE INDEX IX_WorkQueueItem_Priority  ON WorkQueueItem(UserId, Priority, CreatedAt) WHERE Status = 'Pending' AND IsDeleted = 0;
 CREATE INDEX IX_WorkQueueItem_Snooze    ON WorkQueueItem(SnoozeUntil) WHERE Status = 'Snoozed' AND IsDeleted = 0;
+
+-- Unique constraint to prevent duplicate pending items per user/household/type/entity.
+-- Filtered on IsDeleted = 0 and Status = 'Pending' so actioned/dismissed duplicates don't block new insertions.
+-- NOTE: SQL Server filtered unique indexes cannot cover nullable columns in all cases.
+-- NULL RelatedEntityId is handled by including a sentinel placeholder in UpsertItemAsync.
+CREATE UNIQUE INDEX UX_WorkQueueItem_PendingDedup
+    ON WorkQueueItem(UserId, HouseholdId, ItemType, RelatedEntityId)
+    WHERE IsDeleted = 0 AND Status = 'Pending' AND RelatedEntityId IS NOT NULL;
 GO

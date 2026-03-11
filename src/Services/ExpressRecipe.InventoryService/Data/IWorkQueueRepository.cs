@@ -53,8 +53,8 @@ public interface IWorkQueueRepository
     /// <summary>Snooze an item for the user for the given number of hours.</summary>
     Task<bool> SnoozeItemAsync(Guid itemId, Guid userId, int hours = 24, CancellationToken ct = default);
 
-    /// <summary>Re-surface snoozed items whose SnoozeUntil has passed.</summary>
-    Task WakeSnoozedItemsAsync(CancellationToken ct = default);
+    /// <summary>Re-surface snoozed items whose SnoozeUntil has passed, scoped to the given user.</summary>
+    Task WakeSnoozedItemsAsync(Guid userId, CancellationToken ct = default);
 
     /// <summary>
     /// Upsert a work queue item by type + relatedEntityId so duplicate items are not created
@@ -65,8 +65,8 @@ public interface IWorkQueueRepository
         string? relatedEntityType, Guid? relatedEntityId,
         CancellationToken ct = default);
 
-    /// <summary>Remove all Pending items for a related entity (e.g. when item is consumed).</summary>
-    Task DeleteItemsByRelatedEntityAsync(Guid relatedEntityId, CancellationToken ct = default);
+    /// <summary>Remove all Pending/Snoozed items for a related entity, scoped to the given user and household.</summary>
+    Task DeleteItemsByRelatedEntityAsync(Guid relatedEntityId, Guid userId, Guid householdId, CancellationToken ct = default);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,16 +92,18 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
                    ActionPayload, Status, ActionTaken, ActionedAt, SnoozeUntil,
                    RelatedEntityType, RelatedEntityId, CreatedAt
             FROM WorkQueueItem
-            WHERE UserId    = @UserId
-              AND IsDeleted = 0
-              AND Status    = 'Pending'
+            WHERE UserId      = @UserId
+              AND HouseholdId = @HouseholdId
+              AND IsDeleted   = 0
+              AND Status      = 'Pending'
               AND (SnoozeUntil IS NULL OR SnoozeUntil <= GETUTCDATE())
             ORDER BY Priority ASC, CreatedAt ASC";
 
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@UserId",      userId);
+        cmd.Parameters.AddWithValue("@HouseholdId", householdId);
         return await ReadItemsAsync(cmd, ct);
     }
 
@@ -111,15 +113,17 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         const string sql = @"
             SELECT COUNT(*)
             FROM WorkQueueItem
-            WHERE UserId    = @UserId
-              AND IsDeleted = 0
-              AND Status    = 'Pending'
+            WHERE UserId      = @UserId
+              AND HouseholdId = @HouseholdId
+              AND IsDeleted   = 0
+              AND Status      = 'Pending'
               AND (SnoozeUntil IS NULL OR SnoozeUntil <= GETUTCDATE())";
 
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);
-        cmd.Parameters.AddWithValue("@UserId", userId);
+        cmd.Parameters.AddWithValue("@UserId",      userId);
+        cmd.Parameters.AddWithValue("@HouseholdId", householdId);
         object? result = await cmd.ExecuteScalarAsync(ct);
         return result is int count ? count : Convert.ToInt32(result ?? 0);
     }
@@ -164,21 +168,37 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         string? relatedEntityType, Guid? relatedEntityId,
         CancellationToken ct = default)
     {
-        // If a Pending item already exists for this user+type+relatedEntity, update it.
+        // If a Pending item already exists for this user+household+type+relatedEntityType+relatedEntity, update it.
         // Otherwise insert a new one.
+        // NOTE: NULL = NULL is false in SQL, so use IS NULL / IS NOT NULL for relatedEntityId.
         const string sql = @"
             IF EXISTS (
                 SELECT 1 FROM WorkQueueItem
-                WHERE UserId = @UserId AND ItemType = @ItemType
-                  AND RelatedEntityId = @RelatedEntityId
-                  AND Status = 'Pending' AND IsDeleted = 0)
+                WHERE UserId            = @UserId
+                  AND HouseholdId       = @HouseholdId
+                  AND ItemType          = @ItemType
+                  AND (RelatedEntityType = @RelatedEntityType
+                       OR (RelatedEntityType IS NULL AND @RelatedEntityType IS NULL))
+                  AND ((@RelatedEntityId IS NULL     AND RelatedEntityId IS NULL) OR
+                       (@RelatedEntityId IS NOT NULL AND RelatedEntityId = @RelatedEntityId))
+                  AND Status    = 'Pending'
+                  AND IsDeleted = 0)
             BEGIN
                 UPDATE WorkQueueItem
-                SET Title = @Title, Body = @Body, Priority = @Priority,
-                    ActionPayload = @ActionPayload, UpdatedAt = GETUTCDATE()
-                WHERE UserId = @UserId AND ItemType = @ItemType
-                  AND RelatedEntityId = @RelatedEntityId
-                  AND Status = 'Pending' AND IsDeleted = 0
+                SET Title         = @Title,
+                    Body          = @Body,
+                    Priority      = @Priority,
+                    ActionPayload = @ActionPayload,
+                    UpdatedAt     = GETUTCDATE()
+                WHERE UserId      = @UserId
+                  AND HouseholdId = @HouseholdId
+                  AND ItemType    = @ItemType
+                  AND (RelatedEntityType = @RelatedEntityType
+                       OR (RelatedEntityType IS NULL AND @RelatedEntityType IS NULL))
+                  AND ((@RelatedEntityId IS NULL     AND RelatedEntityId IS NULL) OR
+                       (@RelatedEntityId IS NOT NULL AND RelatedEntityId = @RelatedEntityId))
+                  AND Status    = 'Pending'
+                  AND IsDeleted = 0
             END
             ELSE
             BEGIN
@@ -209,12 +229,14 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         Guid itemId, Guid userId, string actionTaken,
         string? actionData = null, CancellationToken ct = default)
     {
+        // actionData (e.g. rating value, note text) is stored in ActionPayload so it is not lost.
         const string sql = @"
             UPDATE WorkQueueItem
-            SET Status     = 'Actioned',
-                ActionTaken = @ActionTaken,
-                ActionedAt  = GETUTCDATE(),
-                UpdatedAt   = GETUTCDATE()
+            SET Status        = 'Actioned',
+                ActionTaken   = @ActionTaken,
+                ActionPayload = COALESCE(@ActionData, ActionPayload),
+                ActionedAt    = GETUTCDATE(),
+                UpdatedAt     = GETUTCDATE()
             WHERE Id = @Id AND UserId = @UserId AND IsDeleted = 0";
 
         await using SqlConnection conn = new(_connectionString);
@@ -223,6 +245,7 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         cmd.Parameters.AddWithValue("@Id",          itemId);
         cmd.Parameters.AddWithValue("@UserId",      userId);
         cmd.Parameters.AddWithValue("@ActionTaken", actionTaken);
+        cmd.Parameters.AddWithValue("@ActionData",  (object?)actionData ?? DBNull.Value);
         int rows = await cmd.ExecuteNonQueryAsync(ct);
         return rows > 0;
     }
@@ -230,7 +253,7 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
     public async Task<bool> DismissItemAsync(
         Guid itemId, Guid userId, CancellationToken ct = default)
     {
-        // Dismiss soft-deletes the item so all household members stop seeing it.
+        // Dismiss soft-deletes the current user's work queue item (per-user dismiss).
         const string sql = @"
             UPDATE WorkQueueItem
             SET Status    = 'Dismissed',
@@ -268,7 +291,7 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         return rows > 0;
     }
 
-    public async Task WakeSnoozedItemsAsync(CancellationToken ct = default)
+    public async Task WakeSnoozedItemsAsync(Guid userId, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE WorkQueueItem
@@ -276,20 +299,25 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
                 UpdatedAt = GETUTCDATE()
             WHERE Status      = 'Snoozed'
               AND SnoozeUntil <= GETUTCDATE()
+              AND UserId      = @UserId
               AND IsDeleted   = 0";
 
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);
+        cmd.Parameters.AddWithValue("@UserId", userId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task DeleteItemsByRelatedEntityAsync(Guid relatedEntityId, CancellationToken ct = default)
+    public async Task DeleteItemsByRelatedEntityAsync(
+        Guid relatedEntityId, Guid userId, Guid householdId, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE WorkQueueItem
             SET IsDeleted = 1, DeletedAt = GETUTCDATE(), UpdatedAt = GETUTCDATE()
             WHERE RelatedEntityId = @RelatedEntityId
+              AND UserId          = @UserId
+              AND HouseholdId     = @HouseholdId
               AND Status IN ('Pending','Snoozed')
               AND IsDeleted = 0";
 
@@ -297,6 +325,8 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);
         cmd.Parameters.AddWithValue("@RelatedEntityId", relatedEntityId);
+        cmd.Parameters.AddWithValue("@UserId",          userId);
+        cmd.Parameters.AddWithValue("@HouseholdId",     householdId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

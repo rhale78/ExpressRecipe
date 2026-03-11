@@ -16,16 +16,16 @@
             <div class="progress-bar-fill" style="width: @ProgressPercent%"></div>
         </div>
         <span class="progress-label">
-            @if (Items.Count > 0)
-            { <text>@(_currentIndex + 1) of @Items.Count</text> }
+            @if (_localItems.Count > 0)
+            { <text>@(_currentIndex + 1) of @_localItems.Count</text> }
             else
             { <text>All done!</text> }
         </span>
     </div>
 
-    @if (_currentIndex < Items.Count)
+    @if (_currentIndex < _localItems.Count)
     {
-        <WorkQueueItemCard Item="Items[_currentIndex]"
+        <WorkQueueItemCard Item="_localItems[_currentIndex]"
                            IsWizardMode="true"
                            OnActioned="HandleActioned"
                            OnDismissed="HandleDismissed"
@@ -57,16 +57,34 @@
     [Parameter] public EventCallback<Guid>            OnItemSnoozed  { get; set; }
     [Parameter] public EventCallback                  OnDone         { get; set; }
 
+    // Local copy of the items list so Skip() doesn't mutate the parent's [Parameter].
+    private List<WorkQueueItemDto> _localItems = new();
     private int _currentIndex;
 
-    private double ProgressPercent =>
-        Items.Count == 0 ? 100 : (_currentIndex / (double)Items.Count) * 100;
+    protected override void OnParametersSet()
+    {
+        // Sync local items from the parent parameter when it changes (e.g. after an action
+        // removes an item). Preserve the current index position.
+        _localItems = new List<WorkQueueItemDto>(Items);
+        // Clamp index in case the list shrank.
+        if (_currentIndex >= _localItems.Count)
+            _currentIndex = Math.Max(0, _localItems.Count - 1);
+    }
+
+    private double ProgressPercent
+    {
+        get
+        {
+            if (_localItems.Count == 0) return 100;
+            double raw = ((_currentIndex + 1) / (double)_localItems.Count) * 100;
+            return Math.Min(raw, 100);
+        }
+    }
 
     private async Task HandleActioned((Guid itemId, string action) args)
     {
         await OnItemActioned.InvokeAsync(args);
-        // Item is removed from Items by the parent. The next item shifts into
-        // Items[_currentIndex] automatically — no index change needed.
+        // Item is removed from Items by the parent. OnParametersSet will sync _localItems.
     }
 
     private async Task HandleDismissed(Guid itemId)
@@ -78,16 +96,16 @@
     {
         await OnItemSnoozed.InvokeAsync(itemId);
         // The parent removes the item from the list, so the next item shifts into
-        // Items[_currentIndex] automatically — no index change needed.
+        // _localItems[_currentIndex] automatically after OnParametersSet.
     }
 
     private void Skip()
     {
-        // Move current item to end of list for this session only (no DB snooze).
-        if (_currentIndex >= Items.Count) return;
-        WorkQueueItemDto current = Items[_currentIndex];
-        Items.RemoveAt(_currentIndex);
-        Items.Add(current);
+        // Move current item to end of local list for this session only (no DB snooze).
+        if (_currentIndex >= _localItems.Count) return;
+        WorkQueueItemDto current = _localItems[_currentIndex];
+        _localItems.RemoveAt(_currentIndex);
+        _localItems.Add(current);
         // Don't increment _currentIndex — the next item slides into the current position.
     }
 

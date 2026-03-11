@@ -35,9 +35,12 @@ public class WorkQueueState : IWorkQueueState
     {
         try
         {
-            List<WorkQueueItemDto> items = await _client.GetItemsAsync(ct);
-            PendingCount = items.Count;
-            HasCritical  = items.Any(i => i.Priority <= 3);
+            // Use the lightweight /count endpoint so we don't fetch the full item list
+            // just to update the badge.  HasCritical uses Priority <= 4 to match the
+            // "Urgent" tier (🔴) shown in WorkQueueList and WorkQueueItemCard.
+            (int count, bool hasCritical) = await _client.GetSummaryAsync(ct);
+            PendingCount = count;
+            HasCritical  = hasCritical;
         }
         catch
         {

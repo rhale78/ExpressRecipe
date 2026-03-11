@@ -4,7 +4,7 @@
    Item type determines the icon, priority dot colour, and the type-specific sub-card
    (RateRecipeCard, ExpirationActionCard, etc.). *@
 
-<div class="queue-card card-type-@Item.ItemType.ToLower()">
+<div class="queue-card card-type-@Item.ItemType.ToLowerInvariant()">
 
     <div class="card-header">
         <span class="card-icon" aria-hidden="true">@GetIcon()</span>

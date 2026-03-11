@@ -96,6 +96,13 @@
 
     private HashSet<Guid> _selectedIds = new();
 
+    protected override void OnParametersSet()
+    {
+        // Remove selected IDs that no longer exist in Items (e.g. after action/dismiss/snooze).
+        HashSet<Guid> currentIds = Items.Select(i => i.Id).ToHashSet();
+        _selectedIds.IntersectWith(currentIds);
+    }
+
     private void ToggleSelect(Guid id, bool selected)
     {
         if (selected) _selectedIds.Add(id);

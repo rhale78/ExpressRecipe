@@ -43,14 +43,15 @@ public sealed class WorkQueueController : ControllerBase
     {
         Guid? userId = GetUserId();
         if (userId is null) return Unauthorized();
-        Guid householdId = GetHouseholdId() ?? Guid.Empty;
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) return Unauthorized();
 
         try
         {
-            // Wake any snoozed items whose snooze period has expired.
-            await _repo.WakeSnoozedItemsAsync(ct);
+            // Wake any snoozed items whose snooze period has expired (scoped to this user).
+            await _repo.WakeSnoozedItemsAsync(userId.Value, ct);
 
-            List<WorkQueueItemDto> items = await _repo.GetPendingItemsAsync(userId.Value, householdId, ct);
+            List<WorkQueueItemDto> items = await _repo.GetPendingItemsAsync(userId.Value, householdId.Value, ct);
             return Ok(items);
         }
         catch (Exception ex)
@@ -62,18 +63,22 @@ public sealed class WorkQueueController : ControllerBase
 
     // ── GET /api/work-queue/count ─────────────────────────────────────────────
 
-    /// <summary>Get the pending item count (for dashboard badge).</summary>
+    /// <summary>Get the pending item count and critical flag (for dashboard badge).</summary>
     [HttpGet("count")]
     public async Task<IActionResult> GetCount(CancellationToken ct)
     {
         Guid? userId = GetUserId();
         if (userId is null) return Unauthorized();
-        Guid householdId = GetHouseholdId() ?? Guid.Empty;
+        Guid? householdId = GetHouseholdId();
+        if (householdId is null) return Unauthorized();
 
         try
         {
-            int count = await _repo.GetPendingCountAsync(userId.Value, householdId, ct);
-            return Ok(new { count });
+            // Re-use GetPendingItems to get count + hasCritical in one lightweight query.
+            List<WorkQueueItemDto> items = await _repo.GetPendingItemsAsync(userId.Value, householdId.Value, ct);
+            int  count       = items.Count;
+            bool hasCritical = items.Any(i => i.Priority <= 4);
+            return Ok(new { count, hasCritical });
         }
         catch (Exception ex)
         {
@@ -107,7 +112,7 @@ public sealed class WorkQueueController : ControllerBase
 
     // ── DELETE /api/work-queue/{id} ───────────────────────────────────────────
 
-    /// <summary>Dismiss an item (soft-deletes for all household members).</summary>
+    /// <summary>Dismiss an item for the current user (per-user soft delete).</summary>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DismissItem(Guid id, CancellationToken ct)
     {
