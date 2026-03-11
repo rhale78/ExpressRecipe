@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.AIService.Data;
 using ExpressRecipe.AIService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -50,10 +51,44 @@ builder.Services.AddHttpClient("Ollama", client =>
 // Register Ollama Service
 builder.Services.AddScoped<IOllamaService, OllamaService>();
 
+// In-memory cache for AI provider config lookups
+builder.Services.AddMemoryCache();
+
+// Register AI provider factory and cooking assistant service
+builder.Services.AddScoped<IAIProviderFactory, AIProviderFactory>();
+builder.Services.AddScoped<ICookingAssistantService, CookingAssistantService>();
+
+// Register grounding repository — optional DB connection (aidb)
+var aiConnectionString = builder.Configuration.GetConnectionString("aidb");
+if (!string.IsNullOrEmpty(aiConnectionString))
+{
+    builder.Services.AddSingleton<IGroundingRepository>(
+        new GroundingRepository(aiConnectionString));
+}
+else
+{
+    builder.Services.AddSingleton<IGroundingRepository, NullGroundingRepository>();
+}
+
 // Health checks
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+// Run database management (drop db/tables if configured)
+if (!string.IsNullOrEmpty(aiConnectionString))
+{
+    await app.RunDatabaseManagementAsync("AIService", "aidb");
+
+    // Run migrations
+    var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+    if (!Directory.Exists(migrationsPath))
+    {
+        migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
+    }
+    var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+    await app.RunMigrationsAsync(aiConnectionString, migrations);
+}
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints();
