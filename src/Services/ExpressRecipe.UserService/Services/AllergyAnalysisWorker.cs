@@ -51,7 +51,7 @@ public sealed class AllergyAnalysisWorker : BackgroundService
 
         try
         {
-            AllergyIncidentEngineDto? incident = await repo.GetIncidentByIdAsync(incidentId, ct);
+            AllergyIncidentEngineDto? incident = await repo.GetIncidentForEngineAsync(incidentId, ct);
             if (incident is null) { return; }
 
             // Run analysis per unique (MemberId, MemberName) combination
