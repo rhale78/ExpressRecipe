@@ -29,8 +29,16 @@ public class StripeEventLogRepository : SqlHelper, IStripeEventLogRepository
             INSERT INTO StripeEventLog (Id, StripeEventId, EventType, ProcessedAt, Success)
             VALUES (NEWID(), @StripeEventId, @EventType, GETUTCDATE(), 1)";
 
-        await ExecuteNonQueryAsync(sql, ct,
-            CreateParameter("@StripeEventId", stripeEventId),
-            CreateParameter("@EventType", eventType));
+        try
+        {
+            await ExecuteNonQueryAsync(sql, ct,
+                CreateParameter("@StripeEventId", stripeEventId),
+                CreateParameter("@EventType", eventType));
+        }
+        catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
+        {
+            // Unique constraint violation on StripeEventId — event already recorded.
+            // Treat as success to ensure idempotency under concurrent webhook deliveries.
+        }
     }
 }

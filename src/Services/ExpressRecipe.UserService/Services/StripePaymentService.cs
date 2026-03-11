@@ -56,9 +56,20 @@ public sealed class StripePaymentService : IPaymentService
     {
         string? stripeCustomerId = await _userProfiles.GetStripeCustomerIdAsync(userId, ct);
 
+        // Always set SubscriptionData so userId propagates to subscription webhooks via Metadata.
+        // Session-level Metadata does NOT propagate to the Subscription object.
+        SessionSubscriptionDataOptions subscriptionData = new()
+        {
+            Metadata = new Dictionary<string, string> { { "userId", userId.ToString() } }
+        };
+
+        if (withTrial)
+        {
+            subscriptionData.TrialPeriodDays = 14;
+        }
+
         SessionCreateOptions opts = new()
         {
-            Customer            = stripeCustomerId,
             Mode                = "subscription",
             LineItems           = new List<SessionLineItemOptions>
             {
@@ -66,12 +77,15 @@ public sealed class StripePaymentService : IPaymentService
             },
             SuccessUrl          = successUrl,
             CancelUrl           = cancelUrl,
-            Metadata            = new Dictionary<string, string> { { "userId", userId.ToString() } },
-            SubscriptionData    = withTrial
-                ? new SessionSubscriptionDataOptions { TrialPeriodDays = 14 }
-                : null,
+            SubscriptionData    = subscriptionData,
             AllowPromotionCodes = true
         };
+
+        // Attach existing Stripe customer when available; otherwise Stripe creates one during checkout.
+        if (!string.IsNullOrEmpty(stripeCustomerId))
+        {
+            opts.Customer = stripeCustomerId;
+        }
 
         Session session = await _checkout.CreateAsync(opts, cancellationToken: ct);
 

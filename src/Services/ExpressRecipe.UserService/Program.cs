@@ -70,7 +70,7 @@ builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsReposi
 builder.Services.AddScoped<IStripeEventLogRepository>(sp => new StripeEventLogRepository(connectionString));
 
 // Register payment service — MockPaymentService in local mode, StripePaymentService otherwise
-if (builder.Configuration["APP_LOCAL_MODE"] == "true")
+if (builder.Configuration.GetValue<bool>("APP_LOCAL_MODE"))
 {
     builder.Services.AddSingleton<ExpressRecipe.UserService.Services.IPaymentService,
         ExpressRecipe.UserService.Services.MockPaymentService>();
@@ -80,6 +80,10 @@ else
     builder.Services.AddScoped<ExpressRecipe.UserService.Services.IPaymentService,
         ExpressRecipe.UserService.Services.StripePaymentService>();
 }
+
+// Register the Stripe event constructor delegate used by StripeWebhookController
+builder.Services.AddSingleton<Func<string, string, string, Stripe.Event>>(
+    (payload, sig, secret) => Stripe.EventUtility.ConstructEvent(payload, sig, secret));
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>

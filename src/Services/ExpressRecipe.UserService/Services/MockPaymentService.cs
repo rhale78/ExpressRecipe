@@ -16,7 +16,13 @@ public sealed class MockPaymentService : IPaymentService
 
     public Task<string> CreateCheckoutSessionAsync(Guid userId, string stripePriceId,
         bool withTrial, string successUrl, string cancelUrl, CancellationToken ct = default)
-        => Task.FromResult($"{successUrl}?mock=true&tier={stripePriceId}");
+    {
+        UriBuilder builder = new(successUrl);
+        string existing = builder.Query.TrimStart('?');
+        string added    = $"mock=true&tier={System.Net.WebUtility.UrlEncode(stripePriceId)}";
+        builder.Query   = string.IsNullOrEmpty(existing) ? added : $"{existing}&{added}";
+        return Task.FromResult(builder.Uri.AbsoluteUri);
+    }
 
     public Task<string> CreateBillingPortalSessionAsync(Guid userId, string returnUrl,
         CancellationToken ct = default)

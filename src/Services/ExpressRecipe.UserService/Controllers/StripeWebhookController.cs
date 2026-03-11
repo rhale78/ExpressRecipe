@@ -15,17 +15,29 @@ public sealed class StripeWebhookController : ControllerBase
     private readonly ISubscriptionRepository _subs;
     private readonly string _webhookSecret;
     private readonly ILogger<StripeWebhookController> _logger;
+    private readonly Func<string, string, string, Event> _constructEvent;
 
     public StripeWebhookController(
         IPaymentService payment,
         ISubscriptionRepository subs,
         IConfiguration config,
-        ILogger<StripeWebhookController> logger)
+        ILogger<StripeWebhookController> logger,
+        Func<string, string, string, Event> constructEvent)
     {
         _payment       = payment;
         _subs          = subs;
-        _webhookSecret = config["Stripe:WebhookSecret"] ?? string.Empty;
         _logger        = logger;
+        _constructEvent = constructEvent;
+
+        string? webhookSecret = config["Stripe:WebhookSecret"];
+        if (string.IsNullOrWhiteSpace(webhookSecret))
+        {
+            logger.LogCritical("Stripe:WebhookSecret is not configured. Webhook handling will fail.");
+            throw new InvalidOperationException(
+                "Stripe:WebhookSecret is not configured. Please set this configuration key.");
+        }
+
+        _webhookSecret = webhookSecret;
     }
 
     /// <summary>
@@ -50,11 +62,16 @@ public sealed class StripeWebhookController : ControllerBase
         Event stripeEvent;
         try
         {
-            stripeEvent = EventUtility.ConstructEvent(payload, sig.ToString(), _webhookSecret);
+            stripeEvent = _constructEvent(payload, sig.ToString(), _webhookSecret);
         }
         catch (StripeException ex)
         {
             _logger.LogWarning(ex, "Stripe signature validation failed");
+            return BadRequest();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to parse Stripe event payload");
             return BadRequest();
         }
 
@@ -87,15 +104,29 @@ public sealed class StripeWebhookController : ControllerBase
             case EventTypes.CustomerSubscriptionUpdated:
             {
                 Subscription sub = (Subscription)ev.Data.Object;
-                string tier     = MapPriceIdToTier(sub.Items.Data[0].Price.Id);
-                Guid? userId    = GetUserIdFromMetadata(sub.Metadata);
+                var items = sub.Items?.Data;
+                if (items == null || items.Count == 0)
+                {
+                    _logger.LogWarning(
+                        "Subscription {SubId} has no items; skipping update", sub.Id);
+                    return;
+                }
+                var price = items[0].Price;
+                if (price == null || string.IsNullOrWhiteSpace(price.Id))
+                {
+                    _logger.LogWarning(
+                        "Subscription {SubId} item has no valid price; skipping update", sub.Id);
+                    return;
+                }
+                string tier  = MapPriceIdToTier(price.Id);
+                Guid? userId = GetUserIdFromMetadata(sub.Metadata);
                 if (!userId.HasValue)
                 {
                     _logger.LogWarning("No valid userId in Stripe subscription metadata for sub {SubId}", sub.Id);
                     return;
                 }
-                DateTime periodEnd = sub.Items.Data.Count > 0
-                    ? sub.Items.Data[0].CurrentPeriodEnd
+                DateTime periodEnd = items[0].CurrentPeriodEnd != default
+                    ? items[0].CurrentPeriodEnd
                     : DateTime.UtcNow.AddMonths(1);
                 await _subs.UpdateUserSubscriptionAsync(userId.Value, tier, sub.Id, periodEnd, ct);
                 _logger.LogInformation(
