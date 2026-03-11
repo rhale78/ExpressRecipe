@@ -20,7 +20,7 @@ public interface IRecipeEventPublisher
     Task PublishDeletedAsync(Guid recipeId, Guid deletedBy, CancellationToken ct = default);
 
     Task PublishCookedSessionAsync(Guid sessionId, Guid userId, Guid householdId,
-        Guid recipeId, DateTime cookedAt, bool hasRating, CancellationToken ct = default);
+        Guid recipeId, DateTimeOffset cookedAt, bool hasRating, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -54,7 +54,7 @@ public sealed class RecipeEventPublisher : IRecipeEventPublisher
             RecipeEventKeys.Deleted, ct);
 
     public Task PublishCookedSessionAsync(Guid sessionId, Guid userId, Guid householdId,
-        Guid recipeId, DateTime cookedAt, bool hasRating, CancellationToken ct = default) =>
+        Guid recipeId, DateTimeOffset cookedAt, bool hasRating, CancellationToken ct = default) =>
         SafePublishAsync(
             new RecipeCookedSessionEvent
             {
@@ -100,6 +100,6 @@ public sealed class NullRecipeEventPublisher : IRecipeEventPublisher
         => Task.CompletedTask;
 
     public Task PublishCookedSessionAsync(Guid sessionId, Guid userId, Guid householdId,
-        Guid recipeId, DateTime cookedAt, bool hasRating, CancellationToken ct = default)
+        Guid recipeId, DateTimeOffset cookedAt, bool hasRating, CancellationToken ct = default)
         => Task.CompletedTask;
 }

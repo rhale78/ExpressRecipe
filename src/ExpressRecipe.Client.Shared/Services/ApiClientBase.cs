@@ -151,13 +151,14 @@ public abstract class ApiClientBase
         }
     }
 
-    protected async Task<bool> PatchAsync(string endpoint)
+    protected async Task<bool> PatchAsync(string endpoint, CancellationToken ct = default)
     {
         await SetAuthorizationHeaderAsync();
 
         try
         {
-            var response = await HttpClient.PatchAsync(endpoint, new StringContent(string.Empty));
+            using HttpRequestMessage request = new(HttpMethod.Patch, endpoint);
+            HttpResponseMessage response = await HttpClient.SendAsync(request, ct);
             return response.IsSuccessStatusCode;
         }
         catch (HttpRequestException ex)

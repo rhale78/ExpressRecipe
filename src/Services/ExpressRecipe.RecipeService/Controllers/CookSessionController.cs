@@ -11,6 +11,8 @@ namespace ExpressRecipe.RecipeService.Controllers;
 [Route("api/cook-sessions")]
 public sealed class CookSessionController : ControllerBase
 {
+    private const int MaxSessionLimit = 100;
+
     private readonly ICookSessionRepository _repo;
     private readonly IRecipeEventPublisher _publisher;
 
@@ -34,14 +36,16 @@ public sealed class CookSessionController : ControllerBase
         Guid? userId = GetCurrentUserId();
         if (userId is null) { return Unauthorized(); }
 
-        Guid id = await _repo.LogSessionAsync(userId.Value, req, ct);
+        DateTimeOffset cookedAt = req.CookedAt ?? DateTimeOffset.UtcNow;
+
+        Guid id = await _repo.LogSessionAsync(userId.Value, req, cookedAt, ct);
 
         await _publisher.PublishCookedSessionAsync(
             sessionId:   id,
             userId:      userId.Value,
             householdId: req.HouseholdId,
             recipeId:    req.RecipeId,
-            cookedAt:    req.CookedAt ?? DateTime.UtcNow,
+            cookedAt:    cookedAt,
             hasRating:   req.Rating.HasValue,
             ct:          ct);
 
@@ -52,69 +56,16 @@ public sealed class CookSessionController : ControllerBase
     public async Task<IActionResult> GetSessions(
         [FromQuery] Guid? recipeId, [FromQuery] int limit = 20, CancellationToken ct = default)
     {
+        if (limit < 1 || limit > MaxSessionLimit)
+        {
+            return BadRequest(new { message = $"limit must be between 1 and {MaxSessionLimit}." });
+        }
+
         Guid? userId = GetCurrentUserId();
         if (userId is null) { return Unauthorized(); }
 
         List<CookSessionDto> sessions =
             await _repo.GetSessionsAsync(userId.Value, recipeId, limit, ct);
         return Ok(sessions);
-    }
-}
-
-[Authorize]
-[ApiController]
-[Route("api/recipes/{recipeId:guid}/notes")]
-public sealed class RecipeNoteController : ControllerBase
-{
-    private readonly ICookSessionRepository _repo;
-
-    public RecipeNoteController(ICookSessionRepository repo)
-    {
-        _repo = repo;
-    }
-
-    private Guid? GetCurrentUserId()
-    {
-        string? value = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(value, out Guid userId)) { return null; }
-        return userId;
-    }
-
-    [HttpGet]
-    public async Task<IActionResult> GetNotes(Guid recipeId, CancellationToken ct)
-    {
-        Guid? userId = GetCurrentUserId();
-        if (userId is null) { return Unauthorized(); }
-        return Ok(await _repo.GetNotesAsync(userId.Value, recipeId, ct));
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> SaveNote(Guid recipeId,
-        [FromBody] SaveRecipeNoteRequest req, CancellationToken ct)
-    {
-        Guid? userId = GetCurrentUserId();
-        if (userId is null) { return Unauthorized(); }
-
-        SaveRecipeNoteRequest reqWithId = req with { RecipeId = recipeId };
-        Guid id = await _repo.SaveNoteAsync(userId.Value, reqWithId, ct);
-        return Ok(new { id });
-    }
-
-    [HttpPatch("{noteId:guid}/dismiss")]
-    public async Task<IActionResult> DismissNote(Guid recipeId, Guid noteId, CancellationToken ct)
-    {
-        Guid? userId = GetCurrentUserId();
-        if (userId is null) { return Unauthorized(); }
-        await _repo.DismissNoteAsync(noteId, userId.Value, ct);
-        return NoContent();
-    }
-
-    [HttpDelete("{noteId:guid}")]
-    public async Task<IActionResult> DeleteNote(Guid recipeId, Guid noteId, CancellationToken ct)
-    {
-        Guid? userId = GetCurrentUserId();
-        if (userId is null) { return Unauthorized(); }
-        await _repo.DeleteNoteAsync(noteId, userId.Value, ct);
-        return NoContent();
     }
 }

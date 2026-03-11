@@ -169,7 +169,7 @@
                 <div class="recipe-notes-bar">
                     @foreach (RecipeNoteDto note in _notes)
                     {
-                        <div class="recipe-note note-@note.NoteType.ToLower()">
+                        <div class="recipe-note note-@note.NoteType.ToLowerInvariant()">
                             <span class="note-icon">@GetNoteIcon(note.NoteType)</span>
                             <p>@note.NoteText</p>
                             @if (note.IsFromAI)

@@ -33,6 +33,6 @@ public sealed record RecipeCookedSessionEvent : IMessage
     public Guid UserId { get; init; }
     public Guid HouseholdId { get; init; }
     public Guid RecipeId { get; init; }
-    public DateTime CookedAt { get; init; }
+    public DateTimeOffset CookedAt { get; init; }
     public bool HasRating { get; init; }
 }

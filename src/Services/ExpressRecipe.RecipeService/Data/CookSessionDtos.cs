@@ -4,7 +4,7 @@ public sealed record LogCookSessionRequest
 {
     public Guid RecipeId { get; init; }
     public Guid HouseholdId { get; init; }
-    public DateTime? CookedAt { get; init; }
+    public DateTimeOffset? CookedAt { get; init; }
     public int? ServingsMade { get; init; }
     public int? Rating { get; init; }
     public bool? WouldMakeAgain { get; init; }

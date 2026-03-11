@@ -18,10 +18,10 @@ CREATE TABLE UserCookSession (
     CONSTRAINT FK_UserCookSession_Recipe FOREIGN KEY (RecipeId)
         REFERENCES Recipe(Id) ON DELETE CASCADE
 );
-CREATE INDEX IX_UserCookSession_UserId      ON UserCookSession(UserId);
+CREATE INDEX IX_UserCookSession_UserId_CookedAt
+    ON UserCookSession(UserId, CookedAt DESC)
+    INCLUDE (RecipeId, Rating);
 CREATE INDEX IX_UserCookSession_HouseholdId ON UserCookSession(HouseholdId);
-CREATE INDEX IX_UserCookSession_RecipeId    ON UserCookSession(RecipeId);
-CREATE INDEX IX_UserCookSession_CookedAt    ON UserCookSession(CookedAt DESC);
 GO
 
 CREATE TABLE UserRecipeNote (

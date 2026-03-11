@@ -39,7 +39,7 @@ public class CookSessionControllerTests
             Rating      = 4,
             AIHelpUsed  = false
         };
-        _mockRepo.Setup(r => r.LogSessionAsync(_userId, req, default))
+        _mockRepo.Setup(r => r.LogSessionAsync(_userId, req, It.IsAny<DateTimeOffset>(), default))
                  .ReturnsAsync(sessionId);
 
         IActionResult result = await _controller.LogSession(req, default);
@@ -59,14 +59,14 @@ public class CookSessionControllerTests
             Rating      = 5,
             AIHelpUsed  = false
         };
-        _mockRepo.Setup(r => r.LogSessionAsync(_userId, req, default))
+        _mockRepo.Setup(r => r.LogSessionAsync(_userId, req, It.IsAny<DateTimeOffset>(), default))
                  .ReturnsAsync(sessionId);
 
         await _controller.LogSession(req, default);
 
         _mockPublisher.Verify(p => p.PublishCookedSessionAsync(
             sessionId, _userId, _householdId, _recipeId,
-            It.IsAny<DateTime>(), true, default), Times.Once);
+            It.IsAny<DateTimeOffset>(), true, default), Times.Once);
     }
 
     [Fact]
@@ -79,14 +79,37 @@ public class CookSessionControllerTests
             HouseholdId = _householdId,
             AIHelpUsed  = false
         };
-        _mockRepo.Setup(r => r.LogSessionAsync(_userId, req, default))
+        _mockRepo.Setup(r => r.LogSessionAsync(_userId, req, It.IsAny<DateTimeOffset>(), default))
                  .ReturnsAsync(sessionId);
 
         await _controller.LogSession(req, default);
 
         _mockPublisher.Verify(p => p.PublishCookedSessionAsync(
             sessionId, _userId, _householdId, _recipeId,
-            It.IsAny<DateTime>(), false, default), Times.Once);
+            It.IsAny<DateTimeOffset>(), false, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task LogSession_CookedAt_SameValuePassedToRepoAndPublisher()
+    {
+        // When CookedAt is supplied, both repo and publisher should use the exact same value
+        DateTimeOffset suppliedTime = new(2026, 1, 15, 10, 0, 0, TimeSpan.Zero);
+        Guid sessionId = Guid.NewGuid();
+        LogCookSessionRequest req = new()
+        {
+            RecipeId    = _recipeId,
+            HouseholdId = _householdId,
+            CookedAt    = suppliedTime,
+            AIHelpUsed  = false
+        };
+        _mockRepo.Setup(r => r.LogSessionAsync(_userId, req, suppliedTime, default))
+                 .ReturnsAsync(sessionId);
+
+        await _controller.LogSession(req, default);
+
+        _mockRepo.Verify(r => r.LogSessionAsync(_userId, req, suppliedTime, default), Times.Once);
+        _mockPublisher.Verify(p => p.PublishCookedSessionAsync(
+            sessionId, _userId, _householdId, _recipeId, suppliedTime, false, default), Times.Once);
     }
 
     [Fact]
@@ -128,116 +151,25 @@ public class CookSessionControllerTests
 
         _mockRepo.Verify(r => r.GetSessionsAsync(_userId, _recipeId, 10, default), Times.Once);
     }
-}
-
-public class RecipeNoteControllerTests
-{
-    private readonly Mock<ICookSessionRepository> _mockRepo;
-    private readonly RecipeNoteController _controller;
-    private readonly Guid _userId = Guid.NewGuid();
-    private readonly Guid _recipeId = Guid.NewGuid();
-
-    public RecipeNoteControllerTests()
-    {
-        _mockRepo   = new Mock<ICookSessionRepository>();
-        _controller = new RecipeNoteController(_mockRepo.Object);
-        _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_userId);
-    }
-
-    // ── GetNotes ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task GetNotes_ReturnsList()
+    public async Task GetSessions_LimitZero_ReturnsBadRequest()
     {
-        List<RecipeNoteDto> notes = new()
-        {
-            new RecipeNoteDto { Id = Guid.NewGuid(), RecipeId = _recipeId, NoteType = "Tip", NoteText = "test" }
-        };
-        _mockRepo.Setup(r => r.GetNotesAsync(_userId, _recipeId, default)).ReturnsAsync(notes);
-
-        IActionResult result = await _controller.GetNotes(_recipeId, default);
-
-        OkObjectResult ok = Assert.IsType<OkObjectResult>(result);
-        ((List<RecipeNoteDto>)ok.Value!).Should().HaveCount(1);
-    }
-
-    // ── SaveNote ──────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task SaveNote_ReturnsOkWithId()
-    {
-        Guid noteId = Guid.NewGuid();
-        SaveRecipeNoteRequest req = new() { NoteType = "Tip", NoteText = "dissolve starch first" };
-        _mockRepo.Setup(r => r.SaveNoteAsync(_userId, It.IsAny<SaveRecipeNoteRequest>(), default))
-                 .ReturnsAsync(noteId);
-
-        IActionResult result = await _controller.SaveNote(_recipeId, req, default);
-
-        OkObjectResult ok = Assert.IsType<OkObjectResult>(result);
-        ok.Value.Should().BeEquivalentTo(new { id = noteId });
+        IActionResult result = await _controller.GetSessions(null, 0, default);
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 
     [Fact]
-    public async Task SaveNote_SetsRecipeIdFromRoute()
+    public async Task GetSessions_LimitExceedsMax_ReturnsBadRequest()
     {
-        SaveRecipeNoteRequest req = new() { NoteText = "test" };
-        _mockRepo.Setup(r => r.SaveNoteAsync(_userId, It.IsAny<SaveRecipeNoteRequest>(), default))
-                 .ReturnsAsync(Guid.NewGuid());
-
-        await _controller.SaveNote(_recipeId, req, default);
-
-        _mockRepo.Verify(r => r.SaveNoteAsync(_userId,
-            It.Is<SaveRecipeNoteRequest>(n => n.RecipeId == _recipeId), default), Times.Once);
-    }
-
-    // ── DismissNote ───────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task DismissNote_ReturnsNoContent()
-    {
-        Guid noteId = Guid.NewGuid();
-        IActionResult result = await _controller.DismissNote(_recipeId, noteId, default);
-        Assert.IsType<NoContentResult>(result);
-        _mockRepo.Verify(r => r.DismissNoteAsync(noteId, _userId, default), Times.Once);
+        IActionResult result = await _controller.GetSessions(null, 101, default);
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 
     [Fact]
-    public async Task DismissNote_UnauthenticatedUser_ReturnsUnauthorized()
+    public async Task GetSessions_LimitNegative_ReturnsBadRequest()
     {
-        RecipeNoteController unauthCtrl = new(_mockRepo.Object);
-        unauthCtrl.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
-
-        IActionResult result = await unauthCtrl.DismissNote(_recipeId, Guid.NewGuid(), default);
-
-        Assert.IsType<UnauthorizedResult>(result);
-    }
-
-    // ── DeleteNote ────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task DeleteNote_ReturnsNoContent()
-    {
-        Guid noteId = Guid.NewGuid();
-        IActionResult result = await _controller.DeleteNote(_recipeId, noteId, default);
-        Assert.IsType<NoContentResult>(result);
-        _mockRepo.Verify(r => r.DeleteNoteAsync(noteId, _userId, default), Times.Once);
-    }
-
-    [Fact]
-    public async Task DeleteNote_WrongUser_DoesNotDeleteOtherUsersNote()
-    {
-        // Because the WHERE clause in the repo includes UserId, the repo does NOT delete
-        // another user's note — the controller just passes userId through. This test verifies
-        // the controller routes userId correctly so the repo guard applies.
-        Guid noteId = Guid.NewGuid();
-        Guid otherUserId = Guid.NewGuid();
-
-        RecipeNoteController otherCtrl = new(_mockRepo.Object);
-        otherCtrl.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(otherUserId);
-
-        await otherCtrl.DeleteNote(_recipeId, noteId, default);
-
-        _mockRepo.Verify(r => r.DeleteNoteAsync(noteId, otherUserId, default), Times.Once);
-        _mockRepo.Verify(r => r.DeleteNoteAsync(noteId, _userId, default), Times.Never);
+        IActionResult result = await _controller.GetSessions(null, -1, default);
+        Assert.IsType<BadRequestObjectResult>(result);
     }
 }
