@@ -2,7 +2,7 @@
 -- Also add CookedAt to PlannedMeal (required for post-cook trigger)
 
 ALTER TABLE PlannedMeal ADD CookedAt DATETIME2 NULL;
-ALTER TABLE PlannedMeal ADD CookedStatus NVARCHAR(20) NULL DEFAULT 'Planned';
+ALTER TABLE PlannedMeal ADD CookedStatus NVARCHAR(20) NOT NULL DEFAULT 'Planned' WITH VALUES;
     -- Planned | Cooked | Skipped
 GO
 

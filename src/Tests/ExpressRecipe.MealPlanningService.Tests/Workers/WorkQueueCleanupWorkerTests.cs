@@ -46,7 +46,7 @@ public class WorkQueueCleanupWorkerTests
 
         WorkQueueCleanupWorker worker = CreateWorker();
 
-        // Use reflection to call the protected ExecuteAsync indirectly via StartAsync
+        // Start the worker, let it run for a moment, then cancel — verifies exception resilience
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(300));
         Func<Task> act = async () =>
         {

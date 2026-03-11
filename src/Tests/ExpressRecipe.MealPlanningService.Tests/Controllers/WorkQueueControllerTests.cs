@@ -110,6 +110,29 @@ public class WorkQueueControllerTests
     }
 
     [Fact]
+    public async Task ActionItem_WithActionData_PassesActionDataToRepository()
+    {
+        Guid itemId = Guid.NewGuid();
+        ActionQueueItemRequest req = new()
+        {
+            ActionTaken = "AddedToShoppingList",
+            ActionData  = "{\"shoppingListId\":\"abc123\"}"
+        };
+
+        _mockRepo
+            .Setup(r => r.ActionItemAsync(itemId, _testUserId, "AddedToShoppingList",
+                "{\"shoppingListId\":\"abc123\"}", default))
+            .Returns(Task.CompletedTask);
+
+        IActionResult result = await _controller.ActionItem(itemId, req, default);
+
+        result.Should().BeOfType<NoContentResult>();
+        _mockRepo.Verify(r => r.ActionItemAsync(
+            itemId, _testUserId, "AddedToShoppingList",
+            "{\"shoppingListId\":\"abc123\"}", default), Times.Once);
+    }
+
+    [Fact]
     public async Task ActionItem_WhenNoUserClaim_ReturnsUnauthorized()
     {
         WorkQueueController controller = new(_mockRepo.Object);

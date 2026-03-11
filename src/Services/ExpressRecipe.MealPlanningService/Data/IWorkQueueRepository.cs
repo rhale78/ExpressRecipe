@@ -124,13 +124,17 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
         Guid? sourceEntityId, string? sourceService,
         DateTime? expiresAt, CancellationToken ct = default)
     {
-        // MERGE: if active item already exists for same household+type+sourceEntity → do nothing
+        // MERGE: if active item already exists for same household+type+sourceEntity → do nothing.
+        // Only attempt deduplication when SourceEntityId is non-NULL on both sides;
+        // NULL SourceEntityId rows are always inserted (no meaningful dedup key available).
         const string sql = @"
             MERGE WorkQueueItem AS t
             USING (SELECT @HouseholdId, @ItemType, @SourceEntityId)
                 AS s(HouseholdId, ItemType, SourceEntityId)
             ON t.HouseholdId=s.HouseholdId
                AND t.ItemType=s.ItemType
+               AND t.SourceEntityId IS NOT NULL
+               AND s.SourceEntityId IS NOT NULL
                AND t.SourceEntityId=s.SourceEntityId
                AND t.Status='Pending'
             WHEN NOT MATCHED THEN INSERT (
@@ -159,14 +163,16 @@ public sealed class WorkQueueRepository : IWorkQueueRepository
     {
         const string sql = @"UPDATE WorkQueueItem SET
             Status='Actioned', ActionedAt=GETUTCDATE(), ActionedBy=@UserId,
-            ActionTaken=@Action, UpdatedAt=GETUTCDATE()
+            ActionTaken=@Action, ActionPayload=ISNULL(@ActionData, ActionPayload),
+            UpdatedAt=GETUTCDATE()
         WHERE Id=@Id AND Status='Pending'";
         await using SqlConnection conn = new(_connectionString);
         await conn.OpenAsync(ct);
         await using SqlCommand cmd = new(sql, conn);
-        cmd.Parameters.AddWithValue("@Id",     itemId);
-        cmd.Parameters.AddWithValue("@UserId", userId);
-        cmd.Parameters.AddWithValue("@Action", actionTaken);
+        cmd.Parameters.AddWithValue("@Id",         itemId);
+        cmd.Parameters.AddWithValue("@UserId",     userId);
+        cmd.Parameters.AddWithValue("@Action",     actionTaken);
+        cmd.Parameters.AddWithValue("@ActionData", (object?)actionData ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
