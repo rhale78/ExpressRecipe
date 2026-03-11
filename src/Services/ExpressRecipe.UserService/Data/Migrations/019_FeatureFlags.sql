@@ -8,12 +8,18 @@ CREATE TABLE FeatureFlag (
     RolloutPercent  INT NOT NULL DEFAULT 100,   -- 0-100; 100=everyone, 0=no one
     RequiresTier    NVARCHAR(20) NULL,           -- NULL=any tier; 'Plus'|'Premium'|'AdFree'
     Description     NVARCHAR(500) NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy       UNIQUEIDENTIFIER NULL,
+    UpdatedAt       DATETIME2 NULL,
     UpdatedBy       UNIQUEIDENTIFIER NULL,
-    UpdatedAt       DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    IsDeleted       BIT NOT NULL DEFAULT 0,
+    DeletedAt       DATETIME2 NULL,
+    RowVersion      ROWVERSION,
     CONSTRAINT UQ_FeatureFlag_Key UNIQUE (FeatureKey),
-    CONSTRAINT CK_FeatureFlag_RolloutPercent CHECK (RolloutPercent BETWEEN 0 AND 100)
+    CONSTRAINT CK_FeatureFlag_RolloutPercent CHECK (RolloutPercent BETWEEN 0 AND 100),
+    CONSTRAINT CK_FeatureFlag_RequiresTier CHECK (RequiresTier IS NULL OR RequiresTier IN ('Free', 'AdFree', 'Plus', 'Premium'))
 );
-CREATE INDEX IX_FeatureFlag_IsEnabled ON FeatureFlag(IsEnabled);
+CREATE INDEX IX_FeatureFlag_IsEnabled ON FeatureFlag(IsEnabled) WHERE IsDeleted = 0;
 GO
 
 CREATE TABLE UserFeatureOverride (
@@ -25,10 +31,16 @@ CREATE TABLE UserFeatureOverride (
     GrantedBy   UNIQUEIDENTIFIER NULL,  -- admin userId
     ExpiresAt   DATETIME2 NULL,         -- null = permanent
     CreatedAt   DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CreatedBy   UNIQUEIDENTIFIER NULL,
+    UpdatedAt   DATETIME2 NULL,
+    UpdatedBy   UNIQUEIDENTIFIER NULL,
+    IsDeleted   BIT NOT NULL DEFAULT 0,
+    DeletedAt   DATETIME2 NULL,
+    RowVersion  ROWVERSION,
     CONSTRAINT UQ_UserFeatureOverride_User_Key UNIQUE (UserId, FeatureKey)
 );
-CREATE INDEX IX_UserFeatureOverride_UserId     ON UserFeatureOverride(UserId);
-CREATE INDEX IX_UserFeatureOverride_FeatureKey ON UserFeatureOverride(FeatureKey);
+CREATE INDEX IX_UserFeatureOverride_UserId     ON UserFeatureOverride(UserId)     WHERE IsDeleted = 0;
+CREATE INDEX IX_UserFeatureOverride_FeatureKey ON UserFeatureOverride(FeatureKey) WHERE IsDeleted = 0;
 GO
 
 -- Seed known feature keys (IsEnabled defaults to 1 = on locally, can be toggled in admin)

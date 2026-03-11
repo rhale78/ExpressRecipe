@@ -49,6 +49,10 @@ public sealed class FeatureFlagController : ControllerBase
     {
         Guid? adminId = AdminId();
         if (adminId is null) { return Unauthorized(); }
+        if (req.RolloutPercent is < 0 or > 100)
+        {
+            return BadRequest(new { message = "RolloutPercent must be between 0 and 100." });
+        }
         await _repo.UpsertFlagAsync(key, req.IsEnabled, req.RolloutPercent,
             req.RequiresTier, req.Description, adminId.Value, ct);
         await _cache.RemoveAsync($"feat-flag:{key}", ct);   // invalidate immediately
@@ -77,6 +81,8 @@ public sealed class FeatureFlagController : ControllerBase
     public async Task<IActionResult> RemoveUserOverride(Guid userId, string key,
         CancellationToken ct)
     {
+        Guid? adminId = AdminId();
+        if (adminId is null) { return Unauthorized(); }
         await _repo.DeleteUserOverrideAsync(userId, key, ct);
         await _cache.RemoveAsync($"feat-override:{userId}:{key}", ct);
         return NoContent();

@@ -111,10 +111,13 @@ public sealed class FeatureFlagService : IFeatureFlagService
     /// <summary>
     /// Deterministic hash — same user always gets same bucket for a given feature.
     /// This prevents users from flickering in/out of a rollout on each request.
+    /// Uses explicit little-endian byte ordering for consistent bucketing across architectures.
     /// </summary>
     private static uint HashUserId(Guid userId, string featureKey)
     {
         byte[] bytes = System.Text.Encoding.UTF8.GetBytes($"{userId}:{featureKey}");
-        return BitConverter.ToUInt32(System.Security.Cryptography.SHA256.HashData(bytes), 0);
+        byte[] hash  = System.Security.Cryptography.SHA256.HashData(bytes);
+        // Read first 4 bytes as little-endian uint32 regardless of host architecture
+        return (uint)(hash[0] | (hash[1] << 8) | (hash[2] << 16) | (hash[3] << 24));
     }
 }
