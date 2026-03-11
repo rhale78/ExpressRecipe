@@ -54,6 +54,13 @@ public sealed class AdSenseAdService : IAdService
         string safeSlot = System.Text.RegularExpressions.Regex.Replace(
             placementId, @"[^A-Za-z0-9\-_]", string.Empty);
 
+        // Fail closed when the sanitized placement ID is empty to avoid emitting
+        // markup with an empty or invalid data-ad-slot attribute.
+        if (string.IsNullOrWhiteSpace(safeSlot))
+        {
+            return null;
+        }
+
         return $"<ins class=\"adsbygoogle\" " +
                $"data-ad-client=\"{_publisherId}\" " +
                $"data-ad-slot=\"{safeSlot}\"></ins>";

@@ -45,7 +45,7 @@ public class SubscriptionsController : ControllerBase
     private static bool IsValidAbsoluteHttpsUrl(string url)
     {
         return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+            && uri.Scheme == Uri.UriSchemeHttps;
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public class SubscriptionsController : ControllerBase
             {
                 try
                 {
-                    await _payment.CancelSubscriptionAsync(subscription.StripeSubscriptionId);
+                    await _payment.CancelSubscriptionAsync(subscription.StripeSubscriptionId, HttpContext.RequestAborted);
                     _logger.LogInformation(
                         "User {UserId} Stripe subscription {StripeId} scheduled for cancellation",
                         userId.Value, subscription.StripeSubscriptionId);
@@ -301,7 +301,7 @@ public class SubscriptionsController : ControllerBase
             }
 
             string portalUrl = await _payment.CreateBillingPortalSessionAsync(
-                userId.Value, req.ReturnUrl, ct);
+                userId.Value, profile.StripeCustomerId, req.ReturnUrl, ct);
 
             return Ok(new { url = portalUrl });
         }

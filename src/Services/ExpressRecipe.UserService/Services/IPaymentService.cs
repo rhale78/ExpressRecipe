@@ -21,6 +21,7 @@ public interface IPaymentService
     /// </summary>
     Task<string> CreateBillingPortalSessionAsync(
         Guid userId,
+        string stripeCustomerId,
         string returnUrl,
         CancellationToken ct = default);
 

@@ -32,12 +32,13 @@ public sealed class MockPaymentService : IPaymentService
     /// <inheritdoc/>
     public Task<string> CreateBillingPortalSessionAsync(
         Guid userId,
+        string stripeCustomerId,
         string returnUrl,
         CancellationToken ct = default)
     {
         _logger.LogInformation(
-            "[MockPayment] CreateBillingPortalSession: userId={UserId}",
-            userId);
+            "[MockPayment] CreateBillingPortalSession: userId={UserId} stripeCustomerId={CustomerId}",
+            userId, stripeCustomerId);
 
         return Task.FromResult(returnUrl);
     }
