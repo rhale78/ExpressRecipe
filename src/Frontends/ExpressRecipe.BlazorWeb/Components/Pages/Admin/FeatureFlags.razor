@@ -1,0 +1,201 @@
+@page "/admin/features"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using ExpressRecipe.Client.Shared.Services
+@using Microsoft.AspNetCore.Authorization
+@inject IAdminApiClient AdminApi
+@inject IToastService ToastService
+
+<PageTitle>Feature Flags - ExpressRecipe Admin</PageTitle>
+
+<div class="admin-container">
+    <div class="admin-header">
+        <h1>🚩 Feature Flags</h1>
+        <p>Manage feature flags, rollout percentages, and tier requirements.</p>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="loading-state">Loading feature flags…</div>
+    }
+    else if (_flags.Count == 0)
+    {
+        <div class="empty-state">No feature flags found.</div>
+    }
+    else
+    {
+        <div class="flags-table-wrapper">
+            <table class="flags-table">
+                <thead>
+                    <tr>
+                        <th>Feature Key</th>
+                        <th>Description</th>
+                        <th>Enabled</th>
+                        <th>Rollout %</th>
+                        <th>Requires Tier</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var flag in _flags)
+                    {
+                        <tr class="@(flag.IsEnabled ? "" : "flag-disabled")">
+                            <td><code class="feature-key">@flag.FeatureKey</code></td>
+                            <td>@flag.Description</td>
+                            <td>
+                                <label class="toggle-switch" title="Toggle @flag.FeatureKey">
+                                    <input type="checkbox"
+                                           aria-label="Enable @flag.FeatureKey"
+                                           checked="@flag.IsEnabled"
+                                           @onchange="e => ToggleFlagAsync(flag, (bool)(e.Value ?? false))" />
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </td>
+                            <td>
+                                @if (_editingKey == flag.FeatureKey)
+                                {
+                                    <input type="number" min="0" max="100"
+                                           class="rollout-input"
+                                           aria-label="Rollout percentage for @flag.FeatureKey"
+                                           @bind="_editRollout"
+                                           @bind:event="oninput" />
+                                }
+                                else
+                                {
+                                    <span>@flag.RolloutPercentage%</span>
+                                }
+                            </td>
+                            <td>
+                                @if (_editingKey == flag.FeatureKey)
+                                {
+                                    <select class="tier-select"
+                                            aria-label="Required tier for @flag.FeatureKey"
+                                            @bind="_editTier">
+                                        <option value="">— none —</option>
+                                        <option value="AdFree">AdFree</option>
+                                        <option value="Plus">Plus</option>
+                                        <option value="Premium">Premium</option>
+                                    </select>
+                                }
+                                else if (!string.IsNullOrEmpty(flag.RequiredTier))
+                                {
+                                    <span class="tier-badge tier-@flag.RequiredTier.ToLowerInvariant()">@flag.RequiredTier</span>
+                                }
+                                else
+                                {
+                                    <span class="no-tier">—</span>
+                                }
+                            </td>
+                            <td>
+                                @if (_editingKey == flag.FeatureKey)
+                                {
+                                    <button class="btn btn-sm btn-success" @onclick="() => SaveEditAsync(flag)">Save</button>
+                                    <button class="btn btn-sm btn-secondary" @onclick="CancelEdit">Cancel</button>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-outline" @onclick="() => StartEdit(flag)">Edit</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<style>
+    .flags-table-wrapper { overflow-x: auto; margin-top: 1.5rem; }
+    .flags-table { width: 100%; border-collapse: collapse; }
+    .flags-table th, .flags-table td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; }
+    .flags-table th { background: #f9fafb; font-weight: 600; color: #374151; }
+    .flags-table tr.flag-disabled td { opacity: 0.5; }
+    .feature-key { background: #f3f4f6; border-radius: 4px; padding: 2px 6px; font-size: 0.82rem; }
+    .rollout-input { width: 64px; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 6px; }
+    .tier-select { border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 6px; font-size: 0.85rem; }
+    .no-tier { color: #9ca3af; }
+    .tier-badge { border-radius: 4px; font-size: 0.7rem; padding: 2px 6px; font-weight: 600; }
+    .tier-plus    { background: #dbeafe; color: #1d4ed8; }
+    .tier-premium { background: #fef3c7; color: #92400e; }
+    .tier-adfree  { background: #f0fdf4; color: #15803d; }
+    /* Toggle switch */
+    .toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; cursor: pointer; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: #d1d5db; border-radius: 22px; transition: .2s; }
+    .toggle-slider:before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .2s; }
+    input:checked + .toggle-slider { background: #2563eb; }
+    input:checked + .toggle-slider:before { transform: translateX(18px); }
+    .btn-sm { padding: 0.25rem 0.6rem; font-size: 0.82rem; border-radius: 4px; border: 1px solid transparent; cursor: pointer; margin-right: 4px; }
+    .btn-success  { background: #16a34a; color: white; }
+    .btn-secondary { background: #6b7280; color: white; }
+    .btn-outline  { background: transparent; border-color: #d1d5db; color: #374151; }
+    .btn-outline:hover { background: #f3f4f6; }
+    .loading-state, .empty-state { color: #6b7280; padding: 2rem; text-align: center; }
+</style>
+
+@code {
+    private List<FeatureFlagAdminDto> _flags = new();
+    private bool _loading = true;
+
+    // Edit state
+    private string? _editingKey;
+    private int     _editRollout;
+    private string  _editTier = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFlagsAsync();
+    }
+
+    private async Task LoadFlagsAsync()
+    {
+        _loading = true;
+        _flags   = await AdminApi.GetFeatureFlagsAsync();
+        _loading = false;
+    }
+
+    private async Task ToggleFlagAsync(FeatureFlagAdminDto flag, bool newValue)
+    {
+        flag.IsEnabled = newValue;
+        var success = await AdminApi.PatchFeatureFlagAsync(flag.FeatureKey,
+            new PatchFeatureFlagAdminRequest { IsEnabled = newValue });
+
+        if (success)
+            ToastService.ShowSuccess($"'{flag.FeatureKey}' {(newValue ? "enabled" : "disabled")}.");
+        else
+            ToastService.ShowError($"Failed to update '{flag.FeatureKey}'.");
+    }
+
+    private void StartEdit(FeatureFlagAdminDto flag)
+    {
+        _editingKey  = flag.FeatureKey;
+        _editRollout = flag.RolloutPercentage;
+        _editTier    = flag.RequiredTier ?? string.Empty;
+    }
+
+    private void CancelEdit() => _editingKey = null;
+
+    private async Task SaveEditAsync(FeatureFlagAdminDto flag)
+    {
+        var success = await AdminApi.PatchFeatureFlagAsync(flag.FeatureKey,
+            new PatchFeatureFlagAdminRequest
+            {
+                RolloutPercentage = _editRollout,
+                RequiredTier      = _editTier      // empty string = clear tier requirement
+            });
+
+        if (success)
+        {
+            flag.RolloutPercentage = _editRollout;
+            flag.RequiredTier      = string.IsNullOrEmpty(_editTier) ? null : _editTier;
+            ToastService.ShowSuccess($"'{flag.FeatureKey}' updated.");
+        }
+        else
+        {
+            ToastService.ShowError($"Failed to update '{flag.FeatureKey}'.");
+        }
+
+        _editingKey = null;
+    }
+}

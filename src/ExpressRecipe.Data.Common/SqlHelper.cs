@@ -263,6 +263,18 @@ public abstract class SqlHelper
         return await ExecuteReaderAsync(sql, record => mapper((SqlDataReader)record), timeoutSeconds, parameters);
     }
 
+    // Overload for SqlDataReader mapper with cancellation support
+    protected async Task<List<T>> ExecuteReaderAsync<T>(
+        string sql,
+        Func<SqlDataReader, T> mapper,
+        CancellationToken cancellationToken,
+        params DbParameter[] parameters)
+    {
+        if (mapper == null) throw new ArgumentNullException(nameof(mapper));
+
+        return await ExecuteReaderAsync(sql, record => mapper((SqlDataReader)record), timeoutSeconds: 30, cancellationToken, parameters);
+    }
+
     /// <summary>
     /// Executes a query and returns the first result or default.
     /// </summary>

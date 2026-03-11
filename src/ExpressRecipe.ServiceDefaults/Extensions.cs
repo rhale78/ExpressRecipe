@@ -1,6 +1,9 @@
+using ExpressRecipe.ServiceDefaults.FeatureGates;
+using ExpressRecipe.Shared.Services.FeatureGates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -53,6 +56,9 @@ public static class Extensions
             // Let Aspire handle HTTP version negotiation automatically
             http.AddServiceDiscovery();
         });
+
+        // Register feature gate services (can be overridden per-service)
+        builder.AddFeatureGateServices();
 
         return builder;
     }
@@ -203,5 +209,34 @@ public static class Extensions
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ILocalModeConfig"/> and <see cref="IFeatureFlagService"/> defaults.
+    /// Services that manage feature flags locally (e.g. UserService) should re-register
+    /// <see cref="IFeatureFlagService"/> after calling <c>AddServiceDefaults()</c> to
+    /// replace the HTTP proxy with a direct DB-backed implementation.
+    /// </summary>
+    public static IHostApplicationBuilder AddFeatureGateServices(
+        this IHostApplicationBuilder builder)
+    {
+        // In-process cache for flag results (shared across all IFeatureFlagService calls)
+        builder.Services.AddMemoryCache();
+
+        // LocalModeConfig reads the "LocalMode" config key (default false)
+        builder.Services.AddSingleton<ILocalModeConfig>(sp =>
+            new LocalModeConfig(sp.GetRequiredService<IConfiguration>()));
+
+        // Named HTTP client for calling UserService's feature-flag endpoint
+        builder.Services.AddHttpClient("UserService", client =>
+        {
+            client.BaseAddress = new Uri("http://userservice");
+            client.Timeout = TimeSpan.FromSeconds(5);
+        });
+
+        // Default implementation — proxies to UserService over HTTP
+        builder.Services.AddScoped<IFeatureFlagService, HttpFeatureFlagService>();
+
+        return builder;
     }
 }

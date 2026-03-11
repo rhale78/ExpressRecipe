@@ -1,0 +1,10 @@
+@if (!string.IsNullOrEmpty(RequiredTier))
+{
+    <span class="tier-badge tier-@RequiredTier.ToLowerInvariant()">@RequiredTier</span>
+}
+
+@code {
+    /// <summary>The tier name to display, e.g. "Plus", "Premium", "AdFree".</summary>
+    [Parameter]
+    public string? RequiredTier { get; set; }
+}

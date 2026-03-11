@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services.FeatureGates;
 using ExpressRecipe.UserService.Data;
 using ExpressRecipe.UserService.Services;
 using ExpressRecipe.Shared.Middleware;
@@ -89,6 +90,12 @@ else
 // Register allergy incident engine repositories and analyzer
 builder.Services.AddScoped<IAllergyIncidentRepository>(sp => new AllergyIncidentRepository(connectionString));
 builder.Services.AddScoped<ExpressRecipe.UserService.Services.AllergyDifferentialAnalyzer>();
+
+// Feature flag services — override the HttpFeatureFlagService registered by ServiceDefaults
+builder.Services.AddScoped<IFeatureFlagRepository>(sp => new FeatureFlagRepository(connectionString));
+builder.Services.AddScoped<FeatureFlagService>();
+// Replace the HTTP proxy with the direct DB-backed implementation
+builder.Services.AddScoped<IFeatureFlagService>(sp => sp.GetRequiredService<FeatureFlagService>());
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>

@@ -1,6 +1,7 @@
 using ExpressRecipe.SafeForkService.Contracts.Requests;
 using ExpressRecipe.SafeForkService.Contracts.Responses;
 using ExpressRecipe.SafeForkService.Services;
+using ExpressRecipe.Shared.Attributes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,6 +10,7 @@ namespace ExpressRecipe.SafeForkService.Controllers;
 [ApiController]
 [Route("api/allergenprofile")]
 [Authorize]
+[RequiresFeature("allergy-engine")]
 public class AllergenProfileController : ControllerBase
 {
     private readonly IAllergenProfileService _service;

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Net.Http.Json;
 
 namespace ExpressRecipe.Client.Shared.Services;
@@ -12,17 +13,26 @@ public interface IAdminApiClient
     Task<ImportStatusDto?> ImportOpenFoodFactsAsync();
     Task<ImportStatusDto?> GetImportStatusAsync(Guid importId);
     Task<List<ImportHistoryDto>> GetImportHistoryAsync();
+
+    // Feature flags
+    Task<List<FeatureFlagAdminDto>> GetFeatureFlagsAsync();
+    Task<bool> PatchFeatureFlagAsync(string featureKey, PatchFeatureFlagAdminRequest request);
 }
 
 public class AdminApiClient : IAdminApiClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITokenProvider _tokenProvider;
+    private readonly ILogger<AdminApiClient> _logger;
 
-    public AdminApiClient(IHttpClientFactory httpClientFactory, ITokenProvider tokenProvider)
+    public AdminApiClient(
+        IHttpClientFactory httpClientFactory,
+        ITokenProvider tokenProvider,
+        ILogger<AdminApiClient> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _tokenProvider = tokenProvider;
+        _tokenProvider     = tokenProvider;
+        _logger            = logger;
     }
 
     public async Task<ImportStatusDto?> ImportUSDADatabaseAsync()
@@ -58,7 +68,10 @@ public class AdminApiClient : IAdminApiClient
                 return await response.Content.ReadFromJsonAsync<ImportStatusDto>();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get import status from ProductService for {ImportId}", importId);
+        }
 
         // Try RecallService
         try
@@ -70,7 +83,10 @@ public class AdminApiClient : IAdminApiClient
                 return await response.Content.ReadFromJsonAsync<ImportStatusDto>();
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get import status from RecallService for {ImportId}", importId);
+        }
 
         return null;
     }
@@ -91,7 +107,10 @@ public class AdminApiClient : IAdminApiClient
                     history.AddRange(productHistory);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get import history from ProductService");
+        }
 
         // Get history from RecallService
         try
@@ -105,9 +124,53 @@ public class AdminApiClient : IAdminApiClient
                     history.AddRange(recallHistory);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get import history from RecallService");
+        }
 
         return history.OrderByDescending(h => h.StartedAt).ToList();
+    }
+
+    public async Task<List<FeatureFlagAdminDto>> GetFeatureFlagsAsync()
+    {
+        try
+        {
+            var client = await CreateClientAsync("UserService");
+            var response = await client.GetAsync("/api/featureflags");
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<List<FeatureFlagAdminDto>>()
+                       ?? new List<FeatureFlagAdminDto>();
+            }
+            _logger.LogWarning("GetFeatureFlagsAsync returned {StatusCode}", response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve feature flags from UserService");
+        }
+
+        return new List<FeatureFlagAdminDto>();
+    }
+
+    public async Task<bool> PatchFeatureFlagAsync(string featureKey, PatchFeatureFlagAdminRequest request)
+    {
+        try
+        {
+            var client = await CreateClientAsync("UserService");
+            var response = await client.PatchAsJsonAsync(
+                $"/api/featureflags/{Uri.EscapeDataString(featureKey)}", request);
+            if (!response.IsSuccessStatusCode)
+                _logger.LogWarning("PatchFeatureFlagAsync for {FeatureKey} returned {StatusCode}",
+                    featureKey, response.StatusCode);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to patch feature flag {FeatureKey}", featureKey);
+        }
+
+        return false;
     }
 
     private async Task<HttpClient> CreateClientAsync(string serviceName)
@@ -149,4 +212,24 @@ public class ImportHistoryDto
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public TimeSpan? Duration => CompletedAt.HasValue ? CompletedAt.Value - StartedAt : null;
+}
+
+public class FeatureFlagAdminDto
+{
+    public Guid   Id                { get; set; }
+    public string FeatureKey        { get; set; } = string.Empty;
+    public string Description       { get; set; } = string.Empty;
+    public bool   IsEnabled         { get; set; }
+    public int    RolloutPercentage { get; set; }
+    public string? RequiredTier     { get; set; }
+    public DateTime CreatedAt       { get; set; }
+    public DateTime? UpdatedAt      { get; set; }
+}
+
+public class PatchFeatureFlagAdminRequest
+{
+    public bool?   IsEnabled         { get; init; }
+    public int?    RolloutPercentage { get; init; }
+    public string? RequiredTier      { get; init; }
+    public string? Description       { get; init; }
 }
