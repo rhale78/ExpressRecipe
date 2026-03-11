@@ -1314,6 +1314,7 @@ public class ProductRepository : SqlHelper, IProductRepository
     /// <summary>
     /// Force-import a product with ApprovalStatus='Approved', bypassing the moderation queue.
     /// Sets ApprovedBy and ApprovedAt immediately.
+    /// Also persists IngredientsText and NutritionJson into ProductMetadata when provided.
     /// </summary>
     public async Task<Guid> ForceImportAsync(ManualProductImportRequest request, Guid approvedBy)
     {
@@ -1334,6 +1335,13 @@ public class ProductRepository : SqlHelper, IProductRepository
             CreateParameter("@Category", (object?)request.Category ?? DBNull.Value),
             CreateParameter("@Description", (object?)request.Description ?? DBNull.Value),
             CreateParameter("@ApprovedBy", approvedBy));
+
+        // Persist optional extended fields so the admin import is not lossy
+        if (!string.IsNullOrWhiteSpace(request.IngredientsText))
+            await UpdateProductMetadataAsync(productId, "IngredientsText", request.IngredientsText);
+
+        if (!string.IsNullOrWhiteSpace(request.NutritionJson))
+            await UpdateProductMetadataAsync(productId, "NutritionJson", request.NutritionJson);
 
         return productId;
     }

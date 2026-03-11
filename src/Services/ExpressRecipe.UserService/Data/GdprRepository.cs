@@ -36,7 +36,7 @@ public sealed class GdprRepository : SqlHelper, IGdprRepository
 
         var id = Guid.NewGuid();
         await ExecuteNonQueryAsync(
-            sql,
+            sql, ct,
             CreateParameter("@Id", id),
             CreateParameter("@UserId", userId),
             CreateParameter("@RequestType", requestType));
@@ -64,6 +64,7 @@ public sealed class GdprRepository : SqlHelper, IGdprRepository
                 DownloadUrl = GetString(reader, "DownloadUrl"),
                 Notes = GetString(reader, "Notes")
             },
+            ct,
             CreateParameter("@UserId", userId));
     }
 
@@ -78,7 +79,7 @@ public sealed class GdprRepository : SqlHelper, IGdprRepository
             WHERE Id = @Id";
 
         await ExecuteNonQueryAsync(
-            sql,
+            sql, ct,
             CreateParameter("@Id", requestId),
             CreateParameter("@Status", status),
             CreateParameter("@DownloadUrl", (object?)downloadUrl ?? DBNull.Value),
@@ -86,10 +87,14 @@ public sealed class GdprRepository : SqlHelper, IGdprRepository
     }
 
     /// <summary>
-    /// Anonymise PII columns but keep the UserProfile row for DB integrity.
-    /// Also hard-deletes allergen data, inventory, and meal-plan records owned by
-    /// this user (tables that hold only PII-linked data).
-    /// Community reviews/contributions are kept but UserId column is zeroed.
+    /// Anonymise PII columns in UserProfile but keep the row for DB integrity.
+    /// Also hard-deletes <c>UserAllergen</c> and <c>UserDietaryRestriction</c> rows for this user —
+    /// these contain sensitive health data and serve no purpose without the user's identity.
+    /// <para>
+    /// Note: inventory, meal-plan, and community records are NOT modified here; they are
+    /// handled by each respective service when they receive the <c>GdprForgetEvent</c> from
+    /// the message bus.
+    /// </para>
     /// </summary>
     public async Task AnonymizeUserAsync(Guid userId, CancellationToken ct = default)
     {
@@ -163,8 +168,17 @@ public sealed class GdprRepository : SqlHelper, IGdprRepository
                 cmd.Transaction = tx;
                 cmd.CommandText = $"DELETE FROM [{table}] WHERE UserId = @UserId";
                 cmd.Parameters.Add(new SqlParameter("@UserId", userId));
-                try { await cmd.ExecuteNonQueryAsync(ct); }
-                catch { /* table may not exist in this DB; skip */ }
+                try
+                {
+                    await cmd.ExecuteNonQueryAsync(ct);
+                }
+                catch (Microsoft.Data.SqlClient.SqlException ex)
+                    when (ex.Number == 208) // Invalid object name – table doesn't exist in this DB
+                {
+                    // Table not present in this service DB; safe to skip.
+                }
+                // All other exceptions (FK violations, permission errors, etc.) propagate
+                // so that the deletion failure is visible and can be investigated.
             }
 
             return 0;

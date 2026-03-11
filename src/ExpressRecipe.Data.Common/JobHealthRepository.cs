@@ -66,7 +66,7 @@ public sealed class JobHealthRepository : SqlHelper, IJobHealthRepository
                 INSERT INTO JobHealthCheck (JobName, LastRunAt, LastSuccess, ErrorMessage, RunCount)
                 VALUES (@JobName, GETUTCDATE(), @Success, @ErrorMessage, 1)";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@JobName", jobName),
             CreateParameter("@Success", success),
             CreateParameter("@ErrorMessage", (object?)errorMessage ?? DBNull.Value));
@@ -86,6 +86,6 @@ public sealed class JobHealthRepository : SqlHelper, IJobHealthRepository
             LastSuccess = GetBoolean(reader, "LastSuccess"),
             ErrorMessage = GetString(reader, "ErrorMessage"),
             RunCount = GetInt32(reader, "RunCount")
-        });
+        }, ct);
     }
 }

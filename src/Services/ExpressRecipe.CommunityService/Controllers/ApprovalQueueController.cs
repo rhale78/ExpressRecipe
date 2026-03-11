@@ -84,7 +84,7 @@ public sealed class ApprovalQueueController : ControllerBase
         var item = await _queue.GetByIdAsync(id, ct);
         if (item is null) return NotFound(new { message = "Approval queue item not found." });
 
-        await _queue.RejectAsync(id, req.Reason ?? "No reason given", ct);
+        await _queue.RejectAsync(id, reviewerId.Value, req.Reason ?? "No reason given", ct);
 
         _logger.LogInformation("Reviewer {ReviewerId} rejected {EntityType}/{EntityId}: {Reason}",
             reviewerId, item.EntityType, item.EntityId, req.Reason);

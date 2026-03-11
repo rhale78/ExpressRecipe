@@ -141,6 +141,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+// Block mutating operations on impersonation (read-only) tokens
+app.UseReadOnlyImpersonation();
 
 // Use activity tracking middleware (must be after authentication)
 app.UseMiddleware<ExpressRecipe.UserService.Middleware.ActivityTrackingMiddleware>();

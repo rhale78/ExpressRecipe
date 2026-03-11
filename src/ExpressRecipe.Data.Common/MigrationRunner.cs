@@ -13,6 +13,9 @@ public class MigrationRunner
     private readonly string _connectionString;
     private readonly ILogger<MigrationRunner>? _logger;
 
+    /// <summary>Lease duration for the migration concurrency lock (minutes).</summary>
+    private const int MigrationLockLeaseMinutes = 5;
+
     public MigrationRunner(string connectionString, ILogger<MigrationRunner>? logger = null)
     {
         _connectionString = connectionString;
@@ -253,21 +256,54 @@ public class MigrationRunner
     }
 
     /// <summary>
-    /// Attempts to insert a lock row. Returns <c>true</c> when the lock was acquired,
-    /// <c>false</c> when another instance already holds it.
+    /// Attempts to acquire (or take over a stale) migration lock.
+    /// Uses a 5-minute lease: if the existing lock is older than 5 minutes it is
+    /// considered stale and this instance takes it over.
+    /// Returns <c>true</c> when the lock was acquired, <c>false</c> when a fresh
+    /// lock is held by another instance.
     /// </summary>
     private async Task<bool> TryAcquireMigrationLockAsync()
     {
+        // Execute within a serialisable transaction so that the check-then-act is
+        // atomic even when multiple pods race at startup.
         const string sql = @"
-            BEGIN TRY
+            DECLARE @Now DATETIME2 = GETUTCDATE();
+
+            BEGIN TRANSACTION;
+
+            IF NOT EXISTS (SELECT 1 FROM [dbo].[MigrationLock] WITH (UPDLOCK, HOLDLOCK) WHERE Id = 1)
+            BEGIN
                 INSERT INTO [dbo].[MigrationLock] (Id, LockedAt, LockedBy)
-                VALUES (1, GETUTCDATE(), @LockedBy);
+                VALUES (1, @Now, @LockedBy);
+                COMMIT TRANSACTION;
                 SELECT 1;
-            END TRY
-            BEGIN CATCH
-                -- Duplicate key → another pod owns the lock
-                SELECT 0;
-            END CATCH";
+                RETURN;
+            END
+
+            -- Existing lock: take over if the lease has expired
+            IF EXISTS (
+                SELECT 1 FROM [dbo].[MigrationLock]
+                WHERE Id = 1
+                  AND LockedAt < DATEADD(MINUTE, -@LeaseMinutes, @Now)
+            )
+            BEGIN
+                UPDATE [dbo].[MigrationLock]
+                SET LockedAt = @Now,
+                    LockedBy = @LockedBy
+                WHERE Id = 1
+                  AND LockedAt < DATEADD(MINUTE, -@LeaseMinutes, @Now);
+
+                IF @@ROWCOUNT = 1
+                BEGIN
+                    COMMIT TRANSACTION;
+                    SELECT 1;
+                    RETURN;
+                END
+            END
+
+            -- Another instance holds a non-expired lease (or won the takeover race)
+            ROLLBACK TRANSACTION;
+            SELECT 0;";
 
         var lockedBy = $"{Environment.MachineName}-{Environment.ProcessId}";
 
@@ -275,6 +311,7 @@ public class MigrationRunner
         await connection.OpenAsync();
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@LockedBy", lockedBy);
+        command.Parameters.AddWithValue("@LeaseMinutes", MigrationLockLeaseMinutes);
 
         var result = await command.ExecuteScalarAsync();
         return result is int i && i == 1;
@@ -282,18 +319,24 @@ public class MigrationRunner
 
     private async Task ReleaseMigrationLockAsync()
     {
-        const string sql = "DELETE FROM [dbo].[MigrationLock] WHERE Id = 1";
+        // Only delete the row owned by this instance; another pod that took over
+        // a stale lease must not have its lock deleted by the original owner waking up.
+        var lockedBy = $"{Environment.MachineName}-{Environment.ProcessId}";
+        const string sql = "DELETE FROM [dbo].[MigrationLock] WHERE Id = 1 AND LockedBy = @LockedBy";
 
         try
         {
             await using var connection = new SqlConnection(_connectionString);
             await connection.OpenAsync();
             await using var command = new SqlCommand(sql, connection);
+            command.Parameters.AddWithValue("@LockedBy", lockedBy);
             await command.ExecuteNonQueryAsync();
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "Failed to release migration lock; it will expire on next startup.");
+            _logger?.LogWarning(ex,
+                "Failed to release migration lock. The lock will be taken over automatically after the {LeaseMinutes}-minute lease expires.",
+                MigrationLockLeaseMinutes);
         }
     }
 }

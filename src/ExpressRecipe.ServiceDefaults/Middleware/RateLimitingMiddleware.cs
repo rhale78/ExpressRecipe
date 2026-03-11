@@ -43,10 +43,11 @@ public class RateLimitingMiddleware
         var path = context.Request.Path.ToString();
         var userId = GetUserId(context);
         var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var clientKey = userId ?? ipAddress;
 
-        // Determine per-endpoint limit
-        var limit = GetLimit(path, userId != null);
+        // Determine per-endpoint limit and the correct rate-limit key.
+        // Auth endpoints are always keyed by IP (regardless of authentication state)
+        // so that an attacker cannot bypass the tighter limit by rotating accounts.
+        var limit = GetLimit(path);
         if (limit <= 0)
         {
             // Endpoint is exempt (e.g., webhooks)
@@ -54,10 +55,16 @@ public class RateLimitingMiddleware
             return;
         }
 
+        // Auth paths: always per-IP. All other paths: per-user (if authenticated) or per-IP.
+        var clientKey = IsAuthPath(path) ? ipAddress : (userId ?? ipAddress);
         var cacheKey = $"ratelimit:{clientKey}:{path}";
         var windowTtl = TimeSpan.FromSeconds(_options.WindowSeconds);
 
-        // Retrieve current counter; initialise to 0 if absent
+        // NOTE: The read-modify-write below is not atomic across distributed instances.
+        // Under high concurrency, increments from different pods can be lost, allowing
+        // brief bursts slightly above the configured limit. For stricter enforcement
+        // replace this with a Redis INCR + EXPIRE (atomic) or .NET 9 RateLimiter with
+        // a distributed backend.
         var counter = await _cache.GetOrCreateAsync(
             cacheKey,
             _ => ValueTask.FromResult(new RateLimitCounter()),
@@ -99,15 +106,14 @@ public class RateLimitingMiddleware
     /// Returns the request limit for the given path.
     /// Returns 0 to indicate the path is exempt from rate limiting.
     /// </summary>
-    private int GetLimit(string path, bool isAuthenticated)
+    private int GetLimit(string path)
     {
         // Webhook endpoints are exempt
         if (path.StartsWith("/webhooks", StringComparison.OrdinalIgnoreCase))
             return 0;
 
         // Auth endpoints: tighter per-IP limit (10/min)
-        if (path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/auth", StringComparison.OrdinalIgnoreCase))
+        if (IsAuthPath(path))
             return _options.AuthMaxRequestsPerWindow;
 
         // Scan endpoints (barcode scanning): 30/min per user
@@ -118,6 +124,10 @@ public class RateLimitingMiddleware
         // Default API limit
         return _options.MaxRequestsPerWindow;
     }
+
+    private static bool IsAuthPath(string path)
+        => path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase) ||
+           path.StartsWith("/auth", StringComparison.OrdinalIgnoreCase);
 
     private static string? GetUserId(HttpContext context)
         => context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;

@@ -32,7 +32,7 @@ public interface IApprovalQueueRepository
     Task<ApprovalQueueItemDto?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Guid> EnqueueAsync(string entityType, Guid entityId, Guid submittedBy, int humanTimeoutMins = 60, CancellationToken ct = default);
     Task ApproveAsync(Guid id, Guid reviewerId, string? notes, CancellationToken ct = default);
-    Task RejectAsync(Guid id, string reason, CancellationToken ct = default);
+    Task RejectAsync(Guid id, Guid reviewerId, string reason, CancellationToken ct = default);
     Task SetAiScoreAsync(Guid id, decimal score, string? flags, CancellationToken ct = default);
     Task SetStatusAsync(Guid id, string status, CancellationToken ct = default);
 }
@@ -58,7 +58,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
                 CASE WHEN EscalatedAt IS NOT NULL THEN 0 ELSE 1 END,
                 SubmittedAt ASC";
 
-        return await ExecuteReaderAsync(sql, MapRow,
+        return await ExecuteReaderAsync(sql, MapRow, ct,
             CreateParameter("@Limit", limit),
             CreateParameter("@Status", status),
             CreateParameter("@EntityType", (object?)entityType ?? DBNull.Value));
@@ -73,7 +73,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
             FROM ApprovalQueue
             WHERE Id = @Id";
 
-        var rows = await ExecuteReaderAsync(sql, MapRow, CreateParameter("@Id", id));
+        var rows = await ExecuteReaderAsync(sql, MapRow, ct, CreateParameter("@Id", id));
         return rows.FirstOrDefault();
     }
 
@@ -85,7 +85,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
             VALUES (@Id, @EntityType, @EntityId, @SubmittedBy, @HumanTimeoutMins)";
 
         var id = Guid.NewGuid();
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@Id", id),
             CreateParameter("@EntityType", entityType),
             CreateParameter("@EntityId", entityId),
@@ -104,23 +104,25 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
                 ReviewNotes = @Notes
             WHERE Id = @Id";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@Id", id),
             CreateParameter("@ReviewedBy", reviewerId),
             CreateParameter("@Notes", (object?)notes ?? DBNull.Value));
     }
 
-    public async Task RejectAsync(Guid id, string reason, CancellationToken ct = default)
+    public async Task RejectAsync(Guid id, Guid reviewerId, string reason, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE ApprovalQueue
             SET Status          = 'Rejected',
+                ReviewedBy      = @ReviewedBy,
                 ReviewedAt      = GETUTCDATE(),
                 RejectionReason = @Reason
             WHERE Id = @Id";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@Id", id),
+            CreateParameter("@ReviewedBy", reviewerId),
             CreateParameter("@Reason", reason));
     }
 
@@ -129,7 +131,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
         const string sql = @"
             UPDATE ApprovalQueue SET AiScore = @Score, AiFlags = @Flags WHERE Id = @Id";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@Id", id),
             CreateParameter("@Score", score),
             CreateParameter("@Flags", (object?)flags ?? DBNull.Value));
@@ -138,14 +140,14 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
     public async Task SetStatusAsync(Guid id, string status, CancellationToken ct = default)
     {
         const string sql = @"UPDATE ApprovalQueue SET Status = @Status WHERE Id = @Id";
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@Id", id),
             CreateParameter("@Status", status));
     }
 
     // ── mapper ──────────────────────────────────────────────────────────────
 
-    private static ApprovalQueueItemDto MapRow(System.Data.IDataReader reader) => new()
+    private static ApprovalQueueItemDto MapRow(System.Data.IDataRecord reader) => new()
     {
         Id = GetGuid(reader, "Id"),
         EntityType = GetString(reader, "EntityType") ?? string.Empty,

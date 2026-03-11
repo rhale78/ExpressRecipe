@@ -465,31 +465,34 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
 
     public async Task<Guid> GrantCreditAsync(Guid userId, string tier, int durationDays, string reason, Guid grantedBy, CancellationToken ct = default)
     {
-        // Look up the subscription tier
+        // Look up the subscription tier by name
         const string tierSql = @"
             SELECT Id FROM SubscriptionTier WHERE TierName = @TierName AND IsActive = 1";
 
         var tierId = await ExecuteScalarAsync<Guid?>(tierSql,
             CreateParameter("@TierName", tier));
 
-        tierId ??= await ExecuteScalarAsync<Guid?>(
-            "SELECT Id FROM SubscriptionTier WHERE IsActive = 1 ORDER BY SortOrder",
-            Array.Empty<SqlParameter>());
+        if (tierId is null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot grant subscription credit: tier '{tier}' not found or is not active.");
+        }
 
         var creditId = Guid.NewGuid();
         const string insertSql = @"
             INSERT INTO UserSubscription
-                (Id, UserId, SubscriptionTierId, Status, BillingCycle, StartDate, EndDate, AutoRenew, CreatedAt)
+                (Id, UserId, SubscriptionTierId, Status, BillingCycle, StartDate, EndDate, AutoRenew, CreatedAt, CreatedBy)
             VALUES
                 (@Id, @UserId, @TierId, 'Active', 'Credit', GETUTCDATE(),
-                 DATEADD(DAY, @DurationDays, GETUTCDATE()), 0, GETUTCDATE())";
+                 DATEADD(DAY, @DurationDays, GETUTCDATE()), 0, GETUTCDATE(), @CreatedBy)";
 
         await ExecuteNonQueryAsync(
             insertSql,
             CreateParameter("@Id", creditId),
             CreateParameter("@UserId", userId),
-            CreateParameter("@TierId", tierId ?? Guid.Empty),
-            CreateParameter("@DurationDays", durationDays));
+            CreateParameter("@TierId", tierId),
+            CreateParameter("@DurationDays", durationDays),
+            CreateParameter("@CreatedBy", grantedBy));
 
         return creditId;
     }
