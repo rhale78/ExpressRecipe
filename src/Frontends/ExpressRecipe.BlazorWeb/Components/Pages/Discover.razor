@@ -30,7 +30,7 @@
             </label>
             <input id="matchSlider" type="range" min="40" max="100" step="5"
                    value="@((int)(_minMatch * 100))"
-                   @oninput="HandleMatchSliderChange"
+                   @onchange="HandleMatchSliderChange"
                    class="match-slider" />
             <div class="slider-labels">
                 <span>Allow missing</span>
@@ -94,7 +94,7 @@
                 <h3>No matches at @(_minMatch.ToString("P0"))</h3>
                 <p>Try lowering the match threshold — you may be missing a few key ingredients.</p>
                 <button class="btn btn-outline-primary" @onclick="LowerThreshold">
-                    Lower to @((_minMatch - 0.10m).ToString("P0"))
+                    Lower to @(Math.Max(0.40m, _minMatch - 0.10m).ToString("P0"))
                 </button>
             </div>
         }
@@ -106,11 +106,7 @@
                 @foreach (PantryRecipeMatch match in _result.Matches)
                 {
                     <div class="recipe-card @(match.IsFullMatch ? "full-match" : "")">
-                        @if (match.HasDietaryConflict)
-                        {
-                            <div class="conflict-badge" title="Contains allergens">🚫</div>
-                        }
-                        else if (match.IsFullMatch)
+                        @if (match.IsFullMatch)
                         {
                             <div class="full-match-badge" title="100% pantry match">✅</div>
                         }

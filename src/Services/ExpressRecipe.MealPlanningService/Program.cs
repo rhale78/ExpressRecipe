@@ -158,13 +158,18 @@ builder.Services.AddHttpClient("InventoryService", (sp, client) =>
         client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
 });
 
-builder.Services.AddHttpClient("UserService", client =>
+builder.Services.AddHttpClient("UserService", (sp, client) =>
 {
     client.BaseAddress = new Uri(
         builder.Configuration["services:userservice:https:0"] ??
         builder.Configuration["services:userservice:http:0"] ??
         builder.Configuration["Services:UserService"] ??
         "http://userservice");
+    string? apiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrEmpty(apiKey))
+    {
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
+    }
 });
 
 builder.Services.AddHttpClient("NotificationService", (sp, client) =>

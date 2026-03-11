@@ -551,10 +551,10 @@ public partial class InventoryRepository
         Guid householdId, CancellationToken ct = default)
     {
         const string sql = @"
-            SELECT DISTINCT
-                ii.Id                                                     AS InventoryItemId,
+            SELECT
+                MIN(ii.Id)                                                AS InventoryItemId,
                 LOWER(TRIM(COALESCE(p.Name, ii.CustomName, '')))          AS NormalizedName,
-                COALESCE(p.Name, ii.CustomName, '')                       AS DisplayName
+                COALESCE(MIN(p.Name), MIN(ii.CustomName), '')             AS DisplayName
             FROM InventoryItem ii
             LEFT JOIN Product p ON p.Id = ii.ProductId
             WHERE ii.HouseholdId = @HouseholdId
@@ -562,6 +562,7 @@ public partial class InventoryRepository
               AND ii.Quantity    > 0
               AND (ii.ExpirationDate IS NULL OR ii.ExpirationDate >= CAST(GETUTCDATE() AS DATE))
               AND COALESCE(p.Name, ii.CustomName, '') <> ''
+            GROUP BY LOWER(TRIM(COALESCE(p.Name, ii.CustomName, '')))
             ORDER BY NormalizedName";
 
         await using SqlConnection conn = new(_connectionString);

@@ -13,7 +13,6 @@ public sealed record PantryDiscoveryOptions
     public string? SortBy { get; init; } = "match";
     public int Limit { get; init; } = 24;
     public bool RespectDietaryRestrictions { get; init; } = true;
-    public bool ExcludePlannedMeals { get; init; } = true;
 }
 
 // ── Result DTOs ───────────────────────────────────────────────────────────────
@@ -94,8 +93,12 @@ public sealed class PantryDiscoveryService : IPantryDiscoveryService
         Guid householdId, Guid userId,
         PantryDiscoveryOptions options, CancellationToken ct = default)
     {
-        string cacheKey = $"pantry-discover:{householdId}:{options.MinMatchPercent}:" +
-                          $"{options.RespectDietaryRestrictions}:{options.SortBy}";
+        // When RespectDietaryRestrictions is true the result is user-scoped (allergen filtering);
+        // include the userId so different users in the same household don't receive each other's filtered results.
+        string userScope = options.RespectDietaryRestrictions ? userId.ToString() : "shared";
+        string cacheKey = $"pantry-discover:{householdId}:{userScope}:" +
+                          $"{options.MinMatchPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)}:" +
+                          $"{options.Limit}:{options.SortBy}";
 
         return await _cache.GetOrCreateAsync(
             cacheKey,
@@ -177,6 +180,9 @@ public sealed class PantryDiscoveryService : IPantryDiscoveryService
                 recipe.Ingredients.Any(i =>
                     ContainsWholeWord(i.NormalizedName, allergen)));
 
+            // Exclude recipes that conflict with the user's dietary restrictions.
+            if (hasConflict) { continue; }
+
             List<string> matched = recipe.Ingredients
                 .Where(i => pantrySet.Contains(i.NormalizedName))
                 .Select(i => i.DisplayName)
@@ -199,8 +205,7 @@ public sealed class PantryDiscoveryService : IPantryDiscoveryService
                 MatchPercent           = matchPct,
                 MatchedIngredientCount = matched.Count,
                 TotalIngredientCount   = recipe.Ingredients.Count,
-                MissingIngredients     = missing,
-                HasDietaryConflict     = hasConflict
+                MissingIngredients     = missing
             });
         }
 

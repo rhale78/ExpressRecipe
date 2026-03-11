@@ -1,5 +1,6 @@
-using System.Net.Http.Json;
 using ExpressRecipe.Client.Shared.Models.Discovery;
+using ExpressRecipe.Shared.Services;
+using System.Globalization;
 
 namespace ExpressRecipe.Client.Shared.Services;
 
@@ -12,25 +13,11 @@ public interface IPantryDiscoveryApiClient
         bool respectDiet = true);
 }
 
-public class PantryDiscoveryApiClient : IPantryDiscoveryApiClient
+public class PantryDiscoveryApiClient : ApiClientBase, IPantryDiscoveryApiClient
 {
-    private readonly HttpClient _httpClient;
-    private readonly ITokenProvider _tokenProvider;
-
     public PantryDiscoveryApiClient(HttpClient httpClient, ITokenProvider tokenProvider)
+        : base(httpClient, tokenProvider)
     {
-        _httpClient    = httpClient;
-        _tokenProvider = tokenProvider;
-    }
-
-    private async Task<bool> EnsureAuthenticatedAsync()
-    {
-        string? token = await _tokenProvider.GetAccessTokenAsync();
-        if (string.IsNullOrEmpty(token)) { return false; }
-
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        return true;
     }
 
     public async Task<PantryDiscoveryResult?> DiscoverAsync(
@@ -39,16 +26,9 @@ public class PantryDiscoveryApiClient : IPantryDiscoveryApiClient
         int limit = 24,
         bool respectDiet = true)
     {
-        if (!await EnsureAuthenticatedAsync()) { return null; }
-
-        try
-        {
-            string url = $"/api/discover?minMatch={minMatch}&sortBy={sortBy}&limit={limit}&respectDiet={respectDiet}";
-            return await _httpClient.GetFromJsonAsync<PantryDiscoveryResult>(url);
-        }
-        catch
-        {
-            return null;
-        }
+        string encodedSortBy = Uri.EscapeDataString(sortBy);
+        string encodedMinMatch = minMatch.ToString("F2", CultureInfo.InvariantCulture);
+        string url = $"/api/discover?minMatch={encodedMinMatch}&sortBy={encodedSortBy}&limit={limit}&respectDiet={respectDiet}";
+        return await GetAsync<PantryDiscoveryResult>(url);
     }
 }

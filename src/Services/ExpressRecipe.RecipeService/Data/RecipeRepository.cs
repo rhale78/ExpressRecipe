@@ -1083,16 +1083,17 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         List<Guid> ids = recipes.Select(r2 => r2.RecipeId).ToList();
         System.Text.StringBuilder sb = new(@"
             SELECT ri.RecipeId,
-                   LOWER(TRIM(ISNULL(ri.Name, ''))) AS NormalizedName,
-                   ISNULL(ri.Name, '')              AS DisplayName
+                   LOWER(TRIM(ISNULL(ri.IngredientName, ''))) AS NormalizedName,
+                   ISNULL(ri.IngredientName, '')              AS DisplayName
             FROM RecipeIngredient ri
-            WHERE ri.RecipeId IN (");
+            WHERE ri.IsDeleted = 0
+              AND ri.RecipeId IN (");
         for (int i = 0; i < ids.Count; i++)
         {
             if (i > 0) { sb.Append(','); }
             sb.Append($"@Id{i}");
         }
-        sb.Append(") ORDER BY ri.RecipeId, ri.Id");
+        sb.Append(") ORDER BY ri.RecipeId, ri.IngredientName");
 
         Dictionary<Guid, List<IngredientRef>> ingredientMap = new();
         using (Microsoft.Data.SqlClient.SqlConnection conn2 = new(ConnectionString))

@@ -213,7 +213,7 @@ public class PantryDiscoveryServiceTests
     }
 
     [Fact]
-    public async Task DiscoverAsync_AllergenConflict_SetsHasDietaryConflictFlag()
+    public async Task DiscoverAsync_AllergenConflict_ExcludesConflictingRecipe()
     {
         Guid userId = Guid.NewGuid();
         List<PantryIngredientItem> pantry = new()
@@ -244,8 +244,52 @@ public class PantryDiscoveryServiceTests
             Guid.NewGuid(), userId,
             new PantryDiscoveryOptions { MinMatchPercent = 0.30m, RespectDietaryRestrictions = true });
 
-        result.Matches.Should().HaveCount(1);
-        result.Matches[0].HasDietaryConflict.Should().BeTrue();
+        result.Matches.Should().BeEmpty("recipe contains a known allergen and should be excluded");
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_AllergenConflict_NonConflictingRecipeStillIncluded()
+    {
+        Guid userId = Guid.NewGuid();
+        Guid safeRecipeId = Guid.NewGuid();
+        List<PantryIngredientItem> pantry = new()
+        {
+            new() { InventoryItemId = Guid.NewGuid(), NormalizedName = "chicken", DisplayName = "Chicken" }
+        };
+        List<RecipeIngredientSummary> recipes = new()
+        {
+            new()
+            {
+                RecipeId    = Guid.NewGuid(),
+                RecipeName  = "Peanut Butter Cookies",
+                Ingredients = new()
+                {
+                    new() { NormalizedName = "peanuts", DisplayName = "Peanuts" },
+                    new() { NormalizedName = "chicken",  DisplayName = "Chicken" }
+                }
+            },
+            new()
+            {
+                RecipeId    = safeRecipeId,
+                RecipeName  = "Grilled Chicken",
+                Ingredients = new()
+                {
+                    new() { NormalizedName = "chicken", DisplayName = "Chicken" }
+                }
+            }
+        };
+
+        PantryDiscoveryService svc = CreateService(
+            inventoryHandler: _ => JsonResponse(pantry),
+            recipeHandler:    _ => JsonResponse(recipes),
+            userHandler:      _ => JsonResponse(new List<string> { "peanuts" }));
+
+        PantryDiscoveryResult result = await svc.DiscoverAsync(
+            Guid.NewGuid(), userId,
+            new PantryDiscoveryOptions { MinMatchPercent = 0.50m, RespectDietaryRestrictions = true });
+
+        result.Matches.Should().HaveCount(1, "only the allergen-free recipe should be included");
+        result.Matches[0].RecipeId.Should().Be(safeRecipeId);
     }
 
     [Fact]

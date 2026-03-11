@@ -462,11 +462,22 @@ public class InventoryController : ControllerBase
     /// <summary>
     /// Get pantry ingredient names for a household — used by PantryDiscoveryService (service-to-service).
     /// Returns non-expired, non-zero-quantity items with normalised and display names.
+    /// Protected by an API key header (X-Internal-Api-Key) when InternalApi:Key is configured.
     /// </summary>
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("pantry-ingredients/{householdId}")]
     public async Task<IActionResult> GetPantryIngredients(Guid householdId, CancellationToken ct)
     {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
         try
         {
             _logger.LogInformation("Getting pantry ingredients for household {HouseholdId}", householdId);
