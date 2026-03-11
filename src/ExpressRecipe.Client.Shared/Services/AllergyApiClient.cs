@@ -1,3 +1,4 @@
+using ExpressRecipe.Client.Shared.Models.User;
 using ExpressRecipe.Shared.DTOs.User;
 
 namespace ExpressRecipe.Client.Shared.Services;
@@ -11,6 +12,7 @@ public interface IAllergyApiClient
 
     // Suspects
     Task<List<SuspectedAllergenDto>?> GetSuspectsAsync(Guid? memberId = null);
+    Task<List<SuspectedAllergenSummaryDto>> GetSuspectedAllergensAsync();
     Task<bool> ConfirmSuspectAsync(Guid id);
     Task<bool> ClearSuspectAsync(Guid id);
 
@@ -46,6 +48,24 @@ public class AllergyApiClient : ApiClientBase, IAllergyApiClient
     {
         var qs = memberId.HasValue ? $"?memberId={memberId}" : string.Empty;
         return GetAsync<List<SuspectedAllergenDto>>($"/api/allergy/suspects{qs}");
+    }
+
+    public async Task<List<SuspectedAllergenSummaryDto>> GetSuspectedAllergensAsync()
+    {
+        const decimal ActionableThreshold = 0.5m;
+        var suspects = await GetSuspectsAsync();
+        if (suspects == null) return new List<SuspectedAllergenSummaryDto>();
+        return suspects
+            .Where(s => s.ConfidenceScore >= ActionableThreshold)
+            .Select(s => new SuspectedAllergenSummaryDto
+            {
+                Id              = s.Id,
+                IngredientName  = s.IngredientName,
+                MemberName      = string.Empty,
+                ConfidenceScore = s.ConfidenceScore,
+                IncidentCount   = s.IncidentCount
+            })
+            .ToList();
     }
 
     public async Task<bool> ConfirmSuspectAsync(Guid id)

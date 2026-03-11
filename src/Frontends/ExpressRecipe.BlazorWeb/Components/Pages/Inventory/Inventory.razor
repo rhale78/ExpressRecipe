@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using ExpressRecipe.Client.Shared.Models.Inventory
 @using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.BlazorWeb.Components.Pages.Allergy
 @inject IInventoryApiClient InventoryApi
 @inject IToastService ToastService
 @inject NavigationManager Navigation
@@ -315,6 +316,13 @@
                             <button class="btn btn-sm btn-secondary-outline" @onclick="() => HandleShowAdjustQuantity(item)">
                                 Adjust
                             </button>
+                            @if (item.ProductId.HasValue)
+                            {
+                                <button class="btn btn-warning btn-xs" title="Log a reaction to this product"
+                                        @onclick="() => OpenInventoryReactionModal(item)" @onclick:stopPropagation>
+                                    ⚠️ Reaction
+                                </button>
+                            }
                             <button class="btn btn-sm btn-danger-outline" @onclick="() => HandleConfirmDelete(item)">
                                 Delete
                             </button>
@@ -447,6 +455,8 @@
     </div>
 }
 
+<LogReactionModal @ref="_inventoryReactionModal" OnIncidentLogged="HandleInventoryReactionSaved" />
+
 @code {
     private enum QuickFilter { All, ExpiringSoon, Expired, LowStock }
 
@@ -485,6 +495,11 @@
     private InventoryItemDto? _selectedItem;
     private decimal _quantityChange = 0;
     private string _adjustmentReason = string.Empty;
+
+    // Reaction modal
+    private LogReactionModal? _inventoryReactionModal;
+    private Guid? _reactionProductId;
+    private string _reactionProductName = string.Empty;
 
     private sealed record ScanResult(bool Success, string Message);
 
@@ -826,5 +841,19 @@
         if (item.IsExpired) return "expired";
         if (item.IsExpiringSoon) return "expiring-soon";
         return string.Empty;
+    }
+
+    private async Task OpenInventoryReactionModal(InventoryItemDto item)
+    {
+        _reactionProductId   = item.ProductId;
+        _reactionProductName = item.Name;
+        if (_inventoryReactionModal != null)
+            await _inventoryReactionModal.ShowAsync(_reactionProductId, _reactionProductName);
+    }
+
+    private async Task HandleInventoryReactionSaved()
+    {
+        ToastService.ShowSuccess("Reaction logged. Check your Allergy Log for suspect updates.");
+        await Task.CompletedTask;
     }
 }

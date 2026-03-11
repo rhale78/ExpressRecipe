@@ -7,11 +7,13 @@
 @using ExpressRecipe.Client.Shared.Models.Recipe
 @using ExpressRecipe.Client.Shared.Services
 @using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.BlazorWeb.Components.Pages.Allergy
 @inject IUserProfileApiClient UserProfileApi
 @inject IInventoryApiClient InventoryApi
 @inject IShoppingListApiClient ShoppingApi
 @inject IMealPlanApiClient MealPlanApi
 @inject IRecipeApiClient RecipeApi
+@inject IAllergyApiClient AllergyApi
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
 
@@ -113,6 +115,29 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        }
+
+        <!-- Suspected Allergen Alert -->
+        @if (_allergenSuspects?.Any() == true)
+        {
+            <div class="dashboard-suspect-alert">
+                <AllergyDisclaimer />
+                <div class="suspect-alert-header">
+                    <span>⚠️</span>
+                    <strong>@_allergenSuspects.Count potential allergen@(_allergenSuspects.Count != 1 ? "s" : "") detected</strong>
+                </div>
+                <p>Based on your logged reactions, these ingredients may be causing issues:</p>
+                <div class="suspect-chips">
+                    @foreach (SuspectedAllergenSummaryDto suspect in _allergenSuspects)
+                    {
+                        <div class="suspect-chip">
+                            <span>@suspect.IngredientName</span>
+                            <span class="suspect-confidence">@((suspect.ConfidenceScore * 100).ToString("F0"))% confidence</span>
+                        </div>
+                    }
+                </div>
+                <a href="/allergy/suspects" class="btn btn-warning btn-sm">Review →</a>
             </div>
         }
 
@@ -342,6 +367,7 @@
     private List<InventoryItemDto>? _expiringItems;
     private List<ShoppingListDto>? _activeShoppingLists;
     private List<RecipeDto>? _suggestedRecipes;
+    private List<SuspectedAllergenSummaryDto>? _allergenSuspects;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -483,6 +509,16 @@
                 {
                     _suggestedRecipes = null;
                 }
+            }
+
+            // Load suspected allergens
+            try
+            {
+                _allergenSuspects = await AllergyApi.GetSuspectedAllergensAsync();
+            }
+            catch
+            {
+                _allergenSuspects = null;
             }
 
             _isLoading = false;

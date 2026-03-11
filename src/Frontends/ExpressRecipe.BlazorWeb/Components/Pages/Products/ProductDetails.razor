@@ -5,6 +5,7 @@
 @using ExpressRecipe.Client.Shared.Models.Product
 @using ExpressRecipe.Client.Shared.Models.Inventory
 @using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.BlazorWeb.Components.Pages.Allergy
 @inject IProductApiClient ProductApi
 @inject IInventoryApiClient InventoryApi
 @inject IShoppingListApiClient ShoppingApi
@@ -122,6 +123,14 @@
                     </button>
                 </div>
 
+                <!-- Reaction Reporting -->
+                <div class="reaction-report-section">
+                    <AllergyDisclaimer />
+                    <button class="btn btn-warning" @onclick="OpenReactionModal">
+                        ⚠️ I Had a Reaction to This Product
+                    </button>
+                </div>
+
                 <!-- Product Metadata -->
                 <div class="product-metadata">
                     <p class="metadata-item">
@@ -182,6 +191,8 @@
         </div>
     }
 </div>
+
+<LogReactionModal @ref="_reactionModal" OnIncidentLogged="HandleReactionSaved" />
     </Authorized>
     <NotAuthorized>
         <div class="unauthorized-container">
@@ -352,5 +363,19 @@
         // TODO: Implement recipe search by product
         // For now, navigate to recipes page
         Navigation.NavigateTo("/recipes");
+    }
+
+    private LogReactionModal? _reactionModal;
+
+    private async Task OpenReactionModal()
+    {
+        if (_product != null && _reactionModal != null)
+            await _reactionModal.ShowAsync(_product.Id, _product.Name);
+    }
+
+    private async Task HandleReactionSaved()
+    {
+        ToastService.ShowSuccess("Reaction logged. Run differential analysis from Allergy Log to update suspect list.");
+        await Task.CompletedTask;
     }
 }
