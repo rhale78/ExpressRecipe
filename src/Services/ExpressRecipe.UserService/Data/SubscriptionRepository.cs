@@ -463,4 +463,43 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
     }
 
     #endregion
+
+    #region Stripe Webhook Helpers
+
+    public async Task UpdateUserSubscriptionAsync(Guid userId, string tierName, string stripeSubscriptionId,
+        DateTime currentPeriodEnd, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE UserProfile
+            SET SubscriptionTier       = @TierName,
+                StripeSubscriptionId   = @StripeSubscriptionId,
+                SubscriptionExpiresAt  = @CurrentPeriodEnd,
+                -- Clear cancellation flag: handles both new subscriptions and reactivations
+                SubscriptionCancelledAt = NULL,
+                UpdatedAt              = GETUTCDATE()
+            WHERE UserId = @UserId AND IsDeleted = 0";
+
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@TierName", tierName),
+            CreateParameter("@StripeSubscriptionId", stripeSubscriptionId),
+            CreateParameter("@CurrentPeriodEnd", currentPeriodEnd));
+    }
+
+    public async Task DowngradeToFreeAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE UserProfile
+            SET SubscriptionTier        = 'Free',
+                StripeSubscriptionId    = NULL,
+                SubscriptionExpiresAt   = NULL,
+                SubscriptionCancelledAt = GETUTCDATE(),
+                UpdatedAt               = GETUTCDATE()
+            WHERE UserId = @UserId AND IsDeleted = 0";
+
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@UserId", userId));
+    }
+
+    #endregion
 }

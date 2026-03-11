@@ -73,20 +73,23 @@ builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionReposi
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
 builder.Services.AddScoped<IReferralRepository>(sp => new ReferralRepository(connectionString));
+builder.Services.AddScoped<IStripeEventLogRepository>(sp => new StripeEventLogRepository(connectionString));
 
-// Payment service — use mock in Development; a real Stripe-backed implementation should be
-// registered here for Staging and Production (replace with StripePaymentService).
-if (builder.Environment.IsDevelopment())
+// Register payment service — MockPaymentService in local mode, StripePaymentService otherwise
+if (builder.Configuration.GetValue<bool>("APP_LOCAL_MODE") || builder.Environment.IsDevelopment())
 {
     builder.Services.AddSingleton<ExpressRecipe.UserService.Services.IPaymentService,
         ExpressRecipe.UserService.Services.MockPaymentService>();
 }
 else
 {
-    // Placeholder: wire up the real Stripe implementation once available.
-    builder.Services.AddSingleton<ExpressRecipe.UserService.Services.IPaymentService,
-        ExpressRecipe.UserService.Services.MockPaymentService>();
+    builder.Services.AddScoped<ExpressRecipe.UserService.Services.IPaymentService,
+        ExpressRecipe.UserService.Services.StripePaymentService>();
 }
+
+// Register the Stripe event constructor delegate used by StripeWebhookController
+builder.Services.AddSingleton<Func<string, string, string, Stripe.Event>>(
+    (payload, sig, secret) => Stripe.EventUtility.ConstructEvent(payload, sig, secret));
 
 // Register allergy incident engine repositories and analyzer
 builder.Services.AddScoped<IAllergyIncidentRepository>(sp => new AllergyIncidentRepository(connectionString));

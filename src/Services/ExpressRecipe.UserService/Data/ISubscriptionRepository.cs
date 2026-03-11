@@ -22,4 +22,9 @@ public interface ISubscriptionRepository
     // Feature Access
     Task<bool> HasFeatureAccessAsync(Guid userId, string featureName);
     Task<Dictionary<string, bool>> GetFeatureAccessMapAsync(Guid userId);
+
+    // Stripe webhook helpers
+    Task UpdateUserSubscriptionAsync(Guid userId, string tierName, string stripeSubscriptionId,
+        DateTime currentPeriodEnd, CancellationToken ct = default);
+    Task DowngradeToFreeAsync(Guid userId, CancellationToken ct = default);
 }
