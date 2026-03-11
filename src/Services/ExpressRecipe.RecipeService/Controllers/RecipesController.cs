@@ -782,7 +782,7 @@ public class RecipesController : ControllerBase
     /// Returns recipes with their full ingredient list — used by PantryDiscoveryService.
     /// Results are cached for 4 hours (the recipe catalog changes infrequently).
     /// </summary>
-    [HttpGet("with-ingredients")]
+    [HttpGet("with-ingredient-summary")]
     [AllowAnonymous]
     public async Task<ActionResult<List<RecipeIngredientSummary>>> GetWithIngredients(
         [FromQuery] int limit = 500, CancellationToken ct = default)

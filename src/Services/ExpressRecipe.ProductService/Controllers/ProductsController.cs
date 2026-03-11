@@ -565,6 +565,14 @@ public class ProductsController : ControllerBase
     public async Task<ActionResult<List<string>>> GetNormalizedIngredients(
         Guid id, CancellationToken ct)
     {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
         try
         {
             List<string> ingredients =

@@ -16,7 +16,7 @@ public interface IIngredientFetchService
     /// (last 180 days, cross-referenced with InventoryService).
     /// </summary>
     Task<HashSet<string>> GetSafeIngredientSetAsync(
-        Guid householdId, Guid? memberId, int minUsageCount, CancellationToken ct = default);
+        Guid householdId, int minUsageCount, CancellationToken ct = default);
 }
 
 public sealed class IngredientFetchService : IIngredientFetchService
@@ -24,6 +24,9 @@ public sealed class IngredientFetchService : IIngredientFetchService
     private readonly IHttpClientFactory _http;
     private readonly HybridCache _cache;
     private readonly ILogger<IngredientFetchService> _logger;
+
+    /// <summary>Maximum concurrent ProductService calls when building the safe ingredient set.</summary>
+    private const int MaxConcurrentIngredientFetches = 8;
 
     public IngredientFetchService(
         IHttpClientFactory http,
@@ -63,9 +66,9 @@ public sealed class IngredientFetchService : IIngredientFetchService
     }
 
     public async Task<HashSet<string>> GetSafeIngredientSetAsync(
-        Guid householdId, Guid? memberId, int minUsageCount, CancellationToken ct = default)
+        Guid householdId, int minUsageCount, CancellationToken ct = default)
     {
-        string cacheKey = $"safe-ing:{householdId}:{memberId?.ToString() ?? "primary"}:min-{minUsageCount}";
+        string cacheKey = $"safe-ing:{householdId}:min-{minUsageCount}";
 
         return await _cache.GetOrCreateAsync(
             cacheKey,
@@ -84,9 +87,14 @@ public sealed class IngredientFetchService : IIngredientFetchService
                         return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     }
 
-                    // Parallelize per-product ingredient fetches to avoid sequential N+1 latency.
-                    IEnumerable<Task<List<string>>> tasks = usages
-                        .Select(u => GetNormalizedIngredientsAsync(u.ProductId, innerCt));
+                    // Throttle concurrent ProductService calls to avoid burst traffic.
+                    SemaphoreSlim throttle = new(MaxConcurrentIngredientFetches, MaxConcurrentIngredientFetches);
+                    IEnumerable<Task<List<string>>> tasks = usages.Select(async u =>
+                    {
+                        await throttle.WaitAsync(innerCt);
+                        try { return await GetNormalizedIngredientsAsync(u.ProductId, innerCt); }
+                        finally { throttle.Release(); }
+                    });
                     List<string>[] results = await Task.WhenAll(tasks);
 
                     HashSet<string> safeSet = new(StringComparer.OrdinalIgnoreCase);

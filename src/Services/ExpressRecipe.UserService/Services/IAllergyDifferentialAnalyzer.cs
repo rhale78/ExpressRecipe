@@ -115,7 +115,7 @@ public sealed class AllergyDifferentialAnalyzer : IAllergyDifferentialAnalyzer
         // ── 3. Build safe ingredient set ─────────────────────────────────
         HashSet<string> safeIngredients =
             await _ingredients.GetSafeIngredientSetAsync(
-                householdId, memberId, SafeUsageThreshold, ct);
+                householdId, SafeUsageThreshold, ct);
 
         // Also add ingredients from control rows (same meal, no reaction)
         foreach (AllergyIncidentProductRow ctrl in controlRows)

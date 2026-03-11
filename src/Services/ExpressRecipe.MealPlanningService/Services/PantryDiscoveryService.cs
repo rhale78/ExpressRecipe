@@ -157,7 +157,7 @@ public sealed class PantryDiscoveryService : IPantryDiscoveryService
         try
         {
             recipes = await recipeClient.GetFromJsonAsync<List<RecipeIngredientSummary>>(
-                "/api/recipes/with-ingredients?limit=500", ct);
+                "/api/recipes/with-ingredient-summary?limit=500", ct);
         }
         catch (Exception ex)
         {

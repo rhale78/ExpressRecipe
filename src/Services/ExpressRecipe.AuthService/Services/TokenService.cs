@@ -53,6 +53,9 @@ public class TokenService : ITokenService
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            // New-user registration path: tier is always Free at signup.
+            // Login paths with existing users use GenerateAccessToken(AuthUser) which
+            // carries the actual tier after EnrichWithSubscriptionTierAsync.
             new Claim("subscription_tier", "free")
         };
 

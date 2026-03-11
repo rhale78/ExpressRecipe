@@ -49,7 +49,7 @@ public sealed class JobHealthRepository : SqlHelper, IJobHealthRepository
                 );
             END";
 
-        await ExecuteNonQueryAsync(sql);
+        await ExecuteNonQueryAsync(sql, ct);
     }
 
     public async Task UpdateAsync(string jobName, bool success, string? errorMessage = null, CancellationToken ct = default)

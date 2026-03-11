@@ -23,7 +23,7 @@ public class AllergyDifferentialAnalyzerTests
 
         // Default: empty safe set
         _ingredientsMock
-            .Setup(s => s.GetSafeIngredientSetAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(),
+            .Setup(s => s.GetSafeIngredientSetAsync(It.IsAny<Guid>(),
                 It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
@@ -234,7 +234,7 @@ public class AllergyDifferentialAnalyzerTests
 
         // Safe set contains wheat
         _ingredientsMock
-            .Setup(s => s.GetSafeIngredientSetAsync(_householdId, _memberId, It.IsAny<int>(), default))
+            .Setup(s => s.GetSafeIngredientSetAsync(_householdId, It.IsAny<int>(), default))
             .ReturnsAsync(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "wheat" });
 
         await _analyzer.RunForMemberAsync(_householdId, _memberId, MemberName);
