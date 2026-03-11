@@ -79,11 +79,14 @@ builder.Services.AddHttpClient("AuthService", client =>
     client.BaseAddress = new Uri(authServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
-builder.Services.AddHttpClient("NotificationService", client =>
+builder.Services.AddHttpClient("NotificationService", (sp, client) =>
 {
     var notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
     client.BaseAddress = new Uri(notificationServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
+    string? apiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrEmpty(apiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
 });
 
 // Register background services

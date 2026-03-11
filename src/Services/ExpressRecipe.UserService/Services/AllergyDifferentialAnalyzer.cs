@@ -7,7 +7,9 @@ namespace ExpressRecipe.UserService.Services;
 /// Runs differential analysis on allergy incidents to identify suspected allergens.
 /// For each product name that appears in reaction incidents more than control incidents,
 /// a SuspectedAllergen row is upserted with a confidence score.
-/// If the score crosses NotifyThreshold, an AllergyAlert notification is sent.
+/// If the score crosses NotifyThreshold on a *new* detection (first insert), an
+/// AllergyAlert notification is sent. Subsequent analysis runs for the same suspect
+/// do not re-notify, preventing notification spam.
 /// </summary>
 public class AllergyDifferentialAnalyzer
 {
@@ -33,7 +35,8 @@ public class AllergyDifferentialAnalyzer
     /// Runs analysis for all members associated with a given household.
     /// memberIds should include null (= primary user) and any FamilyMember GUIDs affected.
     /// </summary>
-    public async Task RunForMembersAsync(Guid householdId, IEnumerable<(Guid? MemberId, string MemberName)> members,
+    public async Task RunForMembersAsync(Guid householdId,
+        IEnumerable<(Guid? MemberId, string MemberName)> members,
         CancellationToken ct = default)
     {
         foreach (var (memberId, memberName) in members)
@@ -59,12 +62,14 @@ public class AllergyDifferentialAnalyzer
                 if (await _repo.IsIngredientClearedAsync(householdId, memberId, productName, ct))
                     continue;
 
-                await _repo.UpsertSuspectedAllergenAsync(
+                bool isNew = await _repo.UpsertSuspectedAllergenAsync(
                     householdId, memberId, productName, confidence, reactionCount, ct);
 
-                if (confidence >= NotifyThreshold)
+                // Only notify on first detection (isNew=true) to avoid spamming on every analysis run.
+                if (isNew && confidence >= NotifyThreshold)
                 {
-                    await NotifyNewSuspectAsync(householdId, memberName, productName, confidence, ct);
+                    await NotifyNewSuspectAsync(householdId, memberName, productName, confidence);
+                    await _repo.MarkSuspectNotifiedAsync(householdId, memberId, productName, ct);
                 }
             }
         }
@@ -77,22 +82,24 @@ public class AllergyDifferentialAnalyzer
     }
 
     private async Task NotifyNewSuspectAsync(Guid householdId, string memberName,
-        string ingredientName, decimal confidence, CancellationToken ct)
+        string ingredientName, decimal confidence)
     {
         HttpClient client = _http.CreateClient("NotificationService");
         try
         {
+            // Use CancellationToken.None so a client disconnect does not suppress the notification.
             await client.PostAsJsonAsync("/api/Notification/internal", new
             {
-                userId            = householdId,        // primary user receives the notification
+                userId            = householdId,
                 type              = "AllergyAlert",
                 priority          = "High",
-                title             = $"⚠ Possible allergen detected: {ingredientName}",
+                title             = $"Possible allergen detected: {ingredientName}",
                 message           = $"Based on logged reactions, {ingredientName} may be causing issues for " +
                                     $"{memberName}. Review in the Allergy section. " +
                                     "This is not a medical diagnosis — consult your doctor.",
-                relatedEntityType = "SuspectedAllergen"
-            }, cancellationToken: ct);
+                relatedEntityType = "SuspectedAllergen",
+                actionUrl         = "/allergy"
+            }, CancellationToken.None);
         }
         catch (Exception ex)
         {

@@ -15,13 +15,15 @@ public interface IAllergyIncidentRepository
     Task<List<SuspectedAllergenDto>> GetSuspectedAllergensAsync(Guid householdId, Guid? memberId,
         CancellationToken ct = default);
     Task<SuspectedAllergenDto?> GetSuspectedAllergenByIdAsync(Guid id, CancellationToken ct = default);
-    Task UpsertSuspectedAllergenAsync(Guid householdId, Guid? memberId, string ingredientName,
+    /// <summary>Returns true if the row was newly inserted (first detection).</summary>
+    Task<bool> UpsertSuspectedAllergenAsync(Guid householdId, Guid? memberId, string ingredientName,
         decimal confidenceScore, int incidentCount, CancellationToken ct = default);
+    Task MarkSuspectNotifiedAsync(Guid householdId, Guid? memberId, string ingredientName,
+        CancellationToken ct = default);
     Task PromoteSuspectedAllergenAsync(Guid id, CancellationToken ct = default);
 
-    // User-initiated clear
-    Task DeleteSuspectedAllergenAsync(Guid suspectedAllergenId, CancellationToken ct = default);
-    Task InsertUserClearedIngredientAsync(Guid suspectedAllergenId, Guid clearedByUserId,
+    // User-initiated clear (atomic: insert ClearedIngredient + soft-delete suspect in one transaction)
+    Task ClearSuspectTransactionalAsync(Guid suspectedAllergenId, Guid clearedByUserId,
         CancellationToken ct = default);
 
     // Cleared ingredients

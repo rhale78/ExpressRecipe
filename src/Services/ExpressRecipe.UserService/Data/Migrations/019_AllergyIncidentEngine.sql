@@ -17,6 +17,7 @@ BEGIN
         CreatedAt       DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
         CreatedBy       UNIQUEIDENTIFIER NULL,
         UpdatedAt       DATETIME2        NULL,
+        UpdatedBy       UNIQUEIDENTIFIER NULL,
         IsDeleted       BIT              NOT NULL DEFAULT 0,
         DeletedAt       DATETIME2        NULL,
         RowVersion      ROWVERSION
@@ -85,24 +86,36 @@ END
 GO
 
 -- SuspectedAllergen: Derived by AllergyDifferentialAnalyzer after each incident.
+-- MemberId is nullable (NULL = primary user "Me"). SQL Server UNIQUE constraints allow multiple NULLs,
+-- so we use a persisted computed column (MemberKey) to enforce uniqueness for active rows.
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('SuspectedAllergen') AND type = 'U')
 BEGIN
     CREATE TABLE SuspectedAllergen (
         Id                      UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
         HouseholdId             UNIQUEIDENTIFIER NOT NULL,
         MemberId                UNIQUEIDENTIFIER NULL,       -- NULL = primary user
+        MemberKey               AS ISNULL(MemberId, '00000000-0000-0000-0000-000000000000') PERSISTED,
         IngredientName          NVARCHAR(200)    NOT NULL,
         ConfidenceScore         DECIMAL(5,4)     NOT NULL DEFAULT 0,  -- 0.0000 – 1.0000
         IncidentCount           INT              NOT NULL DEFAULT 1,
         FirstSeenAt             DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
         LastUpdatedAt           DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
+        LastNotifiedAt          DATETIME2        NULL,       -- last time AllergyAlert was sent; NULL = never
         IsPromotedToConfirmed   BIT              NOT NULL DEFAULT 0,
         PromotedAt              DATETIME2        NULL,
         IsDeleted               BIT              NOT NULL DEFAULT 0,
         DeletedAt               DATETIME2        NULL,
-        RowVersion              ROWVERSION,
-        CONSTRAINT UQ_SuspectedAllergen UNIQUE (HouseholdId, MemberId, IngredientName)
+        RowVersion              ROWVERSION
     );
+END
+GO
+
+-- Enforce uniqueness for active rows using computed MemberKey (handles NULL MemberId correctly).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('SuspectedAllergen') AND name = 'UQ_SuspectedAllergen_Active')
+BEGIN
+    CREATE UNIQUE INDEX UQ_SuspectedAllergen_Active
+        ON SuspectedAllergen(HouseholdId, MemberKey, IngredientName)
+        WHERE IsDeleted = 0;
 END
 GO
 
@@ -113,18 +126,26 @@ END
 GO
 
 -- ClearedIngredient: User-confirmed safe ingredients (analysis engine will not re-suspect these).
+-- MemberId is nullable; use persisted computed column MemberKey to enforce uniqueness.
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('ClearedIngredient') AND type = 'U')
 BEGIN
     CREATE TABLE ClearedIngredient (
         Id                  UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
         HouseholdId         UNIQUEIDENTIFIER NOT NULL,
         MemberId            UNIQUEIDENTIFIER NULL,
+        MemberKey           AS ISNULL(MemberId, '00000000-0000-0000-0000-000000000000') PERSISTED,
         IngredientName      NVARCHAR(200)    NOT NULL,
         ClearedByUserId     UNIQUEIDENTIFIER NOT NULL,
         ClearingIncidentId  UNIQUEIDENTIFIER NULL,           -- NULL = user-initiated (not from analysis)
-        ClearedAt           DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
-        CONSTRAINT UQ_ClearedIngredient UNIQUE (HouseholdId, MemberId, IngredientName)
+        ClearedAt           DATETIME2        NOT NULL DEFAULT GETUTCDATE()
     );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('ClearedIngredient') AND name = 'UQ_ClearedIngredient_Active')
+BEGIN
+    CREATE UNIQUE INDEX UQ_ClearedIngredient_Active
+        ON ClearedIngredient(HouseholdId, MemberKey, IngredientName);
 END
 GO
 
