@@ -35,6 +35,9 @@ public interface IProductRepository
     // High-speed bulk operations
     Task<int> BulkCreateFullProductsHighSpeedAsync(List<FullProductImportDto> products);
     Task<HashSet<string>> GetAllBarcodesAsync();
+
+    // Normalized ingredient names for allergy analysis
+    Task<List<string>> GetNormalizedIngredientNamesAsync(Guid productId, CancellationToken ct = default);
 }
 
 public class ProductRepository : SqlHelper, IProductRepository
@@ -1306,5 +1309,25 @@ public class ProductRepository : SqlHelper, IProductRepository
         return results
             .Where(r => r.Product != null)
             .ToDictionary(r => r.Barcode, r => r.Product!, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public async Task<List<string>> GetNormalizedIngredientNamesAsync(
+        Guid productId, CancellationToken ct = default)
+    {
+        // Fetch ingredient name + raw list-string for all product-ingredient rows
+        const string sql = @"
+            SELECT pi.IngredientListString
+            FROM   ProductIngredient pi
+            WHERE  pi.ProductId  = @ProductId
+              AND  pi.IsDeleted  = 0
+            ORDER  BY pi.OrderIndex";
+
+        List<string?> rawStrings = await ExecuteReaderAsync(
+            sql,
+            reader => reader.IsDBNull(0) ? null : reader.GetString(0),
+            ct,
+            CreateParameter("@ProductId", productId));
+
+        return Services.IngredientNormalizer.NormalizeAll(rawStrings);
     }
     }

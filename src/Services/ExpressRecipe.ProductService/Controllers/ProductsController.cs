@@ -600,6 +600,28 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>
+    /// Get normalized (lowercase, de-parenthesized) ingredient names for a product.
+    /// Used by the allergy differential analysis engine (service-to-service).
+    /// </summary>
+    [HttpGet("{id:guid}/ingredients/normalized")]
+    [AllowAnonymous]
+    public async Task<ActionResult<List<string>>> GetNormalizedIngredients(
+        Guid id, CancellationToken ct)
+    {
+        try
+        {
+            List<string> ingredients =
+                await _productRepository.GetNormalizedIngredientNamesAsync(id, ct);
+            return Ok(ingredients);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching normalized ingredients for product {ProductId}", id);
+            return StatusCode(500, new { message = "An error occurred" });
+        }
+    }
+
+    /// <summary>
     /// Bulk lookup products by barcodes (for batched operations from PriceService)
     /// </summary>
     [HttpPost("barcode/bulk")]

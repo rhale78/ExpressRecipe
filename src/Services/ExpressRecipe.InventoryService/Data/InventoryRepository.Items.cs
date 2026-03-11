@@ -574,4 +574,51 @@ public partial class InventoryRepository
     }
 
     #endregion
+
+    #region Allergy Analysis Support
+
+    public async Task<List<SafeProductUsageResult>> GetSafeProductHistoryAsync(
+        Guid householdId, int minUsageCount, CancellationToken ct = default)
+    {
+        // Returns products consumed from this household's inventory in the last 180 days
+        // that have at least minUsageCount "Used" history records, and whose ProductId is not null,
+        // excluding any products that have an associated allergen discovery record for this household.
+        const string sql = @"
+            SELECT i.ProductId, COUNT(*) AS UsageCount
+            FROM   InventoryHistory ih
+            INNER JOIN InventoryItem i ON i.Id = ih.InventoryItemId
+            WHERE  i.HouseholdId = @HouseholdId
+              AND  i.ProductId   IS NOT NULL
+              AND  ih.ActionType = 'Used'
+              AND  ih.CreatedAt  >= DATEADD(DAY, -180, GETUTCDATE())
+              AND  NOT EXISTS (
+                       SELECT 1
+                       FROM   AllergenDiscovery ad
+                       WHERE  ad.ProductId   = i.ProductId
+                         AND  ad.HouseholdId = i.HouseholdId
+                   )
+            GROUP  BY i.ProductId
+            HAVING COUNT(*) >= @MinUsageCount";
+
+        await using SqlConnection conn = new(_connectionString);
+        await conn.OpenAsync(ct);
+        await using SqlCommand cmd = new(sql, conn);
+        cmd.Parameters.Add(new SqlParameter("@HouseholdId",   SqlDbType.UniqueIdentifier) { Value = householdId });
+        cmd.Parameters.Add(new SqlParameter("@MinUsageCount", SqlDbType.Int)              { Value = minUsageCount });
+
+        List<SafeProductUsageResult> results = new();
+        await using SqlDataReader reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(new SafeProductUsageResult
+            {
+                ProductId  = reader.GetGuid(0),
+                UsageCount = reader.GetInt32(1)
+            });
+        }
+
+        return results;
+    }
+
+    #endregion
 }
