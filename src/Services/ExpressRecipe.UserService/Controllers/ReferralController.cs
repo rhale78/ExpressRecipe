@@ -11,18 +11,23 @@ namespace ExpressRecipe.UserService.Controllers;
 [Authorize]
 public class ReferralController : ControllerBase
 {
+    private const string InternalKeyHeader = "X-Internal-Api-Key";
+
     private readonly IReferralService _referralService;
     private readonly IReferralRepository _referralRepository;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ReferralController> _logger;
 
     public ReferralController(
         IReferralService referralService,
         IReferralRepository referralRepository,
-        ILogger<ReferralController> logger)
+        ILogger<ReferralController> logger,
+        IConfiguration configuration)
     {
         _referralService = referralService;
         _referralRepository = referralRepository;
         _logger = logger;
+        _configuration = configuration;
     }
 
     private Guid? GetCurrentUserId()
@@ -66,11 +71,24 @@ public class ReferralController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>POST /api/referral/convert — record a referral conversion (webhook trigger)</summary>
+    /// <summary>POST /api/referral/convert — record a referral conversion (internal webhook trigger).
+    /// Requires the X-Internal-Api-Key header to match Internal:ApiKey configuration value.</summary>
     [HttpPost("convert")]
     [AllowAnonymous]
     public async Task<IActionResult> Convert([FromBody] ReferralConvertRequest request, CancellationToken ct)
     {
+        // Validate internal API key to prevent unauthenticated callers from minting points
+        var configuredKey = _configuration["Internal:ApiKey"];
+        if (!string.IsNullOrWhiteSpace(configuredKey))
+        {
+            Request.Headers.TryGetValue(InternalKeyHeader, out var providedKey);
+            if (string.IsNullOrWhiteSpace(providedKey) ||
+                !string.Equals(configuredKey, providedKey.ToString(), StringComparison.Ordinal))
+            {
+                return Unauthorized(new { message = "Invalid or missing internal API key." });
+            }
+        }
+
         await _referralService.RecordConversionAsync(request.UserId, ct);
         return NoContent();
     }

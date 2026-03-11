@@ -51,8 +51,61 @@ public class ReferralService : IReferralService
                 $"User already has {MaxActiveCodesPerUser} active referral codes.");
         }
 
-        var code = await GenerateUniqueCodeAsync(ct);
-        return await _referralRepository.CreateReferralCodeAsync(userId, code, ct);
+        return await CreateReferralCodeWithRetryAsync(userId, ct);
+    }
+
+    private async Task<string> CreateReferralCodeWithRetryAsync(Guid userId, CancellationToken ct)
+    {
+        const int maxAttempts = 5;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var code = GenerateCode();
+
+            try
+            {
+                return await _referralRepository.CreateReferralCodeAsync(userId, code, ct);
+            }
+            catch (Exception ex) when (IsUniqueConstraintViolation(ex) && attempt < maxAttempts - 1)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Duplicate referral code collision for user {UserId} on attempt {Attempt}. Retrying.",
+                    userId, attempt + 1);
+            }
+        }
+
+        throw new ReferralException("ReferralCodeGenerationFailed",
+            "Failed to generate a unique referral code after multiple attempts.");
+    }
+
+    private static bool IsUniqueConstraintViolation(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            var message = current.Message;
+            if (message.Contains("UNIQUE KEY constraint", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("Cannot insert duplicate key row", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private async Task<string> GenerateUniqueCodeAsync(CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var code = GenerateCode();
+            if (!await _referralRepository.CodeExistsAsync(code, ct))
+            {
+                return code;
+            }
+        }
+        throw new InvalidOperationException("Could not generate a unique referral code after 10 attempts.");
     }
 
     public async Task<bool> ApplyReferralCodeAsync(Guid newUserId, string code, CancellationToken ct = default)
@@ -69,7 +122,16 @@ public class ReferralService : IReferralService
             return false;
         }
 
-        await _referralRepository.ApplyCodeToUserAsync(newUserId, code, ct);
+        // Only increment usage if the code was actually applied (user had no prior referred-by code)
+        var applied = await _referralRepository.ApplyCodeToUserAsync(newUserId, code, ct);
+        if (!applied)
+        {
+            _logger.LogInformation(
+                "Referral code {Code} not applied to user {UserId} — user already has a referred-by code",
+                code, newUserId);
+            return false;
+        }
+
         await _referralRepository.IncrementCodeUsageAsync(referralCode.Id, ct);
 
         _logger.LogInformation("User {UserId} applied referral code {Code} from referrer {ReferrerId}",
@@ -140,19 +202,6 @@ public class ReferralService : IReferralService
             token, userId, entityType, entityId);
 
         return token;
-    }
-
-    private async Task<string> GenerateUniqueCodeAsync(CancellationToken ct)
-    {
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            var code = GenerateCode();
-            if (!await _referralRepository.CodeExistsAsync(code, ct))
-            {
-                return code;
-            }
-        }
-        throw new InvalidOperationException("Could not generate a unique referral code after 10 attempts.");
     }
 
     private static string GenerateCode()

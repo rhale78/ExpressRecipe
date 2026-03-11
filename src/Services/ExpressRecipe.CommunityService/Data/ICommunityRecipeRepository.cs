@@ -17,6 +17,7 @@ public interface ICommunityRecipeRepository
     // Approval queue
     Task<Guid> EnqueueForApprovalAsync(Guid entityId, string entityType, string? contentJson, CancellationToken ct = default);
     Task<List<ApprovalQueueItemDto>> GetPendingApprovalItemsAsync(int limit = 50, CancellationToken ct = default);
+    Task<ApprovalQueueItemDto?> GetApprovalQueueItemByIdAsync(Guid id, CancellationToken ct = default);
     Task MarkApprovalItemProcessedAsync(Guid queueId, decimal? aiScore, CancellationToken ct = default);
 }
 
@@ -82,6 +83,8 @@ public class CommunityRecipeRepository : ICommunityRecipeRepository
         string? cuisine, string? diet, decimal minRating, string? search,
         Guid? afterId, int pageSize, CancellationToken ct = default)
     {
+        // Cursor pagination: filter and order by SubmittedAt DESC, using (SubmittedAt, Id) as a stable cursor.
+        // search/cuisine/diet filtering is a placeholder — the gallery can be extended later to join recipe data.
         var sb = new StringBuilder(@"
             SELECT TOP (@PageSize)
                    cr.Id, cr.RecipeId, cr.SubmittedBy, cr.Status, cr.ApprovedAt,
@@ -91,15 +94,18 @@ public class CommunityRecipeRepository : ICommunityRecipeRepository
 
         if (afterId.HasValue)
         {
-            sb.Append(" AND cr.Id > @AfterId");
+            // Stable cursor: same-SubmittedAt ties resolved by Id (ascending)
+            sb.Append(@"
+              AND (
+                    cr.SubmittedAt < (SELECT SubmittedAt FROM CommunityRecipe WHERE Id = @AfterId)
+                 OR (
+                        cr.SubmittedAt = (SELECT SubmittedAt FROM CommunityRecipe WHERE Id = @AfterId)
+                    AND cr.Id > @AfterId
+                    )
+              )");
         }
 
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            sb.Append(" AND cr.RecipeId IN (SELECT Id FROM CommunityRecipe WHERE Status='Approved')");
-        }
-
-        sb.Append(" ORDER BY cr.SubmittedAt DESC");
+        sb.Append(" ORDER BY cr.SubmittedAt DESC, cr.Id ASC");
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(ct);
@@ -243,6 +249,34 @@ public class CommunityRecipeRepository : ICommunityRecipeRepository
             });
         }
         return items;
+    }
+
+    public async Task<ApprovalQueueItemDto?> GetApprovalQueueItemByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT Id, EntityType, EntityId, ContentJson, Status, CreatedAt
+            FROM ApprovalQueue
+            WHERE Id = @Id";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@Id", id);
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (await reader.ReadAsync(ct))
+        {
+            return new ApprovalQueueItemDto
+            {
+                Id = reader.GetGuid(0),
+                EntityType = reader.GetString(1),
+                EntityId = reader.GetGuid(2),
+                ContentJson = reader.IsDBNull(3) ? null : reader.GetString(3),
+                Status = reader.GetString(4),
+                CreatedAt = reader.GetDateTime(5)
+            };
+        }
+        return null;
     }
 
     public async Task MarkApprovalItemProcessedAsync(Guid queueId, decimal? aiScore, CancellationToken ct = default)

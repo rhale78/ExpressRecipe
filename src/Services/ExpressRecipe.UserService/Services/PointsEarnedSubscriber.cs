@@ -2,7 +2,6 @@ using ExpressRecipe.Shared.Events;
 using ExpressRecipe.Shared.Services;
 using ExpressRecipe.UserService.Data;
 using RabbitMQ.Client;
-
 namespace ExpressRecipe.UserService.Services;
 
 /// <summary>
@@ -21,11 +20,11 @@ public class PointsEarnedSubscriber : EventSubscriber
         _serviceProvider = serviceProvider;
     }
 
-    protected override string QueueName => "points.earned";
+    protected override string QueueName => EventKeys.PointsEarned;
 
     protected override List<string> RoutingKeys => new()
     {
-        "points.earned"
+        EventKeys.PointsEarned
     };
 
     protected override async Task ProcessEventAsync(string routingKey, string message, CancellationToken cancellationToken)

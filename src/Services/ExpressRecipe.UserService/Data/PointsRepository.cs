@@ -483,50 +483,72 @@ public class PointsRepository : SqlHelper, IPointsRepository
             throw new InsufficientPointsException(balance, reward.PointsCost);
         }
 
-        // Atomic deduction: UPDATE ... WHERE PointsBalance >= @Cost
-        const string deductSql = @"
-            UPDATE UserProfile
-            SET PointsBalance = PointsBalance - @Cost
-            WHERE UserId = @UserId AND PointsBalance >= @Cost";
-
-        var rowsAffected = await ExecuteNonQueryAsync(deductSql,
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@Cost", reward.PointsCost));
-
-        if (rowsAffected == 0)
+        // Atomic deduction + redemption record + PointsTransaction — all in one transaction.
+        // Use OUTPUT INSERTED.PointsBalance to capture the exact post-deduction balance
+        // within the same SQL statement, preventing races with concurrent credits.
+        await ExecuteTransactionAsync(async (connection, transaction) =>
         {
-            throw new InsufficientPointsException(balance, reward.PointsCost);
-        }
+            // 1. Atomic balance deduction — captures new balance via OUTPUT
+            const string deductSql = @"
+                UPDATE UserProfile
+                SET PointsBalance = PointsBalance - @Cost
+                OUTPUT INSERTED.PointsBalance
+                WHERE UserId = @UserId AND PointsBalance >= @Cost";
 
-        // Create redemption record
-        var redemptionId = Guid.NewGuid();
-        var newBalance = balance - reward.PointsCost;
+            await using var deductCmd = new SqlCommand(deductSql, connection, transaction);
+            deductCmd.Parameters.AddWithValue("@UserId", userId);
+            deductCmd.Parameters.AddWithValue("@Cost", reward.PointsCost);
 
-        const string insertRedemptionSql = @"
-            INSERT INTO UserRewardRedemption (Id, UserId, RewardItemId, PointsSpent, RedeemedAt, IsActive)
-            VALUES (@Id, @UserId, @RewardItemId, @PointsSpent, GETUTCDATE(), 1)";
+            var balanceResult = await deductCmd.ExecuteScalarAsync();
+            if (balanceResult == null || balanceResult == DBNull.Value)
+            {
+                throw new InsufficientPointsException(0, reward.PointsCost);
+            }
 
-        await ExecuteNonQueryAsync(insertRedemptionSql,
-            new SqlParameter("@Id", redemptionId),
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@RewardItemId", rewardItemId),
-            new SqlParameter("@PointsSpent", reward.PointsCost));
+            var newBalance = (int)balanceResult;
 
-        // Insert negative PointsTransaction (balance already updated atomically above)
-        const string insertTxSql = @"
-            INSERT INTO PointTransaction (Id, UserId, TransactionType, PointsAmount, BalanceAfter,
-                                         Description, UserContributionId, RewardItemId, TransactionDate)
-            VALUES (@Id, @UserId, 'Spent', @Amount, @BalanceAfter, @Description, NULL, @RewardItemId, GETUTCDATE())";
+            // 2. Redemption record
+            const string insertRedemptionSql = @"
+                INSERT INTO UserRewardRedemption (Id, UserId, RewardItemId, PointsSpent, RedeemedAt, IsActive)
+                VALUES (@Id, @UserId, @RewardItemId, @PointsSpent, GETUTCDATE(), 1)";
 
-        await ExecuteNonQueryAsync(insertTxSql,
-            new SqlParameter("@Id", Guid.NewGuid()),
-            new SqlParameter("@UserId", userId),
-            new SqlParameter("@Amount", -reward.PointsCost),
-            new SqlParameter("@BalanceAfter", newBalance),
-            new SqlParameter("@Description", (object)$"Redeemed: {reward.Name}"),
-            new SqlParameter("@RewardItemId", rewardItemId));
+            await using var redemptionCmd = new SqlCommand(insertRedemptionSql, connection, transaction);
+            redemptionCmd.Parameters.AddWithValue("@Id", Guid.NewGuid());
+            redemptionCmd.Parameters.AddWithValue("@UserId", userId);
+            redemptionCmd.Parameters.AddWithValue("@RewardItemId", rewardItemId);
+            redemptionCmd.Parameters.AddWithValue("@PointsSpent", reward.PointsCost);
+            await redemptionCmd.ExecuteNonQueryAsync();
 
-        // Apply reward effect
+            // 3. PointsTransaction (negative amount = debit)
+            const string insertTxSql = @"
+                INSERT INTO PointTransaction (Id, UserId, TransactionType, PointsAmount, BalanceAfter,
+                                             Description, UserContributionId, RewardItemId, TransactionDate)
+                VALUES (@Id, @UserId, 'Spent', @Amount, @BalanceAfter, @Description, NULL, @RewardItemId, GETUTCDATE())";
+
+            await using var txCmd = new SqlCommand(insertTxSql, connection, transaction);
+            txCmd.Parameters.AddWithValue("@Id", Guid.NewGuid());
+            txCmd.Parameters.AddWithValue("@UserId", userId);
+            txCmd.Parameters.AddWithValue("@Amount", -reward.PointsCost);
+            txCmd.Parameters.AddWithValue("@BalanceAfter", newBalance);
+            txCmd.Parameters.AddWithValue("@Description", (object)$"Redeemed: {reward.Name}");
+            txCmd.Parameters.AddWithValue("@RewardItemId", rewardItemId);
+            await txCmd.ExecuteNonQueryAsync();
+
+            // 4. Decrement quantity if limited
+            if (reward.QuantityAvailable.HasValue)
+            {
+                const string updateQuantitySql = @"
+                    UPDATE RewardItem
+                    SET QuantityAvailable = QuantityAvailable - 1
+                    WHERE Id = @Id";
+
+                await using var qtyCmd = new SqlCommand(updateQuantitySql, connection, transaction);
+                qtyCmd.Parameters.AddWithValue("@Id", rewardItemId);
+                await qtyCmd.ExecuteNonQueryAsync();
+            }
+        });
+
+        // Apply reward effect outside the transaction (idempotent operations)
         if (reward.RewardType == "SubscriptionExtension" && !string.IsNullOrWhiteSpace(reward.Value))
         {
             var days = ParseSubscriptionDays(reward.Value);
@@ -538,18 +560,6 @@ public class PointsRepository : SqlHelper, IPointsRepository
         else if (reward.RewardType == "Badge" && !string.IsNullOrWhiteSpace(reward.Value))
         {
             await AwardBadgeAsync(userId, reward.Value);
-        }
-
-        // Decrement quantity if limited
-        if (reward.QuantityAvailable.HasValue)
-        {
-            const string updateQuantitySql = @"
-                UPDATE RewardItem
-                SET QuantityAvailable = QuantityAvailable - 1
-                WHERE Id = @Id";
-
-            await ExecuteNonQueryAsync(updateQuantitySql,
-                new SqlParameter("@Id", rewardItemId));
         }
 
         return true;

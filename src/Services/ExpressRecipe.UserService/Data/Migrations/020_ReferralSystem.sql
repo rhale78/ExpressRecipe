@@ -25,7 +25,8 @@ CREATE TABLE ReferralConversion (
     ReferredUserId UNIQUEIDENTIFIER NOT NULL,
     ConvertedAt    DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
     PointsAwarded  INT NOT NULL DEFAULT 0,
-    CONSTRAINT FK_ReferralConversion_ReferralCode FOREIGN KEY (ReferralCodeId) REFERENCES ReferralCode(Id)
+    CONSTRAINT FK_ReferralConversion_ReferralCode FOREIGN KEY (ReferralCodeId) REFERENCES ReferralCode(Id),
+    CONSTRAINT UQ_ReferralConversion_Code_ReferredUser UNIQUE (ReferralCodeId, ReferredUserId)
 );
 GO
 

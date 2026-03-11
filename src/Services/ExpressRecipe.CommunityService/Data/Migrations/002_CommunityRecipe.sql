@@ -14,7 +14,8 @@ CREATE TABLE CommunityRecipe (
     AIScore         DECIMAL(5,4) NULL,
     ViewCount       INT NOT NULL DEFAULT 0,
     FeaturedAt      DATETIME2 NULL,
-    SubmittedAt     DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    SubmittedAt     DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    CONSTRAINT UQ_CommunityRecipe_RecipeId UNIQUE (RecipeId)
 );
 
 CREATE INDEX IX_CommunityRecipe_Status ON CommunityRecipe(Status);

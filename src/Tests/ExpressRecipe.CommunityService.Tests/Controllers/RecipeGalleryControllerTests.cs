@@ -4,6 +4,7 @@ using ExpressRecipe.CommunityService.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System.Security.Claims;
@@ -15,6 +16,7 @@ public class RecipeGalleryControllerTests
     private readonly Mock<ICommunityRecipeRepository> _mockGalleryRepository;
     private readonly Mock<IApprovalQueueService> _mockApprovalQueue;
     private readonly Mock<ILogger<RecipeGalleryController>> _mockLogger;
+    private readonly Mock<IConfiguration> _mockConfiguration;
     private readonly RecipeGalleryController _controller;
     private readonly Guid _userId;
 
@@ -23,11 +25,16 @@ public class RecipeGalleryControllerTests
         _mockGalleryRepository = new Mock<ICommunityRecipeRepository>();
         _mockApprovalQueue = new Mock<IApprovalQueueService>();
         _mockLogger = new Mock<ILogger<RecipeGalleryController>>();
+        _mockConfiguration = new Mock<IConfiguration>();
+
+        // No internal key configured → AI score endpoint skips key check in tests
+        _mockConfiguration.Setup(c => c["Internal:ApiKey"]).Returns((string?)null);
 
         _controller = new RecipeGalleryController(
             _mockGalleryRepository.Object,
             _mockApprovalQueue.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockConfiguration.Object);
 
         _userId = Guid.NewGuid();
         SetupAuthenticatedUser(_userId);

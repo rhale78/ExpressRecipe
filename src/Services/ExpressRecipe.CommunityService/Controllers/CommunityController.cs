@@ -112,10 +112,12 @@ public class CommunityController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == null) return Unauthorized();
-        await _repository.VoteReviewAsync(id, userId.Value, request.IsHelpful);
 
-        // Fire PointsEarnedEvent when review just reaches 10 helpful votes
-        if (request.IsHelpful && _eventPublisher != null)
+        // Returns true if this was the user's first vote (false = already voted, no-op)
+        var firstVote = await _repository.VoteReviewAsync(id, userId.Value, request.IsHelpful);
+
+        // Fire PointsEarnedEvent only on the first vote that brings the count to exactly 10
+        if (firstVote && request.IsHelpful && _eventPublisher != null)
         {
             var info = await _repository.GetReviewHelpfulInfoAsync(id);
             if (info.HasValue && info.Value.HelpfulCount == 10)

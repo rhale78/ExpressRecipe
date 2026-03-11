@@ -411,19 +411,58 @@ public class CommunityRepository : ICommunityRepository
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task VoteReviewAsync(Guid reviewId, Guid userId, bool isHelpful)
+    public async Task<bool> VoteReviewAsync(Guid reviewId, Guid userId, bool isHelpful)
     {
-        var sql = isHelpful
+        // Insert a per-user vote record. If the unique constraint fires, the user has already voted → no-op.
+        const string insertVoteSql = @"
+            INSERT INTO ReviewVote (Id, ReviewId, UserId, IsHelpful, VotedAt)
+            SELECT NEWID(), @ReviewId, @UserId, @IsHelpful, GETUTCDATE()
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ReviewVote WHERE ReviewId = @ReviewId AND UserId = @UserId
+            )";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var insertCmd = new SqlCommand(insertVoteSql, connection);
+        insertCmd.Parameters.AddWithValue("@ReviewId", reviewId);
+        insertCmd.Parameters.AddWithValue("@UserId", userId);
+        insertCmd.Parameters.AddWithValue("@IsHelpful", isHelpful);
+
+        var rowsInserted = await insertCmd.ExecuteNonQueryAsync();
+        if (rowsInserted == 0)
+        {
+            // User already voted — no-op
+            return false;
+        }
+
+        // First vote: atomically increment the appropriate counter
+        var incrementSql = isHelpful
             ? "UPDATE CommunityReview SET HelpfulVotes = HelpfulVotes + 1 WHERE Id = @ReviewId"
             : "UPDATE CommunityReview SET UnhelpfulVotes = UnhelpfulVotes + 1 WHERE Id = @ReviewId";
+
+        await using var updateCmd = new SqlCommand(incrementSql, connection);
+        updateCmd.Parameters.AddWithValue("@ReviewId", reviewId);
+        await updateCmd.ExecuteNonQueryAsync();
+
+        return true;
+    }
+
+    public async Task<Guid?> GetSubmissionUserIdAsync(Guid submissionId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT UserId
+            FROM ProductSubmission
+            WHERE Id = @SubmissionId";
 
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
         await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ReviewId", reviewId);
+        command.Parameters.AddWithValue("@SubmissionId", submissionId);
 
-        await command.ExecuteNonQueryAsync();
+        var result = await command.ExecuteScalarAsync();
+        return result is Guid g ? g : null;
     }
 
     public async Task<(Guid ReviewOwnerId, int HelpfulCount)?> GetReviewHelpfulInfoAsync(Guid reviewId)

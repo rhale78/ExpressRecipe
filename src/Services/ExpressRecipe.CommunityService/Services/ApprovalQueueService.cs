@@ -65,8 +65,7 @@ public class ApprovalQueueService : IApprovalQueueService
 
     public async Task ProcessAIApprovalAsync(Guid queueItemId, decimal aiScore, CancellationToken ct = default)
     {
-        var items = await _communityRecipeRepository.GetPendingApprovalItemsAsync(100, ct);
-        var item = items.FirstOrDefault(i => i.Id == queueItemId);
+        var item = await _communityRecipeRepository.GetApprovalQueueItemByIdAsync(queueItemId, ct);
         if (item == null)
         {
             _logger.LogWarning("ApprovalQueue item {Id} not found", queueItemId);
@@ -142,13 +141,14 @@ public class ApprovalQueueService : IApprovalQueueService
         }
         else if (entityType == "Product")
         {
-            await _communityRepository.ApproveSubmissionAsync(entityId, Guid.Parse(approvedBy), Guid.NewGuid());
+            var submitterUserId = await _communityRepository.GetSubmissionUserIdAsync(entityId, ct);
+            await _communityRepository.ApproveSubmissionAsync(entityId, Guid.Parse(approvedBy), Guid.Empty);
 
-            if (_eventPublisher != null)
+            if (_eventPublisher != null && submitterUserId.HasValue)
             {
                 await FireAndForgetAsync(_eventPublisher.PublishAsync(EventKeys.PointsEarned, new PointsEarnedEvent
                 {
-                    UserId = entityId,
+                    UserId = submitterUserId.Value,
                     Reason = "ProductApproved",
                     Points = 50,
                     RelatedEntityId = entityId

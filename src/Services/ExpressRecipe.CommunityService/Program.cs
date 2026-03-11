@@ -61,7 +61,7 @@ if (rabbitEnabled)
         return new ConnectionFactory
         {
             HostName = builder.Configuration["RabbitMQ:Host"] ?? "localhost",
-            Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+            Port = int.TryParse(builder.Configuration["RabbitMQ:Port"], out var commSvcPort) ? commSvcPort : 5672,
             UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
             Password = builder.Configuration["RabbitMQ:Password"] ?? "guest"
         };

@@ -10,7 +10,7 @@ public interface IReferralRepository
     Task<int> CountActiveCodesAsync(Guid userId, CancellationToken ct = default);
     Task<bool> CodeExistsAsync(string code, CancellationToken ct = default);
     Task<ReferralCodeDto?> GetCodeByValueAsync(string code, CancellationToken ct = default);
-    Task ApplyCodeToUserAsync(Guid newUserId, string code, CancellationToken ct = default);
+    Task<bool> ApplyCodeToUserAsync(Guid newUserId, string code, CancellationToken ct = default);
     Task<int> CountConversionsThisMonthAsync(Guid referrerId, CancellationToken ct = default);
     Task RecordConversionAsync(Guid referralCodeId, Guid referrerId, Guid referredUserId, int pointsAwarded, CancellationToken ct = default);
     Task IncrementCodeUsageAsync(Guid codeId, CancellationToken ct = default);
@@ -118,16 +118,18 @@ public class ReferralRepository : SqlHelper, IReferralRepository
         return results.FirstOrDefault();
     }
 
-    public async Task ApplyCodeToUserAsync(Guid newUserId, string code, CancellationToken ct = default)
+    public async Task<bool> ApplyCodeToUserAsync(Guid newUserId, string code, CancellationToken ct = default)
     {
         const string sql = @"
             UPDATE UserProfile
             SET ReferredByCode = @Code
             WHERE UserId = @UserId AND ReferredByCode IS NULL";
 
-        await ExecuteNonQueryAsync(sql,
+        var rowsAffected = await ExecuteNonQueryAsync(sql,
             new SqlParameter("@UserId", newUserId),
             new SqlParameter("@Code", code));
+
+        return rowsAffected > 0;
     }
 
     public async Task<int> CountConversionsThisMonthAsync(Guid referrerId, CancellationToken ct = default)

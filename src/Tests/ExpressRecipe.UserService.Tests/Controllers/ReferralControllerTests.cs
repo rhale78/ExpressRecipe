@@ -4,6 +4,7 @@ using ExpressRecipe.UserService.Services;
 using ExpressRecipe.UserService.Tests.Helpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -14,6 +15,7 @@ public class ReferralControllerTests
     private readonly Mock<IReferralService> _mockService;
     private readonly Mock<IReferralRepository> _mockRepository;
     private readonly Mock<ILogger<ReferralController>> _mockLogger;
+    private readonly Mock<IConfiguration> _mockConfiguration;
     private readonly ReferralController _controller;
     private readonly Guid _userId;
 
@@ -22,8 +24,17 @@ public class ReferralControllerTests
         _mockService = new Mock<IReferralService>();
         _mockRepository = new Mock<IReferralRepository>();
         _mockLogger = new Mock<ILogger<ReferralController>>();
+        _mockConfiguration = new Mock<IConfiguration>();
 
-        _controller = new ReferralController(_mockService.Object, _mockRepository.Object, _mockLogger.Object);
+        // No internal key configured → convert endpoint skips key check in tests
+        _mockConfiguration.Setup(c => c["Internal:ApiKey"]).Returns((string?)null);
+
+        _controller = new ReferralController(
+            _mockService.Object,
+            _mockRepository.Object,
+            _mockLogger.Object,
+            _mockConfiguration.Object);
+
         _userId = Guid.NewGuid();
         ControllerTestHelpers.SetupControllerContext(_controller, _userId);
     }
