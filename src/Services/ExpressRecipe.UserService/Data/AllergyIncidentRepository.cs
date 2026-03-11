@@ -183,11 +183,11 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
                    IncidentCount, FirstSeenAt, LastUpdatedAt, IsPromotedToConfirmed
             FROM SuspectedAllergen
             WHERE HouseholdId = @HouseholdId
-              AND (@MemberId IS NULL OR MemberId = @MemberId)
+              AND (MemberId = @MemberId OR (MemberId IS NULL AND @MemberId IS NULL))
               AND IsDeleted = 0
             ORDER BY ConfidenceScore DESC, IngredientName";
 
-        return await ExecuteReaderAsync(sql, MapSuspected,
+        return await ExecuteReaderAsync(sql, MapSuspected, ct,
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@MemberId",    (object?)memberId ?? DBNull.Value));
     }
@@ -201,7 +201,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             FROM SuspectedAllergen
             WHERE Id = @Id AND IsDeleted = 0";
 
-        var rows = await ExecuteReaderAsync(sql, MapSuspected, CreateParameter("@Id", id));
+        var rows = await ExecuteReaderAsync(sql, MapSuspected, ct, CreateParameter("@Id", id));
         return rows.FirstOrDefault();
     }
 
@@ -216,16 +216,17 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             ON target.HouseholdId   = src.HouseholdId
                AND (target.MemberId = src.MemberId OR (target.MemberId IS NULL AND src.MemberId IS NULL))
                AND target.IngredientName = src.IngredientName
-               AND target.IsDeleted = 0
             WHEN MATCHED THEN
                 UPDATE SET ConfidenceScore = @ConfidenceScore,
                            IncidentCount   = @IncidentCount,
-                           LastUpdatedAt   = GETUTCDATE()
+                           LastUpdatedAt   = GETUTCDATE(),
+                           IsDeleted       = 0,
+                           DeletedAt       = NULL
             WHEN NOT MATCHED THEN
                 INSERT (Id, HouseholdId, MemberId, IngredientName, ConfidenceScore, IncidentCount)
                 VALUES (NEWID(), @HouseholdId, @MemberId, @Name, @ConfidenceScore, @IncidentCount);";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@HouseholdId",    householdId),
             CreateParameter("@MemberId",       (object?)memberId ?? DBNull.Value),
             CreateParameter("@Name",           ingredientName),
@@ -240,7 +241,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             SET IsPromotedToConfirmed = 1, PromotedAt = GETUTCDATE()
             WHERE Id = @Id";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@Id", id));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@Id", id));
     }
 
     public async Task DeleteSuspectedAllergenAsync(Guid suspectedAllergenId, CancellationToken ct = default)
@@ -250,7 +251,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             SET IsDeleted = 1, DeletedAt = GETUTCDATE()
             WHERE Id = @Id";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@Id", suspectedAllergenId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@Id", suspectedAllergenId));
     }
 
     public async Task InsertUserClearedIngredientAsync(Guid suspectedAllergenId,
@@ -268,17 +269,18 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
                 MemberId:       GetGuidNullable(reader, "MemberId"),
                 IngredientName: GetString(reader, "IngredientName") ?? string.Empty
             ),
+            ct,
             CreateParameter("@Id", suspectedAllergenId));
 
         var row = rows.FirstOrDefault();
         if (row == default) return;
 
-        // Upsert into ClearedIngredient (ignore if already exists)
+        // Upsert into ClearedIngredient (ignore if already exists), using null-safe equality
         const string clearSql = @"
             IF NOT EXISTS (
                 SELECT 1 FROM ClearedIngredient
                 WHERE HouseholdId = @HouseholdId
-                  AND (@MemberId IS NULL OR MemberId = @MemberId)
+                  AND (MemberId = @MemberId OR (MemberId IS NULL AND @MemberId IS NULL))
                   AND IngredientName = @IngredientName
             )
             BEGIN
@@ -288,14 +290,120 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
                     (NEWID(), @HouseholdId, @MemberId, @IngredientName, @ClearedBy, NULL)
             END";
 
-        await ExecuteNonQueryAsync(clearSql,
+        await ExecuteNonQueryAsync(clearSql, ct,
             CreateParameter("@HouseholdId",    row.HouseholdId),
             CreateParameter("@MemberId",       (object?)row.MemberId ?? DBNull.Value),
             CreateParameter("@IngredientName", row.IngredientName),
             CreateParameter("@ClearedBy",      clearedByUserId));
 
-        // Soft-delete the suspect row
+        // Soft-delete the suspect row after successfully inserting the cleared record
         await DeleteSuspectedAllergenAsync(suspectedAllergenId, ct);
+    }
+
+    /// <summary>
+    /// Atomically soft-deletes the SuspectedAllergen and inserts a ClearedIngredient record
+    /// in a single transaction so the two operations cannot be partially applied.
+    /// </summary>
+    public async Task ClearSuspectTransactionalAsync(Guid suspectedAllergenId,
+        Guid clearedByUserId, CancellationToken ct = default)
+    {
+        await ExecuteTransactionAsync<int>(async (conn, tx) =>
+        {
+            // Read the suspect data
+            const string fetchSql = @"
+                SELECT HouseholdId, MemberId, IngredientName
+                FROM SuspectedAllergen
+                WHERE Id = @Id";
+
+            Guid   householdId    = default;
+            Guid?  memberId       = null;
+            string ingredientName = string.Empty;
+
+            await using (var cmd = new SqlCommand(fetchSql, conn, tx))
+            {
+                cmd.Parameters.Add((SqlParameter)CreateParameter("@Id", suspectedAllergenId));
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                if (await reader.ReadAsync(ct))
+                {
+                    householdId    = GetGuid(reader, "HouseholdId");
+                    memberId       = GetGuidNullable(reader, "MemberId");
+                    ingredientName = GetString(reader, "IngredientName") ?? string.Empty;
+                }
+            }
+
+            if (householdId == default) return 0;
+
+            // Insert cleared ingredient (null-safe duplicate check)
+            const string clearSql = @"
+                IF NOT EXISTS (
+                    SELECT 1 FROM ClearedIngredient
+                    WHERE HouseholdId = @HouseholdId
+                      AND (MemberId = @MemberId OR (MemberId IS NULL AND @MemberId IS NULL))
+                      AND IngredientName = @IngredientName
+                )
+                BEGIN
+                    INSERT INTO ClearedIngredient
+                        (Id, HouseholdId, MemberId, IngredientName, ClearedByUserId, ClearingIncidentId)
+                    VALUES
+                        (NEWID(), @HouseholdId, @MemberId, @IngredientName, @ClearedBy, NULL)
+                END";
+
+            await using (var cmd = new SqlCommand(clearSql, conn, tx))
+            {
+                cmd.Parameters.Add((SqlParameter)CreateParameter("@HouseholdId",    householdId));
+                cmd.Parameters.Add((SqlParameter)CreateParameter("@MemberId",       (object?)memberId ?? DBNull.Value));
+                cmd.Parameters.Add((SqlParameter)CreateParameter("@IngredientName", ingredientName));
+                cmd.Parameters.Add((SqlParameter)CreateParameter("@ClearedBy",      clearedByUserId));
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // Soft-delete the suspect row
+            const string deleteSql = @"
+                UPDATE SuspectedAllergen
+                SET IsDeleted = 1, DeletedAt = GETUTCDATE()
+                WHERE Id = @Id";
+
+            await using (var cmd = new SqlCommand(deleteSql, conn, tx))
+            {
+                cmd.Parameters.Add((SqlParameter)CreateParameter("@Id", suspectedAllergenId));
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            return 1;
+        });
+    }
+
+    public async Task<List<ConfirmedAllergenDto>> GetConfirmedAllergensAsync(Guid householdId,
+        Guid? memberId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT sa.Id, sa.MemberId,
+                   '' AS MemberName,
+                   sa.IngredientName AS AllergenName,
+                   '' AS SeverityLevel,
+                   CAST(0 AS BIT) AS RequiresEpiPen,
+                   sa.PromotedAt AS DiagnosisDate
+            FROM SuspectedAllergen sa
+            WHERE sa.HouseholdId = @HouseholdId
+              AND (sa.MemberId = @MemberId OR (sa.MemberId IS NULL AND @MemberId IS NULL))
+              AND sa.IsPromotedToConfirmed = 1
+              AND sa.IsDeleted = 0
+            ORDER BY sa.IngredientName";
+
+        return await ExecuteReaderAsync(sql,
+            reader => new ConfirmedAllergenDto
+            {
+                Id           = GetGuid(reader, "Id"),
+                MemberId     = GetGuidNullable(reader, "MemberId"),
+                MemberName   = GetString(reader, "MemberName") ?? string.Empty,
+                AllergenName = GetString(reader, "AllergenName") ?? string.Empty,
+                SeverityLevel = GetString(reader, "SeverityLevel") ?? string.Empty,
+                RequiresEpiPen = GetBoolean(reader, "RequiresEpiPen"),
+                DiagnosisDate  = reader.IsDBNull(reader.GetOrdinal("DiagnosisDate")) ? null : GetDateTime(reader, "DiagnosisDate")
+            },
+            ct,
+            CreateParameter("@HouseholdId", householdId),
+            CreateParameter("@MemberId",    (object?)memberId ?? DBNull.Value));
     }
 
     // ─── Cleared Ingredients ──────────────────────────────────────────────────
@@ -307,7 +415,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             SELECT Id, MemberId, IngredientName, ClearedAt
             FROM ClearedIngredient
             WHERE HouseholdId = @HouseholdId
-              AND (@MemberId IS NULL OR MemberId = @MemberId)
+              AND (MemberId = @MemberId OR (MemberId IS NULL AND @MemberId IS NULL))
             ORDER BY IngredientName";
 
         return await ExecuteReaderAsync(sql,
@@ -318,6 +426,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
                 IngredientName = GetString(reader, "IngredientName") ?? string.Empty,
                 ClearedAt      = GetDateTime(reader, "ClearedAt")
             },
+            ct,
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@MemberId",    (object?)memberId ?? DBNull.Value));
     }
@@ -328,10 +437,10 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
         const string sql = @"
             SELECT COUNT(1) FROM ClearedIngredient
             WHERE HouseholdId = @HouseholdId
-              AND (@MemberId IS NULL OR MemberId = @MemberId)
+              AND (MemberId = @MemberId OR (MemberId IS NULL AND @MemberId IS NULL))
               AND IngredientName = @IngredientName";
 
-        var count = await ExecuteScalarAsync<int>(sql,
+        var count = await ExecuteScalarAsync<int>(sql, ct,
             CreateParameter("@HouseholdId",    householdId),
             CreateParameter("@MemberId",       (object?)memberId ?? DBNull.Value),
             CreateParameter("@IngredientName", ingredientName));
@@ -366,6 +475,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
                 ReactionCount: GetInt32(reader, "ReactionCount"),
                 TotalCount:    GetInt32(reader, "TotalCount")
             ),
+            ct,
             CreateParameter("@HouseholdId",  householdId),
             CreateParameter("@MemberId",     (object?)memberId ?? DBNull.Value),
             CreateParameter("@LookbackDays", lookbackDays));

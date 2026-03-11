@@ -3,6 +3,8 @@
 --   Tracks multi-product, multi-member allergy incidents; suspected allergens derived
 --   by differential analysis; and user-confirmed cleared ingredients.
 -- Date: 2026-03-10
+-- Note: ISNULL(MemberId, '00000000-0000-0000-0000-000000000000') is used in unique indexes
+--       so that NULL MemberId values (= primary user) are treated as equal, not distinct.
 
 -- AllergyIncident: A reaction event (replaces the simpler legacy AllergyIncident row).
 IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID('AllergyIncident2') AND type = 'U')
@@ -17,6 +19,7 @@ BEGIN
         CreatedAt       DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
         CreatedBy       UNIQUEIDENTIFIER NULL,
         UpdatedAt       DATETIME2        NULL,
+        UpdatedBy       UNIQUEIDENTIFIER NULL,
         IsDeleted       BIT              NOT NULL DEFAULT 0,
         DeletedAt       DATETIME2        NULL,
         RowVersion      ROWVERSION
@@ -100,9 +103,18 @@ BEGIN
         PromotedAt              DATETIME2        NULL,
         IsDeleted               BIT              NOT NULL DEFAULT 0,
         DeletedAt               DATETIME2        NULL,
-        RowVersion              ROWVERSION,
-        CONSTRAINT UQ_SuspectedAllergen UNIQUE (HouseholdId, MemberId, IngredientName)
+        RowVersion              ROWVERSION
     );
+END
+GO
+
+-- Filtered unique index to allow soft-deleted rows to be re-inserted without a constraint violation.
+-- ISNULL(@MemberId, '00000000...') ensures NULL values are treated as equal for uniqueness.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('SuspectedAllergen') AND name = 'UQ_SuspectedAllergen_Active')
+BEGIN
+    CREATE UNIQUE INDEX UQ_SuspectedAllergen_Active
+        ON SuspectedAllergen(HouseholdId, ISNULL(MemberId, '00000000-0000-0000-0000-000000000000'), IngredientName)
+        WHERE IsDeleted = 0;
 END
 GO
 
@@ -123,7 +135,7 @@ BEGIN
         ClearedByUserId     UNIQUEIDENTIFIER NOT NULL,
         ClearingIncidentId  UNIQUEIDENTIFIER NULL,           -- NULL = user-initiated (not from analysis)
         ClearedAt           DATETIME2        NOT NULL DEFAULT GETUTCDATE(),
-        CONSTRAINT UQ_ClearedIngredient UNIQUE (HouseholdId, MemberId, IngredientName)
+        CONSTRAINT UQ_ClearedIngredient UNIQUE (HouseholdId, ISNULL(MemberId, '00000000-0000-0000-0000-000000000000'), IngredientName)
     );
 END
 GO

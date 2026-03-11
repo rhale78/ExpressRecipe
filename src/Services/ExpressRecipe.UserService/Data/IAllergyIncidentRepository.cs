@@ -23,6 +23,10 @@ public interface IAllergyIncidentRepository
     Task DeleteSuspectedAllergenAsync(Guid suspectedAllergenId, CancellationToken ct = default);
     Task InsertUserClearedIngredientAsync(Guid suspectedAllergenId, Guid clearedByUserId,
         CancellationToken ct = default);
+    Task ClearSuspectTransactionalAsync(Guid suspectedAllergenId, Guid clearedByUserId,
+        CancellationToken ct = default);
+    Task<List<ConfirmedAllergenDto>> GetConfirmedAllergensAsync(Guid householdId, Guid? memberId,
+        CancellationToken ct = default);
 
     // Cleared ingredients
     Task<List<ClearedIngredientDto>> GetClearedIngredientsAsync(Guid householdId, Guid? memberId,

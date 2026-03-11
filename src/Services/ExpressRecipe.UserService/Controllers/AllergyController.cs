@@ -138,8 +138,8 @@ public class AllergyController : ControllerBase
         if (suspect == null) return NotFound();
         if (suspect.HouseholdId != householdId!.Value) return Forbid();
 
-        await _repo.DeleteSuspectedAllergenAsync(id, ct);
-        await _repo.InsertUserClearedIngredientAsync(id, userId.Value, ct);
+        // Atomic: insert ClearedIngredient and soft-delete suspect in one transaction
+        await _repo.ClearSuspectTransactionalAsync(id, userId.Value, ct);
         return NoContent();
     }
 
@@ -173,17 +173,20 @@ public class AllergyController : ControllerBase
             memberName = member.Name;
         }
 
-        var suspects  = await _repo.GetSuspectedAllergensAsync(householdId.Value, memberId, ct);
-        var incidents = await _repo.GetIncidentsAsync(householdId.Value, memberId, 200, ct);
-        var cleared   = await _repo.GetClearedIngredientsAsync(householdId.Value, memberId, ct);
+        var suspects   = await _repo.GetSuspectedAllergensAsync(householdId.Value, memberId, ct);
+        var confirmed  = await _repo.GetConfirmedAllergensAsync(householdId.Value, memberId, ct);
+        var incidents  = await _repo.GetIncidentsAsync(householdId.Value, memberId, 200, ct);
+        var cleared    = await _repo.GetClearedIngredientsAsync(householdId.Value, memberId, ct);
 
         var report = new AllergyReportModel
         {
-            MemberName         = memberName,
-            GeneratedAt        = DateTime.UtcNow,
-            SuspectedAllergens = suspects.OrderByDescending(s => s.ConfidenceScore).ToList(),
-            Incidents          = incidents,
-            ClearedIngredients = cleared
+            MemberName          = memberName,
+            GeneratedAt         = DateTime.UtcNow,
+            ConfirmedAllergens  = confirmed,
+            SuspectedAllergens  = suspects.Where(s => !s.IsPromotedToConfirmed)
+                                          .OrderByDescending(s => s.ConfidenceScore).ToList(),
+            Incidents           = incidents,
+            ClearedIngredients  = cleared
         };
 
         return Ok(report);

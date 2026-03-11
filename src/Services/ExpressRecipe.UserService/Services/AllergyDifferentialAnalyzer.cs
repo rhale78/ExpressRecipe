@@ -82,7 +82,7 @@ public class AllergyDifferentialAnalyzer
         HttpClient client = _http.CreateClient("NotificationService");
         try
         {
-            await client.PostAsJsonAsync("/api/Notification/internal", new
+            using var response = await client.PostAsJsonAsync("/api/Notification/internal", new
             {
                 userId            = householdId,        // primary user receives the notification
                 type              = "AllergyAlert",
@@ -93,6 +93,13 @@ public class AllergyDifferentialAnalyzer
                                     "This is not a medical diagnosis — consult your doctor.",
                 relatedEntityType = "SuspectedAllergen"
             }, cancellationToken: ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Allergy notification for {IngredientName} returned {StatusCode}",
+                    ingredientName, (int)response.StatusCode);
+            }
         }
         catch (Exception ex)
         {
