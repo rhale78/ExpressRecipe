@@ -3,6 +3,7 @@ using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.CQRS.Commands;
 using ExpressRecipe.RecipeService.CQRS.Queries;
 using ExpressRecipe.RecipeService.Services;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -22,6 +23,7 @@ public class RecipesController : ControllerBase
     private readonly IRecipeEventPublisher _events;
     private readonly IRecipeBatchChannel _batchChannel;
     private readonly ILogger<RecipesController> _logger;
+    private readonly HybridCacheService? _cache;
 
     public RecipesController(
         IRecipeRepository recipeRepository,
@@ -29,7 +31,8 @@ public class RecipesController : ControllerBase
         ShoppingListIntegrationService shoppingListService,
         IRecipeEventPublisher events,
         IRecipeBatchChannel batchChannel,
-        ILogger<RecipesController> logger)
+        ILogger<RecipesController> logger,
+        HybridCacheService? cache = null)
     {
         _recipeRepository    = recipeRepository;
         _servingSizeService  = servingSizeService;
@@ -37,6 +40,7 @@ public class RecipesController : ControllerBase
         _events              = events;
         _batchChannel        = batchChannel;
         _logger              = logger;
+        _cache               = cache;
     }
 
     private Guid? GetCurrentUserId()
@@ -772,6 +776,44 @@ public class RecipesController : ControllerBase
         {
             _logger.LogError(ex, "Error submitting recipe batch import");
             return StatusCode(500, new { message = "An error occurred while submitting the recipe batch" });
+        }
+    }
+    /// <summary>
+    /// Returns recipes with their full ingredient list — used by PantryDiscoveryService.
+    /// Results are cached for 4 hours (the recipe catalog changes infrequently).
+    /// </summary>
+    [HttpGet("with-ingredients")]
+    [AllowAnonymous]
+    public async Task<ActionResult<List<RecipeIngredientSummary>>> GetWithIngredients(
+        [FromQuery] int limit = 500, CancellationToken ct = default)
+    {
+        if (limit < 1)   { limit = 1; }
+        if (limit > 1000) { limit = 1000; }
+
+        try
+        {
+            string cacheKey = $"recipes:with-ingredients:{limit}";
+
+            List<RecipeIngredientSummary>? result = null;
+            if (_cache is not null)
+            {
+                result = await _cache.GetOrSetAsync<List<RecipeIngredientSummary>>(
+                    cacheKey,
+                    async innerCt => await _recipeRepository.GetRecipesWithIngredientSummaryAsync(limit, innerCt),
+                    TimeSpan.FromHours(4),
+                    cancellationToken: ct);
+            }
+            else
+            {
+                result = await _recipeRepository.GetRecipesWithIngredientSummaryAsync(limit, ct);
+            }
+
+            return Ok(result ?? new List<RecipeIngredientSummary>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving recipes with ingredients");
+            return StatusCode(500, new { message = "An error occurred while retrieving recipes" });
         }
     }
 }

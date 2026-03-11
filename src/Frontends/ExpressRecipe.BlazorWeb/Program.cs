@@ -136,6 +136,11 @@ builder.Services.AddHttpClient<IMealPlanApiClient, MealPlanApiClient>(client =>
     client.BaseAddress = new Uri("http://mealplanningservice");
 });
 
+builder.Services.AddHttpClient<IPantryDiscoveryApiClient, PantryDiscoveryApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://mealplanningservice");
+});
+
 builder.Services.AddHttpClient<INotificationApiClient, NotificationApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://notificationservice");

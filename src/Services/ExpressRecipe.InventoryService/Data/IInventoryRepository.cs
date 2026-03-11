@@ -122,6 +122,16 @@ public interface IInventoryRepository
     // Allergy analysis support
     Task<List<SafeProductUsageResult>> GetSafeProductHistoryAsync(
         Guid householdId, int minUsageCount, CancellationToken ct = default);
+
+    // Pantry discovery support
+    Task<List<PantryIngredientItem>> GetPantryIngredientNamesAsync(Guid householdId, CancellationToken ct = default);
+}
+
+public class PantryIngredientItem
+{
+    public Guid InventoryItemId { get; init; }
+    public string NormalizedName { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
 }
 
 public class FrozenIngredientResult
