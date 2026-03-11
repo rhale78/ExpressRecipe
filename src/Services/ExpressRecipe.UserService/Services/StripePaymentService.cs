@@ -95,10 +95,9 @@ public sealed class StripePaymentService : IPaymentService
         return session.Url;
     }
 
-    public async Task<string> CreateBillingPortalSessionAsync(Guid userId, string returnUrl,
+    public async Task<string> CreateBillingPortalSessionAsync(Guid userId, string stripeCustomerId, string returnUrl,
         CancellationToken ct = default)
     {
-        string? stripeCustomerId = await _userProfiles.GetStripeCustomerIdAsync(userId, ct);
         if (string.IsNullOrEmpty(stripeCustomerId))
         {
             throw new InvalidOperationException($"No Stripe customer ID found for user {userId}");

@@ -501,5 +501,26 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
             CreateParameter("@UserId", userId));
     }
 
+    public async Task<Guid> GrantCreditAsync(Guid userId, string tier, int durationDays,
+        string reason, Guid grantedBy, CancellationToken ct = default)
+    {
+        var creditId = Guid.NewGuid();
+        const string sql = @"
+            INSERT INTO SubscriptionCredit
+                (Id, UserId, Tier, DurationDays, Reason, GrantedBy, GrantedAt)
+            VALUES
+                (@Id, @UserId, @Tier, @DurationDays, @Reason, @GrantedBy, GETUTCDATE())";
+
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@Id",          creditId),
+            CreateParameter("@UserId",      userId),
+            CreateParameter("@Tier",        tier),
+            CreateParameter("@DurationDays", durationDays),
+            CreateParameter("@Reason",      reason),
+            CreateParameter("@GrantedBy",   grantedBy));
+
+        return creditId;
+    }
+
     #endregion
 }

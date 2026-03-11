@@ -45,7 +45,7 @@ public class AllergyAnalysisWorkerTests
             .ReturnsAsync(pendingIds);
 
         // Each incident has one member
-        _repoMock.Setup(r => r.GetIncidentByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetIncidentForEngineAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns<Guid, CancellationToken>((id, ct) => Task.FromResult<AllergyIncidentEngineDto?>(
                 new AllergyIncidentEngineDto
                 {
@@ -100,7 +100,7 @@ public class AllergyAnalysisWorkerTests
         _repoMock.Setup(r => r.GetUnanalyzedIncidentIdsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Guid>());
 
-        _repoMock.Setup(r => r.GetIncidentByIdAsync(failId, It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetIncidentForEngineAsync(failId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AllergyIncidentEngineDto
             {
                 Id          = failId,
@@ -109,7 +109,7 @@ public class AllergyAnalysisWorkerTests
                     { new() { MemberId = Guid.NewGuid(), MemberName = "Bob" } }
             });
 
-        _repoMock.Setup(r => r.GetIncidentByIdAsync(successId, It.IsAny<CancellationToken>()))
+        _repoMock.Setup(r => r.GetIncidentForEngineAsync(successId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AllergyIncidentEngineDto
             {
                 Id          = successId,

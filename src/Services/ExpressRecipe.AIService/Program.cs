@@ -1,8 +1,8 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.AIService.Configuration;
 using ExpressRecipe.AIService.Data;
-using ExpressRecipe.AIService.Providers;
-using ExpressRecipe.AIService.Services;
+using Providers = ExpressRecipe.AIService.Providers;
+using Services = ExpressRecipe.AIService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -51,7 +51,7 @@ builder.Services.AddHttpClient("Ollama", client =>
 });
 
 // Register Ollama Service
-builder.Services.AddScoped<IOllamaService, OllamaService>();
+builder.Services.AddScoped<Services.IOllamaService, Services.OllamaService>();
 
 // ── AI Provider infrastructure ───────────────────────────────────────────────
 
@@ -61,18 +61,26 @@ builder.Services.AddMemoryCache();
 // Local-mode flag (APP_LOCAL_MODE=true disables cloud provider HTTP calls)
 builder.Services.AddSingleton<ILocalModeConfig, LocalModeConfig>();
 
-// Register all AI providers
-builder.Services.AddSingleton<IAIProvider, OllamaProvider>();
-builder.Services.AddSingleton<IAIProvider, ClaudeProvider>();
-builder.Services.AddSingleton<IAIProvider, OpenAIProvider>();
-builder.Services.AddSingleton<IAIProvider, GeminiProvider>();
-builder.Services.AddSingleton<IAIProvider, AzureOpenAIProvider>();
+// Register all AI providers (Providers.IAIProvider)
+builder.Services.AddSingleton<Providers.IAIProvider, Providers.OllamaProvider>();
+builder.Services.AddSingleton<Providers.IAIProvider, Providers.ClaudeProvider>();
+builder.Services.AddSingleton<Providers.IAIProvider, Providers.OpenAIProvider>();
+builder.Services.AddSingleton<Providers.IAIProvider, Providers.GeminiProvider>();
+builder.Services.AddSingleton<Providers.IAIProvider, Providers.AzureOpenAIProvider>();
 
 // Provider factory (config-driven per use case with HybridCache)
-builder.Services.AddSingleton<IAIProviderFactory, AIProviderFactory>();
+builder.Services.AddSingleton<Providers.IAIProviderFactory, Providers.AIProviderFactory>();
+
+// Legacy Ollama-backed factory for CookingAssistantService (wraps IOllamaService)
+builder.Services.AddSingleton<Providers.IAIProviderFactory>(sp =>
+    new Services.AIProviderFactory(
+        sp.GetRequiredService<Services.IOllamaService>(),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+        sp.GetRequiredService<ILogger<Services.AIProviderFactory>>()));
 
 // Cooking assistant service
-builder.Services.AddScoped<ICookingAssistantService, CookingAssistantService>();
+builder.Services.AddScoped<Services.ICookingAssistantService, Services.CookingAssistantService>();
 
 // Data repositories for provider config and approval queue
 var aiConnectionString = builder.Configuration.GetConnectionString("aidb")
@@ -82,7 +90,7 @@ if (string.IsNullOrWhiteSpace(aiConnectionString))
 {
     if (builder.Environment.IsDevelopment())
     {
-        aiConnectionString = "Server=(localdb)\MSSQLLocalDB;Database=ExpressRecipe;Trusted_Connection=True;TrustServerCertificate=True;";
+        aiConnectionString = @"Server=(localdb)\MSSQLLocalDB;Database=ExpressRecipe;Trusted_Connection=True;TrustServerCertificate=True;";
     }
     else
     {
@@ -114,7 +122,7 @@ builder.Services.AddHttpClient("NotificationService", client =>
 });
 
 // Approval queue service
-builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
+builder.Services.AddScoped<Services.IApprovalQueueService, Services.ApprovalQueueService>();
 
 
 // Health checks

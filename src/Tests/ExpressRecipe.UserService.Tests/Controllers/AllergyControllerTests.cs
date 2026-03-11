@@ -44,7 +44,7 @@ public class AllergyControllerTests
 
         _analyzer = new AllergyDifferentialAnalyzer(
             _mockRepo.Object,
-            _mockHttpFactory.Object,
+            Mock.Of<IIngredientFetchService>(),
             Mock.Of<ILogger<AllergyDifferentialAnalyzer>>());
 
         _controller = new AllergyController(

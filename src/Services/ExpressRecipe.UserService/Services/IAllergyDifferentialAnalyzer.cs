@@ -7,6 +7,10 @@ public interface IAllergyDifferentialAnalyzer
     Task RunForMemberAsync(
         Guid householdId, Guid? memberId, string memberName,
         CancellationToken ct = default);
+
+    Task RunForMembersAsync(
+        Guid householdId, IEnumerable<(Guid? MemberId, string MemberName)> members,
+        CancellationToken ct = default);
 }
 
 public sealed class AllergyDifferentialAnalyzer : IAllergyDifferentialAnalyzer
@@ -42,6 +46,16 @@ public sealed class AllergyDifferentialAnalyzer : IAllergyDifferentialAnalyzer
         _repo        = repo;
         _ingredients = ingredients;
         _logger      = logger;
+    }
+
+    public async Task RunForMembersAsync(
+        Guid householdId, IEnumerable<(Guid? MemberId, string MemberName)> members,
+        CancellationToken ct = default)
+    {
+        foreach (var (memberId, memberName) in members)
+        {
+            await RunForMemberAsync(householdId, memberId, memberName, ct);
+        }
     }
 
     public async Task RunForMemberAsync(

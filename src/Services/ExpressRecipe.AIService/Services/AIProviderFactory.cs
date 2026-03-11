@@ -1,3 +1,4 @@
+using ExpressRecipe.AIService.Providers;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -90,7 +91,9 @@ internal sealed class OllamaAIProvider : IAIProvider
         _logger = logger;
     }
 
-    public async Task<AITextResult> GenerateAsync(string prompt, AIRequestOptions options,
+    public string ProviderName => "Ollama";
+
+    public async Task<AITextResult> GenerateAsync(string prompt, AIRequestOptions? options = null,
         CancellationToken ct = default)
     {
         try
@@ -98,7 +101,7 @@ internal sealed class OllamaAIProvider : IAIProvider
             ct.ThrowIfCancellationRequested();
 
             string text = await _service.GenerateCompletionAsync(
-                prompt, _modelName, (double)options.Temperature, options.MaxTokens, ct);
+                prompt, _modelName, (double)(options?.Temperature ?? 0.7m), options?.MaxTokens ?? 2000, ct);
 
             return new AITextResult { Success = true, Text = text };
         }
@@ -113,4 +116,12 @@ internal sealed class OllamaAIProvider : IAIProvider
             return new AITextResult { Success = false, ErrorMessage = ex.Message };
         }
     }
+
+    public Task<AIClassifyResult> ClassifyAsync(string prompt, string[] possibleClasses,
+        AIRequestOptions? options = null, CancellationToken ct = default)
+        => Task.FromResult(new AIClassifyResult { Success = false, ChosenClass = possibleClasses.FirstOrDefault() ?? string.Empty, Confidence = 0 });
+
+    public Task<AIApprovalResult> ScoreForApprovalAsync(string content, string entityType,
+        AIRequestOptions? options = null, CancellationToken ct = default)
+        => Task.FromResult(new AIApprovalResult { Success = true, Score = 0.5m });
 }

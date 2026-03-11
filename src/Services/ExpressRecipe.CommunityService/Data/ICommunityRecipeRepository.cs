@@ -16,8 +16,8 @@ public interface ICommunityRecipeRepository
 
     // Approval queue
     Task<Guid> EnqueueForApprovalAsync(Guid entityId, string entityType, string? contentJson, CancellationToken ct = default);
-    Task<List<ApprovalQueueItemDto>> GetPendingApprovalItemsAsync(int limit = 50, CancellationToken ct = default);
-    Task<ApprovalQueueItemDto?> GetApprovalQueueItemByIdAsync(Guid id, CancellationToken ct = default);
+    Task<List<CommunityApprovalQueueItemDto>> GetPendingApprovalItemsAsync(int limit = 50, CancellationToken ct = default);
+    Task<CommunityApprovalQueueItemDto?> GetApprovalQueueItemByIdAsync(Guid id, CancellationToken ct = default);
     Task MarkApprovalItemProcessedAsync(Guid queueId, decimal? aiScore, CancellationToken ct = default);
 }
 
@@ -43,7 +43,7 @@ public sealed record GalleryPage
     public Guid? NextCursorId { get; init; }
 }
 
-public sealed record ApprovalQueueItemDto
+public sealed record CommunityApprovalQueueItemDto
 {
     public Guid Id { get; init; }
     public string EntityType { get; init; } = string.Empty;
@@ -221,7 +221,7 @@ public class CommunityRecipeRepository : ICommunityRecipeRepository
         return id;
     }
 
-    public async Task<List<ApprovalQueueItemDto>> GetPendingApprovalItemsAsync(int limit = 50, CancellationToken ct = default)
+    public async Task<List<CommunityApprovalQueueItemDto>> GetPendingApprovalItemsAsync(int limit = 50, CancellationToken ct = default)
     {
         const string sql = @"
             SELECT TOP (@Limit) Id, EntityType, EntityId, ContentJson, Status, CreatedAt
@@ -234,11 +234,11 @@ public class CommunityRecipeRepository : ICommunityRecipeRepository
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@Limit", limit);
 
-        var items = new List<ApprovalQueueItemDto>();
+        var items = new List<CommunityApprovalQueueItemDto>();
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            items.Add(new ApprovalQueueItemDto
+            items.Add(new CommunityApprovalQueueItemDto
             {
                 Id = reader.GetGuid(0),
                 EntityType = reader.GetString(1),
@@ -251,7 +251,7 @@ public class CommunityRecipeRepository : ICommunityRecipeRepository
         return items;
     }
 
-    public async Task<ApprovalQueueItemDto?> GetApprovalQueueItemByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<CommunityApprovalQueueItemDto?> GetApprovalQueueItemByIdAsync(Guid id, CancellationToken ct = default)
     {
         const string sql = @"
             SELECT Id, EntityType, EntityId, ContentJson, Status, CreatedAt
@@ -266,7 +266,7 @@ public class CommunityRecipeRepository : ICommunityRecipeRepository
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (await reader.ReadAsync(ct))
         {
-            return new ApprovalQueueItemDto
+            return new CommunityApprovalQueueItemDto
             {
                 Id = reader.GetGuid(0),
                 EntityType = reader.GetString(1),

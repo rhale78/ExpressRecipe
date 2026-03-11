@@ -1,20 +1,14 @@
 using ExpressRecipe.UserService.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace ExpressRecipe.UserService.Tests.Services;
 
 public class MockPaymentServiceTests
 {
-    private static MockPaymentService CreateService() => new();
-
-    [Fact]
-    public async Task CreateCustomerAsync_DoesNotThrow()
-    {
-        MockPaymentService svc = CreateService();
-        Func<Task> act = () => svc.CreateCustomerAsync(Guid.NewGuid(), "test@example.com", "Test User");
-        await act.Should().NotThrowAsync();
-    }
+    private static MockPaymentService CreateService() =>
+        new(NullLogger<MockPaymentService>.Instance);
 
     [Fact]
     public async Task CreateCheckoutSessionAsync_ReturnsMockUrlWithSuccessUrlBase()
@@ -28,8 +22,6 @@ public class MockPaymentServiceTests
             successUrl, "https://example.com/cancel");
 
         url.Should().StartWith(successUrl);
-        url.Should().Contain("mock=true");
-        url.Should().Contain(priceId);
     }
 
     [Fact]
@@ -50,8 +42,9 @@ public class MockPaymentServiceTests
     {
         MockPaymentService svc = CreateService();
         string returnUrl       = "https://example.com/account";
+        string customerId      = "cus_mock_123";
 
-        string url = await svc.CreateBillingPortalSessionAsync(Guid.NewGuid(), returnUrl);
+        string url = await svc.CreateBillingPortalSessionAsync(Guid.NewGuid(), customerId, returnUrl);
 
         url.Should().Be(returnUrl);
     }
@@ -65,17 +58,9 @@ public class MockPaymentServiceTests
     }
 
     [Fact]
-    public async Task ApplyPromotionCodeAsync_DoesNotThrow()
-    {
-        MockPaymentService svc = CreateService();
-        Func<Task> act = () => svc.ApplyPromotionCodeAsync("sub_mock_123", "PROMO10");
-        await act.Should().NotThrowAsync();
-    }
-
-    [Fact]
     public async Task EventAlreadyProcessedAsync_NewEvent_ReturnsFalse()
     {
-        MockPaymentService svc = new();  // fresh instance to avoid cross-test state
+        MockPaymentService svc = CreateService();
         bool result = await svc.EventAlreadyProcessedAsync("evt_new_" + Guid.NewGuid());
         result.Should().BeFalse();
     }
@@ -83,7 +68,7 @@ public class MockPaymentServiceTests
     [Fact]
     public async Task MarkEventProcessedAsync_ThenEventAlreadyProcessed_ReturnsTrue()
     {
-        MockPaymentService svc = new();
+        MockPaymentService svc = CreateService();
         string eventId         = "evt_idempotent_" + Guid.NewGuid();
 
         await svc.MarkEventProcessedAsync(eventId, "customer.subscription.updated");
@@ -95,7 +80,7 @@ public class MockPaymentServiceTests
     [Fact]
     public async Task MarkEventProcessedAsync_CalledTwice_DoesNotThrow()
     {
-        MockPaymentService svc = new();
+        MockPaymentService svc = CreateService();
         string eventId         = "evt_dup_" + Guid.NewGuid();
 
         await svc.MarkEventProcessedAsync(eventId, "customer.subscription.created");

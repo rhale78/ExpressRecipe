@@ -52,4 +52,12 @@ public sealed class MockPaymentService : IPaymentService
 
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc/>
+    public Task<bool> EventAlreadyProcessedAsync(string stripeEventId, CancellationToken ct = default)
+        => Task.FromResult(false);
+
+    /// <inheritdoc/>
+    public Task MarkEventProcessedAsync(string stripeEventId, string eventType, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

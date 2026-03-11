@@ -24,8 +24,8 @@ public class AllergyManagementControllerTests
 
         _controller = new AllergyManagementController(
             _mockRepository.Object,
-            _mockLogger.Object
-        );
+            _mockLogger.Object,
+            null);
 
         _testUserId = Guid.NewGuid();
         ControllerTestHelpers.SetupControllerContext(_controller, _testUserId);

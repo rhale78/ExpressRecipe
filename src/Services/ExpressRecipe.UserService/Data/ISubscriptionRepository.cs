@@ -27,4 +27,8 @@ public interface ISubscriptionRepository
     Task UpdateUserSubscriptionAsync(Guid userId, string tierName, string stripeSubscriptionId,
         DateTime currentPeriodEnd, CancellationToken ct = default);
     Task DowngradeToFreeAsync(Guid userId, CancellationToken ct = default);
+
+    // Admin credit grants
+    Task<Guid> GrantCreditAsync(Guid userId, string tier, int durationDays, string reason,
+        Guid grantedBy, CancellationToken ct = default);
 }

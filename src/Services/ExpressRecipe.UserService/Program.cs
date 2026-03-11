@@ -102,10 +102,12 @@ builder.Services.AddScoped<ExpressRecipe.UserService.Services.AllergyDifferentia
 builder.Services.AddHybridCache();
 
 // Feature flag services — override the HttpFeatureFlagService registered by ServiceDefaults
-builder.Services.AddScoped<IFeatureFlagRepository>(sp => new FeatureFlagRepository(connectionString));
-builder.Services.AddScoped<FeatureFlagService>();
+builder.Services.AddScoped<ExpressRecipe.UserService.Data.IFeatureFlagRepository>(
+    sp => new ExpressRecipe.UserService.Data.FeatureFlagRepository(connectionString));
+builder.Services.AddScoped<ExpressRecipe.UserService.Services.FeatureFlagService>();
 // Replace the HTTP proxy with the direct DB-backed implementation
-builder.Services.AddScoped<IFeatureFlagService>(sp => sp.GetRequiredService<FeatureFlagService>());
+builder.Services.AddScoped<ExpressRecipe.Shared.Services.FeatureGates.IFeatureFlagService>(
+    sp => sp.GetRequiredService<ExpressRecipe.UserService.Services.FeatureFlagService>());
 
 // Optional messaging (RabbitMQ) — gracefully disabled when connection string is absent
 bool messagingEnabled = !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"));

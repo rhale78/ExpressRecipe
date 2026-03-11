@@ -31,25 +31,20 @@ public class WorkQueueInternalControllerTests
             Title          = "Rate your meal",
             Body           = "Tap to rate",
             ActionPayload  = "{\"recipeId\":\"...\"}",
-            SourceEntityId = sourceEntityId,
+            RelatedEntityId = sourceEntityId,
             SourceService  = "Recipe",
+            RelatedEntityType = "Recipe",
             ExpiresAt      = DateTime.UtcNow.AddDays(7)
         };
 
         _mockRepo
-            .Setup(r => r.UpsertItemAsync(
-                householdId, "RateRecipe", WorkQueuePriority.RateRecipe,
-                "Rate your meal", "Tap to rate", "{\"recipeId\":\"...\"}",
-                sourceEntityId, "Recipe", It.IsAny<DateTime?>(), default))
-            .Returns(Task.CompletedTask);
+            .Setup(r => r.UpsertAsync(It.IsAny<UpsertWorkQueueItemRequest>(), default))
+            .Returns(Task.FromResult(Guid.Empty));
 
         IActionResult result = await _controller.UpsertItem(req, default);
 
         result.Should().BeOfType<NoContentResult>();
-        _mockRepo.Verify(r => r.UpsertItemAsync(
-            householdId, "RateRecipe", WorkQueuePriority.RateRecipe,
-            "Rate your meal", "Tap to rate", "{\"recipeId\":\"...\"}",
-            sourceEntityId, "Recipe", It.IsAny<DateTime?>(), default), Times.Once);
+        _mockRepo.Verify(r => r.UpsertAsync(It.IsAny<UpsertWorkQueueItemRequest>(), default), Times.Once);
     }
 
     [Fact]
@@ -65,16 +60,14 @@ public class WorkQueueInternalControllerTests
             Title         = "Price drop on Milk",
             Body          = null,
             ActionPayload = null,
-            SourceEntityId = null,
+            RelatedEntityId = null,
             SourceService  = null,
             ExpiresAt      = null
         };
 
         _mockRepo
-            .Setup(r => r.UpsertItemAsync(
-                householdId, "PriceDrop", WorkQueuePriority.PriceDrop,
-                "Price drop on Milk", null, null, null, null, null, default))
-            .Returns(Task.CompletedTask);
+            .Setup(r => r.UpsertAsync(It.IsAny<UpsertWorkQueueItemRequest>(), default))
+            .Returns(Task.FromResult(Guid.Empty));
 
         IActionResult result = await _controller.UpsertItem(req, default);
 

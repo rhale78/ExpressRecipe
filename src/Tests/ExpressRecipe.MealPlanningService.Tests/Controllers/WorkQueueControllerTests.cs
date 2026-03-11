@@ -17,7 +17,7 @@ public class WorkQueueControllerTests
     public WorkQueueControllerTests()
     {
         _mockRepo       = new Mock<IWorkQueueRepository>();
-        _controller     = new WorkQueueController(_mockRepo.Object);
+        _controller     = new WorkQueueController(_mockRepo.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkQueueController>.Instance);
         _testUserId     = Guid.NewGuid();
         _testHouseholdId = Guid.NewGuid();
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(
@@ -44,36 +44,36 @@ public class WorkQueueControllerTests
         };
 
         _mockRepo
-            .Setup(r => r.GetPendingItemsAsync(_testHouseholdId, _testUserId, 50, default))
+            .Setup(r => r.GetPendingItemsAsync(_testHouseholdId, default))
             .ReturnsAsync(items);
 
-        IActionResult result = await _controller.GetQueue(50, default);
+        IActionResult result = await _controller.GetPendingItems(default);
 
         result.Should().BeOfType<OkObjectResult>();
         ((OkObjectResult)result).Value.Should().BeEquivalentTo(items);
-        _mockRepo.Verify(r => r.GetPendingItemsAsync(_testHouseholdId, _testUserId, 50, default), Times.Once);
+        _mockRepo.Verify(r => r.GetPendingItemsAsync(_testHouseholdId, default), Times.Once);
     }
 
     [Fact]
     public async Task GetQueue_WithCustomLimit_PassesLimitToRepository()
     {
         _mockRepo
-            .Setup(r => r.GetPendingItemsAsync(_testHouseholdId, _testUserId, 10, default))
+            .Setup(r => r.GetPendingItemsAsync(_testHouseholdId, default))
             .ReturnsAsync(new List<WorkQueueItemDto>());
 
-        IActionResult result = await _controller.GetQueue(10, default);
+        IActionResult result = await _controller.GetPendingItems(default);
 
         result.Should().BeOfType<OkObjectResult>();
-        _mockRepo.Verify(r => r.GetPendingItemsAsync(_testHouseholdId, _testUserId, 10, default), Times.Once);
+        _mockRepo.Verify(r => r.GetPendingItemsAsync(_testHouseholdId, default), Times.Once);
     }
 
     [Fact]
     public async Task GetQueue_WhenNoHouseholdIdClaim_ReturnsUnauthorized()
     {
-        WorkQueueController controller = new(_mockRepo.Object);
+        WorkQueueController controller = new(_mockRepo.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkQueueController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
 
-        IActionResult result = await controller.GetQueue(50, default);
+        IActionResult result = await controller.GetPendingItems(default);
 
         result.Should().BeOfType<UnauthorizedResult>();
     }
@@ -81,10 +81,10 @@ public class WorkQueueControllerTests
     [Fact]
     public async Task GetQueue_WhenNoUserClaim_ReturnsUnauthorized()
     {
-        WorkQueueController controller = new(_mockRepo.Object);
+        WorkQueueController controller = new(_mockRepo.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkQueueController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
 
-        IActionResult result = await controller.GetQueue(50, default);
+        IActionResult result = await controller.GetPendingItems(default);
 
         result.Should().BeOfType<UnauthorizedResult>();
     }
@@ -135,7 +135,7 @@ public class WorkQueueControllerTests
     [Fact]
     public async Task ActionItem_WhenNoUserClaim_ReturnsUnauthorized()
     {
-        WorkQueueController controller = new(_mockRepo.Object);
+        WorkQueueController controller = new(_mockRepo.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkQueueController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
 
         IActionResult result = await controller.ActionItem(Guid.NewGuid(),
@@ -166,7 +166,7 @@ public class WorkQueueControllerTests
     [Fact]
     public async Task Dismiss_WhenNoUserClaim_ReturnsUnauthorized()
     {
-        WorkQueueController controller = new(_mockRepo.Object);
+        WorkQueueController controller = new(_mockRepo.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkQueueController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
 
         IActionResult result = await controller.Dismiss(Guid.NewGuid(), default);
@@ -182,7 +182,7 @@ public class WorkQueueControllerTests
     public async Task Snooze_WithPositiveHours_SnoozesByCorrectDuration()
     {
         Guid itemId = Guid.NewGuid();
-        SnoozeRequest req = new() { Hours = 4 };
+        SnoozeWorkQueueItemRequest req = new() { ResumeAt = DateTime.UtcNow.AddHours(4) };
 
         _mockRepo
             .Setup(r => r.SnoozeItemAsync(itemId, _testUserId, It.IsAny<DateTime>(), default))
@@ -199,7 +199,7 @@ public class WorkQueueControllerTests
     public async Task Snooze_WithZeroHours_SnoozesUntilTomorrow()
     {
         Guid itemId = Guid.NewGuid();
-        SnoozeRequest req = new() { Hours = 0 };
+        SnoozeWorkQueueItemRequest req = new() { ResumeAt = DateTime.UtcNow };
 
         _mockRepo
             .Setup(r => r.SnoozeItemAsync(itemId, _testUserId, It.IsAny<DateTime>(), default))
@@ -217,10 +217,10 @@ public class WorkQueueControllerTests
     [Fact]
     public async Task Snooze_WhenNoUserClaim_ReturnsUnauthorized()
     {
-        WorkQueueController controller = new(_mockRepo.Object);
+        WorkQueueController controller = new(_mockRepo.Object, Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkQueueController>.Instance);
         controller.ControllerContext = ControllerTestHelpers.CreateUnauthenticatedContext();
 
-        IActionResult result = await controller.Snooze(Guid.NewGuid(), new SnoozeRequest(), default);
+        IActionResult result = await controller.Snooze(Guid.NewGuid(), new SnoozeWorkQueueItemRequest { ResumeAt = DateTime.UtcNow.AddHours(24) }, default);
 
         result.Should().BeOfType<UnauthorizedResult>();
     }

@@ -746,61 +746,6 @@ public class InventoryController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Internal: returns product purchase history for a household.
-    /// Intended for use by the AllergyAnalysis service for safe-product correlation;
-    /// incident-based eligibility filtering is left to the caller.
-    /// </summary>
-    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
-    [HttpGet("safe-product-history/{householdId}")]
-    public async Task<IActionResult> GetSafeProductHistory(
-        Guid householdId,
-        [FromQuery] int daysBack = 180,
-        CancellationToken ct = default)
-    {
-        string? configuredKey = _configuration?["InternalApi:Key"];
-        if (!string.IsNullOrEmpty(configuredKey))
-        {
-            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
-            if (!IsValidApiKey(providedKey, configuredKey))
-                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
-        }
-
-        try
-        {
-            if (householdId == Guid.Empty)
-                return BadRequest(new { message = "householdId is required" });
-
-            // Get all household members' purchase history
-            var household = await _repository.GetHouseholdByIdAsync(householdId);
-            if (household == null)
-                return NotFound(new { message = "Household not found" });
-
-            var members = await _repository.GetHouseholdMembersAsync(householdId);
-            var allEvents = new List<PurchaseEventDto>();
-
-            foreach (var member in members)
-            {
-                var events = await _repository.GetPurchaseHistoryAsync(member.UserId, null, daysBack, ct);
-                allEvents.AddRange(events);
-            }
-
-            // Distinct by ProductId, include custom-name products too
-            var result = allEvents
-                .GroupBy(e => e.ProductId?.ToString() ?? e.CustomName ?? e.Barcode ?? e.Id.ToString())
-                .Select(g => g.OrderByDescending(e => e.PurchasedAt).First())
-                .OrderByDescending(e => e.PurchasedAt)
-                .ToList();
-
-            return Ok(new { HouseholdId = householdId, DaysBack = daysBack, Products = result });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving safe product history for household {HouseholdId}", householdId);
-            return StatusCode(500, new { message = "An error occurred while retrieving safe product history" });
-        }
-    }
-
     // ──────────────────────────────────────────────────────────────────────────
     //  CONSUMPTION PATTERNS
     // ──────────────────────────────────────────────────────────────────────────
