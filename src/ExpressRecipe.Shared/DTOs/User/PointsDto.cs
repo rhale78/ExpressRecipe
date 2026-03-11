@@ -158,6 +158,7 @@ public class UserSubscriptionDto
     public DateTime? NextBillingDate { get; set; }
     public bool AutoRenew { get; set; }
     public string? PaymentMethodId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
     public DateTime? CancellationDate { get; set; }
     public string? CancellationReason { get; set; }
     public string TierName { get; set; } = string.Empty;
@@ -171,4 +172,24 @@ public class UpdatePaymentMethodRequest
     [Required]
     [StringLength(100)]
     public string PaymentMethodId { get; set; } = string.Empty;
+}
+
+public class CheckoutRequest
+{
+    [Required]
+    [StringLength(100)]
+    public string StripePriceId { get; set; } = string.Empty;
+
+    public bool WithTrial { get; set; }
+
+    [Required]
+    [StringLength(2048)]
+    public string BaseUrl { get; set; } = string.Empty;
+}
+
+public class BillingPortalRequest
+{
+    [Required]
+    [StringLength(2048)]
+    public string ReturnUrl { get; set; } = string.Empty;
 }

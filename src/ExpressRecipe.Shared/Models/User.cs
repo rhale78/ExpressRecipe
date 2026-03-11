@@ -63,9 +63,10 @@ public class Allergen : BaseEntity
 
 public enum SubscriptionTier
 {
-    Free,
-    Premium,
-    Family
+    Free    = 0,
+    AdFree  = 1,
+    Plus    = 2,
+    Premium = 3
 }
 
 public enum RestrictionType

@@ -1,5 +1,6 @@
 using ExpressRecipe.Shared.DTOs.User;
 using ExpressRecipe.UserService.Data;
+using ExpressRecipe.UserService.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -12,13 +13,19 @@ namespace ExpressRecipe.UserService.Controllers;
 public class SubscriptionsController : ControllerBase
 {
     private readonly ISubscriptionRepository _subscriptionRepository;
+    private readonly IUserProfileRepository _userProfileRepository;
+    private readonly IPaymentService _payment;
     private readonly ILogger<SubscriptionsController> _logger;
 
     public SubscriptionsController(
         ISubscriptionRepository subscriptionRepository,
+        IUserProfileRepository userProfileRepository,
+        IPaymentService payment,
         ILogger<SubscriptionsController> logger)
     {
         _subscriptionRepository = subscriptionRepository;
+        _userProfileRepository = userProfileRepository;
+        _payment = payment;
         _logger = logger;
     }
 
@@ -30,6 +37,15 @@ public class SubscriptionsController : ControllerBase
             return null;
         }
         return userId;
+    }
+
+    /// <summary>
+    /// Validates that a URL is an absolute HTTPS URL to prevent open redirect attacks.
+    /// </summary>
+    private static bool IsValidAbsoluteHttpsUrl(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            && uri.Scheme == Uri.UriSchemeHttps;
     }
 
     /// <summary>
@@ -159,7 +175,8 @@ public class SubscriptionsController : ControllerBase
     }
 
     /// <summary>
-    /// Cancel subscription
+    /// Cancel subscription (updates local DB; also cancels via payment provider when a
+    /// Stripe subscription ID is present).
     /// </summary>
     [HttpPost("cancel")]
     public async Task<ActionResult> CancelSubscription([FromBody] CancelSubscriptionRequest? request = null)
@@ -170,6 +187,28 @@ public class SubscriptionsController : ControllerBase
             if (!userId.HasValue)
             {
                 return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            // If a Stripe subscription is active, cancel it via the payment service first.
+            // If the Stripe call fails, log and continue with local DB cancellation so the
+            // user is not left in an inconsistent state; the subscription can be reconciled later.
+            var subscription = await _subscriptionRepository.GetUserSubscriptionAsync(userId.Value);
+            if (subscription?.StripeSubscriptionId is not null)
+            {
+                try
+                {
+                    await _payment.CancelSubscriptionAsync(subscription.StripeSubscriptionId, HttpContext.RequestAborted);
+                    _logger.LogInformation(
+                        "User {UserId} Stripe subscription {StripeId} scheduled for cancellation",
+                        userId.Value, subscription.StripeSubscriptionId);
+                }
+                catch (Exception paymentEx)
+                {
+                    _logger.LogError(paymentEx,
+                        "Stripe cancellation failed for user {UserId} subscription {StripeId}. " +
+                        "Proceeding with local DB cancellation; manual reconciliation may be required.",
+                        userId.Value, subscription.StripeSubscriptionId);
+                }
             }
 
             var success = await _subscriptionRepository.CancelSubscriptionAsync(
@@ -193,6 +232,83 @@ public class SubscriptionsController : ControllerBase
         {
             _logger.LogError(ex, "Error cancelling subscription");
             return StatusCode(500, new { message = "An error occurred while cancelling your subscription" });
+        }
+    }
+
+    /// <summary>
+    /// Start a Stripe Checkout session for the given price.
+    /// Returns a redirect URL to the hosted payment page.
+    /// </summary>
+    [HttpPost("checkout")]
+    public async Task<ActionResult> StartCheckout(
+        [FromBody] CheckoutRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            if (!IsValidAbsoluteHttpsUrl(req.BaseUrl))
+            {
+                return BadRequest(new { error = "Invalid base URL" });
+            }
+
+            string sessionUrl = await _payment.CreateCheckoutSessionAsync(
+                userId.Value,
+                req.StripePriceId,
+                req.WithTrial,
+                $"{req.BaseUrl}/settings/billing/success",
+                $"{req.BaseUrl}/settings/billing/cancel",
+                ct);
+
+            return Ok(new { url = sessionUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating checkout session for user");
+            return StatusCode(500, new { message = "An error occurred while creating the checkout session" });
+        }
+    }
+
+    /// <summary>
+    /// Open the Stripe Billing Portal for the current user.
+    /// Returns a redirect URL to the hosted portal page.
+    /// </summary>
+    [HttpPost("portal")]
+    public async Task<ActionResult> BillingPortal(
+        [FromBody] BillingPortalRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
+
+            if (!IsValidAbsoluteHttpsUrl(req.ReturnUrl))
+            {
+                return BadRequest(new { error = "Invalid return URL" });
+            }
+
+            var profile = await _userProfileRepository.GetByUserIdAsync(userId.Value);
+            if (profile?.StripeCustomerId is null)
+            {
+                return BadRequest(new { error = "No billing account" });
+            }
+
+            string portalUrl = await _payment.CreateBillingPortalSessionAsync(
+                userId.Value, profile.StripeCustomerId, req.ReturnUrl, ct);
+
+            return Ok(new { url = portalUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating billing portal session for user");
+            return StatusCode(500, new { message = "An error occurred while opening the billing portal" });
         }
     }
 
