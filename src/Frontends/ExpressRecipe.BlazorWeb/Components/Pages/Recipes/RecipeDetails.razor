@@ -163,6 +163,25 @@
 
         <!-- Main Content Grid -->
         <div class="recipe-content-grid">
+            <!-- Personal Recipe Notes Bar -->
+            @if (_notes.Any())
+            {
+                <div class="recipe-notes-bar">
+                    @foreach (RecipeNoteDto note in _notes)
+                    {
+                        <div class="recipe-note note-@note.NoteType.ToLowerInvariant()">
+                            <span class="note-icon">@GetNoteIcon(note.NoteType)</span>
+                            <p>@note.NoteText</p>
+                            @if (note.IsFromAI)
+                            {
+                                <span class="ai-badge">✨ AI tip</span>
+                            }
+                            <button class="note-dismiss" @onclick="() => DismissNote(note.Id)">×</button>
+                        </div>
+                    }
+                </div>
+            }
+
             <!-- Ingredients Section -->
             <div class="ingredients-section">
                 <h2>Ingredients</h2>
@@ -356,6 +375,18 @@
     // Share modal state
     private bool _showShareModal;
 
+    // Recipe notes
+    private List<RecipeNoteDto> _notes = new();
+
+    private static string GetNoteIcon(string noteType) => noteType switch
+    {
+        "Warning"      => "⚠️",
+        "Tip"          => "💡",
+        "Substitution" => "🔄",
+        "Equipment"    => "🍳",
+        _              => "📝"
+    };
+
     private void ShowSubstitutes(Guid ingredientId, string ingredientName)
     {
         _substituteIngredientId = ingredientId;
@@ -396,6 +427,9 @@
 
             // Check if recipe is favorited
             _isFavorite = await RecipeApi.IsFavoriteAsync(RecipeId);
+
+            // Load personal recipe notes
+            _notes = await RecipeApi.GetRecipeNotesAsync(RecipeId) ?? new List<RecipeNoteDto>();
         }
         catch (Exception ex)
         {
@@ -429,6 +463,19 @@
         catch (Exception ex)
         {
             _errorMessage = $"Failed to update favorite: {ex.Message}";
+        }
+    }
+
+    private async Task DismissNote(Guid noteId)
+    {
+        try
+        {
+            await RecipeApi.DismissRecipeNoteAsync(RecipeId, noteId);
+            _notes = _notes.Where(n => n.Id != noteId).ToList();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to dismiss note: {ex.Message}";
         }
     }
 

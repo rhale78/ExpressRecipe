@@ -18,6 +18,9 @@ public interface IRecipeEventPublisher
         CancellationToken ct = default);
 
     Task PublishDeletedAsync(Guid recipeId, Guid deletedBy, CancellationToken ct = default);
+
+    Task PublishCookedSessionAsync(Guid sessionId, Guid userId, Guid householdId,
+        Guid recipeId, DateTimeOffset cookedAt, bool hasRating, CancellationToken ct = default);
 }
 
 /// <inheritdoc />
@@ -50,6 +53,20 @@ public sealed class RecipeEventPublisher : IRecipeEventPublisher
             new RecipeDeletedEvent(recipeId, deletedBy, DateTimeOffset.UtcNow),
             RecipeEventKeys.Deleted, ct);
 
+    public Task PublishCookedSessionAsync(Guid sessionId, Guid userId, Guid householdId,
+        Guid recipeId, DateTimeOffset cookedAt, bool hasRating, CancellationToken ct = default) =>
+        SafePublishAsync(
+            new RecipeCookedSessionEvent
+            {
+                SessionId   = sessionId,
+                UserId      = userId,
+                HouseholdId = householdId,
+                RecipeId    = recipeId,
+                CookedAt    = cookedAt,
+                HasRating   = hasRating
+            },
+            RecipeCookedEventKeys.Session, ct);
+
     private async Task SafePublishAsync<TMsg>(TMsg msg, string eventKey, CancellationToken ct)
         where TMsg : IMessage
     {
@@ -80,5 +97,9 @@ public sealed class NullRecipeEventPublisher : IRecipeEventPublisher
         CancellationToken ct = default) => Task.CompletedTask;
 
     public Task PublishDeletedAsync(Guid recipeId, Guid deletedBy, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    public Task PublishCookedSessionAsync(Guid sessionId, Guid userId, Guid householdId,
+        Guid recipeId, DateTimeOffset cookedAt, bool hasRating, CancellationToken ct = default)
         => Task.CompletedTask;
 }

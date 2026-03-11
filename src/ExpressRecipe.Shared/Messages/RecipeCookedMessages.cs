@@ -7,7 +7,8 @@ namespace ExpressRecipe.Shared.Messages;
 /// </summary>
 public static class RecipeCookedEventKeys
 {
-    public const string Cooked = "recipe.cooked";
+    public const string Cooked  = "recipe.cooked";
+    public const string Session = "recipe.cooked.session";
 }
 
 /// <summary>
@@ -21,3 +22,17 @@ public record RecipeCookedEvent(
     int Servings,
     DateTimeOffset CookedAt,
     Guid CookingHistoryId) : IMessage;
+
+/// <summary>
+/// Published when a cook session is logged via CookSessionController,
+/// allowing WorkQueue generators (e.g. MealPlanningService) to subscribe.
+/// </summary>
+public sealed record RecipeCookedSessionEvent : IMessage
+{
+    public Guid SessionId { get; init; }
+    public Guid UserId { get; init; }
+    public Guid HouseholdId { get; init; }
+    public Guid RecipeId { get; init; }
+    public DateTimeOffset CookedAt { get; init; }
+    public bool HasRating { get; init; }
+}
