@@ -82,6 +82,11 @@ builder.Services.AddHttpClient<ISubscriptionApiClient, SubscriptionApiClient>(cl
     client.BaseAddress = new Uri("http://userservice");
 });
 
+builder.Services.AddHttpClient<IAllergyApiClient, AllergyApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://userservice");
+});
+
 builder.Services.AddScoped<SubscriptionStateService>();
 
 // Ad service — disabled when ADS_DISABLED=true or AdSense:PublisherId is not set.

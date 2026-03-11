@@ -86,6 +86,10 @@ else
         ExpressRecipe.UserService.Services.MockPaymentService>();
 }
 
+// Register allergy incident engine repositories and analyzer
+builder.Services.AddScoped<IAllergyIncidentRepository>(sp => new AllergyIncidentRepository(connectionString));
+builder.Services.AddScoped<ExpressRecipe.UserService.Services.AllergyDifferentialAnalyzer>();
+
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
 {
@@ -98,6 +102,9 @@ builder.Services.AddHttpClient("NotificationService", client =>
     var notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
     client.BaseAddress = new Uri(notificationServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
+    string? apiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrEmpty(apiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
 });
 
 // Register background services
