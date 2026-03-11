@@ -462,11 +462,9 @@ public class InventoryController : ControllerBase
             if (householdId == Guid.Empty)
                 return BadRequest(new { message = "householdId is required" });
 
-            var items = await _repository.GetHouseholdInventoryAsync(householdId);
-            var cutoff = DateTime.UtcNow.AddDays(daysAhead);
+            var items = await _repository.GetHouseholdExpiringItemsAsync(householdId, daysAhead);
 
             var expiring = items
-                .Where(i => i.ExpirationDate.HasValue && i.ExpirationDate.Value <= cutoff && i.ExpirationDate.Value >= DateTime.UtcNow)
                 .Select(i => new
                 {
                     i.Id,
@@ -477,7 +475,6 @@ public class InventoryController : ControllerBase
                     i.ExpirationDate,
                     DaysUntilExpiry = (int)Math.Ceiling((i.ExpirationDate!.Value - DateTime.UtcNow).TotalDays)
                 })
-                .OrderBy(i => i.ExpirationDate)
                 .ToList();
 
             return Ok(new { HouseholdId = householdId, DaysAhead = daysAhead, ExpiringItems = expiring });
@@ -681,8 +678,9 @@ public class InventoryController : ControllerBase
     }
 
     /// <summary>
-    /// Internal: returns product purchase history for a household that has never triggered
-    /// an allergy incident. Used by AllergyAnalysis service for safe-product correlation.
+    /// Internal: returns product purchase history for a household.
+    /// Intended for use by the AllergyAnalysis service for safe-product correlation;
+    /// incident-based eligibility filtering is left to the caller.
     /// </summary>
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("safe-product-history/{householdId}")]
@@ -710,18 +708,12 @@ public class InventoryController : ControllerBase
                 return NotFound(new { message = "Household not found" });
 
             var members = await _repository.GetHouseholdMembersAsync(householdId);
-            var productIds = new HashSet<Guid>();
             var allEvents = new List<PurchaseEventDto>();
 
             foreach (var member in members)
             {
                 var events = await _repository.GetPurchaseHistoryAsync(member.UserId, null, daysBack, ct);
-                foreach (var e in events)
-                {
-                    allEvents.Add(e);
-                    if (e.ProductId.HasValue)
-                        productIds.Add(e.ProductId.Value);
-                }
+                allEvents.AddRange(events);
             }
 
             // Distinct by ProductId, include custom-name products too

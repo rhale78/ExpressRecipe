@@ -42,6 +42,7 @@ public sealed record UpsertWorkQueueItemRequest
 public interface IWorkQueueRepository
 {
     Task<List<WorkQueueItemDto>> GetPendingItemsAsync(Guid householdId, CancellationToken ct = default);
+    Task<WorkQueueItemDto?> GetByIdAsync(Guid itemId, CancellationToken ct = default);
     Task<Guid> UpsertAsync(UpsertWorkQueueItemRequest request, CancellationToken ct = default);
     Task MarkDoneAsync(Guid itemId, CancellationToken ct = default);
     Task SnoozeAsync(Guid itemId, Guid snoozedByUserId, DateTime resumeAt, string? notes = null, CancellationToken ct = default);
@@ -70,6 +71,19 @@ public sealed class WorkQueueRepository : SqlHelper, IWorkQueueRepository
 
         return await ExecuteReaderAsync(sql, MapDto,
             new SqlParameter("@HouseholdId", householdId));
+    }
+
+    public async Task<WorkQueueItemDto?> GetByIdAsync(Guid itemId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT wq.Id, wq.HouseholdId, wq.UserId, wq.ItemType, wq.Title, wq.Body,
+                   wq.Priority, wq.Status, wq.DueAt, wq.RelatedEntityType, wq.RelatedEntityId,
+                   wq.DeduplicationKey, wq.CreatedAt, wq.UpdatedAt
+            FROM WorkQueueItem wq
+            WHERE wq.Id = @Id AND wq.IsDeleted = 0";
+
+        var results = await ExecuteReaderAsync(sql, MapDto, new SqlParameter("@Id", itemId));
+        return results.FirstOrDefault();
     }
 
     public async Task<Guid> UpsertAsync(UpsertWorkQueueItemRequest request, CancellationToken ct = default)

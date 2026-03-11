@@ -72,6 +72,36 @@ public partial class InventoryRepository
         return await ReadInventoryItemsAsync(command);
     }
 
+    public async Task<List<InventoryItemDto>> GetHouseholdExpiringItemsAsync(Guid householdId, int daysAhead)
+    {
+        const string sql = @"
+            SELECT
+                i.Id, i.UserId, i.HouseholdId, i.ProductId, i.CustomName, i.StorageLocationId,
+                i.Quantity, i.Unit, i.PurchaseDate, i.ExpirationDate, i.OpenedDate,
+                i.Notes, i.Barcode, i.Price, i.Store, i.PreferredStore, i.StoreLocation,
+                i.IsOpened, i.AddedBy, i.CreatedAt, i.UpdatedAt,
+                s.Name AS StorageLocationName, s.AddressId,
+                a.Name AS AddressName
+            FROM InventoryItem i
+            INNER JOIN StorageLocation s ON i.StorageLocationId = s.Id
+            LEFT JOIN Address a ON s.AddressId = a.Id
+            WHERE i.HouseholdId = @HouseholdId
+              AND i.IsDeleted = 0
+              AND i.ExpirationDate IS NOT NULL
+              AND i.ExpirationDate >= GETUTCDATE()
+              AND i.ExpirationDate <= DATEADD(day, @DaysAhead, GETUTCDATE())
+            ORDER BY i.ExpirationDate ASC";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@HouseholdId", householdId);
+        command.Parameters.AddWithValue("@DaysAhead", daysAhead);
+
+        return await ReadInventoryItemsAsync(command);
+    }
+
     public async Task<List<InventoryItemDto>> GetInventoryByAddressAsync(Guid addressId)
     {
         const string sql = @"

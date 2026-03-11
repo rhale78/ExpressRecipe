@@ -284,7 +284,7 @@ public class AllergensController : ControllerBase
                 }
             }
 
-            return Ok(new { UserId = userId, HouseholdId = householdId, AllergenNames = allergenNames.OrderBy(n => n).ToList() });
+            return Ok(new { UserId = userId, AllergenNames = allergenNames.OrderBy(n => n).ToList() });
         }
         catch (Exception ex)
         {

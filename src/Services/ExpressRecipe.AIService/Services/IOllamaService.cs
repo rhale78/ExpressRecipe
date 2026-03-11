@@ -436,7 +436,7 @@ User: {request.Message}";
                 {
                     return new MealPlanSuggestionDto
                     {
-                        Days = parsed.Days.Select((d, i) => new DayMealPlanDto
+                        Days = parsed.Days.Take(days).Select((d, i) => new DayMealPlanDto
                         {
                             Date      = DateTime.UtcNow.Date.AddDays(i),
                             Breakfast = d.Breakfast,

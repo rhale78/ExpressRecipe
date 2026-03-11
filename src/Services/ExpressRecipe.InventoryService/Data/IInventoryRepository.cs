@@ -35,6 +35,9 @@ public interface IInventoryRepository
         decimal quantity, string? unit, DateTime? expirationDate, string? barcode, decimal? price = null, string? preferredStore = null, string? storeLocation = null);
     Task<List<InventoryItemDto>> GetUserInventoryAsync(Guid userId);
     Task<List<InventoryItemDto>> GetHouseholdInventoryAsync(Guid householdId);
+    /// <summary>Returns items for a household that expire within the next <paramref name="daysAhead"/> days.
+    /// Filtering is done in SQL to avoid loading the full household inventory into memory.</summary>
+    Task<List<InventoryItemDto>> GetHouseholdExpiringItemsAsync(Guid householdId, int daysAhead);
     Task<List<InventoryItemDto>> GetInventoryByAddressAsync(Guid addressId);
     Task<List<InventoryItemDto>> GetInventoryByStorageLocationAsync(Guid storageLocationId);
     Task<InventoryItemDto?> GetInventoryItemAsync(Guid itemId, Guid userId);

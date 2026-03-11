@@ -48,7 +48,7 @@ public static class TestDataFactory
         };
     }
 
-    public static CookingTimerDto CreateExpiredUnnotifiedTimer(Guid userId, string label = "Boil pasta")
+    public static CookingTimerDto CreateExpiredUnnotifiedTimer(Guid userId, string label = "Boil pasta", Guid? plannedMealId = null)
     {
         DateTime now = DateTime.UtcNow;
         return new CookingTimerDto
@@ -61,7 +61,8 @@ public static class TestDataFactory
             Status           = "Running",
             StartedAt        = now.AddSeconds(-400),
             ExpiresAt        = now.AddSeconds(-100),
-            NotificationSent = false
+            NotificationSent = false,
+            PlannedMealId    = plannedMealId
         };
     }
 }

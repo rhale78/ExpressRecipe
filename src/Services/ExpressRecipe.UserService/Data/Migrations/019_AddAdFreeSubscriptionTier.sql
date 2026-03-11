@@ -5,9 +5,6 @@
 -- Insert Ad-Free tier if it does not already exist
 IF NOT EXISTS (SELECT 1 FROM SubscriptionTier WHERE TierName = 'AdFree')
 BEGIN
-    DECLARE @FreeId UNIQUEIDENTIFIER;
-    SELECT TOP 1 @FreeId = Id FROM SubscriptionTier WHERE TierName = 'Free';
-
     DECLARE @SortOrder INT = 2;
     SELECT @SortOrder = ISNULL(MAX(SortOrder), 1) + 1 FROM SubscriptionTier;
 

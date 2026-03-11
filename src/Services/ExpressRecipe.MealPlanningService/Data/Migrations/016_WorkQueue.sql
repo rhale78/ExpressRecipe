@@ -43,5 +43,5 @@ CREATE TABLE WorkQueueItemSnooze (
 );
 
 CREATE INDEX IX_WorkQueueItemSnooze_WorkQueueItemId ON WorkQueueItemSnooze(WorkQueueItemId);
-CREATE INDEX IX_WorkQueueItemSnooze_ResumeAt        ON WorkQueueItemSnooze(ResumeAt) WHERE ResumeAt > GETUTCDATE();
+CREATE INDEX IX_WorkQueueItemSnooze_ResumeAt        ON WorkQueueItemSnooze(ResumeAt);
 GO

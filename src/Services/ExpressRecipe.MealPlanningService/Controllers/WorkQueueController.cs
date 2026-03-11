@@ -9,7 +9,8 @@ namespace ExpressRecipe.MealPlanningService.Controllers;
 
 /// <summary>
 /// Exposes the household work-queue. Authenticated users can view and manage queue items
-/// for their household. The internal upsert endpoint is service-to-service only.
+/// for their own household (resolved from JWT claims). The internal upsert endpoint is
+/// service-to-service only.
 /// </summary>
 [ApiController]
 [Route("api/work-queue")]
@@ -30,20 +31,33 @@ public class WorkQueueController : ControllerBase
         _configuration = configuration;
     }
 
-    private Guid? GetUserId()
+    /// <summary>Returns the authenticated user's ID from the JWT, or throws if missing.</summary>
+    private Guid GetUserId()
     {
-        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(claim, out var id) ? id : null;
+        string? claim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(claim) || !Guid.TryParse(claim, out Guid id))
+            throw new InvalidOperationException("User identity claim is missing or invalid.");
+        return id;
+    }
+
+    /// <summary>Returns the authenticated user's household ID from the JWT, or throws if missing.</summary>
+    private Guid GetHouseholdId()
+    {
+        string? claim = User.FindFirstValue("household_id");
+        if (string.IsNullOrEmpty(claim) || !Guid.TryParse(claim, out Guid id) || id == Guid.Empty)
+            throw new InvalidOperationException("household_id claim is missing or invalid.");
+        return id;
     }
 
     /// <summary>
-    /// Get pending work-queue items for a household.
+    /// Get pending work-queue items for the caller's household (from JWT claims).
     /// </summary>
-    [HttpGet("{householdId:guid}")]
-    public async Task<IActionResult> GetPendingItems(Guid householdId, CancellationToken ct = default)
+    [HttpGet]
+    public async Task<IActionResult> GetPendingItems(CancellationToken ct = default)
     {
-        var userId = GetUserId();
-        if (userId == null) return Unauthorized();
+        Guid householdId;
+        try { householdId = GetHouseholdId(); }
+        catch (InvalidOperationException) { return Unauthorized(); }
 
         try
         {
@@ -58,16 +72,21 @@ public class WorkQueueController : ControllerBase
     }
 
     /// <summary>
-    /// Mark a work-queue item as done.
+    /// Mark a work-queue item as done. The item must belong to the caller's household.
     /// </summary>
     [HttpPost("{id:guid}/done")]
     public async Task<IActionResult> MarkDone(Guid id, CancellationToken ct = default)
     {
-        var userId = GetUserId();
-        if (userId == null) return Unauthorized();
+        Guid householdId;
+        try { householdId = GetHouseholdId(); }
+        catch (InvalidOperationException) { return Unauthorized(); }
 
         try
         {
+            var item = await _repo.GetByIdAsync(id, ct);
+            if (item == null) return NotFound();
+            if (item.HouseholdId != householdId) return Forbid();
+
             await _repo.MarkDoneAsync(id, ct);
             return NoContent();
         }
@@ -79,17 +98,23 @@ public class WorkQueueController : ControllerBase
     }
 
     /// <summary>
-    /// Snooze a work-queue item until a future time.
+    /// Snooze a work-queue item until a future time. The item must belong to the caller's household.
     /// </summary>
     [HttpPost("{id:guid}/snooze")]
     public async Task<IActionResult> Snooze(Guid id, [FromBody] SnoozeWorkQueueItemRequest request, CancellationToken ct = default)
     {
-        var userId = GetUserId();
-        if (userId == null) return Unauthorized();
+        Guid userId;
+        Guid householdId;
+        try { userId = GetUserId(); householdId = GetHouseholdId(); }
+        catch (InvalidOperationException) { return Unauthorized(); }
 
         try
         {
-            await _repo.SnoozeAsync(id, userId.Value, request.ResumeAt, request.Notes, ct);
+            var item = await _repo.GetByIdAsync(id, ct);
+            if (item == null) return NotFound();
+            if (item.HouseholdId != householdId) return Forbid();
+
+            await _repo.SnoozeAsync(id, userId, request.ResumeAt, request.Notes, ct);
             return NoContent();
         }
         catch (Exception ex)
