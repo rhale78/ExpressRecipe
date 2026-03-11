@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Services.FeatureGates;
 using ExpressRecipe.UserService.Data;
 using ExpressRecipe.UserService.Services;
@@ -74,6 +75,8 @@ builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(con
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
 builder.Services.AddScoped<IReferralRepository>(sp => new ReferralRepository(connectionString));
 builder.Services.AddScoped<IStripeEventLogRepository>(sp => new StripeEventLogRepository(connectionString));
+builder.Services.AddScoped<IGdprRepository>(sp => new GdprRepository(connectionString));
+builder.Services.AddScoped<IAuditRepository>(sp => new AuditRepository(connectionString));
 
 // Register payment service — MockPaymentService in local mode, StripePaymentService otherwise
 if (builder.Configuration.GetValue<bool>("APP_LOCAL_MODE") || builder.Environment.IsDevelopment())
@@ -103,6 +106,18 @@ builder.Services.AddScoped<IFeatureFlagRepository>(sp => new FeatureFlagReposito
 builder.Services.AddScoped<FeatureFlagService>();
 // Replace the HTTP proxy with the direct DB-backed implementation
 builder.Services.AddScoped<IFeatureFlagService>(sp => sp.GetRequiredService<FeatureFlagService>());
+
+// Optional messaging (RabbitMQ) — gracefully disabled when connection string is absent
+bool messagingEnabled = !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"));
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+}
+else
+{
+    builder.Services.AddSingleton<ExpressRecipe.Messaging.Core.Abstractions.IMessageBus,
+        ExpressRecipe.UserService.Services.NoOpMessageBus>();
+}
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
@@ -221,6 +236,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+// Block mutating operations on impersonation (read-only) tokens
+app.UseReadOnlyImpersonation();
 
 // Use activity tracking middleware (must be after authentication)
 app.UseMiddleware<ExpressRecipe.UserService.Middleware.ActivityTrackingMiddleware>();
