@@ -27,7 +27,17 @@ public interface ICommunityRepository
     Task<List<CommunityReviewDto>> GetUserReviewsAsync(Guid userId);
     Task<ReviewSummaryDto> GetReviewSummaryAsync(string entityType, Guid entityId);
     Task DeleteReviewAsync(Guid reviewId);
-    Task VoteReviewAsync(Guid reviewId, Guid userId, bool isHelpful);
+
+    /// <summary>
+    /// Records a helpful/unhelpful vote for a review, enforcing one-vote-per-user.
+    /// Returns true when this is the user's first vote on the review (vote was recorded);
+    /// returns false when the user has already voted (vote was ignored).
+    /// </summary>
+    Task<bool> VoteReviewAsync(Guid reviewId, Guid userId, bool isHelpful);
+    Task<(Guid ReviewOwnerId, int HelpfulCount)?> GetReviewHelpfulInfoAsync(Guid reviewId);
+
+    /// <summary>Returns the UserId of the owner of a product submission, or null if not found.</summary>
+    Task<Guid?> GetSubmissionUserIdAsync(Guid submissionId, CancellationToken ct = default);
 }
 
 public class UserContributionDto

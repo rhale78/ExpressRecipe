@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using ExpressRecipe.CommunityService.Data;
+using ExpressRecipe.Shared.Events;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.CommunityService.Controllers;
 
@@ -12,11 +14,13 @@ public class CommunityController : ControllerBase
 {
     private readonly ILogger<CommunityController> _logger;
     private readonly ICommunityRepository _repository;
+    private readonly EventPublisher? _eventPublisher;
 
-    public CommunityController(ILogger<CommunityController> logger, ICommunityRepository repository)
+    public CommunityController(ILogger<CommunityController> logger, ICommunityRepository repository, EventPublisher? eventPublisher = null)
     {
         _logger = logger;
         _repository = repository;
+        _eventPublisher = eventPublisher;
     }
 
     private Guid? GetUserId()
@@ -108,7 +112,26 @@ public class CommunityController : ControllerBase
     {
         var userId = GetUserId();
         if (userId == null) return Unauthorized();
-        await _repository.VoteReviewAsync(id, userId.Value, request.IsHelpful);
+
+        // Returns true if this was the user's first vote (false = already voted, no-op)
+        var firstVote = await _repository.VoteReviewAsync(id, userId.Value, request.IsHelpful);
+
+        // Fire PointsEarnedEvent only on the first vote that brings the count to exactly 10
+        if (firstVote && request.IsHelpful && _eventPublisher != null)
+        {
+            var info = await _repository.GetReviewHelpfulInfoAsync(id);
+            if (info.HasValue && info.Value.HelpfulCount == 10)
+            {
+                _ = _eventPublisher.PublishAsync(EventKeys.PointsEarned, new PointsEarnedEvent
+                {
+                    UserId = info.Value.ReviewOwnerId,
+                    Reason = "ReviewMarkedHelpful10",
+                    Points = 25,
+                    RelatedEntityId = id
+                });
+            }
+        }
+
         return NoContent();
     }
 }

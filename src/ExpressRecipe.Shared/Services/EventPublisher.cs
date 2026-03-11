@@ -96,4 +96,5 @@ public static class EventKeys
     public const string RecallPublished = "recall.published";
     public const string PriceChanged = "price.changed";
     public const string UserRegistered = "user.registered";
+    public const string PointsEarned = "points.earned";
 }
