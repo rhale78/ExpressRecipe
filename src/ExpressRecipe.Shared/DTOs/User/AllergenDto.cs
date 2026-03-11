@@ -66,6 +66,7 @@ public class AllergyIncidentDto
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
+    public Guid? HouseholdId { get; set; }
     public Guid? UserAllergenId { get; set; }
     public Guid? UserIngredientAllergyId { get; set; }
     public DateTime IncidentDate { get; set; }
@@ -188,6 +189,9 @@ public class CreateAllergyIncidentRequest
     public Guid? UserAllergenId { get; set; }
 
     public Guid? UserIngredientAllergyId { get; set; }
+
+    /// <summary>Household the incident belongs to. Required when recording from a background worker that has no HTTP context.</summary>
+    public Guid? HouseholdId { get; set; }
 
     [Required]
     public DateTime IncidentDate { get; set; }

@@ -143,6 +143,9 @@ builder.Services.AddHostedService(sp =>
 builder.Services.AddScoped<IHouseholdTaskRepository>(_ =>
     new HouseholdTaskRepository(connectionString));
 
+builder.Services.AddScoped<IWorkQueueRepository>(_ =>
+    new WorkQueueRepository(connectionString));
+
 // Register task services
 builder.Services.AddScoped<IThawTaskGeneratorService, ThawTaskGeneratorService>();
 builder.Services.AddScoped<IHouseholdMemberQuery, HouseholdMemberHttpQuery>();

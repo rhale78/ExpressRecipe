@@ -38,7 +38,9 @@ public class CookingTimerWorkerTests
         _testUserId = Guid.NewGuid();
     }
 
-    private CookingTimerWorker CreateWorker(HttpMessageHandler? handler = null)
+    private CookingTimerWorker CreateWorker(
+        HttpMessageHandler? handler = null,
+        IMealPlanningRepository? mealPlanningRepo = null)
     {
         HttpClient client = new(handler ?? new FakeHttpMessageHandler())
         {
@@ -55,6 +57,9 @@ public class CookingTimerWorkerTests
         scopedProvider
             .Setup(p => p.GetService(typeof(ICookingTimerRepository)))
             .Returns(_mockRepository.Object);
+        scopedProvider
+            .Setup(p => p.GetService(typeof(IMealPlanningRepository)))
+            .Returns(mealPlanningRepo ?? new Mock<IMealPlanningRepository>().Object);
         scope.Setup(s => s.ServiceProvider).Returns(scopedProvider.Object);
         scopeFactory.Setup(f => f.CreateScope()).Returns(scope.Object);
 
@@ -189,5 +194,97 @@ public class CookingTimerWorkerTests
 
         // Verify MarkNotificationSentAsync is never called (timer already handled)
         _mockRepository.Verify(r => r.MarkNotificationSentAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    //  MarkMealCookedAsync tests (post-cook trigger)
+    // ──────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ProcessExpiredTimers_WithPlannedMealId_CallsMarkMealCookedAsync()
+    {
+        // Arrange
+        var plannedMealId = Guid.NewGuid();
+        CookingTimerDto timerWithMeal = TestDataFactory.CreateExpiredUnnotifiedTimer(_testUserId, plannedMealId: plannedMealId);
+
+        _mockRepository
+            .Setup(r => r.GetExpiredUnnotifiedTimersAsync(default))
+            .ReturnsAsync(new List<CookingTimerDto> { timerWithMeal });
+        _mockRepository
+            .Setup(r => r.MarkNotificationSentAsync(timerWithMeal.Id, default))
+            .Returns(Task.CompletedTask);
+
+        var mockMealRepo = new Mock<IMealPlanningRepository>();
+        mockMealRepo
+            .Setup(r => r.MarkMealCookedAsync(plannedMealId, It.IsAny<DateTime>(), timerWithMeal.Id, default))
+            .Returns(Task.CompletedTask);
+
+        CookingTimerWorker worker = CreateWorker(mealPlanningRepo: mockMealRepo.Object);
+
+        // Act
+        await InvokeProcessExpiredAsync(worker);
+
+        // Assert – MarkMealCookedAsync called with the right planned meal and timer IDs
+        mockMealRepo.Verify(
+            r => r.MarkMealCookedAsync(plannedMealId, It.IsAny<DateTime>(), timerWithMeal.Id, default),
+            Times.Once);
+        // MarkNotificationSentAsync should still be called
+        _mockRepository.Verify(r => r.MarkNotificationSentAsync(timerWithMeal.Id, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessExpiredTimers_WithoutPlannedMealId_DoesNotCallMarkMealCookedAsync()
+    {
+        // Arrange – timer with no linked PlannedMeal
+        CookingTimerDto timerNoMeal = TestDataFactory.CreateExpiredUnnotifiedTimer(_testUserId, plannedMealId: null);
+
+        _mockRepository
+            .Setup(r => r.GetExpiredUnnotifiedTimersAsync(default))
+            .ReturnsAsync(new List<CookingTimerDto> { timerNoMeal });
+        _mockRepository
+            .Setup(r => r.MarkNotificationSentAsync(timerNoMeal.Id, default))
+            .Returns(Task.CompletedTask);
+
+        var mockMealRepo = new Mock<IMealPlanningRepository>();
+
+        CookingTimerWorker worker = CreateWorker(mealPlanningRepo: mockMealRepo.Object);
+
+        // Act
+        await InvokeProcessExpiredAsync(worker);
+
+        // Assert – MarkMealCookedAsync must NOT be called
+        mockMealRepo.Verify(
+            r => r.MarkMealCookedAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        // Notification should still fire
+        _mockRepository.Verify(r => r.MarkNotificationSentAsync(timerNoMeal.Id, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessExpiredTimers_WhenMarkMealCookedFails_StillCallsMarkNotificationSentAsync()
+    {
+        // Arrange – MarkMealCookedAsync throws; notification should already be marked sent before the cook step
+        var plannedMealId = Guid.NewGuid();
+        CookingTimerDto timerWithMeal = TestDataFactory.CreateExpiredUnnotifiedTimer(_testUserId, plannedMealId: plannedMealId);
+
+        _mockRepository
+            .Setup(r => r.GetExpiredUnnotifiedTimersAsync(default))
+            .ReturnsAsync(new List<CookingTimerDto> { timerWithMeal });
+        _mockRepository
+            .Setup(r => r.MarkNotificationSentAsync(timerWithMeal.Id, default))
+            .Returns(Task.CompletedTask);
+
+        var mockMealRepo = new Mock<IMealPlanningRepository>();
+        mockMealRepo
+            .Setup(r => r.MarkMealCookedAsync(plannedMealId, It.IsAny<DateTime>(), timerWithMeal.Id, default))
+            .ThrowsAsync(new InvalidOperationException("DB failure"));
+
+        CookingTimerWorker worker = CreateWorker(mealPlanningRepo: mockMealRepo.Object);
+
+        // Act – should not throw; worker catches the exception internally
+        await InvokeProcessExpiredAsync(worker);
+
+        // Assert – notification was still sent despite meal-cooked failure
+        _mockRepository.Verify(r => r.MarkNotificationSentAsync(timerWithMeal.Id, default), Times.Once);
     }
 }

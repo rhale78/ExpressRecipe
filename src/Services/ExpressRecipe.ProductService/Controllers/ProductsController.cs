@@ -7,6 +7,8 @@ using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace ExpressRecipe.ProductService.Controllers;
@@ -22,6 +24,7 @@ public class ProductsController : ControllerBase
     private readonly ILogger<ProductsController> _logger;
     private readonly IProductEventPublisher _events;
     private readonly IProductBatchChannel _batchChannel;
+    private readonly IConfiguration? _configuration;
 
     public ProductsController(
         IProductRepository productRepository,
@@ -30,7 +33,8 @@ public class ProductsController : ControllerBase
         HybridCacheService cache,
         ILogger<ProductsController> logger,
         IProductEventPublisher events,
-        IProductBatchChannel batchChannel)
+        IProductBatchChannel batchChannel,
+        IConfiguration? configuration = null)
     {
         _productRepository = productRepository;
         _ingredientRepository = ingredientRepository;
@@ -39,6 +43,7 @@ public class ProductsController : ControllerBase
         _logger = logger;
         _events = events;
         _batchChannel = batchChannel;
+        _configuration = configuration;
     }
 
     private Guid? GetCurrentUserId()
@@ -495,6 +500,63 @@ public class ProductsController : ControllerBase
             _logger.LogError(ex, "Error adding ingredient to product {ProductId}", id);
             return StatusCode(500, new { message = "An error occurred" });
         }
+    }
+
+    /// <summary>
+    /// Returns the normalized ingredient list for a product.
+    /// Used internally by AllergyAnalysis to check known-safe ingredient lists.
+    /// Returns allergen-relevant name and ID for each ingredient.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("{id:guid}/ingredients/normalized")]
+    public async Task<ActionResult> GetNormalizedIngredients(Guid id)
+    {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
+        try
+        {
+            if (!await _productRepository.ProductExistsAsync(id))
+                return NotFound(new { message = "Product not found" });
+
+            var ingredients = await _ingredientRepository.GetProductIngredientsAsync(id);
+
+            var normalized = ingredients.Select(i => new
+            {
+                i.Id,
+                i.IngredientId,
+                NormalizedName = (i.IngredientName ?? i.IngredientListString ?? string.Empty).Trim().ToLowerInvariant(),
+                i.IngredientName,
+                i.IngredientListString,
+                i.OrderIndex
+            }).ToList();
+
+            return Ok(new { ProductId = id, Ingredients = normalized });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving normalized ingredients for product {ProductId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving normalized ingredients" });
+        }
+    }
+
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) return false;
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 
     /// <summary>

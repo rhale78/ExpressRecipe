@@ -3,6 +3,8 @@ using ExpressRecipe.UserService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ExpressRecipe.UserService.Controllers;
 
@@ -11,13 +13,22 @@ namespace ExpressRecipe.UserService.Controllers;
 public class AllergensController : ControllerBase
 {
     private readonly IAllergenRepository _repository;
+    private readonly IEnhancedAllergenRepository _enhancedRepository;
+    private readonly IFamilyMemberRepository _familyMemberRepository;
+    private readonly IConfiguration? _configuration;
     private readonly ILogger<AllergensController> _logger;
 
     public AllergensController(
         IAllergenRepository repository,
-        ILogger<AllergensController> logger)
+        IEnhancedAllergenRepository enhancedRepository,
+        IFamilyMemberRepository familyMemberRepository,
+        ILogger<AllergensController> logger,
+        IConfiguration? configuration = null)
     {
         _repository = repository;
+        _enhancedRepository = enhancedRepository;
+        _familyMemberRepository = familyMemberRepository;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -219,5 +230,80 @@ public class AllergensController : ControllerBase
             _logger.LogError(ex, "Error removing user allergen");
             return StatusCode(500, new { message = "An error occurred" });
         }
+    }
+
+    /// <summary>
+    /// Internal service-to-service endpoint: returns all allergen names for all family members
+    /// belonging to the household identified by <paramref name="householdId"/>.
+    /// Used by PantryDiscovery to filter unsafe recipes without authenticating on behalf of a user.
+    /// <c>userId</c> is the primary account holder for the household.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("/api/users/{userId:guid}/household/{householdId:guid}/allergen-names")]
+    public async Task<ActionResult> GetHouseholdAllergenNames(Guid userId, Guid householdId)
+    {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
+        try
+        {
+            // Collect allergens from the primary user
+            var primaryAllergens = await _enhancedRepository.GetUserAllergensAsync(userId, includeReactions: false);
+            var allergenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var a in primaryAllergens)
+            {
+                if (!string.IsNullOrWhiteSpace(a.AllergenName))
+                    allergenNames.Add(a.AllergenName.Trim());
+            }
+
+            // Collect allergens from all linked family members
+            var familyMembers = await _familyMemberRepository.GetByPrimaryUserIdAsync(userId);
+            foreach (var member in familyMembers)
+            {
+                foreach (var name in member.Allergens)
+                {
+                    if (!string.IsNullOrWhiteSpace(name))
+                        allergenNames.Add(name.Trim());
+                }
+
+                // If the family member has a linked user account, fetch their stored allergens too
+                if (member.UserId.HasValue)
+                {
+                    var memberAllergens = await _enhancedRepository.GetUserAllergensAsync(member.UserId.Value, includeReactions: false);
+                    foreach (var a in memberAllergens)
+                    {
+                        if (!string.IsNullOrWhiteSpace(a.AllergenName))
+                            allergenNames.Add(a.AllergenName.Trim());
+                    }
+                }
+            }
+
+            return Ok(new { UserId = userId, AllergenNames = allergenNames.OrderBy(n => n).ToList() });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving household allergen names for user {UserId} household {HouseholdId}", userId, householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving household allergen names" });
+        }
+    }
+
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) return false;
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 }

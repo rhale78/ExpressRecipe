@@ -505,6 +505,38 @@ public class RecipesController : ControllerBase
     }
 
     /// <summary>
+    /// Returns recipes that can be made with the supplied ingredients (pantry discovery).
+    /// Used by PantryDiscovery to answer "what can I cook with what I have?".
+    /// Pass ingredient names as repeated <c>ingredients</c> query params,
+    /// e.g. <c>GET /api/recipes/with-ingredients?ingredients=chicken&amp;ingredients=garlic</c>
+    /// </summary>
+    [HttpGet("with-ingredients")]
+    [AllowAnonymous]
+    public async Task<ActionResult<List<RecipeDto>>> GetRecipesWithIngredients(
+        [FromQuery] List<string> ingredients,
+        [FromQuery] int limit = 20)
+    {
+        try
+        {
+            var filtered = ingredients
+                .Where(i => !string.IsNullOrWhiteSpace(i))
+                .Select(i => i.Trim())
+                .ToList();
+
+            if (filtered.Count == 0)
+                return BadRequest(new { message = "At least one ingredient is required" });
+
+            var recipes = await _recipeRepository.GetRecipesWithIngredientsAsync(filtered, limit);
+            return Ok(recipes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving recipes with ingredients");
+            return StatusCode(500, new { message = "An error occurred while retrieving recipes" });
+        }
+    }
+
+    /// <summary>
     /// Get available categories
     /// </summary>
     [HttpGet("categories")]
