@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ExpressRecipe.AIService.Services;
 
@@ -6,22 +7,26 @@ namespace ExpressRecipe.AIService.Services;
 /// Factory that resolves the correct <see cref="IAIProvider"/> for a given use-case
 /// by looking up the <c>AIProviderConfig</c> table. Falls back to the default Ollama
 /// model when the DB is unavailable or the use-case has no configured entry.
+/// Results are cached in-memory for 1 hour because use-case→model mappings are static.
 /// </summary>
 public sealed class AIProviderFactory : IAIProviderFactory
 {
     private readonly IOllamaService _ollamaService;
     private readonly string? _connectionString;
     private readonly string _defaultModel;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<AIProviderFactory> _logger;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
 
     public AIProviderFactory(IOllamaService ollamaService, IConfiguration configuration,
-        ILogger<AIProviderFactory> logger)
+        IMemoryCache cache, ILogger<AIProviderFactory> logger)
     {
         _ollamaService = ollamaService;
         _connectionString = configuration.GetConnectionString("aidb");
         _defaultModel = configuration["AI:DefaultModel"]
             ?? configuration["Ollama:DefaultModel"]
             ?? "llama3.2";
+        _cache = cache;
         _logger = logger;
     }
 
@@ -32,7 +37,16 @@ public sealed class AIProviderFactory : IAIProviderFactory
 
         if (!string.IsNullOrEmpty(_connectionString))
         {
-            model = await LookupModelForUseCaseAsync(useCase, ct) ?? _defaultModel;
+            string cacheKey = $"aimodel:{useCase}";
+            if (!_cache.TryGetValue(cacheKey, out string? cachedModel))
+            {
+                cachedModel = await LookupModelForUseCaseAsync(useCase, ct);
+                if (cachedModel is not null)
+                {
+                    _cache.Set(cacheKey, cachedModel, CacheTtl);
+                }
+            }
+            model = cachedModel ?? _defaultModel;
         }
 
         return new OllamaAIProvider(_ollamaService, model, _logger);
@@ -81,9 +95,17 @@ internal sealed class OllamaAIProvider : IAIProvider
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
+
             string text = await _service.GenerateCompletionAsync(
-                prompt, _modelName, (double)options.Temperature);
+                prompt, _modelName, (double)options.Temperature, options.MaxTokens, ct);
+
             return new AITextResult { Success = true, Text = text };
+        }
+        catch (OperationCanceledException)
+        {
+            // Propagate cancellation so upstream callers can observe it.
+            throw;
         }
         catch (Exception ex)
         {

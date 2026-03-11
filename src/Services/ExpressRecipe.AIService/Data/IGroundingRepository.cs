@@ -129,8 +129,8 @@ public sealed class GroundingRepository : IGroundingRepository
     /// filtering by minimum length and capping at <see cref="MaxKeywordTerms"/>.
     /// </summary>
     private static string[] ExtractKeywords(string input, int minLength) =>
-        input.ToLower()
-             .Split(' ', ',', '.', '?', '!')
+        input.ToLowerInvariant()
+             .Split(new char[] { ' ', ',', '.', '?', '!' }, StringSplitOptions.RemoveEmptyEntries)
              .Where(w => w.Length >= minLength)
              .Distinct()
              .Take(MaxKeywordTerms)

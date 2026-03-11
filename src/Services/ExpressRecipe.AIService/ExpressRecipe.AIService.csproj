@@ -15,6 +15,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Data\Migrations\*.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\ExpressRecipe.Client.Shared\ExpressRecipe.Client.Shared.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.Data.Common\ExpressRecipe.Data.Common.csproj" />
     <ProjectReference Include="..\..\ExpressRecipe.ServiceDefaults\ExpressRecipe.ServiceDefaults.csproj" />

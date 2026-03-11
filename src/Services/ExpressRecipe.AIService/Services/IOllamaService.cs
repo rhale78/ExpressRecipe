@@ -4,7 +4,8 @@ namespace ExpressRecipe.AIService.Services;
 
 public interface IOllamaService
 {
-    Task<string> GenerateCompletionAsync(string prompt, string? model = null, double temperature = 0.7);
+    Task<string> GenerateCompletionAsync(string prompt, string? model = null,
+        double temperature = 0.7, int maxTokens = 2000, CancellationToken ct = default);
     Task<List<RecipeSuggestionDto>> GenerateRecipeSuggestionsAsync(RecipeSuggestionRequest request);
     Task<IngredientSubstitutionDto> GenerateSubstitutionsAsync(IngredientSubstitutionRequest request);
     /// <summary>
@@ -53,7 +54,8 @@ public class OllamaService : IOllamaService
         _httpClient.Timeout = TimeSpan.FromMinutes(2);
     }
 
-    public async Task<string> GenerateCompletionAsync(string prompt, string? model = null, double temperature = 0.7)
+    public async Task<string> GenerateCompletionAsync(string prompt, string? model = null,
+        double temperature = 0.7, int maxTokens = 2000, CancellationToken ct = default)
     {
         try
         {
@@ -65,14 +67,14 @@ public class OllamaService : IOllamaService
                 options = new
                 {
                     temperature = temperature,
-                    num_predict = 2000
+                    num_predict = maxTokens
                 }
             };
 
-            var response = await _httpClient.PostAsJsonAsync("/api/generate", requestBody);
+            var response = await _httpClient.PostAsJsonAsync("/api/generate", requestBody, ct);
             response.EnsureSuccessStatusCode();
 
-            var result = await response.Content.ReadFromJsonAsync<OllamaResponse>();
+            var result = await response.Content.ReadFromJsonAsync<OllamaResponse>(cancellationToken: ct);
             return result?.Response ?? string.Empty;
         }
         catch (Exception ex)

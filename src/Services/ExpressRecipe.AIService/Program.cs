@@ -51,6 +51,9 @@ builder.Services.AddHttpClient("Ollama", client =>
 // Register Ollama Service
 builder.Services.AddScoped<IOllamaService, OllamaService>();
 
+// In-memory cache for AI provider config lookups
+builder.Services.AddMemoryCache();
+
 // Register AI provider factory and cooking assistant service
 builder.Services.AddScoped<IAIProviderFactory, AIProviderFactory>();
 builder.Services.AddScoped<ICookingAssistantService, CookingAssistantService>();
