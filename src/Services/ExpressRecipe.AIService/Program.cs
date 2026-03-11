@@ -1,5 +1,7 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.AIService.Configuration;
 using ExpressRecipe.AIService.Data;
+using ExpressRecipe.AIService.Providers;
 using ExpressRecipe.AIService.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -51,24 +53,69 @@ builder.Services.AddHttpClient("Ollama", client =>
 // Register Ollama Service
 builder.Services.AddScoped<IOllamaService, OllamaService>();
 
+// ── AI Provider infrastructure ───────────────────────────────────────────────
+
 // In-memory cache for AI provider config lookups
 builder.Services.AddMemoryCache();
 
-// Register AI provider factory and cooking assistant service
-builder.Services.AddScoped<IAIProviderFactory, AIProviderFactory>();
+// Local-mode flag (APP_LOCAL_MODE=true disables cloud provider HTTP calls)
+builder.Services.AddSingleton<ILocalModeConfig, LocalModeConfig>();
+
+// Register all AI providers
+builder.Services.AddSingleton<IAIProvider, OllamaProvider>();
+builder.Services.AddSingleton<IAIProvider, ClaudeProvider>();
+builder.Services.AddSingleton<IAIProvider, OpenAIProvider>();
+builder.Services.AddSingleton<IAIProvider, GeminiProvider>();
+builder.Services.AddSingleton<IAIProvider, AzureOpenAIProvider>();
+
+// Provider factory (config-driven per use case with HybridCache)
+builder.Services.AddSingleton<IAIProviderFactory, AIProviderFactory>();
+
+// Cooking assistant service
 builder.Services.AddScoped<ICookingAssistantService, CookingAssistantService>();
 
-// Register grounding repository — optional DB connection (aidb)
-var aiConnectionString = builder.Configuration.GetConnectionString("aidb");
-if (!string.IsNullOrEmpty(aiConnectionString))
+// Data repositories for provider config and approval queue
+var aiConnectionString = builder.Configuration.GetConnectionString("aidb")
+    ?? builder.Configuration.GetConnectionString("SqlServer");
+
+if (string.IsNullOrWhiteSpace(aiConnectionString))
 {
-    builder.Services.AddSingleton<IGroundingRepository>(
-        new GroundingRepository(aiConnectionString));
+    if (builder.Environment.IsDevelopment())
+    {
+        aiConnectionString = "Server=(localdb)\MSSQLLocalDB;Database=ExpressRecipe;Trusted_Connection=True;TrustServerCertificate=True;";
+    }
+    else
+    {
+        throw new InvalidOperationException(
+            "Database connection string for 'aidb' or 'SqlServer' is not configured. " +
+            "Please configure it via configuration files, environment variables, or a secure secrets store.");
+    }
 }
-else
+
+// Register grounding repository
+builder.Services.AddSingleton<IGroundingRepository>(_ => new GroundingRepository(aiConnectionString));
+
+builder.Services.AddSingleton<IAIProviderConfigRepository>(
+    _ => new AIProviderConfigRepository(aiConnectionString));
+
+builder.Services.AddSingleton<IApprovalQueueRepository>(
+    _ => new ApprovalQueueRepository(aiConnectionString));
+
+// HttpClient for NotificationService used by ApprovalQueueService
+builder.Services.AddHttpClient("NotificationService", client =>
 {
-    builder.Services.AddSingleton<IGroundingRepository, NullGroundingRepository>();
-}
+    string? baseUrl = builder.Configuration["Services:NotificationService"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+        client.BaseAddress = new Uri(baseUrl);
+
+    string? internalApiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrWhiteSpace(internalApiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", internalApiKey);
+});
+
+// Approval queue service
+builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
+
 
 // Health checks
 builder.Services.AddHealthChecks();
@@ -76,19 +123,14 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 // Run database management (drop db/tables if configured)
-if (!string.IsNullOrEmpty(aiConnectionString))
-{
-    await app.RunDatabaseManagementAsync("AIService", "aidb");
+await app.RunDatabaseManagementAsync("AIService", "aidb");
 
-    // Run migrations
-    var migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
-    if (!Directory.Exists(migrationsPath))
-    {
-        migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
-    }
-    var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
-    await app.RunMigrationsAsync(aiConnectionString, migrations);
-}
+string migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+if (!Directory.Exists(migrationsPath))
+    migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
+
+var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+await app.RunMigrationsAsync(aiConnectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints();
