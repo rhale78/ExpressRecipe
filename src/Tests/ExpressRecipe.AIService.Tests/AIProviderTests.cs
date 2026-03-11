@@ -259,25 +259,19 @@ public class AIProviderTests
     [Fact]
     public async Task ClaudeProvider_LocalMode_ReturnsMockWithoutHttpCall()
     {
-        Mock<IHttpClientFactory> httpMock = new();
-        IConfiguration config = new ConfigurationBuilder().Build();
-        ClaudeProvider provider = new(LocalMode(true), httpMock.Object, config);
+        ClaudeProvider provider = new(LocalMode(true));
 
         AITextResult result = await provider.GenerateAsync("prompt");
 
         result.Success.Should().BeTrue();
         result.Text.Should().Contain("mock");
         result.ProviderName.Should().Be("Claude");
-        httpMock.Verify(f => f.CreateClient(It.IsAny<string>()), Times.Never,
-            "no HTTP calls should be made in local mode");
     }
 
     [Fact]
     public async Task ClaudeProvider_CloudMode_ThrowsNotImplementedException()
     {
-        Mock<IHttpClientFactory> httpMock = new();
-        IConfiguration config = new ConfigurationBuilder().Build();
-        ClaudeProvider provider = new(LocalMode(false), httpMock.Object, config);
+        ClaudeProvider provider = new(LocalMode(false));
 
         Func<Task> act = () => provider.GenerateAsync("prompt");
 

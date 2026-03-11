@@ -18,13 +18,16 @@ public sealed class AIProviderConfigRepository : SqlHelper, IAIProviderConfigRep
             WHERE UseCase = @UseCase AND IsDeleted = 0
             """;
 
-        return await ExecuteReaderSingleAsync(
+        var results = await ExecuteReaderAsync(
             sql,
             reader => new AIProviderConfigDto
             {
                 UseCase  = GetString(reader, "UseCase") ?? string.Empty,
                 Provider = GetString(reader, "Provider") ?? "Ollama"
             },
+            ct,
             CreateParameter("@UseCase", useCase));
+
+        return results.FirstOrDefault();
     }
 }

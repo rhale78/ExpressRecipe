@@ -10,20 +10,37 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
     }
 
     public async Task InsertPendingAsync(Guid entityId, string entityType, string mode,
-        CancellationToken ct = default)
+        string content, CancellationToken ct = default)
     {
+        // Derive initial status: human-routed items start as PendingHuman so the
+        // human-timeout query (which filters Status='PendingHuman') can find them.
+        string initialStatus = mode is "HumanFirst" or "HumanOnly"
+            ? "PendingHuman"
+            : "Pending";
+
         const string sql = """
-            INSERT INTO ApprovalQueue (EntityId, EntityType, Mode, Status, CreatedAt)
-            SELECT @EntityId, @EntityType, @Mode, 'Pending', GETUTCDATE()
+            INSERT INTO ApprovalQueue (EntityId, EntityType, Mode, Status, Content, CreatedAt)
+            SELECT @EntityId, @EntityType, @Mode, @Status, @Content, GETUTCDATE()
             WHERE NOT EXISTS (
                 SELECT 1 FROM ApprovalQueue
                 WHERE EntityId = @EntityId AND EntityType = @EntityType AND IsDeleted = 0)
             """;
 
-        await ExecuteNonQueryAsync(sql,
-            CreateParameter("@EntityId",   entityId),
-            CreateParameter("@EntityType", entityType),
-            CreateParameter("@Mode",       mode));
+        try
+        {
+            await ExecuteNonQueryAsync(sql,
+                ct,
+                CreateParameter("@EntityId",   entityId),
+                CreateParameter("@EntityType", entityType),
+                CreateParameter("@Mode",       mode),
+                CreateParameter("@Status",     initialStatus),
+                CreateParameter("@Content",    content));
+        }
+        catch (SqlException ex) when (ex.Number == 2601 || ex.Number == 2627)
+        {
+            // A concurrent insert already created a row for this (EntityId, EntityType).
+            // Swallow duplicate-key violations to preserve idempotent behavior.
+        }
     }
 
     public async Task<ApprovalConfigDto?> GetApprovalConfigAsync(string entityType,
@@ -35,7 +52,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
             WHERE EntityType = @EntityType AND IsDeleted = 0
             """;
 
-        return await ExecuteReaderSingleAsync(
+        var results = await ExecuteReaderAsync(
             sql,
             reader => new ApprovalConfigDto
             {
@@ -44,7 +61,10 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
                 AIConfidenceMin = GetDecimal(reader, "AIConfidenceMin"),
                 HumanTimeoutMins = GetInt32(reader, "HumanTimeoutMins")
             },
+            ct,
             CreateParameter("@EntityType", entityType));
+
+        return results.FirstOrDefault();
     }
 
     public async Task<List<PendingApprovalDto>> GetHumanTimedOutItemsAsync(
@@ -67,7 +87,8 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
                 EntityId   = GetGuid(reader, "EntityId"),
                 EntityType = GetString(reader, "EntityType") ?? string.Empty,
                 Content    = GetString(reader, "Content") ?? string.Empty
-            });
+            },
+            ct);
     }
 
     public async Task MoveToHumanQueueAsync(Guid entityId, string entityType,
@@ -80,6 +101,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
             """;
 
         await ExecuteNonQueryAsync(sql,
+            ct,
             CreateParameter("@EntityId",   entityId),
             CreateParameter("@EntityType", entityType),
             CreateParameter("@Reason",     reason));
@@ -95,6 +117,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
             """;
 
         await ExecuteNonQueryAsync(sql,
+            ct,
             CreateParameter("@EntityId",   entityId),
             CreateParameter("@EntityType", entityType),
             CreateParameter("@Reason",     reason));
@@ -110,6 +133,7 @@ public sealed class ApprovalQueueRepository : SqlHelper, IApprovalQueueRepositor
             """;
 
         await ExecuteNonQueryAsync(sql,
+            ct,
             CreateParameter("@EntityId",   entityId),
             CreateParameter("@EntityType", entityType),
             CreateParameter("@Reason",     reason));

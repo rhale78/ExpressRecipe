@@ -70,7 +70,9 @@ BEGIN
         DeletedAt   DATETIME2        NULL,
 
         CONSTRAINT CK_ApprovalQueue_Status
-            CHECK (Status IN ('Pending', 'PendingHuman', 'Approved', 'Rejected'))
+            CHECK (Status IN ('Pending', 'PendingHuman', 'Approved', 'Rejected')),
+        CONSTRAINT UQ_ApprovalQueue_EntityId_EntityType
+            UNIQUE (EntityId, EntityType)
     );
 
     CREATE INDEX IX_ApprovalQueue_EntityId     ON ApprovalQueue(EntityId)    WHERE IsDeleted = 0;

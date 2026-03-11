@@ -13,15 +13,10 @@ public sealed class ClaudeProvider : IAIProvider
     public string ProviderName => "Claude";
 
     private readonly ILocalModeConfig _localMode;
-    private readonly IHttpClientFactory _http;
-    private readonly string _apiKey;
 
-    public ClaudeProvider(ILocalModeConfig localMode, IHttpClientFactory http,
-        IConfiguration config)
+    public ClaudeProvider(ILocalModeConfig localMode)
     {
         _localMode = localMode;
-        _http      = http;
-        _apiKey    = config["AI:Claude:ApiKey"] ?? string.Empty;
     }
 
     public Task<AITextResult> GenerateAsync(string prompt,

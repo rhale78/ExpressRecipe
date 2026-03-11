@@ -70,14 +70,40 @@ builder.Services.AddSingleton<IAIProviderFactory, AIProviderFactory>();
 
 // Data repositories for provider config and approval queue
 var aiConnectionString = builder.Configuration.GetConnectionString("aidb")
-    ?? builder.Configuration.GetConnectionString("SqlServer")
-    ?? "Server=localhost;Database=ExpressRecipe;User Id=sa;Password=ExpressRecipe123!;TrustServerCertificate=True";
+    ?? builder.Configuration.GetConnectionString("SqlServer");
+
+if (string.IsNullOrWhiteSpace(aiConnectionString))
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        // Safe development-only fallback using LocalDB with integrated security (no hardcoded password)
+        aiConnectionString = "Server=(localdb)\\MSSQLLocalDB;Database=ExpressRecipe;Trusted_Connection=True;TrustServerCertificate=True;";
+    }
+    else
+    {
+        throw new InvalidOperationException(
+            "Database connection string for 'aidb' or 'SqlServer' is not configured. " +
+            "Please configure it via configuration files, environment variables, or a secure secrets store.");
+    }
+}
 
 builder.Services.AddSingleton<IAIProviderConfigRepository>(
     _ => new AIProviderConfigRepository(aiConnectionString));
 
 builder.Services.AddSingleton<IApprovalQueueRepository>(
     _ => new ApprovalQueueRepository(aiConnectionString));
+
+// HttpClient for NotificationService used by ApprovalQueueService
+builder.Services.AddHttpClient("NotificationService", client =>
+{
+    string? baseUrl = builder.Configuration["Services:NotificationService"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+        client.BaseAddress = new Uri(baseUrl);
+
+    string? internalApiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrWhiteSpace(internalApiKey))
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", internalApiKey);
+});
 
 // Approval queue service
 builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
@@ -86,6 +112,16 @@ builder.Services.AddScoped<IApprovalQueueService, ApprovalQueueService>();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
+
+// Run DB management and migrations (same pattern as other services)
+await app.RunDatabaseManagementAsync("AIService", "aidb");
+
+string migrationsPath = Path.Combine(AppContext.BaseDirectory, "Data", "Migrations");
+if (!Directory.Exists(migrationsPath))
+    migrationsPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Migrations");
+
+var migrations = MigrationExtensions.LoadMigrationsFromDirectory(migrationsPath);
+await app.RunMigrationsAsync(aiConnectionString, migrations);
 
 // Configure middleware pipeline
 app.MapDefaultEndpoints();

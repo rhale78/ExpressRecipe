@@ -21,9 +21,19 @@ public sealed class AzureOpenAIProvider : IAIProvider
 
     public Task<AITextResult> GenerateAsync(string prompt,
         AIRequestOptions? options = null, CancellationToken ct = default)
-        => Task.FromResult(_localMode.IsLocalMode
-            ? new AITextResult { Success = true, Text = "[AzureOpenAI mock]", ProviderName = ProviderName }
-            : new AITextResult { Success = false, ErrorMessage = "AzureOpenAIProvider: not implemented", ProviderName = ProviderName });
+    {
+        if (_localMode.IsLocalMode)
+        {
+            return Task.FromResult(new AITextResult
+            {
+                Success = true, Text = "[AzureOpenAI mock]", ProviderName = ProviderName
+            });
+        }
+
+        // TODO: Implement Azure OpenAI chat/completions call when cloud is live
+        throw new NotImplementedException(
+            "AzureOpenAIProvider not yet implemented for cloud deployment.");
+    }
 
     public Task<AIClassifyResult> ClassifyAsync(string prompt, string[] possibleClasses,
         AIRequestOptions? options = null, CancellationToken ct = default)

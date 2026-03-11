@@ -18,7 +18,7 @@ public sealed record PendingApprovalDto
 public interface IApprovalQueueRepository
 {
     Task InsertPendingAsync(Guid entityId, string entityType, string mode,
-        CancellationToken ct = default);
+        string content, CancellationToken ct = default);
 
     Task<ApprovalConfigDto?> GetApprovalConfigAsync(string entityType,
         CancellationToken ct = default);

@@ -7,6 +7,8 @@ public sealed class OllamaProvider : IAIProvider
 {
     public string ProviderName => "Ollama";
 
+    private static readonly TimeSpan DefaultApprovalTimeout = TimeSpan.FromSeconds(30);
+
     private readonly IHttpClientFactory _http;
     private readonly string _baseUrl;
     private readonly string _defaultModel;
@@ -64,7 +66,7 @@ public sealed class OllamaProvider : IAIProvider
             }
 
             OllamaGenerateResponse? body =
-                await response.Content.ReadFromJsonAsync<OllamaGenerateResponse>(ct);
+                await response.Content.ReadFromJsonAsync<OllamaGenerateResponse>(cts.Token);
             return new AITextResult
             {
                 Success      = true,
@@ -110,8 +112,16 @@ public sealed class OllamaProvider : IAIProvider
             {{content}}
             """;
 
-        AITextResult result = await GenerateAsync(prompt,
-            new AIRequestOptions { MaxTokens = 200, Temperature = 0.1m }, ct);
+        // Merge caller-supplied options with approval-specific defaults.
+        AIRequestOptions mergedOptions = new AIRequestOptions
+        {
+            MaxTokens    = options?.MaxTokens    ?? 200,
+            Temperature  = options?.Temperature  ?? 0.1m,
+            Timeout      = options?.Timeout      ?? DefaultApprovalTimeout,
+            SystemPrompt = options?.SystemPrompt
+        };
+
+        AITextResult result = await GenerateAsync(prompt, mergedOptions, ct);
 
         if (!result.Success)
         {

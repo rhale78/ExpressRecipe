@@ -33,7 +33,7 @@ public sealed class ApprovalQueueService : IApprovalQueueService
         ApprovalConfigDto? config = await _queue.GetApprovalConfigAsync(entityType, ct);
         string mode = config?.Mode ?? "HumanFirst";
 
-        await _queue.InsertPendingAsync(entityId, entityType, mode, ct);
+        await _queue.InsertPendingAsync(entityId, entityType, mode, content, ct);
 
         if (mode == "AIFirst" || mode == "AIOnly")
         {
@@ -50,7 +50,8 @@ public sealed class ApprovalQueueService : IApprovalQueueService
         List<PendingApprovalDto> timedOut = await _queue.GetHumanTimedOutItemsAsync(ct);
         foreach (PendingApprovalDto item in timedOut)
         {
-            await RunAIApprovalAsync(item.EntityId, item.EntityType, item.Content, null, ct);
+            ApprovalConfigDto? config = await _queue.GetApprovalConfigAsync(item.EntityType, ct);
+            await RunAIApprovalAsync(item.EntityId, item.EntityType, item.Content, config, ct);
         }
     }
 
@@ -87,12 +88,16 @@ public sealed class ApprovalQueueService : IApprovalQueueService
         CancellationToken ct)
     {
         HttpClient client = _http.CreateClient("NotificationService");
-        await client.PostAsJsonAsync("/api/notifications/moderators", new
+        await client.PostAsJsonAsync("/api/Notification/internal", new
         {
-            type       = "ModerationRequired",
-            title      = $"New {entityType} pending review",
-            entityType,
-            entityId
+            // TODO: replace with a proper moderator user lookup; Guid.Empty is a placeholder
+            // that signals a broadcast/system notification until a moderation user store exists.
+            UserId            = Guid.Empty,
+            Type              = "ModerationRequired",
+            Title             = $"New {entityType} pending review",
+            Message           = $"A new {entityType} submission is waiting for moderation review.",
+            RelatedEntityType = entityType,
+            RelatedEntityId   = entityId
         }, ct);
     }
 }
