@@ -554,6 +554,179 @@ public partial class InventoryRepository
         return userIds;
     }
 
+    public async Task<List<Guid>> GetDistinctHouseholdIdsWithInventoryAsync(CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT DISTINCT HouseholdId
+            FROM InventoryItem
+            WHERE IsDeleted = 0 AND HouseholdId IS NOT NULL AND ExpirationDate IS NOT NULL";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        List<Guid> ids = new();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            ids.Add(reader.GetGuid(0));
+        }
+        return ids;
+    }
+
+    public async Task<List<InventoryItemDto>> GetExpiringItemsByHouseholdAsync(
+        Guid householdId, int daysAhead, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT i.Id, i.UserId, i.HouseholdId, i.ProductId,
+                   p.Name AS ProductName, i.CustomName,
+                   i.StorageLocationId, sl.Name AS StorageLocationName,
+                   i.AddressId, NULL AS AddressName,
+                   i.Quantity, i.Unit, i.PurchaseDate, i.ExpirationDate, i.OpenedDate,
+                   i.IsOpened, i.Barcode, i.Price, i.Store, i.PreferredStore,
+                   i.StoreLocation, i.Notes, i.AddedBy, i.CreatedAt, i.UpdatedAt,
+                   i.StorageMethod, i.IsLongTermStorage, NULL AS StorageCapacityUnit,
+                   i.BatchLabel, i.Source, i.Temperature
+            FROM InventoryItem i
+            LEFT JOIN Product p ON p.Id = i.ProductId
+            LEFT JOIN StorageLocation sl ON sl.Id = i.StorageLocationId
+            WHERE i.HouseholdId = @HouseholdId
+              AND i.IsDeleted = 0
+              AND i.ExpirationDate IS NOT NULL
+              AND i.ExpirationDate <= DATEADD(day, @DaysAhead, GETUTCDATE())
+            ORDER BY i.ExpirationDate ASC";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@HouseholdId", householdId);
+        command.Parameters.AddWithValue("@DaysAhead",   daysAhead);
+        List<InventoryItemDto> items = new();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            items.Add(new InventoryItemDto
+            {
+                Id                  = reader.GetGuid(0),
+                UserId              = reader.GetGuid(1),
+                HouseholdId         = reader.IsDBNull(2)  ? null : reader.GetGuid(2),
+                ProductId           = reader.IsDBNull(3)  ? null : reader.GetGuid(3),
+                ProductName         = reader.IsDBNull(4)  ? null : reader.GetString(4),
+                CustomName          = reader.IsDBNull(5)  ? null : reader.GetString(5),
+                StorageLocationId   = reader.GetGuid(6),
+                StorageLocationName = reader.IsDBNull(7)  ? string.Empty : reader.GetString(7),
+                AddressId           = reader.IsDBNull(8)  ? null : reader.GetGuid(8),
+                AddressName         = null,
+                Quantity            = reader.GetDecimal(10),
+                Unit                = reader.IsDBNull(11) ? null : reader.GetString(11),
+                PurchaseDate        = reader.IsDBNull(12) ? null : reader.GetDateTime(12),
+                ExpirationDate      = reader.IsDBNull(13) ? null : reader.GetDateTime(13),
+                OpenedDate          = reader.IsDBNull(14) ? null : reader.GetDateTime(14),
+                IsOpened            = reader.GetBoolean(15),
+                Barcode             = reader.IsDBNull(16) ? null : reader.GetString(16),
+                Price               = reader.IsDBNull(17) ? null : reader.GetDecimal(17),
+                Store               = reader.IsDBNull(18) ? null : reader.GetString(18),
+                PreferredStore      = reader.IsDBNull(19) ? null : reader.GetString(19),
+                StoreLocation       = reader.IsDBNull(20) ? null : reader.GetString(20),
+                Notes               = reader.IsDBNull(21) ? null : reader.GetString(21),
+                AddedBy             = reader.IsDBNull(22) ? null : reader.GetGuid(22),
+                CreatedAt           = reader.GetDateTime(23),
+                UpdatedAt           = reader.IsDBNull(24) ? null : reader.GetDateTime(24),
+                StorageMethod       = reader.IsDBNull(25) ? null : reader.GetString(25),
+                IsLongTermStorage   = reader.GetBoolean(26),
+                BatchLabel          = reader.IsDBNull(28) ? null : reader.GetString(28),
+                Source              = reader.IsDBNull(29) ? null : reader.GetString(29),
+                Temperature         = reader.IsDBNull(30) ? null : reader.GetString(30)
+            });
+        }
+        return items;
+    }
+
+    public async Task<List<InventoryItemDto>> GetLowStockItemsByHouseholdAsync(
+        Guid householdId, decimal threshold = 2.0m, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT i.Id, i.UserId, i.HouseholdId, i.ProductId,
+                   p.Name AS ProductName, i.CustomName,
+                   i.StorageLocationId, sl.Name AS StorageLocationName,
+                   i.AddressId, NULL AS AddressName,
+                   i.Quantity, i.Unit, i.PurchaseDate, i.ExpirationDate, i.OpenedDate,
+                   i.IsOpened, i.Barcode, i.Price, i.Store, i.PreferredStore,
+                   i.StoreLocation, i.Notes, i.AddedBy, i.CreatedAt, i.UpdatedAt,
+                   i.StorageMethod, i.IsLongTermStorage, NULL AS StorageCapacityUnit,
+                   i.BatchLabel, i.Source, i.Temperature
+            FROM InventoryItem i
+            LEFT JOIN Product p ON p.Id = i.ProductId
+            LEFT JOIN StorageLocation sl ON sl.Id = i.StorageLocationId
+            WHERE i.HouseholdId = @HouseholdId
+              AND i.IsDeleted = 0
+              AND i.Quantity <= @Threshold
+              AND i.Quantity > 0
+            ORDER BY i.Quantity ASC";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@HouseholdId", householdId);
+        command.Parameters.AddWithValue("@Threshold",   threshold);
+        List<InventoryItemDto> items = new();
+        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            items.Add(new InventoryItemDto
+            {
+                Id                  = reader.GetGuid(0),
+                UserId              = reader.GetGuid(1),
+                HouseholdId         = reader.IsDBNull(2)  ? null : reader.GetGuid(2),
+                ProductId           = reader.IsDBNull(3)  ? null : reader.GetGuid(3),
+                ProductName         = reader.IsDBNull(4)  ? null : reader.GetString(4),
+                CustomName          = reader.IsDBNull(5)  ? null : reader.GetString(5),
+                StorageLocationId   = reader.GetGuid(6),
+                StorageLocationName = reader.IsDBNull(7)  ? string.Empty : reader.GetString(7),
+                AddressId           = reader.IsDBNull(8)  ? null : reader.GetGuid(8),
+                AddressName         = null,
+                Quantity            = reader.GetDecimal(10),
+                Unit                = reader.IsDBNull(11) ? null : reader.GetString(11),
+                PurchaseDate        = reader.IsDBNull(12) ? null : reader.GetDateTime(12),
+                ExpirationDate      = reader.IsDBNull(13) ? null : reader.GetDateTime(13),
+                OpenedDate          = reader.IsDBNull(14) ? null : reader.GetDateTime(14),
+                IsOpened            = reader.GetBoolean(15),
+                Barcode             = reader.IsDBNull(16) ? null : reader.GetString(16),
+                Price               = reader.IsDBNull(17) ? null : reader.GetDecimal(17),
+                Store               = reader.IsDBNull(18) ? null : reader.GetString(18),
+                PreferredStore      = reader.IsDBNull(19) ? null : reader.GetString(19),
+                StoreLocation       = reader.IsDBNull(20) ? null : reader.GetString(20),
+                Notes               = reader.IsDBNull(21) ? null : reader.GetString(21),
+                AddedBy             = reader.IsDBNull(22) ? null : reader.GetGuid(22),
+                CreatedAt           = reader.GetDateTime(23),
+                UpdatedAt           = reader.IsDBNull(24) ? null : reader.GetDateTime(24),
+                StorageMethod       = reader.IsDBNull(25) ? null : reader.GetString(25),
+                IsLongTermStorage   = reader.GetBoolean(26),
+                BatchLabel          = reader.IsDBNull(28) ? null : reader.GetString(28),
+                Source              = reader.IsDBNull(29) ? null : reader.GetString(29),
+                Temperature         = reader.IsDBNull(30) ? null : reader.GetString(30)
+            });
+        }
+        return items;
+    }
+
+    public async Task<bool> HasHouseholdPurchasedProductAsync(
+        Guid householdId, Guid productId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT TOP 1 1
+            FROM PurchaseEvent
+            WHERE HouseholdId = @HouseholdId AND ProductId = @ProductId";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@HouseholdId", householdId);
+        command.Parameters.AddWithValue("@ProductId",   productId);
+        object? result = await command.ExecuteScalarAsync(ct);
+        return result is not null;
+    }
+
+    
     public async Task WriteInventoryHistoryDirectAsync(
         Guid itemId, Guid userId, string actionType,
         decimal quantityChange, decimal quantityBefore, decimal quantityAfter,

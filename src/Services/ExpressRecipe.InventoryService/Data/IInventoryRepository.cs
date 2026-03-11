@@ -102,6 +102,10 @@ public interface IInventoryRepository
     // Intelligence helpers
     Task<List<Guid>> GetDistinctUserIdsWithInventoryAsync(CancellationToken ct = default);
     Task<List<Guid>> GetDistinctUserIdsWithPurchaseHistoryAsync(CancellationToken ct = default);
+    Task<List<Guid>> GetDistinctHouseholdIdsWithInventoryAsync(CancellationToken ct = default);
+    Task<List<InventoryItemDto>> GetExpiringItemsByHouseholdAsync(Guid householdId, int daysAhead, CancellationToken ct = default);
+    Task<List<InventoryItemDto>> GetLowStockItemsByHouseholdAsync(Guid householdId, decimal threshold = 2.0m, CancellationToken ct = default);
+    Task<bool> HasHouseholdPurchasedProductAsync(Guid householdId, Guid productId, CancellationToken ct = default);
     Task WriteInventoryHistoryDirectAsync(Guid itemId, Guid userId, string actionType, decimal quantityChange, decimal quantityBefore, decimal quantityAfter, string? reason, Guid? recipeId, CancellationToken ct = default);
 
     // Garden & Long-Term Storage

@@ -177,6 +177,16 @@ builder.Services.AddSingleton<ICookingTimerRepository>(
 // Register background workers
 builder.Services.AddHostedService<CookingTimerWorker>();
 
+// Work Queue
+builder.Services.AddSingleton<IWorkQueueRepository>(new WorkQueueRepository(connectionString));
+builder.Services.AddHostedService<WorkQueueCleanupWorker>();
+
+// RecipeCookedEventSubscriber — only register if messaging is enabled
+if (messagingEnabled)
+{
+    builder.Services.AddHostedService<RecipeCookedEventSubscriber>();
+}
+
 // Add controllers
 builder.Services.AddControllers();
 
