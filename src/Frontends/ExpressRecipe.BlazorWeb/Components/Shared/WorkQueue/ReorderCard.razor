@@ -1,0 +1,25 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Reorder action card — for LowStockReorder items. *@
+
+<div class="reorder-card">
+    <div class="action-buttons">
+        <button class="btn btn-primary"   @onclick='() => TakeAction("AddedToList")' disabled="@_working">🛒 Add to Shopping List</button>
+        <button class="btn btn-secondary" @onclick='() => TakeAction("AlreadyOrdered")' disabled="@_working">✅ Already Ordered</button>
+        <button class="btn btn-secondary-outline" @onclick='() => TakeAction("NoLongerNeeded")' disabled="@_working">✖ Not Needed</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public WorkQueueItemDto Item    { get; set; } = default!;
+    [Parameter] public EventCallback<(Guid, string)> OnActioned { get; set; }
+
+    private bool _working;
+
+    private async Task TakeAction(string action)
+    {
+        _working = true;
+        await OnActioned.InvokeAsync((Item.Id, action));
+        _working = false;
+    }
+}

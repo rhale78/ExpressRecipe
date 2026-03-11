@@ -1,0 +1,77 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Inline 5-star rating card for RateRecipe work-queue items.
+   Front-end note: Star hover effects work through Blazor's @onmouseover / @onmouseout
+   event handlers that set component state. Blazor re-renders on each state change,
+   filling/unfilling stars — no JavaScript required. *@
+
+<div class="rate-recipe-inline">
+    <div class="star-row" role="group" aria-label="Rate this recipe">
+        @for (int star = 1; star <= 5; star++)
+        {
+            int s = star; @* capture loop variable for lambda *@
+            <button type="button"
+                    class="star @(_hoveredStar >= s || _selectedStar >= s ? "filled" : "")"
+                    aria-label="@s star@(s == 1 ? "" : "s")"
+                    aria-pressed="@(_selectedStar == s)"
+                    @onmouseover="() => _hoveredStar = s"
+                    @onmouseout="() => _hoveredStar = 0"
+                    @onclick="() => SelectStar(s)">★</button>
+        }
+    </div>
+
+    @if (_selectedStar > 0)
+    {
+        <div class="rate-actions">
+            <label class="would-make-label">Would you make this again?</label>
+            <div class="would-make-buttons">
+                <button class="btn @(_wouldMakeAgain == true  ? "selected btn-primary" : "btn-outline")"
+                        @onclick='() => _wouldMakeAgain = true'>👍 Yes</button>
+                <button class="btn @(_wouldMakeAgain == false ? "selected btn-secondary" : "btn-outline")"
+                        @onclick='() => _wouldMakeAgain = false'>👎 No</button>
+            </div>
+            <textarea class="quick-note-input"
+                      placeholder="Quick note (optional)"
+                      @bind="_quickNote"
+                      rows="2"></textarea>
+            <button class="btn btn-primary btn-submit-rating"
+                    @onclick="SubmitRating"
+                    disabled="@_submitting">
+                @if (_submitting) { <span class="spinner-sm" /> } else { <span>Save Rating</span> }
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public WorkQueueItemDto Item    { get; set; } = default!;
+    [Parameter] public EventCallback<(Guid, string)> OnActioned { get; set; }
+
+    private int    _hoveredStar;
+    private int    _selectedStar;
+    private bool?  _wouldMakeAgain;
+    private string _quickNote  = string.Empty;
+    private bool   _submitting;
+
+    private void SelectStar(int star) => _selectedStar = star;
+
+    private async Task SubmitRating()
+    {
+        _submitting = true;
+
+        // Build action string: "Rated:4:Yes" or "Rated:4:Yes:optional note"
+        string makeAgain = _wouldMakeAgain switch
+        {
+            true  => "Yes",
+            false => "No",
+            null  => "Unset"
+        };
+        string notePart = string.IsNullOrWhiteSpace(_quickNote)
+            ? string.Empty
+            : $":{_quickNote.Trim()}";
+        string action = $"Rated:{_selectedStar}:{makeAgain}{notePart}";
+
+        await OnActioned.InvokeAsync((Item.Id, action));
+        _submitting = false;
+    }
+}

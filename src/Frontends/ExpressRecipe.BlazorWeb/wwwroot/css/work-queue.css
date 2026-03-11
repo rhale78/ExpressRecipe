@@ -1,0 +1,520 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Work Queue Page & Components (WQ2)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Page ─────────────────────────────────────────────────────────────────── */
+
+.queue-page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 1.5rem;
+}
+
+.queue-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+}
+
+.queue-header h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+}
+
+.item-count {
+    background: var(--color-surface-alt, #f0f0f0);
+    color: var(--color-text-muted, #666);
+    border-radius: 20px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Mode toggle */
+.queue-mode-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.toggle-btn {
+    padding: 0.4rem 0.9rem;
+    border-radius: 20px;
+    border: 1px solid var(--color-border, #ddd);
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.15s;
+}
+
+.toggle-btn.active {
+    background: var(--color-primary, #2563eb);
+    color: #fff;
+    border-color: var(--color-primary, #2563eb);
+}
+
+.toggle-btn:not(.active):hover {
+    background: var(--color-surface-alt, #f0f0f0);
+}
+
+/* Empty state */
+.queue-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.queue-empty .empty-icon {
+    font-size: 3rem;
+}
+
+.queue-empty h2 {
+    margin: 0;
+    color: var(--color-text, #1a1a1a);
+}
+
+.queue-empty p {
+    color: var(--color-text-muted, #666);
+    margin: 0;
+}
+
+/* ── Action Card ──────────────────────────────────────────────────────────── */
+
+.queue-card {
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border, #e5e7eb);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    transition: box-shadow 0.15s;
+}
+
+.queue-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Card type colour strips */
+.queue-card.card-type-expired,
+.queue-card.card-type-expiringcritical {
+    border-left: 4px solid #ef4444;
+}
+
+.queue-card.card-type-expiringsoon {
+    border-left: 4px solid #f97316;
+}
+
+.queue-card.card-type-pricedrop {
+    border-left: 4px solid #22c55e;
+}
+
+.queue-card.card-type-lowstockreorder {
+    border-left: 4px solid #3b82f6;
+}
+
+.queue-card.card-type-movetofreezer {
+    border-left: 4px solid #06b6d4;
+}
+
+.queue-card.card-type-raterecipe {
+    border-left: 4px solid #f59e0b;
+}
+
+.queue-card.card-type-savecookingnote {
+    border-left: 4px solid #8b5cf6;
+}
+
+.queue-card.card-type-householdtaskpending,
+.queue-card.card-type-householdtaskoverdue {
+    border-left: 4px solid #6366f1;
+}
+
+/* Card header */
+.card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.card-icon {
+    font-size: 1.75rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.card-titles {
+    flex: 1;
+    min-width: 0;
+}
+
+.card-title {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text, #1a1a1a);
+    line-height: 1.3;
+}
+
+.card-body {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--color-text-muted, #6b7280);
+    line-height: 1.4;
+}
+
+/* Priority dot */
+.priority-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.priority-dot.priority-critical { background: #ef4444; }
+.priority-dot.priority-high     { background: #f97316; }
+.priority-dot.priority-medium   { background: #f59e0b; }
+.priority-dot.priority-normal   { background: #9ca3af; }
+
+/* Card content */
+.card-content {
+    margin-bottom: 0.75rem;
+}
+
+/* Card footer actions (list mode only) */
+.card-footer-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border, #e5e7eb);
+    margin-top: 0.75rem;
+}
+
+.btn-snooze,
+.btn-dismiss {
+    padding: 0.35rem 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--color-border, #ddd);
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.8125rem;
+    transition: all 0.15s;
+}
+
+.btn-snooze:hover { background: var(--color-surface-alt, #f0f0f0); }
+.btn-dismiss:hover { background: #fef2f2; border-color: #fca5a5; color: #ef4444; }
+
+/* Action buttons inside sub-cards */
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* ── Wizard ────────────────────────────────────────────────────────────────── */
+
+.wizard-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.wizard-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.progress-bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--color-surface-alt, #e5e7eb);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--color-primary, #2563eb);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.progress-label {
+    font-size: 0.8125rem;
+    color: var(--color-text-muted, #6b7280);
+    white-space: nowrap;
+}
+
+.wizard-footer {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.btn-skip,
+.btn-done-today {
+    padding: 0.5rem 1.1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border, #ddd);
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.15s;
+}
+
+.btn-skip:hover,
+.btn-done-today:hover {
+    background: var(--color-surface-alt, #f0f0f0);
+}
+
+.wizard-complete {
+    text-align: center;
+    padding: 3rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.wizard-complete .complete-icon {
+    font-size: 3rem;
+}
+
+/* ── List mode ────────────────────────────────────────────────────────────── */
+
+.queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.batch-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.selected-count {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #1d4ed8;
+}
+
+.priority-group {
+    margin-bottom: 1.5rem;
+}
+
+.group-heading {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid var(--color-border, #e5e7eb);
+}
+
+.group-critical { color: #ef4444; border-color: #fca5a5; }
+.group-medium   { color: #d97706; border-color: #fde68a; }
+.group-normal   { color: #3b82f6; border-color: #bfdbfe; }
+
+.list-item-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.item-checkbox {
+    margin-top: 1.4rem;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.list-item-row > .queue-card {
+    flex: 1;
+}
+
+/* ── Rate Recipe Card ─────────────────────────────────────────────────────── */
+
+.rate-recipe-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.star-row {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.star {
+    font-size: 1.75rem;
+    cursor: pointer;
+    color: #d1d5db;
+    transition: color 0.1s, transform 0.1s;
+    user-select: none;
+    /* Reset button element styles */
+    background: none;
+    border: none;
+    padding: 0;
+    line-height: 1;
+    font-family: inherit;
+}
+
+.star.filled {
+    color: #f59e0b;
+}
+
+.star:hover {
+    transform: scale(1.15);
+}
+
+.rate-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.would-make-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-text, #1a1a1a);
+}
+
+.would-make-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.quick-note-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.btn-submit-rating {
+    align-self: flex-start;
+}
+
+/* ── Save note card ───────────────────────────────────────────────────────── */
+
+.note-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border, #ddd);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.saved-confirmation {
+    color: #16a34a;
+    font-weight: 500;
+}
+
+/* ── Dashboard Badge / Nav Badge ─────────────────────────────────────────── */
+
+.queue-badge-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    text-decoration: none;
+    color: inherit;
+    position: relative;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.badge-normal {
+    background: #6b7280;
+    color: #fff;
+}
+
+.badge-critical {
+    background: #ef4444;
+    color: #fff;
+    animation: pulse-badge 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+    50%       { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+}
+
+/* Nav badge override (in sidebar) */
+.nav-link .notification-badge.badge-critical {
+    background: #ef4444;
+}
+
+/* ── Spinner utility ─────────────────────────────────────────────────────── */
+
+.spinner-sm {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+    .queue-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .queue-mode-toggle {
+        margin-left: 0;
+    }
+
+    .wizard-footer {
+        flex-direction: column;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .action-buttons .btn {
+        width: 100%;
+    }
+}

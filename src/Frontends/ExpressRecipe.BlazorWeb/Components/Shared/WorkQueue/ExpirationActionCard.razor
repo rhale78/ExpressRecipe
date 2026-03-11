@@ -1,0 +1,26 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Expiration action card for Expired / ExpiringSoon / ExpiringCritical items.
+   Offers Dispose, Move to Freezer, or Already Used actions. *@
+
+<div class="expiration-action-card">
+    <div class="action-buttons">
+        <button class="btn btn-danger"    @onclick='() => TakeAction("Disposed")'   disabled="@_working">🗑️ Dispose</button>
+        <button class="btn btn-info"      @onclick='() => TakeAction("Froze")'      disabled="@_working">❄️ Move to Freezer</button>
+        <button class="btn btn-secondary" @onclick='() => TakeAction("AlreadyUsed")' disabled="@_working">✅ Already Used</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public WorkQueueItemDto Item    { get; set; } = default!;
+    [Parameter] public EventCallback<(Guid, string)> OnActioned { get; set; }
+
+    private bool _working;
+
+    private async Task TakeAction(string action)
+    {
+        _working = true;
+        await OnActioned.InvokeAsync((Item.Id, action));
+        _working = false;
+    }
+}

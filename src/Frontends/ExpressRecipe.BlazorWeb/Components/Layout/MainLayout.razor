@@ -1,6 +1,8 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
 @using ExpressRecipe.Client.Shared.Services
+@implements IDisposable
+@inject IWorkQueueState WorkQueueState
 
 <div class="app-container">
     <div class="sidebar">
@@ -9,7 +11,9 @@
         </div>
 
         <nav class="sidebar-nav">
-            <NavigationMenu UnreadCount="@_unreadCount" />
+            <NavigationMenu UnreadCount="@_unreadCount"
+                            WorkQueueCount="@WorkQueueState.PendingCount"
+                            WorkQueueHasCritical="@WorkQueueState.HasCritical" />
         </nav>
     </div>
 
@@ -29,13 +33,18 @@
 <ToastContainer />
 
 @code {
-    private int _unreadCount = 0;
+    private int  _unreadCount          = 0;
     private bool _eatingDisorderRecovery = false;
     // TODO: Load from PreferencesService for the authenticated user's primary profile
 
-    // TODO: Load unread notification count when NotificationService is available
-    // protected override async Task OnInitializedAsync()
-    // {
-    //     _unreadCount = await NotificationApi.GetUnreadCountAsync();
-    // }
+    protected override async Task OnInitializedAsync()
+    {
+        WorkQueueState.OnChange += HandleQueueChange;
+        // Refresh the work queue count on layout load (best-effort; failures are swallowed).
+        await WorkQueueState.RefreshAsync();
+    }
+
+    private void HandleQueueChange() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => WorkQueueState.OnChange -= HandleQueueChange;
 }

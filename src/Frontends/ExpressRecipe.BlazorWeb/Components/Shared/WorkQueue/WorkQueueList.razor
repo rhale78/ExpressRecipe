@@ -1,0 +1,127 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* List mode: shows all items grouped by priority tier.
+   Multi-select batch actions are supported via the checkboxes. *@
+
+<div class="queue-list">
+    @* Batch action toolbar — shown when items are selected *@
+    @if (_selectedIds.Count > 0)
+    {
+        <div class="batch-toolbar">
+            <span class="selected-count">@_selectedIds.Count selected</span>
+            <button class="btn btn-secondary" @onclick="BatchSnooze">💤 Snooze All</button>
+            <button class="btn btn-outline"   @onclick="BatchDismiss">✕ Dismiss All</button>
+            <button class="btn btn-link"      @onclick="ClearSelection">Cancel</button>
+        </div>
+    }
+
+    @* Critical / Urgent tier (Priority 1-4) *@
+    @{ var critical = Items.Where(i => i.Priority <= 4).ToList(); }
+    @if (critical.Any())
+    {
+        <div class="priority-group">
+            <h2 class="group-heading group-critical">🔴 Urgent</h2>
+            @foreach (var item in critical)
+            {
+                <div class="list-item-row">
+                    <input type="checkbox"
+                           class="item-checkbox"
+                           checked="@_selectedIds.Contains(item.Id)"
+                           @onchange="e => ToggleSelect(item.Id, (bool)(e.Value ?? false))"
+                           aria-label="Select @item.Title" />
+                    <WorkQueueItemCard Item="item"
+                                       IsWizardMode="false"
+                                       OnActioned="OnItemActioned"
+                                       OnDismissed="OnItemDismissed"
+                                       OnSnoozed="OnItemSnoozed" />
+                </div>
+            }
+        </div>
+    }
+
+    @* Medium tier (Priority 5-6) *@
+    @{ var medium = Items.Where(i => i.Priority is >= 5 and <= 6).ToList(); }
+    @if (medium.Any())
+    {
+        <div class="priority-group">
+            <h2 class="group-heading group-medium">🟡 Medium Priority</h2>
+            @foreach (var item in medium)
+            {
+                <div class="list-item-row">
+                    <input type="checkbox"
+                           class="item-checkbox"
+                           checked="@_selectedIds.Contains(item.Id)"
+                           @onchange="e => ToggleSelect(item.Id, (bool)(e.Value ?? false))"
+                           aria-label="Select @item.Title" />
+                    <WorkQueueItemCard Item="item"
+                                       IsWizardMode="false"
+                                       OnActioned="OnItemActioned"
+                                       OnDismissed="OnItemDismissed"
+                                       OnSnoozed="OnItemSnoozed" />
+                </div>
+            }
+        </div>
+    }
+
+    @* Normal tier (Priority 7+) *@
+    @{ var normal = Items.Where(i => i.Priority >= 7).ToList(); }
+    @if (normal.Any())
+    {
+        <div class="priority-group">
+            <h2 class="group-heading group-normal">🔵 Normal</h2>
+            @foreach (var item in normal)
+            {
+                <div class="list-item-row">
+                    <input type="checkbox"
+                           class="item-checkbox"
+                           checked="@_selectedIds.Contains(item.Id)"
+                           @onchange="e => ToggleSelect(item.Id, (bool)(e.Value ?? false))"
+                           aria-label="Select @item.Title" />
+                    <WorkQueueItemCard Item="item"
+                                       IsWizardMode="false"
+                                       OnActioned="OnItemActioned"
+                                       OnDismissed="OnItemDismissed"
+                                       OnSnoozed="OnItemSnoozed" />
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<WorkQueueItemDto>         Items          { get; set; } = new();
+    [Parameter] public EventCallback<(Guid, string)>  OnItemActioned { get; set; }
+    [Parameter] public EventCallback<Guid>            OnItemDismissed { get; set; }
+    [Parameter] public EventCallback<Guid>            OnItemSnoozed  { get; set; }
+
+    private HashSet<Guid> _selectedIds = new();
+
+    protected override void OnParametersSet()
+    {
+        // Remove selected IDs that no longer exist in Items (e.g. after action/dismiss/snooze).
+        HashSet<Guid> currentIds = Items.Select(i => i.Id).ToHashSet();
+        _selectedIds.IntersectWith(currentIds);
+    }
+
+    private void ToggleSelect(Guid id, bool selected)
+    {
+        if (selected) _selectedIds.Add(id);
+        else          _selectedIds.Remove(id);
+    }
+
+    private void ClearSelection() => _selectedIds.Clear();
+
+    private async Task BatchSnooze()
+    {
+        foreach (Guid id in _selectedIds.ToList())
+            await OnItemSnoozed.InvokeAsync(id);
+        _selectedIds.Clear();
+    }
+
+    private async Task BatchDismiss()
+    {
+        foreach (Guid id in _selectedIds.ToList())
+            await OnItemDismissed.InvokeAsync(id);
+        _selectedIds.Clear();
+    }
+}

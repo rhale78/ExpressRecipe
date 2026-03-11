@@ -1,0 +1,113 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Wizard mode: shows one action card at a time with a progress bar.
+   Skip pushes the current item to the end for this session without snoozing it in the DB.
+   "Done for today" fires OnDone to return to the dashboard.
+   
+   Front-end note: When the parent removes an item from the list Blazor's diff engine
+   updates the Items parameter and re-renders. The _currentIndex doesn't need to change
+   when an item is removed from the front — the next item naturally shifts into Items[_currentIndex].
+   This is different from jQuery/vanilla JS where you'd manage the DOM manually. *@
+
+<div class="wizard-container">
+    @* Progress bar *@
+    <div class="wizard-progress">
+        <div class="progress-bar-track">
+            <div class="progress-bar-fill" style="width: @ProgressPercent%"></div>
+        </div>
+        <span class="progress-label">
+            @if (_localItems.Count > 0)
+            { <text>@(_currentIndex + 1) of @_localItems.Count</text> }
+            else
+            { <text>All done!</text> }
+        </span>
+    </div>
+
+    @if (_currentIndex < _localItems.Count)
+    {
+        <WorkQueueItemCard Item="_localItems[_currentIndex]"
+                           IsWizardMode="true"
+                           OnActioned="HandleActioned"
+                           OnDismissed="HandleDismissed"
+                           OnSnoozed="HandleSnoozed" />
+
+        <div class="wizard-footer">
+            <button class="btn btn-outline btn-skip" @onclick="Skip">
+                ⏭ Skip for now
+            </button>
+            <button class="btn btn-secondary-outline btn-done-today" @onclick="DoneForToday">
+                ✋ Done for today
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="wizard-complete">
+            <span class="complete-icon">🎉</span>
+            <p>All done!</p>
+            <button class="btn btn-primary" @onclick='() => OnDone.InvokeAsync()'>Back to Home</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<WorkQueueItemDto>         Items          { get; set; } = new();
+    [Parameter] public EventCallback<(Guid, string)>  OnItemActioned { get; set; }
+    [Parameter] public EventCallback<Guid>            OnItemDismissed { get; set; }
+    [Parameter] public EventCallback<Guid>            OnItemSnoozed  { get; set; }
+    [Parameter] public EventCallback                  OnDone         { get; set; }
+
+    // Local copy of the items list so Skip() doesn't mutate the parent's [Parameter].
+    private List<WorkQueueItemDto> _localItems = new();
+    private int _currentIndex;
+
+    protected override void OnParametersSet()
+    {
+        // Sync local items from the parent parameter when it changes (e.g. after an action
+        // removes an item). Preserve the current index position.
+        _localItems = new List<WorkQueueItemDto>(Items);
+        // Clamp index in case the list shrank.
+        if (_currentIndex >= _localItems.Count)
+            _currentIndex = Math.Max(0, _localItems.Count - 1);
+    }
+
+    private double ProgressPercent
+    {
+        get
+        {
+            if (_localItems.Count == 0) return 100;
+            double raw = ((_currentIndex + 1) / (double)_localItems.Count) * 100;
+            return Math.Min(raw, 100);
+        }
+    }
+
+    private async Task HandleActioned((Guid itemId, string action) args)
+    {
+        await OnItemActioned.InvokeAsync(args);
+        // Item is removed from Items by the parent. OnParametersSet will sync _localItems.
+    }
+
+    private async Task HandleDismissed(Guid itemId)
+    {
+        await OnItemDismissed.InvokeAsync(itemId);
+    }
+
+    private async Task HandleSnoozed(Guid itemId)
+    {
+        await OnItemSnoozed.InvokeAsync(itemId);
+        // The parent removes the item from the list, so the next item shifts into
+        // _localItems[_currentIndex] automatically after OnParametersSet.
+    }
+
+    private void Skip()
+    {
+        // Move current item to end of local list for this session only (no DB snooze).
+        if (_currentIndex >= _localItems.Count) return;
+        WorkQueueItemDto current = _localItems[_currentIndex];
+        _localItems.RemoveAt(_currentIndex);
+        _localItems.Add(current);
+        // Don't increment _currentIndex — the next item slides into the current position.
+    }
+
+    private void DoneForToday() => OnDone.InvokeAsync();
+}
