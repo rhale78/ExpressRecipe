@@ -66,7 +66,8 @@ public enum SubscriptionTier
     Free    = 0,
     AdFree  = 1,
     Plus    = 2,
-    Premium = 3
+    Premium = 3,
+    Family  = 4
 }
 
 public enum RestrictionType

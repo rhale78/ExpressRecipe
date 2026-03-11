@@ -1,0 +1,25 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Move-to-freezer action card for MoveToFreezer items. *@
+
+<div class="move-storage-card">
+    <div class="action-buttons">
+        <button class="btn btn-primary"   @onclick='() => TakeAction("Moved")'       disabled="@_working">❄️ Moved to Freezer</button>
+        <button class="btn btn-secondary" @onclick='() => TakeAction("AlreadyMoved")' disabled="@_working">✅ Already Done</button>
+        <button class="btn btn-secondary-outline" @onclick='() => TakeAction("Ignored")' disabled="@_working">✖ Ignore</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public WorkQueueItemDto Item    { get; set; } = default!;
+    [Parameter] public EventCallback<(Guid, string)> OnActioned { get; set; }
+
+    private bool _working;
+
+    private async Task TakeAction(string action)
+    {
+        _working = true;
+        await OnActioned.InvokeAsync((Item.Id, action));
+        _working = false;
+    }
+}

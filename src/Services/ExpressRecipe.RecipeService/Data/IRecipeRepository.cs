@@ -53,6 +53,11 @@ public interface IRecipeRepository
     Task<List<RecipeDto>> GetRecipesByCuisineAsync(string cuisine, int limit = 50);
     Task<List<RecipeDto>> GetRecipesByTagAsync(string tag, int limit = 50);
     Task<List<RecipeDto>> GetRecipesByIngredientAsync(string ingredient, int limit = 50);
+    /// <summary>
+    /// Returns recipes where all required ingredients match one of the provided ingredient names
+    /// (case-insensitive). Used by PantryDiscovery to find "what can I make?" from pantry contents.
+    /// </summary>
+    Task<List<RecipeDto>> GetRecipesWithIngredientsAsync(IReadOnlyList<string> ingredientNames, int limit = 20);
     Task<List<string>> GetAllCategoriesAsync();
     Task<List<string>> GetAllCuisinesAsync();
     Task<object?> GetByExactTitleAsync(string title);
@@ -67,4 +72,26 @@ public interface IRecipeRepository
     Task SetFavoriteHouseholdShareAsync(Guid favoriteId, Guid userId, bool shared, Guid? householdId, CancellationToken ct = default);
     Task<List<RecipeDto>> GetHouseholdSharedFavoritesAsync(Guid householdId, CancellationToken ct = default);
     Task UpdateEstimatedCostAsync(Guid recipeId, decimal costPerServing, CancellationToken ct = default);
+
+    // Pantry discovery support
+    Task<List<RecipeIngredientSummary>> GetRecipesWithIngredientSummaryAsync(int limit = 500, CancellationToken ct = default);
+}
+
+/// <summary>
+/// Lightweight recipe + ingredient projection used by PantryDiscoveryService.
+/// </summary>
+public sealed record RecipeIngredientSummary
+{
+    public Guid RecipeId { get; init; }
+    public string RecipeName { get; init; } = string.Empty;
+    public string? ImageUrl { get; init; }
+    public int CookTimeMinutes { get; init; }
+    public decimal AverageRating { get; init; }
+    public List<IngredientRef> Ingredients { get; init; } = new();
+}
+
+public sealed record IngredientRef
+{
+    public string NormalizedName { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
 }

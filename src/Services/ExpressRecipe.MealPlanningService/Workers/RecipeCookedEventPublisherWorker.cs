@@ -81,7 +81,10 @@ public class RecipeCookedEventPublisherWorker : BackgroundService
                     HouseholdId:      row.HouseholdId,
                     Servings:         row.Servings,
                     CookedAt:         new DateTimeOffset(row.CookedAt, TimeSpan.Zero),
-                    CookingHistoryId: row.Id);
+                    CookingHistoryId: row.Id)
+                {
+                    HasRating = row.Rating.HasValue
+                };
 
                 await messageBus.PublishAsync(evt, cancellationToken: ct);
                 await repository.MarkInventoryDeductionSentAsync(row.Id, ct);

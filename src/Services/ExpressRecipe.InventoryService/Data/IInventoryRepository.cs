@@ -35,6 +35,9 @@ public interface IInventoryRepository
         decimal quantity, string? unit, DateTime? expirationDate, string? barcode, decimal? price = null, string? preferredStore = null, string? storeLocation = null);
     Task<List<InventoryItemDto>> GetUserInventoryAsync(Guid userId);
     Task<List<InventoryItemDto>> GetHouseholdInventoryAsync(Guid householdId);
+    /// <summary>Returns items for a household that expire within the next <paramref name="daysAhead"/> days.
+    /// Filtering is done in SQL to avoid loading the full household inventory into memory.</summary>
+    Task<List<InventoryItemDto>> GetHouseholdExpiringItemsAsync(Guid householdId, int daysAhead);
     Task<List<InventoryItemDto>> GetInventoryByAddressAsync(Guid addressId);
     Task<List<InventoryItemDto>> GetInventoryByStorageLocationAsync(Guid storageLocationId);
     Task<InventoryItemDto?> GetInventoryItemAsync(Guid itemId, Guid userId);
@@ -102,6 +105,10 @@ public interface IInventoryRepository
     // Intelligence helpers
     Task<List<Guid>> GetDistinctUserIdsWithInventoryAsync(CancellationToken ct = default);
     Task<List<Guid>> GetDistinctUserIdsWithPurchaseHistoryAsync(CancellationToken ct = default);
+    Task<List<Guid>> GetDistinctHouseholdIdsWithInventoryAsync(CancellationToken ct = default);
+    Task<List<InventoryItemDto>> GetExpiringItemsByHouseholdAsync(Guid householdId, int daysAhead, CancellationToken ct = default);
+    Task<List<InventoryItemDto>> GetLowStockItemsByHouseholdAsync(Guid householdId, decimal threshold = 2.0m, CancellationToken ct = default);
+    Task<bool> HasHouseholdPurchasedProductAsync(Guid householdId, Guid productId, CancellationToken ct = default);
     Task WriteInventoryHistoryDirectAsync(Guid itemId, Guid userId, string actionType, decimal quantityChange, decimal quantityBefore, decimal quantityAfter, string? reason, Guid? recipeId, CancellationToken ct = default);
 
     // Garden & Long-Term Storage
@@ -111,6 +118,20 @@ public interface IInventoryRepository
 
     // Thaw task support
     Task<List<FrozenIngredientResult>> GetFrozenIngredientsForRecipeAsync(Guid householdId, Guid recipeId, CancellationToken ct = default);
+
+    // Allergy analysis support
+    Task<List<SafeProductUsageResult>> GetSafeProductHistoryAsync(
+        Guid householdId, int minUsageCount, CancellationToken ct = default);
+
+    // Pantry discovery support
+    Task<List<PantryIngredientItem>> GetPantryIngredientNamesAsync(Guid householdId, CancellationToken ct = default);
+}
+
+public class PantryIngredientItem
+{
+    public Guid InventoryItemId { get; init; }
+    public string NormalizedName { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
 }
 
 public class FrozenIngredientResult
@@ -118,6 +139,12 @@ public class FrozenIngredientResult
     public string ItemName { get; set; } = string.Empty;
     public string FoodCategory { get; set; } = string.Empty;
     public Guid StorageLocationId { get; set; }
+}
+
+public sealed record SafeProductUsageResult
+{
+    public Guid ProductId  { get; init; }
+    public int  UsageCount { get; init; }
 }
 
 public class HouseholdDto

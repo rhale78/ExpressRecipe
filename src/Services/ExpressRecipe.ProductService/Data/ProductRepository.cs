@@ -35,6 +35,12 @@ public interface IProductRepository
     // High-speed bulk operations
     Task<int> BulkCreateFullProductsHighSpeedAsync(List<FullProductImportDto> products);
     Task<HashSet<string>> GetAllBarcodesAsync();
+
+    // Normalized ingredient names for allergy analysis
+    Task<List<string>> GetNormalizedIngredientNamesAsync(Guid productId, CancellationToken ct = default);
+
+    // Admin manual import (bypasses approval queue)
+    Task<Guid> ForceImportAsync(ManualProductImportRequest request, Guid adminId, CancellationToken ct = default);
 }
 
 public class ProductRepository : SqlHelper, IProductRepository
@@ -1307,4 +1313,51 @@ public class ProductRepository : SqlHelper, IProductRepository
             .Where(r => r.Product != null)
             .ToDictionary(r => r.Barcode, r => r.Product!, StringComparer.OrdinalIgnoreCase);
     }
+
+    public async Task<List<string>> GetNormalizedIngredientNamesAsync(
+        Guid productId, CancellationToken ct = default)
+    {
+        // Fetch ingredient name + raw list-string for all product-ingredient rows
+        const string sql = @"
+            SELECT pi.IngredientListString
+            FROM   ProductIngredient pi
+            WHERE  pi.ProductId  = @ProductId
+              AND  pi.IsDeleted  = 0
+            ORDER  BY pi.OrderIndex";
+
+        List<string?> rawStrings = await ExecuteReaderAsync(
+            sql,
+            reader => reader.IsDBNull(0) ? null : reader.GetString(0),
+            ct,
+            CreateParameter("@ProductId", productId));
+
+        return Services.IngredientNormalizer.NormalizeAll(rawStrings);
     }
+
+    public async Task<Guid> ForceImportAsync(ManualProductImportRequest request, Guid adminId, CancellationToken ct = default)
+    {
+        var id = Guid.NewGuid();
+        const string sql = @"
+            INSERT INTO Product
+                (Id, Name, Brand, Barcode, Category, Description, IngredientsText, NutritionJson,
+                 ApprovalStatus, CreatedBy, CreatedAt)
+            VALUES
+                (@Id, @Name, @Brand, @Barcode, @Category, @Description, @IngredientsText,
+                 @NutritionJson, 'Approved', @CreatedBy, GETUTCDATE())";
+
+        await ExecuteNonQueryAsync(
+            sql,
+            ct,
+            CreateParameter("@Id",              id),
+            CreateParameter("@Name",            request.ProductName),
+            CreateParameter("@Brand",           (object?)request.Brand           ?? DBNull.Value),
+            CreateParameter("@Barcode",         (object?)request.Barcode         ?? DBNull.Value),
+            CreateParameter("@Category",        (object?)request.Category        ?? DBNull.Value),
+            CreateParameter("@Description",     (object?)request.Description     ?? DBNull.Value),
+            CreateParameter("@IngredientsText", (object?)request.IngredientsText ?? DBNull.Value),
+            CreateParameter("@NutritionJson",   (object?)request.NutritionJson   ?? DBNull.Value),
+            CreateParameter("@CreatedBy",       adminId));
+
+        return id;
+    }
+}

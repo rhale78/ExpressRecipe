@@ -1,0 +1,49 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Save-cooking-note action card. Shows a textarea to capture the note inline. *@
+
+<div class="save-note-card">
+    @if (!_saved)
+    {
+        <textarea class="note-input"
+                  placeholder="What did you learn from this cook? (optional)"
+                  @bind="_note"
+                  rows="3"></textarea>
+        <div class="action-buttons">
+            <button class="btn btn-primary" @onclick="SaveNote" disabled="@(_saving)">
+                @if (_saving) { <span class="spinner-sm" /> } else { <span>💡 Save Note</span> }
+            </button>
+            <button class="btn btn-secondary-outline" @onclick='() => TakeAction("Skipped")' disabled="@_saving">
+                Skip
+            </button>
+        </div>
+    }
+    else
+    {
+        <p class="saved-confirmation">✅ Note saved!</p>
+    }
+</div>
+
+@code {
+    [Parameter] public WorkQueueItemDto Item    { get; set; } = default!;
+    [Parameter] public EventCallback<(Guid, string)> OnActioned { get; set; }
+
+    private string _note  = string.Empty;
+    private bool   _saving;
+    private bool   _saved;
+
+    private async Task SaveNote()
+    {
+        _saving = true;
+        // The note text is appended to the action string so the parent can pass it along.
+        await TakeAction("NoteSaved:" + _note.Trim().Replace(":", ""));
+    }
+
+    private async Task TakeAction(string action)
+    {
+        _saving = true;
+        await OnActioned.InvokeAsync((Item.Id, action));
+        _saved  = true;
+        _saving = false;
+    }
+}

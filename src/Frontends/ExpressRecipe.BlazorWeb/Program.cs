@@ -77,6 +77,11 @@ builder.Services.AddHttpClient<IUserSettingsApiClient, UserSettingsApiClient>(cl
     client.BaseAddress = new Uri("http://userservice");
 });
 
+builder.Services.AddHttpClient<IAllergyApiClient, AllergyApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://userservice");
+});
+
 builder.Services.AddHttpClient<ISubscriptionApiClient, SubscriptionApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://userservice");
@@ -113,12 +118,25 @@ builder.Services.AddHttpClient<IInventoryApiClient, InventoryApiClient>(client =
     client.BaseAddress = new Uri("http://inventoryservice");
 });
 
+// Work queue client (talks to InventoryService /api/work-queue)
+builder.Services.AddHttpClient<IWorkQueueClientService, WorkQueueApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://inventoryservice");
+});
+// WorkQueueState is scoped per-circuit (one per user session in Blazor Server)
+builder.Services.AddScoped<IWorkQueueState, WorkQueueState>();
+
 builder.Services.AddHttpClient<IShoppingListApiClient, ShoppingListApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://shoppingservice");
 });
 
 builder.Services.AddHttpClient<IMealPlanApiClient, MealPlanApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://mealplanningservice");
+});
+
+builder.Services.AddHttpClient<IPantryDiscoveryApiClient, PantryDiscoveryApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://mealplanningservice");
 });

@@ -1,0 +1,99 @@
+@using ExpressRecipe.Client.Shared.Services
+
+@* Renders a single work-queue action card.
+   Item type determines the icon, priority dot colour, and the type-specific sub-card
+   (RateRecipeCard, ExpirationActionCard, etc.). *@
+
+<div class="queue-card card-type-@Item.ItemType.ToLowerInvariant()">
+
+    <div class="card-header">
+        <span class="card-icon" aria-hidden="true">@GetIcon()</span>
+        <div class="card-titles">
+            <h3 class="card-title">@Item.Title</h3>
+            @if (Item.Body is not null)
+            {
+                <p class="card-body">@Item.Body</p>
+            }
+        </div>
+        <span class="priority-dot priority-@GetPriorityClass()"
+              title="Priority @Item.Priority"></span>
+    </div>
+
+    @* Type-specific content area *@
+    <div class="card-content">
+        @if (Item.ItemType == "RateRecipe")
+        {
+            <RateRecipeCard Item="Item" OnActioned="OnActioned" />
+        }
+        else if (Item.ItemType is "Expired" or "ExpiringSoon" or "ExpiringCritical")
+        {
+            <ExpirationActionCard Item="Item" OnActioned="OnActioned" />
+        }
+        else if (Item.ItemType == "PriceDrop")
+        {
+            <PriceDropCard Item="Item" OnActioned="OnActioned" />
+        }
+        else if (Item.ItemType == "LowStockReorder")
+        {
+            <ReorderCard Item="Item" OnActioned="OnActioned" />
+        }
+        else if (Item.ItemType == "MoveToFreezer")
+        {
+            <MoveStorageCard Item="Item" OnActioned="OnActioned" />
+        }
+        else if (Item.ItemType == "SaveCookingNote")
+        {
+            <SaveNoteCard Item="Item" OnActioned="OnActioned" />
+        }
+        else
+        {
+            <GenericActionCard Item="Item" OnActioned="OnActioned" />
+        }
+    </div>
+
+    @* In list mode show per-card snooze/dismiss; wizard mode uses its own footer *@
+    @if (!IsWizardMode)
+    {
+        <div class="card-footer-actions">
+            @if (Item.ItemType is not ("Expired" or "ExpiringCritical"))
+            {
+                <button class="btn-snooze" @onclick="HandleSnooze">💤 Snooze 24h</button>
+            }
+            <button class="btn-dismiss" @onclick="HandleDismiss">✕ Dismiss</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public WorkQueueItemDto          Item        { get; set; } = default!;
+    [Parameter] public bool                      IsWizardMode { get; set; }
+    [Parameter] public EventCallback<(Guid, string)> OnActioned   { get; set; }
+    [Parameter] public EventCallback<Guid>       OnDismissed  { get; set; }
+    [Parameter] public EventCallback<Guid>       OnSnoozed    { get; set; }
+
+    private async Task HandleSnooze()  => await OnSnoozed.InvokeAsync(Item.Id);
+    private async Task HandleDismiss() => await OnDismissed.InvokeAsync(Item.Id);
+
+    private string GetIcon() => Item.ItemType switch
+    {
+        "Expired"              => "🗑️",
+        "ExpiringCritical"     => "⏰",
+        "ExpiringSoon"         => "📅",
+        "PriceDrop"            => "💰",
+        "LowStockReorder"      => "🛒",
+        "MoveToFreezer"        => "❄️",
+        "RateRecipe"           => "⭐",
+        "SaveCookingNote"      => "💡",
+        "HouseholdTaskPending" => "📋",
+        "HouseholdTaskOverdue" => "🔔",
+        _                      => "ℹ️"
+    };
+
+    private string GetPriorityClass() => Item.Priority switch
+    {
+        1 or 2 => "critical",
+        3 or 4 => "high",
+        5 or 6 => "medium",
+        _      => "normal"
+    };
+}

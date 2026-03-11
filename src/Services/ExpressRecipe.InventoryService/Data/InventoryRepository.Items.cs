@@ -72,6 +72,36 @@ public partial class InventoryRepository
         return await ReadInventoryItemsAsync(command);
     }
 
+    public async Task<List<InventoryItemDto>> GetHouseholdExpiringItemsAsync(Guid householdId, int daysAhead)
+    {
+        const string sql = @"
+            SELECT
+                i.Id, i.UserId, i.HouseholdId, i.ProductId, i.CustomName, i.StorageLocationId,
+                i.Quantity, i.Unit, i.PurchaseDate, i.ExpirationDate, i.OpenedDate,
+                i.Notes, i.Barcode, i.Price, i.Store, i.PreferredStore, i.StoreLocation,
+                i.IsOpened, i.AddedBy, i.CreatedAt, i.UpdatedAt,
+                s.Name AS StorageLocationName, s.AddressId,
+                a.Name AS AddressName
+            FROM InventoryItem i
+            INNER JOIN StorageLocation s ON i.StorageLocationId = s.Id
+            LEFT JOIN Address a ON s.AddressId = a.Id
+            WHERE i.HouseholdId = @HouseholdId
+              AND i.IsDeleted = 0
+              AND i.ExpirationDate IS NOT NULL
+              AND i.ExpirationDate >= GETUTCDATE()
+              AND i.ExpirationDate <= DATEADD(day, @DaysAhead, GETUTCDATE())
+            ORDER BY i.ExpirationDate ASC";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@HouseholdId", householdId);
+        command.Parameters.AddWithValue("@DaysAhead", daysAhead);
+
+        return await ReadInventoryItemsAsync(command);
+    }
+
     public async Task<List<InventoryItemDto>> GetInventoryByAddressAsync(Guid addressId)
     {
         const string sql = @"
@@ -541,6 +571,92 @@ public partial class InventoryRepository
             if (shouldDisposeConnection)
                 await connection.DisposeAsync();
         }
+    }
+
+    #endregion
+
+    #region Allergy Analysis Support
+
+    public async Task<List<SafeProductUsageResult>> GetSafeProductHistoryAsync(
+        Guid householdId, int minUsageCount, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT i.ProductId, COUNT(*) AS UsageCount
+            FROM   InventoryHistory ih
+            INNER JOIN InventoryItem i ON i.Id = ih.InventoryItemId
+            WHERE  i.HouseholdId = @HouseholdId
+              AND  i.ProductId   IS NOT NULL
+              AND  ih.ActionType = 'Used'
+              AND  ih.CreatedAt  >= DATEADD(DAY, -180, GETUTCDATE())
+              AND  NOT EXISTS (
+                       SELECT 1
+                       FROM   AllergenDiscovery ad
+                       WHERE  ad.ProductId   = i.ProductId
+                         AND  ad.HouseholdId = i.HouseholdId
+                   )
+            GROUP  BY i.ProductId
+            HAVING COUNT(*) >= @MinUsageCount";
+
+        await using SqlConnection conn = new(_connectionString);
+        await conn.OpenAsync(ct);
+        await using SqlCommand cmd = new(sql, conn);
+        cmd.Parameters.Add(new SqlParameter("@HouseholdId",   SqlDbType.UniqueIdentifier) { Value = householdId });
+        cmd.Parameters.Add(new SqlParameter("@MinUsageCount", SqlDbType.Int)              { Value = minUsageCount });
+
+        List<SafeProductUsageResult> results = new();
+        await using SqlDataReader reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(new SafeProductUsageResult
+            {
+                ProductId  = reader.GetGuid(0),
+                UsageCount = reader.GetInt32(1)
+            });
+        }
+
+        return results;
+    }
+
+    #endregion
+
+    #region Pantry Discovery Support
+
+    public async Task<List<PantryIngredientItem>> GetPantryIngredientNamesAsync(
+        Guid householdId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            SELECT
+                MIN(ii.Id)                                                AS InventoryItemId,
+                LOWER(TRIM(COALESCE(p.Name, ii.CustomName, '')))          AS NormalizedName,
+                COALESCE(MIN(p.Name), MIN(ii.CustomName), '')             AS DisplayName
+            FROM InventoryItem ii
+            LEFT JOIN Product p ON p.Id = ii.ProductId
+            WHERE ii.HouseholdId = @HouseholdId
+              AND ii.IsDeleted   = 0
+              AND ii.Quantity    > 0
+              AND (ii.ExpirationDate IS NULL OR ii.ExpirationDate >= CAST(GETUTCDATE() AS DATE))
+              AND COALESCE(p.Name, ii.CustomName, '') <> ''
+            GROUP BY LOWER(TRIM(COALESCE(p.Name, ii.CustomName, '')))
+            ORDER BY NormalizedName";
+
+        await using SqlConnection conn = new(_connectionString);
+        await conn.OpenAsync(ct);
+        await using SqlCommand cmd = new(sql, conn);
+        cmd.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
+
+        List<PantryIngredientItem> results = new();
+        await using SqlDataReader reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            results.Add(new PantryIngredientItem
+            {
+                InventoryItemId = reader.GetGuid(0),
+                NormalizedName  = reader.GetString(1),
+                DisplayName     = reader.GetString(2)
+            });
+        }
+
+        return results;
     }
 
     #endregion

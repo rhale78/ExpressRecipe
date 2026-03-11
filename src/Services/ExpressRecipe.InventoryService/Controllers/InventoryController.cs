@@ -441,6 +441,54 @@ public class InventoryController : ControllerBase
     }
 
     /// <summary>
+    /// Internal: returns a lightweight expiring-item summary for a household.
+    /// Used by ExpirationQueueGenerator to decide which work-queue items to create.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpGet("expiring-summary")]
+    public async Task<IActionResult> GetExpiringSummary(
+        [FromQuery] Guid householdId,
+        [FromQuery] int daysAhead = 7,
+        CancellationToken ct = default)
+    {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+        }
+
+        try
+        {
+            if (householdId == Guid.Empty)
+                return BadRequest(new { message = "householdId is required" });
+
+            var items = await _repository.GetHouseholdExpiringItemsAsync(householdId, daysAhead);
+
+            var expiring = items
+                .Select(i => new
+                {
+                    i.Id,
+                    ItemName = i.CustomName ?? i.ProductName ?? "Unknown",
+                    i.HouseholdId,
+                    i.StorageLocationId,
+                    i.StorageLocationName,
+                    i.ExpirationDate,
+                    DaysUntilExpiry = (int)Math.Ceiling((i.ExpirationDate!.Value - DateTime.UtcNow).TotalDays)
+                })
+                .ToList();
+
+            return Ok(new { HouseholdId = householdId, DaysAhead = daysAhead, ExpiringItems = expiring });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving expiring-summary for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving expiring summary" });
+        }
+    }
+
+    /// <summary>
     /// Get inventory report with statistics
     /// </summary>
     [HttpGet("report")]
@@ -458,6 +506,39 @@ public class InventoryController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving inventory report");
             return StatusCode(500, new { message = "An error occurred while retrieving the inventory report" });
+        }
+    }
+
+    /// <summary>
+    /// Get pantry ingredient names for a household — used by PantryDiscoveryService (service-to-service).
+    /// Returns non-expired, non-zero-quantity items with normalised and display names.
+    /// Protected by an API key header (X-Internal-Api-Key) when InternalApi:Key is configured.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpGet("pantry-ingredients/{householdId}")]
+    public async Task<IActionResult> GetPantryIngredients(Guid householdId, CancellationToken ct)
+    {
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
+        try
+        {
+            _logger.LogInformation("Getting pantry ingredients for household {HouseholdId}", householdId);
+            List<PantryIngredientItem> items =
+                await _repository.GetPantryIngredientNamesAsync(householdId, ct);
+            return Ok(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving pantry ingredients for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred while retrieving pantry ingredients" });
         }
     }
 
@@ -510,6 +591,40 @@ public class InventoryController : ControllerBase
             if (a.Length < b.Length) { a = padded; } else { b = padded; }
         }
         return CryptographicOperations.FixedTimeEquals(a, b);
+    }
+
+    /// <summary>
+    /// Get products safely consumed by this household in the last 180 days (service-to-service).
+    /// Used by the allergy differential analysis engine.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpGet("safe-product-history/{householdId}")]
+    public async Task<IActionResult> GetSafeProductHistory(
+        Guid householdId, [FromQuery] int minCount = 3, CancellationToken ct = default)
+    {
+        // Validate service-to-service API key when one is configured.
+        string? configuredKey = _configuration?["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
+        try
+        {
+            List<SafeProductUsageResult> results =
+                await _repository.GetSafeProductHistoryAsync(householdId, minCount, ct);
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error fetching safe product history for household {HouseholdId}", householdId);
+            return StatusCode(500, new { message = "An error occurred" });
+        }
     }
 
     /// <summary>

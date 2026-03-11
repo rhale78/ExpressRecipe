@@ -1,10 +1,12 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Services.FeatureGates;
 using ExpressRecipe.UserService.Data;
 using ExpressRecipe.UserService.Services;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.IdentityModel.Tokens;
 using RabbitMQ.Client;
 using System.Text;
@@ -72,52 +74,92 @@ builder.Services.AddScoped<ISubscriptionRepository>(sp => new SubscriptionReposi
 builder.Services.AddScoped<IActivityRepository>(sp => new ActivityRepository(connectionString));
 builder.Services.AddScoped<IUserSettingsRepository>(sp => new UserSettingsRepository(connectionString));
 builder.Services.AddScoped<IReferralRepository>(sp => new ReferralRepository(connectionString));
+builder.Services.AddScoped<IStripeEventLogRepository>(sp => new StripeEventLogRepository(connectionString));
+builder.Services.AddScoped<IGdprRepository>(sp => new GdprRepository(connectionString));
+builder.Services.AddScoped<IAuditRepository>(sp => new AuditRepository(connectionString));
 
-// Payment service — use mock in Development; a real Stripe-backed implementation should be
-// registered here for Staging and Production (replace with StripePaymentService).
-if (builder.Environment.IsDevelopment())
+// Register payment service — MockPaymentService in local mode, StripePaymentService otherwise
+if (builder.Configuration.GetValue<bool>("APP_LOCAL_MODE") || builder.Environment.IsDevelopment())
 {
     builder.Services.AddSingleton<ExpressRecipe.UserService.Services.IPaymentService,
         ExpressRecipe.UserService.Services.MockPaymentService>();
 }
 else
 {
-    // Placeholder: wire up the real Stripe implementation once available.
-    builder.Services.AddSingleton<ExpressRecipe.UserService.Services.IPaymentService,
-        ExpressRecipe.UserService.Services.MockPaymentService>();
+    builder.Services.AddScoped<ExpressRecipe.UserService.Services.IPaymentService,
+        ExpressRecipe.UserService.Services.StripePaymentService>();
 }
+
+// Register the Stripe event constructor delegate used by StripeWebhookController
+builder.Services.AddSingleton<Func<string, string, string, Stripe.Event>>(
+    (payload, sig, secret) => Stripe.EventUtility.ConstructEvent(payload, sig, secret));
 
 // Register allergy incident engine repositories and analyzer
 builder.Services.AddScoped<IAllergyIncidentRepository>(sp => new AllergyIncidentRepository(connectionString));
 builder.Services.AddScoped<ExpressRecipe.UserService.Services.AllergyDifferentialAnalyzer>();
 
+// HybridCache (L1 in-memory + L2 Redis) for ingredient caching
+builder.Services.AddHybridCache();
+
 // Feature flag services — override the HttpFeatureFlagService registered by ServiceDefaults
-builder.Services.AddScoped<IFeatureFlagRepository>(sp => new FeatureFlagRepository(connectionString));
-builder.Services.AddScoped<FeatureFlagService>();
+builder.Services.AddScoped<ExpressRecipe.UserService.Data.IFeatureFlagRepository>(
+    sp => new ExpressRecipe.UserService.Data.FeatureFlagRepository(connectionString));
+builder.Services.AddScoped<ExpressRecipe.UserService.Services.FeatureFlagService>();
 // Replace the HTTP proxy with the direct DB-backed implementation
-builder.Services.AddScoped<IFeatureFlagService>(sp => sp.GetRequiredService<FeatureFlagService>());
+builder.Services.AddScoped<ExpressRecipe.Shared.Services.FeatureGates.IFeatureFlagService>(
+    sp => sp.GetRequiredService<ExpressRecipe.UserService.Services.FeatureFlagService>());
+
+// Optional messaging (RabbitMQ) — gracefully disabled when connection string is absent
+bool messagingEnabled = !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("messaging"));
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+}
+else
+{
+    builder.Services.AddSingleton<ExpressRecipe.Messaging.Core.Abstractions.IMessageBus,
+        ExpressRecipe.UserService.Services.NoOpMessageBus>();
+}
 
 // Register named HTTP clients for service-to-service calls
 builder.Services.AddHttpClient("AuthService", client =>
 {
-    var authServiceUrl = builder.Configuration["Services:AuthService"] ?? "http://authservice";
+    string authServiceUrl = builder.Configuration["Services:AuthService"] ?? "http://authservice";
     client.BaseAddress = new Uri(authServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
 });
-builder.Services.AddHttpClient("NotificationService", client =>
+builder.Services.AddHttpClient("NotificationService", (sp, client) =>
 {
-    var notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
+    string notificationServiceUrl = builder.Configuration["Services:NotificationService"] ?? "http://notificationservice";
     client.BaseAddress = new Uri(notificationServiceUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
     string? apiKey = builder.Configuration["InternalApi:Key"];
     if (!string.IsNullOrEmpty(apiKey))
         client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
 });
+builder.Services.AddHttpClient("ProductService", client =>
+{
+    string productServiceUrl = builder.Configuration["Services:ProductService"] ?? "http://productservice";
+    client.BaseAddress = new Uri(productServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddHttpClient("InventoryService", client =>
+{
+    string inventoryServiceUrl = builder.Configuration["Services:InventoryService"] ?? "http://inventoryservice";
+    client.BaseAddress = new Uri(inventoryServiceUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+// Allergy analysis engine services
+builder.Services.AddSingleton<IAllergyAnalysisQueue, AllergyAnalysisQueue>();
+builder.Services.AddScoped<IIngredientFetchService, IngredientFetchService>();
+builder.Services.AddScoped<IAllergyDifferentialAnalyzer, AllergyDifferentialAnalyzer>();
 
 // Register background services
-builder.Services.AddHostedService<ExpressRecipe.UserService.Services.SubscriptionRenewalService>();
-builder.Services.AddHostedService<ExpressRecipe.UserService.Services.ScheduledReportsService>();
-builder.Services.AddHostedService<ExpressRecipe.UserService.Services.PointsManagementService>();
+builder.Services.AddHostedService<SubscriptionRenewalService>();
+builder.Services.AddHostedService<ScheduledReportsService>();
+builder.Services.AddHostedService<PointsManagementService>();
+builder.Services.AddHostedService<AllergyAnalysisWorker>();
 
 // Conditionally register RabbitMQ for PointsEarnedSubscriber
 var rabbitEnabled = builder.Configuration.GetValue<bool?>("RabbitMQ:Enabled")
@@ -196,6 +238,8 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+// Block mutating operations on impersonation (read-only) tokens
+app.UseReadOnlyImpersonation();
 
 // Use activity tracking middleware (must be after authentication)
 app.UseMiddleware<ExpressRecipe.UserService.Middleware.ActivityTrackingMiddleware>();

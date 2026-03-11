@@ -62,3 +62,16 @@ public record StoreAddedEvent(
     string? State,
     string? Chain,
     DateTimeOffset OccurredAt) : IMessage;
+
+/// <summary>
+/// Emitted when a significant price drop is detected for a product that households are tracking.
+/// </summary>
+public record PriceDropEvent(
+    Guid ProductId,
+    string ProductName,
+    Guid StoreId,
+    string StoreName,
+    decimal OldPrice,
+    decimal NewPrice,
+    Guid[] HouseholdIds,
+    DateTimeOffset OccurredAt) : IMessage;

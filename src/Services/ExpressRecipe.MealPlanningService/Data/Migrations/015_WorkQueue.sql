@@ -1,0 +1,4 @@
+-- Migration: 015_WorkQueue (superseded)
+-- The PlannedMeal CookedAt/CookedStatus columns are added by 015_PlannedMealCookStatus.sql
+-- (with IF NOT EXISTS guards). The WorkQueueItem table is created by 016_WorkQueue.sql
+-- which has the authoritative schema. This file intentionally contains no DDL.

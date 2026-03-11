@@ -433,6 +433,80 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
     public async Task<List<RecipeDto>> GetRecipesByCuisineAsync(string cuisine, int limit = 50) { return new List<RecipeDto>(); }
     public async Task<List<RecipeDto>> GetRecipesByTagAsync(string tag, int limit = 50) { return new List<RecipeDto>(); }
     public async Task<List<RecipeDto>> GetRecipesByIngredientAsync(string ingredient, int limit = 50) { return new List<RecipeDto>(); }
+
+    public async Task<List<RecipeDto>> GetRecipesWithIngredientsAsync(IReadOnlyList<string> ingredientNames, int limit = 20)
+    {
+        if (ingredientNames == null || ingredientNames.Count == 0)
+            return new List<RecipeDto>();
+
+        // Build a parameterized IN-clause: @ing0, @ing1, … are sequential integer-named parameters
+        // whose values are the user-supplied ingredient names. The only string interpolated into the
+        // SQL is the comma-separated list of these parameter *names* (derived from integer indices),
+        // never the user data itself — so this is not a SQL injection risk.
+        var paramNames = ingredientNames
+            .Select((_, i) => $"@ing{i}")
+            .ToList();
+
+        var inList = string.Join(", ", paramNames);
+
+        // Return recipes where every required (non-optional) ingredient name
+        // matches one of the supplied names (case-insensitive).
+        // Recipes with no required ingredients (all optional) are excluded.
+        var sql = $@"
+            SELECT r.Id, r.Name, r.Description, r.Category, r.Cuisine,
+                   r.DifficultyLevel, r.PrepTimeMinutes, r.CookTimeMinutes, r.TotalTimeMinutes,
+                   r.Servings, r.ImageUrl, r.VideoUrl, r.Instructions, r.Notes,
+                   r.IsPublic, r.IsApproved, r.SourceUrl, r.AuthorId, r.CreatedAt, r.UpdatedAt,
+                   r.EstimatedCostPerServing, r.CostLastCalculatedAt
+            FROM Recipe r
+            WHERE r.IsDeleted = 0
+              AND r.IsApproved = 1
+              AND EXISTS (
+                  SELECT 1 FROM RecipeIngredient ri
+                  WHERE ri.RecipeId = r.Id AND ri.IsDeleted = 0 AND ri.IsOptional = 0
+              )
+              AND NOT EXISTS (
+                  -- no required ingredient that is NOT in the supplied list
+                  SELECT 1 FROM RecipeIngredient ri2
+                  WHERE ri2.RecipeId = r.Id
+                    AND ri2.IsDeleted = 0
+                    AND ri2.IsOptional = 0
+                    AND LOWER(ri2.IngredientName) NOT IN ({inList})
+              )
+            ORDER BY r.Name
+            OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
+
+        var parameters = ingredientNames
+            .Select((name, i) => new SqlParameter($"@ing{i}", name.ToLowerInvariant()))
+            .Append(new SqlParameter("@Limit", limit))
+            .ToArray();
+
+        return await ExecuteReaderAsync(sql, reader => new RecipeDto
+        {
+            Id = reader.GetGuid(reader.GetOrdinal("Id")),
+            Name = reader.GetString(reader.GetOrdinal("Name")),
+            Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Category = reader.IsDBNull(reader.GetOrdinal("Category")) ? null : reader.GetString(reader.GetOrdinal("Category")),
+            Cuisine = reader.IsDBNull(reader.GetOrdinal("Cuisine")) ? null : reader.GetString(reader.GetOrdinal("Cuisine")),
+            DifficultyLevel = reader.IsDBNull(reader.GetOrdinal("DifficultyLevel")) ? null : reader.GetString(reader.GetOrdinal("DifficultyLevel")),
+            PrepTimeMinutes = reader.IsDBNull(reader.GetOrdinal("PrepTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("PrepTimeMinutes")),
+            CookTimeMinutes = reader.IsDBNull(reader.GetOrdinal("CookTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("CookTimeMinutes")),
+            TotalTimeMinutes = reader.IsDBNull(reader.GetOrdinal("TotalTimeMinutes")) ? null : reader.GetInt32(reader.GetOrdinal("TotalTimeMinutes")),
+            Servings = reader.IsDBNull(reader.GetOrdinal("Servings")) ? null : reader.GetInt32(reader.GetOrdinal("Servings")),
+            ImageUrl = reader.IsDBNull(reader.GetOrdinal("ImageUrl")) ? null : reader.GetString(reader.GetOrdinal("ImageUrl")),
+            VideoUrl = reader.IsDBNull(reader.GetOrdinal("VideoUrl")) ? null : reader.GetString(reader.GetOrdinal("VideoUrl")),
+            Instructions = reader.IsDBNull(reader.GetOrdinal("Instructions")) ? null : reader.GetString(reader.GetOrdinal("Instructions")),
+            Notes = reader.IsDBNull(reader.GetOrdinal("Notes")) ? null : reader.GetString(reader.GetOrdinal("Notes")),
+            IsPublic = reader.GetBoolean(reader.GetOrdinal("IsPublic")),
+            IsApproved = reader.GetBoolean(reader.GetOrdinal("IsApproved")),
+            SourceUrl = reader.IsDBNull(reader.GetOrdinal("SourceUrl")) ? null : reader.GetString(reader.GetOrdinal("SourceUrl")),
+            AuthorId = reader.GetGuid(reader.GetOrdinal("AuthorId")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.IsDBNull(reader.GetOrdinal("UpdatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            EstimatedCostPerServing = reader.IsDBNull(reader.GetOrdinal("EstimatedCostPerServing")) ? null : reader.GetDecimal(reader.GetOrdinal("EstimatedCostPerServing")),
+            CostLastCalculatedAt = reader.IsDBNull(reader.GetOrdinal("CostLastCalculatedAt")) ? null : reader.GetDateTime(reader.GetOrdinal("CostLastCalculatedAt"))
+        }, parameters);
+    }
     public async Task<List<string>> GetRecipeCategoriesAsync(Guid recipeId) { return new List<string>(); }
     public async Task<List<string>> GetRecipeTagsAsync(Guid recipeId) { return new List<string>(); }
     public async Task<List<RecipeIngredientDto>> GetIngredientsAsync(Guid recipeId) { return new List<RecipeIngredientDto>(); }
@@ -1030,5 +1104,111 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 UpdatedAt = reader.IsDBNull(updOrd) ? null : reader.GetDateTime(updOrd)
             };
         }, new SqlParameter("@HouseholdId", householdId));
+    }
+
+    public async Task<List<RecipeIngredientSummary>> GetRecipesWithIngredientSummaryAsync(
+        int limit = 500, CancellationToken ct = default)
+    {
+        // Fetch approved, non-deleted recipes with at least one ingredient.
+        // We do two passes: (1) fetch recipes, (2) fetch all ingredient rows in a single query
+        // keyed by RecipeId to avoid N+1 queries.
+        const string recipesSql = @"
+            SELECT TOP (@Limit) r.Id, r.Name, r.ImageUrl,
+                   ISNULL(r.CookTimeMinutes, 0) AS CookTimeMinutes,
+                   ISNULL(ar.AvgRating, 0)      AS AverageRating
+            FROM Recipe r
+            OUTER APPLY (
+                SELECT AVG(CAST(rv.Rating AS DECIMAL(4,2))) AS AvgRating
+                FROM RecipeRating rv
+                WHERE rv.RecipeId = r.Id
+            ) ar
+            WHERE r.IsDeleted  = 0
+              AND r.IsApproved = 1
+              AND r.IsPublic   = 1
+            ORDER BY r.CreatedAt DESC";
+
+        List<RecipeIngredientSummary> recipes;
+
+        using (Microsoft.Data.SqlClient.SqlConnection conn = new(ConnectionString))
+        {
+            await conn.OpenAsync(ct);
+            using Microsoft.Data.SqlClient.SqlCommand cmd = new(recipesSql, conn);
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Limit", System.Data.SqlDbType.Int) { Value = limit });
+
+            recipes = new List<RecipeIngredientSummary>();
+            using Microsoft.Data.SqlClient.SqlDataReader r = await cmd.ExecuteReaderAsync(ct);
+            int imgOrd     = r.GetOrdinal("ImageUrl");
+            while (await r.ReadAsync(ct))
+            {
+                recipes.Add(new RecipeIngredientSummary
+                {
+                    RecipeId        = r.GetGuid(0),
+                    RecipeName      = r.GetString(1),
+                    ImageUrl        = r.IsDBNull(imgOrd) ? null : r.GetString(imgOrd),
+                    CookTimeMinutes = r.GetInt32(3),
+                    AverageRating   = r.GetDecimal(4)
+                });
+            }
+        }
+
+        if (recipes.Count == 0) { return recipes; }
+
+        // Build the ingredients query using the recipe-id set
+        List<Guid> ids = recipes.Select(r2 => r2.RecipeId).ToList();
+        System.Text.StringBuilder sb = new(@"
+            SELECT ri.RecipeId,
+                   LOWER(TRIM(ISNULL(ri.IngredientName, ''))) AS NormalizedName,
+                   ISNULL(ri.IngredientName, '')              AS DisplayName
+            FROM RecipeIngredient ri
+            WHERE ri.IsDeleted = 0
+              AND ri.RecipeId IN (");
+        for (int i = 0; i < ids.Count; i++)
+        {
+            if (i > 0) { sb.Append(','); }
+            sb.Append($"@Id{i}");
+        }
+        sb.Append(") ORDER BY ri.RecipeId, ri.IngredientName");
+
+        Dictionary<Guid, List<IngredientRef>> ingredientMap = new();
+        using (Microsoft.Data.SqlClient.SqlConnection conn2 = new(ConnectionString))
+        {
+            await conn2.OpenAsync(ct);
+            using Microsoft.Data.SqlClient.SqlCommand cmd2 = new(sb.ToString(), conn2);
+            for (int i = 0; i < ids.Count; i++)
+            {
+                cmd2.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter($"@Id{i}", System.Data.SqlDbType.UniqueIdentifier) { Value = ids[i] });
+            }
+
+            using Microsoft.Data.SqlClient.SqlDataReader rdr = await cmd2.ExecuteReaderAsync(ct);
+            while (await rdr.ReadAsync(ct))
+            {
+                Guid recipeId = rdr.GetGuid(0);
+                string normalized = rdr.GetString(1);
+                string display    = rdr.GetString(2);
+                if (!ingredientMap.TryGetValue(recipeId, out List<IngredientRef>? list))
+                {
+                    list = new List<IngredientRef>();
+                    ingredientMap[recipeId] = list;
+                }
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    list.Add(new IngredientRef { NormalizedName = normalized, DisplayName = display });
+                }
+            }
+        }
+
+        // Attach ingredient lists and filter out recipes with no ingredients
+        List<RecipeIngredientSummary> result = new();
+        foreach (RecipeIngredientSummary recipe in recipes)
+        {
+            if (!ingredientMap.TryGetValue(recipe.RecipeId, out List<IngredientRef>? ingredientRefs) ||
+                ingredientRefs.Count == 0)
+            {
+                continue;
+            }
+            result.Add(recipe with { Ingredients = ingredientRefs });
+        }
+
+        return result;
     }
 }

@@ -480,7 +480,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
     public async Task<AllergyIncidentDto?> GetIncidentByIdAsync(Guid id)
     {
         const string sql = @"
-            SELECT ai.Id, ai.UserId, ai.UserAllergenId, ai.UserIngredientAllergyId,
+            SELECT ai.Id, ai.UserId, ai.HouseholdId, ai.UserAllergenId, ai.UserIngredientAllergyId,
                    ai.IncidentDate, ai.TriggerSource, ai.TriggerProductId,
                    ai.TriggerRecipeId, ai.TriggerMenuItemId, ai.Symptoms,
                    ai.SeverityLevel, ai.EpiPenUsed, ai.HospitalVisit,
@@ -494,6 +494,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
             {
                 Id = GetGuid(reader, "Id"),
                 UserId = GetGuid(reader, "UserId"),
+                HouseholdId = GetGuidNullable(reader, "HouseholdId"),
                 UserAllergenId = GetGuidNullable(reader, "UserAllergenId"),
                 UserIngredientAllergyId = GetGuidNullable(reader, "UserIngredientAllergyId"),
                 IncidentDate = GetNullableDateTime(reader, "IncidentDate") ?? DateTime.UtcNow,
@@ -526,12 +527,12 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
         var id = Guid.NewGuid();
 
         const string sql = @"
-            INSERT INTO AllergyIncident (Id, UserId, UserAllergenId, UserIngredientAllergyId,
+            INSERT INTO AllergyIncident (Id, UserId, HouseholdId, UserAllergenId, UserIngredientAllergyId,
                                         IncidentDate, TriggerSource, TriggerProductId,
                                         TriggerRecipeId, TriggerMenuItemId, Symptoms,
                                         SeverityLevel, EpiPenUsed, HospitalVisit,
                                         Treatment, Notes, CreatedAt)
-            VALUES (@Id, @UserId, @UserAllergenId, @UserIngredientAllergyId,
+            VALUES (@Id, @UserId, @HouseholdId, @UserAllergenId, @UserIngredientAllergyId,
                     @IncidentDate, @TriggerSource, @TriggerProductId,
                     @TriggerRecipeId, @TriggerMenuItemId, @Symptoms,
                     @SeverityLevel, @EpiPenUsed, @HospitalVisit,
@@ -540,6 +541,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
         await ExecuteNonQueryAsync(sql,
             new SqlParameter("@Id", id),
             new SqlParameter("@UserId", userId),
+            new SqlParameter("@HouseholdId", (object?)request.HouseholdId ?? DBNull.Value),
             new SqlParameter("@UserAllergenId", (object?)request.UserAllergenId ?? DBNull.Value),
             new SqlParameter("@UserIngredientAllergyId", (object?)request.UserIngredientAllergyId ?? DBNull.Value),
             new SqlParameter("@IncidentDate", request.IncidentDate),

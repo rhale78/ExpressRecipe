@@ -463,4 +463,64 @@ public class SubscriptionRepository : SqlHelper, ISubscriptionRepository
     }
 
     #endregion
+
+    #region Stripe Webhook Helpers
+
+    public async Task UpdateUserSubscriptionAsync(Guid userId, string tierName, string stripeSubscriptionId,
+        DateTime currentPeriodEnd, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE UserProfile
+            SET SubscriptionTier       = @TierName,
+                StripeSubscriptionId   = @StripeSubscriptionId,
+                SubscriptionExpiresAt  = @CurrentPeriodEnd,
+                -- Clear cancellation flag: handles both new subscriptions and reactivations
+                SubscriptionCancelledAt = NULL,
+                UpdatedAt              = GETUTCDATE()
+            WHERE UserId = @UserId AND IsDeleted = 0";
+
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@TierName", tierName),
+            CreateParameter("@StripeSubscriptionId", stripeSubscriptionId),
+            CreateParameter("@CurrentPeriodEnd", currentPeriodEnd));
+    }
+
+    public async Task DowngradeToFreeAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+            UPDATE UserProfile
+            SET SubscriptionTier        = 'Free',
+                StripeSubscriptionId    = NULL,
+                SubscriptionExpiresAt   = NULL,
+                SubscriptionCancelledAt = GETUTCDATE(),
+                UpdatedAt               = GETUTCDATE()
+            WHERE UserId = @UserId AND IsDeleted = 0";
+
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@UserId", userId));
+    }
+
+    public async Task<Guid> GrantCreditAsync(Guid userId, string tier, int durationDays,
+        string reason, Guid grantedBy, CancellationToken ct = default)
+    {
+        var creditId = Guid.NewGuid();
+        const string sql = @"
+            INSERT INTO SubscriptionCredit
+                (Id, UserId, Tier, DurationDays, Reason, GrantedBy, GrantedAt)
+            VALUES
+                (@Id, @UserId, @Tier, @DurationDays, @Reason, @GrantedBy, GETUTCDATE())";
+
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@Id",          creditId),
+            CreateParameter("@UserId",      userId),
+            CreateParameter("@Tier",        tier),
+            CreateParameter("@DurationDays", durationDays),
+            CreateParameter("@Reason",      reason),
+            CreateParameter("@GrantedBy",   grantedBy));
+
+        return creditId;
+    }
+
+    #endregion
 }

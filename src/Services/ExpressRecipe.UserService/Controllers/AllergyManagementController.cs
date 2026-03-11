@@ -3,6 +3,8 @@ using ExpressRecipe.UserService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ExpressRecipe.UserService.Controllers;
 
@@ -13,13 +15,16 @@ public class AllergyManagementController : ControllerBase
 {
     private readonly IEnhancedAllergenRepository _allergenRepository;
     private readonly ILogger<AllergyManagementController> _logger;
+    private readonly IConfiguration _configuration;
 
     public AllergyManagementController(
         IEnhancedAllergenRepository allergenRepository,
-        ILogger<AllergyManagementController> logger)
+        ILogger<AllergyManagementController> logger,
+        IConfiguration configuration)
     {
         _allergenRepository = allergenRepository;
         _logger = logger;
+        _configuration = configuration;
     }
 
     private Guid? GetCurrentUserId()
@@ -305,5 +310,69 @@ public class AllergyManagementController : ControllerBase
             _logger.LogError(ex, "Error creating allergy incident");
             return StatusCode(500, new { message = "An error occurred while creating the incident record" });
         }
+    }
+
+    /// <summary>
+    /// Internal service-to-service endpoint: returns allergen names (allergens + ingredient allergies)
+    /// for a given user. Used by PantryDiscoveryService for dietary conflict filtering.
+    /// Protected by X-Internal-Api-Key header when InternalApi:Key is configured.
+    /// </summary>
+    [AllowAnonymous]
+    [HttpGet("internal/{userId:guid}/allergen-names")]
+    public async Task<ActionResult<List<string>>> GetAllergenNamesForDiscovery(Guid userId, CancellationToken ct)
+    {
+        string? configuredKey = _configuration["InternalApi:Key"];
+        if (!string.IsNullOrEmpty(configuredKey))
+        {
+            string? providedKey = Request.Headers["X-Internal-Api-Key"].FirstOrDefault();
+            if (!IsValidApiKey(providedKey, configuredKey))
+            {
+                return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
+            }
+        }
+
+        try
+        {
+            List<UserAllergenDto> allergens = await _allergenRepository.GetUserAllergensAsync(userId, includeReactions: false);
+            List<UserIngredientAllergyDto> ingredientAllergies = await _allergenRepository.GetUserIngredientAllergiesAsync(userId, includeReactions: false);
+
+            List<string> names = new();
+            foreach (UserAllergenDto a in allergens)
+            {
+                if (!string.IsNullOrWhiteSpace(a.AllergenName))
+                {
+                    names.Add(a.AllergenName);
+                }
+            }
+            foreach (UserIngredientAllergyDto ia in ingredientAllergies)
+            {
+                if (!string.IsNullOrWhiteSpace(ia.IngredientName))
+                {
+                    names.Add(ia.IngredientName);
+                }
+            }
+
+            return Ok(names.Distinct(StringComparer.OrdinalIgnoreCase).ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving allergen names for user {UserId}", userId);
+            return StatusCode(500, new { message = "An error occurred while retrieving allergen names" });
+        }
+    }
+
+    /// <summary>Constant-time comparison to guard against timing attacks when comparing API keys.</summary>
+    private static bool IsValidApiKey(string? provided, string configured)
+    {
+        if (provided is null) { return false; }
+        byte[] a = Encoding.UTF8.GetBytes(provided);
+        byte[] b = Encoding.UTF8.GetBytes(configured);
+        if (a.Length != b.Length)
+        {
+            byte[] padded = new byte[Math.Max(a.Length, b.Length)];
+            Buffer.BlockCopy(a.Length < b.Length ? a : b, 0, padded, 0, Math.Min(a.Length, b.Length));
+            if (a.Length < b.Length) { a = padded; } else { b = padded; }
+        }
+        return CryptographicOperations.FixedTimeEquals(a, b);
     }
 }

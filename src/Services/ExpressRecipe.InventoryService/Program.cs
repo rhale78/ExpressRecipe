@@ -70,6 +70,9 @@ builder.Services.AddScoped<ILivestockRepository>(sp =>
 builder.Services.AddScoped<IInventorySaleRepository>(sp =>
     new InventorySaleRepository(connectionString, sp.GetRequiredService<ILogger<InventorySaleRepository>>()));
 
+// Register work queue repository (WQ1)
+builder.Services.AddScoped<IWorkQueueRepository>(_ => new WorkQueueRepository(connectionString));
+
 // Register seasonal produce service (singleton - pure in-memory calendar)
 builder.Services.AddSingleton<ExpressRecipe.MealPlanningService.Services.ISeasonalProduceService,
     ExpressRecipe.MealPlanningService.Services.SeasonalProduceService>();
@@ -123,12 +126,23 @@ builder.Services.AddHttpClient("recipeservice", client =>
     }
 });
 
+builder.Services.AddHttpClient("MealPlanningService", client =>
+{
+    string? baseUrl = builder.Configuration["Services:MealPlanningService"];
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
+
 // Register background workers
 builder.Services.AddHostedService<ExpirationAlertWorker>();
 builder.Services.AddHostedService<LowStockMonitorWorker>();
 builder.Services.AddHostedService<PatternAnalysisWorker>();
 builder.Services.AddHostedService<StorageReminderWorker>();
 builder.Services.AddHostedService<GardenRipeCheckWorker>();
+builder.Services.AddHostedService<ExpirationQueueGenerator>();
+builder.Services.AddHostedService<LowStockQueueGenerator>();
 
 // Register messaging and subscribers (optional — requires RabbitMQ)
 bool messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);

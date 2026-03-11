@@ -143,9 +143,13 @@ builder.Services.AddHostedService(sp =>
 builder.Services.AddScoped<IHouseholdTaskRepository>(_ =>
     new HouseholdTaskRepository(connectionString));
 
+builder.Services.AddScoped<IWorkQueueRepository>(_ =>
+    new WorkQueueRepository(connectionString));
+
 // Register task services
 builder.Services.AddScoped<IThawTaskGeneratorService, ThawTaskGeneratorService>();
 builder.Services.AddScoped<IHouseholdMemberQuery, HouseholdMemberHttpQuery>();
+builder.Services.AddScoped<IPantryDiscoveryService, PantryDiscoveryService>();
 
 // Register HTTP clients for inter-service calls
 builder.Services.AddHttpClient("InventoryService", (sp, client) =>
@@ -155,6 +159,20 @@ builder.Services.AddHttpClient("InventoryService", (sp, client) =>
     string? apiKey = builder.Configuration["InternalApi:Key"];
     if (!string.IsNullOrEmpty(apiKey))
         client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
+});
+
+builder.Services.AddHttpClient("UserService", (sp, client) =>
+{
+    client.BaseAddress = new Uri(
+        builder.Configuration["services:userservice:https:0"] ??
+        builder.Configuration["services:userservice:http:0"] ??
+        builder.Configuration["Services:UserService"] ??
+        "http://userservice");
+    string? apiKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrEmpty(apiKey))
+    {
+        client.DefaultRequestHeaders.Add("X-Internal-Api-Key", apiKey);
+    }
 });
 
 builder.Services.AddHttpClient("NotificationService", (sp, client) =>
@@ -176,6 +194,15 @@ builder.Services.AddSingleton<ICookingTimerRepository>(
 
 // Register background workers
 builder.Services.AddHostedService<CookingTimerWorker>();
+
+// Work Queue
+builder.Services.AddHostedService<WorkQueueCleanupWorker>();
+
+// RecipeCookedEventSubscriber — only register if messaging is enabled
+if (messagingEnabled)
+{
+    builder.Services.AddHostedService<RecipeCookedEventSubscriber>();
+}
 
 // Add controllers
 builder.Services.AddControllers();

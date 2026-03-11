@@ -29,4 +29,10 @@ public interface IPaymentService
     /// Cancels an active Stripe subscription at the end of the current period.
     /// </summary>
     Task CancelSubscriptionAsync(string stripeSubscriptionId, CancellationToken ct = default);
+
+    /// <summary>Returns true if a Stripe event with this ID has already been processed (idempotency).</summary>
+    Task<bool> EventAlreadyProcessedAsync(string stripeEventId, CancellationToken ct = default);
+
+    /// <summary>Records a processed Stripe event to prevent duplicate processing.</summary>
+    Task MarkEventProcessedAsync(string stripeEventId, string eventType, CancellationToken ct = default);
 }

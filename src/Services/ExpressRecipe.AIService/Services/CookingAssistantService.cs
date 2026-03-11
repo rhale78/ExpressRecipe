@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ExpressRecipe.AIService.Data;
+using ExpressRecipe.AIService.Providers;
 
 namespace ExpressRecipe.AIService.Services;
 

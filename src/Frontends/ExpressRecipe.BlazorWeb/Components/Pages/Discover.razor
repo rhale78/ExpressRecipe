@@ -1,0 +1,485 @@
+@page "/discover"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Models.Discovery
+@using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.Client.Shared.Services
+@inject IPantryDiscoveryApiClient DiscoveryApi
+@inject IShoppingListApiClient ShoppingApi
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>What Can I Make? - ExpressRecipe</PageTitle>
+
+<div class="discover-container">
+    <div class="discover-header">
+        <h1>🥘 What Can I Make Right Now?</h1>
+        @if (_result is not null)
+        {
+            <p class="discover-subtitle">
+                Your pantry has <strong>@_result.TotalPantryIngredients</strong> ingredients
+                &bull; Last updated <span title="@_result.CachedAt.ToString("f")">@FormatTimeAgo(_result.CachedAt)</span>
+            </p>
+        }
+    </div>
+
+    <!-- Controls bar -->
+    <div class="discover-controls">
+        <div class="control-group">
+            <label for="matchSlider">
+                Match: <strong>@(_minMatch.ToString("P0"))</strong>
+            </label>
+            <input id="matchSlider" type="range" min="40" max="100" step="5"
+                   value="@((int)(_minMatch * 100))"
+                   @onchange="HandleMatchSliderChange"
+                   class="match-slider" />
+            <div class="slider-labels">
+                <span>Allow missing</span>
+                <span>Exact pantry</span>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label for="sortBy">Sort by</label>
+            <select id="sortBy" class="form-select" @bind="_sortBy" @bind:after="LoadResults">
+                <option value="match">Match %</option>
+                <option value="rating">Rating</option>
+                <option value="cookTime">Quickest</option>
+                <option value="added">Newest</option>
+            </select>
+        </div>
+
+        <div class="control-group diet-toggle">
+            <label>
+                <input type="checkbox" @bind="_respectDiet" @bind:after="LoadResults" />
+                Respect dietary restrictions
+            </label>
+        </div>
+
+        <button class="btn btn-outline-secondary" @onclick="LoadResults" disabled="@_isLoading">
+            🔄 Refresh
+        </button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner-border text-success" style="width: 3rem; height: 3rem;"></div>
+            <p class="mt-3 text-muted">Scanning your pantry…</p>
+        </div>
+    }
+    else if (_error is not null)
+    {
+        <div class="alert alert-danger">
+            <strong>Error:</strong> @_error
+            <button class="btn btn-sm btn-outline-danger ms-2" @onclick="LoadResults">Try Again</button>
+        </div>
+    }
+    else if (_result is not null)
+    {
+        @if (_result.TotalPantryIngredients == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">🛒</div>
+                <h3>Your pantry is empty</h3>
+                <p>Start scanning groceries to get recipe suggestions.</p>
+                <button class="btn btn-primary" @onclick="@(() => Navigation.NavigateTo("/scanner"))">
+                    📷 Open Scanner
+                </button>
+            </div>
+        }
+        else if (_result.Matches.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <h3>No matches at @(_minMatch.ToString("P0"))</h3>
+                <p>Try lowering the match threshold — you may be missing a few key ingredients.</p>
+                <button class="btn btn-outline-primary" @onclick="LowerThreshold">
+                    Lower to @(Math.Max(0.40m, _minMatch - 0.10m).ToString("P0"))
+                </button>
+            </div>
+        }
+        else
+        {
+            <p class="results-count">@_result.Matches.Count recipe@(_result.Matches.Count == 1 ? "" : "s") found</p>
+
+            <div class="recipe-grid">
+                @foreach (PantryRecipeMatch match in _result.Matches)
+                {
+                    <div class="recipe-card @(match.IsFullMatch ? "full-match" : "")">
+                        @if (match.IsFullMatch)
+                        {
+                            <div class="full-match-badge" title="100% pantry match">✅</div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(match.ImageUrl))
+                        {
+                            <img src="@match.ImageUrl" alt="@match.RecipeName" class="recipe-image" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="recipe-image-placeholder">🍽️</div>
+                        }
+
+                        <div class="recipe-card-body">
+                            <h3 class="recipe-name">@match.RecipeName</h3>
+
+                            <div class="recipe-meta">
+                                <span title="Average rating">⭐ @match.AverageRating.ToString("F1")</span>
+                                <span class="meta-divider">|</span>
+                                <span title="Cook time">⏱ @match.CookTimeMinutes min</span>
+                            </div>
+
+                            <!-- Match bar -->
+                            <div class="match-bar-container" title="@match.MatchedIngredientCount / @match.TotalIngredientCount ingredients available">
+                                <div class="match-bar-fill" style="width: @((match.MatchPercent * 100m).ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            </div>
+                            <div class="match-label">
+                                <strong>@match.MatchPercentFormatted</strong>
+                                <span class="text-muted">@match.MatchedIngredientCount / @match.TotalIngredientCount ingredients</span>
+                            </div>
+
+                            @if (match.MissingIngredients.Count > 0)
+                            {
+                                <div class="missing-ingredients">
+                                    <small>Missing: @string.Join(", ", match.MissingIngredients.Take(3))
+                                        @if (match.MissingIngredients.Count > 3)
+                                        {
+                                            <span> +@(match.MissingIngredients.Count - 3) more</span>
+                                        }
+                                    </small>
+                                </div>
+                            }
+
+                            <div class="card-actions">
+                                @if (match.MissingIngredients.Count > 0)
+                                {
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            @onclick="@(() => AddMissingToShoppingList(match))"
+                                            title="Add missing ingredients to shopping list">
+                                        🛒 Add to list
+                                    </button>
+                                }
+                                <button class="btn btn-sm btn-primary"
+                                        @onclick="@(() => Navigation.NavigateTo($"/meal-planning/add?recipeId={match.RecipeId}"))">
+                                    📅 Add to Meal Plan
+                                </button>
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="/recipes/@match.RecipeId">
+                                    👁 View
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .discover-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1.5rem;
+    }
+
+    .discover-header h1 {
+        font-size: 1.8rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .discover-subtitle {
+        color: #666;
+        margin-bottom: 1.5rem;
+    }
+
+    .discover-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        align-items: flex-end;
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .match-slider {
+        width: 200px;
+        accent-color: #16a34a;
+    }
+
+    .slider-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: #888;
+        width: 200px;
+    }
+
+    .diet-toggle {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .loading-state {
+        text-align: center;
+        padding: 4rem 0;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 4rem 1rem;
+        color: #555;
+    }
+
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+    }
+
+    .results-count {
+        color: #666;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+    }
+
+    .recipe-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 1.25rem;
+    }
+
+    .recipe-card {
+        position: relative;
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        display: flex;
+        flex-direction: column;
+        transition: box-shadow .15s;
+    }
+
+    .recipe-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,.12);
+    }
+
+    .recipe-card.full-match {
+        border-color: #16a34a;
+        box-shadow: 0 0 0 2px #d1fae5;
+    }
+
+    .conflict-badge, .full-match-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font-size: 1.25rem;
+        line-height: 1;
+        z-index: 1;
+    }
+
+    .recipe-image {
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+    }
+
+    .recipe-image-placeholder {
+        width: 100%;
+        height: 120px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+        background: #f0fdf4;
+    }
+
+    .recipe-card-body {
+        padding: 0.75rem 1rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        flex: 1;
+    }
+
+    .recipe-name {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0;
+        line-height: 1.3;
+    }
+
+    .recipe-meta {
+        font-size: 0.85rem;
+        color: #555;
+    }
+
+    .meta-divider {
+        margin: 0 0.4rem;
+        color: #ccc;
+    }
+
+    .match-bar-container {
+        position: relative;
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .match-bar-fill {
+        position: absolute;
+        top: 0; left: 0;
+        height: 100%;
+        background: linear-gradient(to right, #16a34a, #86efac);
+        border-radius: 4px;
+    }
+
+    .match-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.8rem;
+    }
+
+    .missing-ingredients {
+        font-size: 0.78rem;
+        color: #888;
+        background: #fef9c3;
+        border-radius: 4px;
+        padding: 3px 6px;
+    }
+
+    .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: auto;
+        padding-top: 0.5rem;
+    }
+</style>
+
+@code {
+    private PantryDiscoveryResult? _result;
+    private bool _isLoading;
+    private string? _error;
+
+    private decimal _minMatch = 0.80m;
+    private string _sortBy = "match";
+    private bool _respectDiet = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadResults();
+    }
+
+    private async Task LoadResults()
+    {
+        _isLoading = true;
+        _error     = null;
+        StateHasChanged();
+
+        try
+        {
+            _result = await DiscoveryApi.DiscoverAsync(
+                minMatch:    _minMatch,
+                sortBy:      _sortBy,
+                limit:       24,
+                respectDiet: _respectDiet);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleMatchSliderChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int pct))
+        {
+            _minMatch = pct / 100m;
+            await LoadResults();
+        }
+    }
+
+    private async Task LowerThreshold()
+    {
+        _minMatch = Math.Max(0.40m, _minMatch - 0.10m);
+        await LoadResults();
+    }
+
+    private async Task AddMissingToShoppingList(PantryRecipeMatch match)
+    {
+        try
+        {
+            Guid? listId = await GetOrCreateDefaultShoppingListAsync();
+            if (listId is null)
+            {
+                ToastService.ShowError("Could not find or create a shopping list.");
+                return;
+            }
+
+            int added = 0;
+            foreach (string ingredient in match.MissingIngredients)
+            {
+                Guid? itemId = await ShoppingApi.AddItemAsync(new AddShoppingListItemRequest
+                {
+                    ShoppingListId = listId.Value,
+                    Name           = ingredient,
+                    Quantity       = 1,
+                    Unit           = "unit",
+                    Source         = "PantryDiscovery",
+                    Notes          = $"Missing for: {match.RecipeName}"
+                });
+                if (itemId.HasValue) { added++; }
+            }
+
+            if (added > 0)
+            {
+                ToastService.ShowSuccess($"Added {added} item{(added == 1 ? "" : "s")} to your shopping list.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to add items: {ex.Message}");
+        }
+    }
+
+    private async Task<Guid?> GetOrCreateDefaultShoppingListAsync()
+    {
+        try
+        {
+            ShoppingListSearchResult? result = await ShoppingApi.SearchShoppingListsAsync(
+                new ShoppingListSearchRequest { Status = "Active", PageSize = 1 });
+            if (result?.Lists?.Count > 0) { return result.Lists[0].Id; }
+
+            return await ShoppingApi.CreateShoppingListAsync(
+                new CreateShoppingListRequest { Name = "My Shopping List" });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string FormatTimeAgo(DateTime dt)
+    {
+        TimeSpan elapsed = DateTime.UtcNow - dt;
+        if (elapsed.TotalMinutes < 1)  { return "just now"; }
+        if (elapsed.TotalMinutes < 60) { return $"{(int)elapsed.TotalMinutes} min ago"; }
+        if (elapsed.TotalHours < 24)   { return $"{(int)elapsed.TotalHours} hr ago"; }
+        return dt.ToString("MMM d 'at' h:mm tt");
+    }
+}

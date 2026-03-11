@@ -12,21 +12,24 @@ namespace ExpressRecipe.UserService.Controllers;
 [Authorize]
 public class AllergyController : ControllerBase
 {
-    private readonly IAllergyIncidentRepository    _repo;
-    private readonly IFamilyMemberRepository       _familyRepo;
-    private readonly AllergyDifferentialAnalyzer   _analyzer;
-    private readonly ILogger<AllergyController>    _logger;
+    private readonly IAllergyIncidentRepository  _repo;
+    private readonly IFamilyMemberRepository     _familyRepo;
+    private readonly IEnhancedAllergenRepository _allergenRepo;
+    private readonly AllergyDifferentialAnalyzer _analyzer;
+    private readonly ILogger<AllergyController>  _logger;
 
     public AllergyController(
         IAllergyIncidentRepository repo,
         IFamilyMemberRepository familyRepo,
+        IEnhancedAllergenRepository allergenRepo,
         AllergyDifferentialAnalyzer analyzer,
         ILogger<AllergyController> logger)
     {
-        _repo       = repo;
-        _familyRepo = familyRepo;
-        _analyzer   = analyzer;
-        _logger     = logger;
+        _repo        = repo;
+        _familyRepo  = familyRepo;
+        _allergenRepo = allergenRepo;
+        _analyzer    = analyzer;
+        _logger      = logger;
     }
 
     private Guid? UserId()
@@ -54,17 +57,26 @@ public class AllergyController : ControllerBase
         {
             var id = await _repo.CreateIncidentAsync(householdId.Value, request, ct);
 
-            // Run analysis asynchronously per affected member (fire & forget with catch).
-            // Use CancellationToken.None so the analysis is not cancelled when the HTTP request completes.
+            // Run analysis asynchronously per affected member.
+            // Use CancellationToken.None so a client disconnect never cancels analysis.
             _ = Task.Run(async () =>
             {
-                var members = request.Members
-                    .Select(m => (m.MemberId, m.MemberName))
-                    .Distinct()
-                    .ToList();
+                try
+                {
+                    var members = request.Members
+                        .Select(m => (m.MemberId, m.MemberName))
+                        .Distinct()
+                        .ToList();
 
-                await _analyzer.RunForMembersAsync(householdId.Value, members!, CancellationToken.None);
-            });
+                    await _analyzer.RunForMembersAsync(householdId.Value, members!, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error running allergy differential analysis for household {HouseholdId}",
+                        householdId.Value);
+                }
+            }, CancellationToken.None);
 
             return CreatedAtAction(nameof(GetIncident), new { id }, new { id });
         }
@@ -116,14 +128,35 @@ public class AllergyController : ControllerBase
     [HttpPost("suspects/{id:guid}/confirm")]
     public async Task<IActionResult> ConfirmSuspect(Guid id, CancellationToken ct)
     {
-        var householdId = HouseholdId();
-        if (householdId == null) return Unauthorized();
+        var userId = UserId();
+        if (userId == null) return Unauthorized();
 
         var suspect = await _repo.GetSuspectedAllergenByIdAsync(id, ct);
         if (suspect == null) return NotFound();
-        if (suspect.HouseholdId != householdId.Value) return Forbid();
+        if (suspect.HouseholdId != userId.Value) return Forbid();
 
+        // Promote the suspect flag
         await _repo.PromoteSuspectedAllergenAsync(id, ct);
+
+        // Also create a UserIngredientAllergy record so SafeFork / other features
+        // treat this ingredient as a confirmed allergy going forward.
+        try
+        {
+            await _allergenRepo.CreateIngredientAllergyAsync(userId.Value,
+                new CreateUserIngredientAllergyRequest
+                {
+                    IngredientName = suspect.IngredientName,
+                    SeverityLevel  = "Moderate",   // default — user can edit in AllergensController
+                    RequiresEpiPen = false
+                });
+        }
+        catch (Exception ex)
+        {
+            // Log but don't fail the confirmation if the profile upsert fails
+            _logger.LogWarning(ex,
+                "Could not create ingredient allergy profile entry for {Ingredient}", suspect.IngredientName);
+        }
+
         return NoContent();
     }
 
@@ -133,12 +166,11 @@ public class AllergyController : ControllerBase
         var userId = UserId();
         if (userId == null) return Unauthorized();
 
-        var householdId = HouseholdId();
         var suspect = await _repo.GetSuspectedAllergenByIdAsync(id, ct);
         if (suspect == null) return NotFound();
-        if (suspect.HouseholdId != householdId!.Value) return Forbid();
+        if (suspect.HouseholdId != userId.Value) return Forbid();
 
-        // Atomic: insert ClearedIngredient and soft-delete suspect in one transaction
+        // Atomic operation: insert ClearedIngredient + soft-delete suspect in one transaction
         await _repo.ClearSuspectTransactionalAsync(id, userId.Value, ct);
         return NoContent();
     }
@@ -161,32 +193,55 @@ public class AllergyController : ControllerBase
     [HttpGet("report/{memberId?}")]
     public async Task<IActionResult> GetReport(Guid? memberId, CancellationToken ct)
     {
-        var householdId = HouseholdId();
-        if (householdId == null) return Unauthorized();
+        var userId = UserId();
+        if (userId == null) return Unauthorized();
 
         string memberName = "Me";
         if (memberId.HasValue)
         {
             var member = await _familyRepo.GetByIdAsync(memberId.Value);
             if (member == null) return NotFound(new { message = "Member not found" });
-            if (member.PrimaryUserId != householdId.Value) return Forbid();
+            if (member.PrimaryUserId != userId.Value) return Forbid();
             memberName = member.Name;
         }
 
-        var suspects   = await _repo.GetSuspectedAllergensAsync(householdId.Value, memberId, ct);
-        var confirmed  = await _repo.GetConfirmedAllergensAsync(householdId.Value, memberId, ct);
-        var incidents  = await _repo.GetIncidentsAsync(householdId.Value, memberId, 200, ct);
-        var cleared    = await _repo.GetClearedIngredientsAsync(householdId.Value, memberId, ct);
+        var suspects  = await _repo.GetSuspectedAllergensAsync(userId.Value, memberId, ct);
+        var incidents = await _repo.GetIncidentsAsync(userId.Value, memberId, 200, ct);
+        var cleared   = await _repo.GetClearedIngredientsAsync(userId.Value, memberId, ct);
+
+        // Confirmed allergens come from the ingredient allergy profile (primary user only)
+        List<ConfirmedAllergenDto> confirmed = new();
+        if (!memberId.HasValue)
+        {
+            try
+            {
+                var ingredientAllergies =
+                    await _allergenRepo.GetUserIngredientAllergiesAsync(userId.Value, includeReactions: false);
+
+                confirmed = ingredientAllergies
+                    .Select(a => new ConfirmedAllergenDto
+                    {
+                        AllergenName   = a.IngredientName ?? string.Empty,
+                        SeverityLevel  = a.SeverityLevel,
+                        RequiresEpiPen = a.RequiresEpiPen,
+                        DiagnosisDate  = a.DiagnosisDate
+                    })
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not load confirmed allergens for report");
+            }
+        }
 
         var report = new AllergyReportModel
         {
-            MemberName          = memberName,
-            GeneratedAt         = DateTime.UtcNow,
-            ConfirmedAllergens  = confirmed,
-            SuspectedAllergens  = suspects.Where(s => !s.IsPromotedToConfirmed)
-                                          .OrderByDescending(s => s.ConfidenceScore).ToList(),
-            Incidents           = incidents,
-            ClearedIngredients  = cleared
+            MemberName         = memberName,
+            GeneratedAt        = DateTime.UtcNow,
+            ConfirmedAllergens = confirmed,
+            SuspectedAllergens = suspects.OrderByDescending(s => s.ConfidenceScore).ToList(),
+            Incidents          = incidents,
+            ClearedIngredients = cleared
         };
 
         return Ok(report);

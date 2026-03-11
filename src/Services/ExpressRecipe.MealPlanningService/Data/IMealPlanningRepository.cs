@@ -17,6 +17,7 @@ public interface IMealPlanningRepository
     Task UpdatePlannedMealAsync(Guid plannedMealId, DateTime plannedDate, string mealType, int? servings, CancellationToken ct = default);
     Task RemovePlannedMealAsync(Guid plannedMealId, CancellationToken ct = default);
     Task MarkMealAsCompletedAsync(Guid plannedMealId, CancellationToken ct = default);
+    Task MarkMealCookedAsync(Guid plannedMealId, DateTime cookedAt, Guid? cookedByTimerId = null, CancellationToken ct = default);
 
     // Calendar
     Task<List<MealPlanCalendarDay>> GetCalendarAsync(Guid userId, int year, int month, CancellationToken ct = default);
@@ -75,6 +76,12 @@ public class PlannedMealDto
     public int? Servings { get; set; }
     public bool IsCompleted { get; set; }
     public DateTime? CompletedAt { get; set; }
+    /// <summary>Cook state: Pending | InProgress | Cooked | Skipped</summary>
+    public string CookedStatus { get; set; } = "Pending";
+    /// <summary>UTC timestamp when the meal was marked as cooked.</summary>
+    public DateTime? CookedAt { get; set; }
+    /// <summary>Id of the CookingTimer that triggered the cooked event, if applicable.</summary>
+    public Guid? CookedByTimerId { get; set; }
 }
 
 public class MealPlanCalendarDay
