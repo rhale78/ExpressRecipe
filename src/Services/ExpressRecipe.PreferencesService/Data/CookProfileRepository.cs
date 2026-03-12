@@ -54,6 +54,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
                 CreatedAt = GetDateTime(reader, "CreatedAt"),
                 UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
             },
+            ct,
             CreateParameter("@MemberId", memberId));
 
         return results.FirstOrDefault();
@@ -91,6 +92,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
 
         Guid? result = await ExecuteScalarAsync<Guid>(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId),
             CreateParameter("@CooksForHousehold", request.CooksForHousehold),
             CreateParameter("@CookingFrequency", request.CookingFrequency),
@@ -120,6 +122,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
                 TechniqueCode = GetString(reader, "TechniqueCode") ?? string.Empty,
                 ComfortLevel = GetString(reader, "ComfortLevel") ?? string.Empty
             },
+            ct,
             CreateParameter("@MemberId", memberId),
             CreateParameter("@TechniqueCode", techniqueCode));
 
@@ -140,6 +143,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId),
             CreateParameter("@TechniqueCode", techniqueCode),
             CreateParameter("@ComfortLevel", request.ComfortLevel));
@@ -162,6 +166,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
                 TipId = GetGuid(reader, "TipId"),
                 DismissedAt = GetDateTime(reader, "DismissedAt")
             },
+            ct,
             CreateParameter("@MemberId", memberId));
     }
 
@@ -176,6 +181,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId),
             CreateParameter("@TipId", tipId));
     }
@@ -188,6 +194,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId),
             CreateParameter("@TipId", tipId));
     }
@@ -209,6 +216,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
                 TechniqueCode = GetString(reader, "TechniqueCode") ?? string.Empty,
                 ComfortLevel = GetString(reader, "ComfortLevel") ?? string.Empty
             },
+            ct,
             CreateParameter("@MemberId", memberId));
     }
 
@@ -226,6 +234,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId));
     }
 
@@ -239,6 +248,7 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId));
 
         if (_cache != null)
@@ -252,7 +262,7 @@ DELETE FROM DismissedTip      WHERE MemberId = @MemberId;
 DELETE FROM TechniqueComfort  WHERE MemberId = @MemberId;
 DELETE FROM CookProfile       WHERE MemberId = @MemberId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@MemberId", memberId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@MemberId", memberId));
 
         if (_cache != null)
             await _cache.RemoveAsync($"{CachePrefix}member:{memberId}");
