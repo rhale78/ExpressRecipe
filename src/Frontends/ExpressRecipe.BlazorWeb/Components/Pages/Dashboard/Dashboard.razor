@@ -14,6 +14,8 @@
 @inject IMealPlanApiClient MealPlanApi
 @inject IRecipeApiClient RecipeApi
 @inject IAllergyApiClient AllergyApi
+@inject IWorkQueueState QueueState
+@inject IWorkQueueClientService WorkQueueApi
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
 
@@ -69,6 +71,39 @@
                 </div>
             </div>
         </div>
+
+        <!-- Quick Feature Access -->
+        <div class="quick-access-grid">
+            <a href="/discover" class="quick-access-card">
+                <span>🔎</span>
+                <span>What Can I Make?</span>
+            </a>
+            <a href="/allergy" class="quick-access-card">
+                <span>🩺</span>
+                <span>Log a Reaction</span>
+            </a>
+            <a href="/meal-planning" class="quick-access-card">
+                <span>⏱️</span>
+                <span>Cooking Timers</span>
+            </a>
+            <a href="/queue" class="quick-access-card">
+                <span>📋</span>
+                <span>My Work Queue</span>
+            </a>
+        </div>
+
+        <!-- Allergen Discovery Alert -->
+        @if (_allergenDiscoveries?.Any() == true)
+        {
+            <div class="dashboard-discovery-alert">
+                <span class="discovery-alert-icon">🔬</span>
+                <div class="discovery-alert-body">
+                    <strong>@_allergenDiscoveries.Count new allergen @(_allergenDiscoveries.Count == 1 ? "discovery" : "discoveries")</strong>
+                    <p>Potential allergens were found when items were disposed from inventory.</p>
+                </div>
+                <a href="/inventory" class="btn btn-warning btn-sm">Review →</a>
+            </div>
+        }
 
         <!-- Family Allergen Summary -->
         @if (_userProfile != null && (_userProfile.Allergens.Any() || _userProfile.FamilyMembers.Any()))
@@ -139,6 +174,65 @@
                     }
                 </div>
                 <a href="/allergy" class="btn btn-warning btn-sm">Review →</a>
+            </div>
+        }
+
+        <!-- Work Queue Widget -->
+        @if (QueueState.PendingCount > 0)
+        {
+            <div class="dashboard-queue-widget @(QueueState.HasCritical ? "queue-critical" : "")">
+                <div class="queue-widget-header">
+                    <span class="queue-widget-icon">📋</span>
+                    <h3>Work Queue</h3>
+                    <span class="queue-count-badge">@QueueState.PendingCount item@(QueueState.PendingCount != 1 ? "s" : "") need attention</span>
+                </div>
+
+                @if (_queuePreview?.Any() == true)
+                {
+                    <div class="queue-preview-list">
+                        @foreach (WorkQueueItemDto item in _queuePreview.Take(3))
+                        {
+                            <div class="queue-preview-item priority-@GetQueueItemPriorityClass(item.Priority)">
+                                <span class="queue-item-icon">@GetQueueItemIcon(item.ItemType)</span>
+                                <span class="queue-item-title">@item.Title</span>
+                                <span class="queue-item-age">@GetRelativeTime(item.CreatedAt)</span>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <a href="/queue" class="btn btn-primary btn-sm queue-action-link">
+                    View All →
+                </a>
+            </div>
+        }
+
+        <!-- Household Tasks Widget -->
+        @if (_householdTasks?.Any() == true)
+        {
+            <div class="dashboard-tasks-widget">
+                <div class="tasks-widget-header">
+                    <span>🧊</span>
+                    <h3>Household Reminders</h3>
+                    <span class="task-count">@_householdTasks.Count pending</span>
+                </div>
+                <div class="task-list">
+                    @foreach (HouseholdTaskDto task in _householdTasks.Take(4))
+                    {
+                        <div class="task-item task-@GetTaskTypeCssClass(task.TaskType)">
+                            <div class="task-title">@task.Title</div>
+                            <div class="task-due">Due: @task.DueAt.ToString("MMM dd h:mmtt")</div>
+                            <div class="task-actions">
+                                <button class="btn btn-success btn-xs" @onclick='() => CompleteTask(task, "Moved")'>
+                                    ✓ Done
+                                </button>
+                                <button class="btn btn-outline btn-xs" @onclick='() => CompleteTask(task, "Ignored")'>
+                                    Dismiss
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
             </div>
         }
 
@@ -369,6 +463,9 @@
     private List<ShoppingListDto>? _activeShoppingLists;
     private List<RecipeDto>? _suggestedRecipes;
     private List<SuspectedAllergenSummaryDto>? _allergenSuspects;
+    private List<WorkQueueItemDto>? _queuePreview;
+    private List<HouseholdTaskDto>? _householdTasks;
+    private List<AllergenDiscoveryDto>? _allergenDiscoveries;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -522,6 +619,36 @@
                 _allergenSuspects = null;
             }
 
+            // Load work queue preview
+            try
+            {
+                _queuePreview = await WorkQueueApi.GetItemsAsync();
+            }
+            catch
+            {
+                _queuePreview = null;
+            }
+
+            // Load household tasks
+            try
+            {
+                _householdTasks = await MealPlanApi.GetActiveTasksAsync();
+            }
+            catch
+            {
+                _householdTasks = null;
+            }
+
+            // Load allergen discoveries
+            try
+            {
+                _allergenDiscoveries = await InventoryApi.GetAllergenDiscoveriesAsync();
+            }
+            catch
+            {
+                _allergenDiscoveries = null;
+            }
+
             _isLoading = false;
             StateHasChanged();
         }
@@ -557,5 +684,50 @@
             "freezer" => "🧊",
             _ => "📦"
         };
+    }
+
+    private static string GetTaskTypeCssClass(string taskType) => taskType switch
+    {
+        "ThawReminder"    => "thawreminder",
+        "CookingReminder" => "cookingreminder",
+        "LowStock"        => "lowstock",
+        "Expiring"        => "expiring",
+        _                 => "general"
+    };
+
+    private static string GetQueueItemPriorityClass(int priority) => priority switch
+    {
+        <= 2 => "expired",
+        <= 4 => "high",
+        _    => "normal"
+    };
+
+    private static string GetQueueItemIcon(string itemType) => itemType switch
+    {
+        "ExpirationAlert" => "⏰",
+        "AllergenSuspect" => "⚠️",
+        "ThawReminder"    => "🧊",
+        "CookingRating"   => "⭐",
+        "LowStock"        => "📉",
+        "PriceAlert"      => "💰",
+        _                 => "📋"
+    };
+
+    private static string GetRelativeTime(DateTime dt)
+    {
+        TimeSpan diff = DateTime.UtcNow - dt;
+        if (diff.TotalMinutes < 60) { return $"{(int)diff.TotalMinutes}m ago"; }
+        if (diff.TotalHours < 24)   { return $"{(int)diff.TotalHours}h ago"; }
+        return $"{(int)diff.TotalDays}d ago";
+    }
+
+    private async Task CompleteTask(HouseholdTaskDto task, string action)
+    {
+        bool ok = await MealPlanApi.ActionTaskAsync(task.Id, action);
+        if (ok)
+        {
+            _householdTasks?.Remove(task);
+            StateHasChanged();
+        }
     }
 }

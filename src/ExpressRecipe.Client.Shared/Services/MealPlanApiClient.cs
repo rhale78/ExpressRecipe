@@ -70,6 +70,10 @@ public interface IMealPlanApiClient
     // Pantry Discovery
     Task<PantryDiscoveryResultDto?> GetPantryDiscoveryAsync(PantryDiscoveryOptionsDto options,
         CancellationToken ct = default);
+
+    // Household Tasks
+    Task<List<HouseholdTaskDto>?> GetActiveTasksAsync();
+    Task<bool> ActionTaskAsync(Guid taskId, string actionTaken);
 }
 
 public class MealPlanApiClient : IMealPlanApiClient
@@ -774,6 +778,41 @@ public class MealPlanApiClient : IMealPlanApiClient
         {
             // Suppress network/deserialization errors; callers check for null
             return null;
+        }
+    }
+
+    // ── Household Tasks ───────────────────────────────────────────────────────
+
+    public async Task<List<HouseholdTaskDto>?> GetActiveTasksAsync()
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<HouseholdTaskDto>>("/api/tasks");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> ActionTaskAsync(Guid taskId, string actionTaken)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"/api/tasks/{taskId}/action",
+                new { actionTaken });
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
         }
     }
 }
