@@ -1,0 +1,313 @@
+@page "/pantry-discovery"
+@rendermode InteractiveServer
+@implements IDisposable
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+@using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.Client.Shared.Services
+@using System.Globalization
+@inject IMealPlanApiClient MealPlanApi
+@inject IShoppingListApiClient ShoppingApi
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+
+<PageTitle>What Can I Make? — ExpressRecipe</PageTitle>
+
+<div class="discovery-page-container">
+    <div class="discovery-page-header">
+        <h1>🔎 What Can I Make Right Now?</h1>
+        <p class="discovery-page-subtitle">
+            Recipes matched to what's already in your pantry, fridge, and freezer.
+        </p>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="discovery-filters">
+        <div class="filter-group-inline">
+            <label>Minimum match</label>
+            <select class="form-control-sm" @bind="_minMatchStr" @bind:after="Discover" disabled="@_isLoading">
+                <option value="0.60">60%+</option>
+                <option value="0.70">70%+</option>
+                <option value="0.80">80%+</option>
+                <option value="0.90">90%+</option>
+                <option value="1.00">100% (exact)</option>
+            </select>
+        </div>
+
+        <div class="filter-group-inline">
+            <label>Sort by</label>
+            <select class="form-control-sm" @bind="_sortBy" @bind:after="Discover" disabled="@_isLoading">
+                <option value="match">Best Match</option>
+                <option value="rating">Top Rated</option>
+                <option value="cookTime">Quickest</option>
+            </select>
+        </div>
+
+        <div class="filter-group-inline">
+            <label class="toggle-label">
+                <input type="checkbox" @bind="_respectDietary" @bind:after="Discover" disabled="@_isLoading" />
+                Apply dietary filters
+            </label>
+        </div>
+
+        <button class="btn btn-outline btn-sm" @onclick="Discover" disabled="@_isLoading">
+            🔄 Refresh
+        </button>
+    </div>
+
+    <!-- Results -->
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Checking your pantry...</p>
+        </div>
+    }
+    else if (_error != null)
+    {
+        <div class="empty-state">
+            <p>⚠️ @_error</p>
+            <button class="btn btn-outline" @onclick="Discover">🔄 Try again</button>
+        </div>
+    }
+    else if (_result == null || _result.TotalPantryIngredients == 0)
+    {
+        <div class="empty-state">
+            <p>🥘 No pantry inventory found. Add some items first and come back here!</p>
+            <a href="/inventory/add" class="btn btn-primary">Add Inventory Items →</a>
+        </div>
+    }
+    else
+    {
+        <!-- Stats bar -->
+        <div class="discovery-stats">
+            <span>🧺 <strong>@_result.TotalPantryIngredients</strong> pantry ingredients checked</span>
+            <span>🍳 <strong>@_result.Matches.Count</strong> recipes found</span>
+            @if (_result.CachedAt > DateTime.MinValue)
+            {
+                <span class="cache-note">Results as of @_result.CachedAt.ToLocalTime().ToString("h:mmtt")</span>
+            }
+        </div>
+
+        @if (!_result.Matches.Any())
+        {
+            <div class="empty-state">
+                <p>😔 No recipes match your current pantry at @((MinMatch * 100).ToString("F0"))%+ coverage.</p>
+                <button class="btn btn-outline" @onclick="LowerThreshold">
+                    Try 60% match
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="discovery-results-grid">
+                @foreach (PantryRecipeMatchDto match in _result.Matches)
+                {
+                    <div class="discovery-recipe-card">
+                        <!-- Match % badge -->
+                        <div class="match-badge match-@GetMatchTier(match.MatchPercent)">
+                            @((match.MatchPercent * 100).ToString("F0"))% match
+                        </div>
+
+                        <!-- Recipe image -->
+                        @if (!string.IsNullOrWhiteSpace(match.ImageUrl))
+                        {
+                            <img src="@match.ImageUrl" alt="@match.RecipeName"
+                                 class="discovery-recipe-image" />
+                        }
+                        else
+                        {
+                            <div class="discovery-recipe-placeholder">🍽️</div>
+                        }
+
+                        <!-- Info -->
+                        <div class="discovery-recipe-info">
+                            <h3 class="discovery-recipe-name">@match.RecipeName</h3>
+                            <div class="discovery-recipe-meta">
+                                @if (match.CookTimeMinutes > 0)
+                                {
+                                    <span>⏱️ @match.CookTimeMinutes min</span>
+                                }
+                                @if (match.AverageRating > 0)
+                                {
+                                    <span>⭐ @match.AverageRating.ToString("F1")</span>
+                                }
+                                <span>🥬 @match.MatchedIngredientCount/@match.TotalIngredientCount ingredients</span>
+                            </div>
+
+                            @if (match.MissingIngredients.Any())
+                            {
+                                <div class="missing-ingredients">
+                                    <span class="missing-label">You need:</span>
+                                    @string.Join(", ", match.MissingIngredients.Take(3))
+                                    @if (match.MissingIngredients.Count > 3)
+                                    {
+                                        <span> +@(match.MissingIngredients.Count - 3) more</span>
+                                    }
+                                </div>
+                            }
+
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="discovery-recipe-actions">
+                            <a href="/recipes/@match.RecipeId" class="btn btn-primary btn-sm">
+                                View Recipe
+                            </a>
+                            <button class="btn btn-outline btn-sm"
+                                    @onclick="() => AddToMealPlan(match)">
+                                ➕ Plan It
+                            </button>
+                            @if (match.MissingIngredients.Any())
+                            {
+                                <button class="btn btn-outline btn-sm"
+                                        @onclick="() => AddMissingToList(match)">
+                                    🛒 Buy Missing
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _minMatchStr = "0.80";
+    private decimal MinMatch => decimal.Parse(_minMatchStr, CultureInfo.InvariantCulture);
+    private string _sortBy = "match";
+    private bool _respectDietary = true;
+    private bool _isLoading = true;
+    private string? _error;
+    private PantryDiscoveryResultDto? _result;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync() => await Discover();
+
+    private async Task Discover()
+    {
+        // Cancel any previous in-flight request and dispose it
+        CancellationTokenSource oldCts = _cts;
+        await oldCts.CancelAsync();
+        _cts = new CancellationTokenSource();
+        oldCts.Dispose();
+        CancellationToken ct = _cts.Token;
+
+        _isLoading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            PantryDiscoveryResultDto? result = await MealPlanApi.GetPantryDiscoveryAsync(
+                new PantryDiscoveryOptionsDto
+                {
+                    MinMatchPercent = MinMatch,
+                    SortBy = _sortBy,
+                    Limit = 24,
+                    RespectDietaryRestrictions = _respectDietary
+                }, ct);
+
+            if (ct.IsCancellationRequested) { return; }
+
+            _result = result;
+            if (_result is null)
+            {
+                _error = "Could not load pantry discovery results. Check your connection and try again.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Stale request cancelled; do not update state
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (ct.IsCancellationRequested) { return; }
+            _error = ex.Message;
+        }
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LowerThreshold()
+    {
+        _minMatchStr = "0.60";
+        await Discover();
+    }
+
+    private void AddToMealPlan(PantryRecipeMatchDto match)
+        => Navigation.NavigateTo($"/meal-planning?addRecipe={match.RecipeId}");
+
+    private async Task AddMissingToList(PantryRecipeMatchDto match)
+    {
+        try
+        {
+            Guid? listId = await GetOrCreateDefaultShoppingListAsync();
+            if (listId is null)
+            {
+                ToastService.ShowError("Could not find or create a shopping list.");
+                return;
+            }
+
+            int added = 0;
+            foreach (string ingredient in match.MissingIngredients)
+            {
+                Guid? itemId = await ShoppingApi.AddItemAsync(new AddShoppingListItemRequest
+                {
+                    ShoppingListId = listId.Value,
+                    Name = ingredient,
+                    Quantity = 1,
+                    Unit = "unit",
+                    Source = "PantryDiscovery",
+                    Notes = $"Missing for: {match.RecipeName}"
+                });
+                if (itemId.HasValue) { added++; }
+            }
+
+            if (added > 0)
+            {
+                ToastService.ShowSuccess(
+                    $"Added {added} item{(added == 1 ? "" : "s")} from '{match.RecipeName}' to your shopping list.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to add items: {ex.Message}");
+        }
+    }
+
+    private async Task<Guid?> GetOrCreateDefaultShoppingListAsync()
+    {
+        try
+        {
+            ShoppingListSearchResult? result = await ShoppingApi.SearchShoppingListsAsync(
+                new ShoppingListSearchRequest { Status = "Active", PageSize = 1 });
+            if (result?.Lists?.Count > 0) { return result.Lists[0].Id; }
+
+            return await ShoppingApi.CreateShoppingListAsync(
+                new CreateShoppingListRequest { Name = "My Shopping List" });
+        }
+        catch
+        {
+            // Return null on failure; caller shows an error toast
+            return null;
+        }
+    }
+
+    private static string GetMatchTier(decimal pct) => pct switch
+    {
+        >= 1.00m => "perfect",
+        >= 0.90m => "excellent",
+        >= 0.80m => "great",
+        >= 0.70m => "good",
+        _ => "partial"
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

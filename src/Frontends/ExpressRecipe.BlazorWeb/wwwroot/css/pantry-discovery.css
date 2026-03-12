@@ -1,0 +1,145 @@
+/* ── Page Container ──────────────────────────────────────────── */
+.discovery-page-container { max-width: 1200px; margin: 0 auto; padding: 1.25rem; }
+
+.discovery-page-header { margin-bottom: 1.25rem; }
+.discovery-page-header h1 { margin: 0 0 0.35rem; }
+.discovery-page-subtitle { color: #6b7280; margin: 0; }
+
+/* ── Filters ─────────────────────────────────────────────────── */
+.discovery-filters {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.filter-group-inline { display: flex; align-items: center; gap: 0.4rem; font-size: 0.875rem; }
+.filter-group-inline label { color: #6b7280; white-space: nowrap; }
+.discovery-scope { margin-bottom: 1rem; }
+
+/* ── Stats Bar ───────────────────────────────────────────────── */
+.discovery-stats {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+    color: #374151;
+    margin-bottom: 1rem;
+}
+
+.cache-note { color: #9ca3af; margin-left: auto; }
+
+/* ── Results Grid ────────────────────────────────────────────── */
+.discovery-results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+/* ── Recipe Card ─────────────────────────────────────────────── */
+.discovery-recipe-card {
+    position: relative;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.2s, transform 0.1s;
+}
+
+.discovery-recipe-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+
+.discovery-recipe-card.card-dietary-conflict { border-color: #fca5a5; }
+
+/* Match badge (top-right of card) */
+.match-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    border-radius: 12px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    z-index: 1;
+}
+
+.match-perfect   { background: #166534; color: #fff; }
+.match-excellent { background: #15803d; color: #fff; }
+.match-great     { background: #16a34a; color: #fff; }
+.match-good      { background: #65a30d; color: #fff; }
+.match-partial   { background: #ca8a04; color: #fff; }
+
+.discovery-recipe-image {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    display: block;
+}
+
+.discovery-recipe-placeholder {
+    width: 100%;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    background: #f3f4f6;
+}
+
+.discovery-recipe-info { padding: 0.875rem; flex: 1; }
+
+.discovery-recipe-name {
+    margin: 0 0 0.4rem;
+    font-size: 1rem;
+    color: #111827;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.discovery-recipe-meta {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.missing-ingredients {
+    font-size: 0.8rem;
+    color: #92400e;
+    background: #fffbeb;
+    border-radius: 4px;
+    padding: 0.25rem 0.4rem;
+    margin-top: 0.4rem;
+}
+
+.missing-label { font-weight: 600; margin-right: 0.25rem; }
+
+.dietary-conflict-badge {
+    display: inline-block;
+    background: #fee2e2;
+    color: #dc2626;
+    border-radius: 4px;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-top: 0.35rem;
+}
+
+.discovery-recipe-actions {
+    padding: 0.625rem 0.875rem;
+    border-top: 1px solid #f3f4f6;
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}

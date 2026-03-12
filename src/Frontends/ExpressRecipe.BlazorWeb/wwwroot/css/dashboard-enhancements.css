@@ -1,0 +1,152 @@
+/* ── Quick Access Grid ───────────────────────────────────────── */
+.quick-access-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.quick-access-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 1rem 0.5rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    text-decoration: none;
+    color: #374151;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.quick-access-card span:first-child { font-size: 1.6rem; }
+
+.quick-access-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(0,123,255,0.12);
+    transform: translateY(-1px);
+    color: var(--primary-color);
+}
+
+/* ── Work Queue Widget ───────────────────────────────────────── */
+.dashboard-queue-widget {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.dashboard-queue-widget.queue-critical {
+    border-left-color: var(--danger-color);
+    background: #fff5f5;
+}
+
+.queue-widget-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.queue-widget-header h3 { margin: 0; font-size: 1rem; }
+
+.queue-count-badge {
+    margin-left: auto;
+    background: var(--primary-color);
+    color: #fff;
+    border-radius: 20px;
+    padding: 0.15rem 0.65rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.dashboard-queue-widget .queue-count-badge.badge-critical {
+    background: var(--danger-color);
+}
+
+.queue-preview-list { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.75rem; }
+
+.queue-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    background: #f9fafb;
+}
+
+.queue-preview-item.priority-expired  { background: #fef2f2; }
+.queue-preview-item.priority-high     { background: #fffbeb; }
+.queue-item-icon { font-size: 1rem; }
+.queue-item-title { flex: 1; color: #374151; }
+.queue-item-age { font-size: 0.78rem; color: #9ca3af; }
+.queue-action-link { display: inline-block; margin-top: 0.25rem; }
+
+/* ── Household Tasks Widget ──────────────────────────────────── */
+.dashboard-tasks-widget {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.tasks-widget-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.tasks-widget-header h3 { margin: 0; font-size: 1rem; color: #1d4ed8; }
+
+.task-count {
+    margin-left: auto;
+    font-size: 0.82rem;
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+.task-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.task-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: #fff;
+    border: 1px solid #dbeafe;
+    border-radius: 7px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.task-title { flex: 1; font-weight: 600; color: #1e3a8a; }
+.task-due { font-size: 0.8rem; color: #3b82f6; }
+.task-actions { display: flex; gap: 0.35rem; }
+.btn-xs { padding: 0.2rem 0.5rem; font-size: 0.78rem; }
+
+/* ── Allergen Discovery Alert ────────────────────────────────── */
+.dashboard-discovery-alert {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: #fff8e1;
+    border: 1px solid #f59e0b;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 0.875rem 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.discovery-alert-icon { font-size: 1.6rem; }
+.discovery-alert-body { flex: 1; }
+.discovery-alert-body strong { display: block; color: #92400e; }
+.discovery-alert-body p { margin: 0.2rem 0 0; font-size: 0.85rem; color: #78350f; }
