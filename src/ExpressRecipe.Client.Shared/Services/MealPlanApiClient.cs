@@ -55,6 +55,10 @@ public interface IMealPlanApiClient
     // Attendees
     Task<List<MealAttendeeDto>?> GetMealAttendeesAsync(Guid mealId);
     Task<bool> UpdateMealAttendeesAsync(Guid mealId, List<MealAttendeeDto> attendees);
+
+    // Household Tasks
+    Task<List<HouseholdTaskDto>?> GetActiveTasksAsync();
+    Task<bool> ActionTaskAsync(Guid taskId, string actionTaken);
 }
 
 public class MealPlanApiClient : IMealPlanApiClient
@@ -623,4 +627,39 @@ public class MealPlanApiClient : IMealPlanApiClient
     private class SaveTemplateResponse { public Guid Id { get; set; } }
     private class ApplyTemplateResponse { public Guid PlanId { get; set; } }
     private class AddCourseResponse { public Guid Id { get; set; } }
+
+    // ── Household Tasks ───────────────────────────────────────────────────────
+
+    public async Task<List<HouseholdTaskDto>?> GetActiveTasksAsync()
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<HouseholdTaskDto>>("/api/tasks");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> ActionTaskAsync(Guid taskId, string actionTaken)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync(
+                $"/api/tasks/{taskId}/action",
+                new { actionTaken });
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
