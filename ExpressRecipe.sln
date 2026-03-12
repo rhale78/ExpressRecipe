@@ -198,7 +198,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.SyncService",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.UserService", "src\Services\ExpressRecipe.UserService\ExpressRecipe.UserService.csproj", "{26814460-00DF-471A-B074-9D362A07133C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.IngredientService.Tests", "src\Services\ExpressRecipe.IngredientService.Tests\ExpressRecipe.IngredientService.Tests.csproj", "{F31AB806-9454-470E-BB37-51139F58F2BC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.IngredientService.Tests", "src\Tests\ExpressRecipe.IngredientService.Tests\ExpressRecipe.IngredientService.Tests.csproj", "{F31AB806-9454-470E-BB37-51139F58F2BC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressRecipe.AIService.Tests", "src\Tests\ExpressRecipe.AIService.Tests\ExpressRecipe.AIService.Tests.csproj", "{A137E894-CB58-4FE2-ADFA-55A14334F483}"
 EndProject
