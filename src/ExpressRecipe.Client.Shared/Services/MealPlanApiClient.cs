@@ -652,13 +652,7 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("/api/timers", new
-            {
-                label           = request.Label,
-                durationSeconds = request.DurationSeconds,
-                recipeId        = request.RecipeId,
-                startImmediately = request.AutoStart
-            });
+            var response = await _httpClient.PostAsJsonAsync("/api/timers", request);
             response.EnsureSuccessStatusCode();
             var result = await response.Content.ReadFromJsonAsync<CreateTimerResponse>();
             return result?.Id;

@@ -278,6 +278,10 @@
                                     {
                                         <span class="ingredient-optional-label">(optional)</span>
                                     }
+                                    @if (!string.IsNullOrEmpty(ingredient.Notes))
+                                    {
+                                        <span class="ingredient-notes">@ingredient.Notes</span>
+                                    }
                                 </li>
                             }
                         </ul>

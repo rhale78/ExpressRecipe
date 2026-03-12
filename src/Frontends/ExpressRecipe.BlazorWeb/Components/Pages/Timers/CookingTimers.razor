@@ -121,8 +121,8 @@
 
     private async Task LoadTimers()
     {
-        _isLoading = false;
         _timers    = await TimerApi.GetActiveTimersAsync() ?? new List<CookingTimerDto>();
+        _isLoading = false;
         StateHasChanged();
     }
 
@@ -159,10 +159,33 @@
         }
     }
 
-    private async Task StartTimer(Guid id)  { await TimerApi.StartTimerAsync(id);        await LoadTimers(); }
-    private async Task PauseTimer(Guid id)  { await TimerApi.PauseTimerAsync(id);        await LoadTimers(); }
-    private async Task AckTimer(Guid id)    { await TimerApi.AcknowledgeTimerAsync(id);  await LoadTimers(); }
-    private async Task CancelTimer(Guid id) { await TimerApi.CancelTimerAsync(id);       await LoadTimers(); }
+    private async Task StartTimer(Guid id)
+    {
+        if (!await TimerApi.StartTimerAsync(id))
+            ToastService.ShowError("Failed to start timer.");
+        await LoadTimers();
+    }
+
+    private async Task PauseTimer(Guid id)
+    {
+        if (!await TimerApi.PauseTimerAsync(id))
+            ToastService.ShowError("Failed to pause timer.");
+        await LoadTimers();
+    }
+
+    private async Task AckTimer(Guid id)
+    {
+        if (!await TimerApi.AcknowledgeTimerAsync(id))
+            ToastService.ShowError("Failed to acknowledge timer.");
+        await LoadTimers();
+    }
+
+    private async Task CancelTimer(Guid id)
+    {
+        if (!await TimerApi.CancelTimerAsync(id))
+            ToastService.ShowError("Failed to cancel timer.");
+        await LoadTimers();
+    }
 
     private static string FormatCountdown(CookingTimerDto timer)
     {

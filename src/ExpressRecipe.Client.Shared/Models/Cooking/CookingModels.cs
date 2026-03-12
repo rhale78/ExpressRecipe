@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ExpressRecipe.Client.Shared.Models.Cooking;
 
 public class CookingTimerDto
@@ -17,6 +19,7 @@ public class CreateCookingTimerRequest
     public string Label { get; set; } = string.Empty;
     public int DurationSeconds { get; set; }
     public Guid? RecipeId { get; set; }
+    [JsonPropertyName("startImmediately")]
     public bool AutoStart { get; set; }
 }
 
