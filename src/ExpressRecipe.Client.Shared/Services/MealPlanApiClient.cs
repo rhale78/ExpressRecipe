@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using ExpressRecipe.Client.Shared.Models.Cooking;
 using ExpressRecipe.Client.Shared.Models.MealPlanning;
@@ -65,6 +66,10 @@ public interface IMealPlanApiClient
     Task<bool> PauseTimerAsync(Guid timerId);
     Task<bool> CancelTimerAsync(Guid timerId);
     Task<bool> AcknowledgeTimerAsync(Guid timerId);
+
+    // Pantry Discovery
+    Task<PantryDiscoveryResultDto?> GetPantryDiscoveryAsync(PantryDiscoveryOptionsDto options,
+        CancellationToken ct = default);
 }
 
 public class MealPlanApiClient : IMealPlanApiClient
@@ -749,4 +754,26 @@ public class MealPlanApiClient : IMealPlanApiClient
     private class ApplyTemplateResponse { public Guid PlanId { get; set; } }
     private class AddCourseResponse { public Guid Id { get; set; } }
     private class CreateTimerResponse { public Guid Id { get; set; } }
+
+    // ── Pantry Discovery ───────────────────────────────────────────────────────
+
+    public async Task<PantryDiscoveryResultDto?> GetPantryDiscoveryAsync(
+        PantryDiscoveryOptionsDto options, CancellationToken ct = default)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            string minMatch = options.MinMatchPercent.ToString("F2", CultureInfo.InvariantCulture);
+            string sortBy = Uri.EscapeDataString(options.SortBy);
+            string url = $"/api/discover?minMatch={minMatch}&sortBy={sortBy}&limit={options.Limit}&respectDiet={options.RespectDietaryRestrictions}";
+            return await _httpClient.GetFromJsonAsync<PantryDiscoveryResultDto>(url, ct);
+        }
+        catch
+        {
+            // Suppress network/deserialization errors; callers check for null
+            return null;
+        }
+    }
 }
