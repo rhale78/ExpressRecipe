@@ -3,11 +3,12 @@ using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.Services;
 using ExpressRecipe.RecipeService.Tests.Helpers;
 using ExpressRecipe.Shared.DTOs.Recipe;
+using ExpressRecipe.Shared.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using ControllerSearchResult = ExpressRecipe.RecipeService.Controllers.RecipeSearchResult;
+using ControllerSearchResult = ExpressRecipe.Shared.Models.PagedResult<ExpressRecipe.Shared.DTOs.Recipe.RecipeDto>;
 
 namespace ExpressRecipe.RecipeService.Tests.Controllers;
 
@@ -124,7 +125,7 @@ public class RecipesControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var searchResult = Assert.IsType<ControllerSearchResult>(ok.Value);
-        searchResult.Recipes.Should().HaveCount(2);
+        searchResult.Items.Should().HaveCount(2);
         searchResult.Page.Should().Be(1);
         searchResult.PageSize.Should().Be(20);
     }
@@ -139,7 +140,7 @@ public class RecipesControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var searchResult = Assert.IsType<ControllerSearchResult>(ok.Value);
-        searchResult.Recipes.Should().HaveCount(1);
+        searchResult.Items.Should().HaveCount(1);
         _mockRepo.Verify(r => r.SearchRecipesAsync("tomato", 20, 0), Times.Once);
     }
 
@@ -157,8 +158,8 @@ public class RecipesControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var searchResult = Assert.IsType<ControllerSearchResult>(ok.Value);
-        searchResult.Recipes.Should().HaveCount(1);
-        searchResult.Recipes[0].Category.Should().Be("Italian");
+        searchResult.Items.Should().HaveCount(1);
+        searchResult.Items[0].Category.Should().Be("Italian");
     }
 
     [Fact]
