@@ -33,6 +33,10 @@ builder.Services.AddScoped<IIngredientMatchingService>(sp =>
         sp.GetRequiredService<ExpressRecipe.Shared.Services.HybridCacheService>(),
         sp.GetRequiredService<ILogger<IngredientMatchingService>>()));
 
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
+
 // Parsing Services
 builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>();
 builder.Services.AddScoped<IIngredientParser, IngredientParser>();
