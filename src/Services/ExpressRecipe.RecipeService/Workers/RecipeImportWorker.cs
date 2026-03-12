@@ -39,6 +39,14 @@ public class RecipeImportWorker : BackgroundService
     {
         _logger.LogInformation("RecipeImportWorker starting...");
 
+        // Check if auto-import is enabled (allows disabling at config level)
+        var autoImport = _configuration.GetValue<bool>("RecipeImport:AutoImport", true);
+        if (!autoImport)
+        {
+            _logger.LogInformation("RecipeImportWorker: auto-import is disabled in configuration. Worker will not run.");
+            return;
+        }
+
         var importIntervalHours = _configuration.GetValue<int>("RecipeImport:ImportIntervalHours", 24);
         var importInterval = TimeSpan.FromHours(importIntervalHours);
         DateTime lastImportTime = DateTime.MinValue;
@@ -224,6 +232,11 @@ public class RecipeImportWorker : BackgroundService
                     consumerImported += result.Imported;
                     consumerSkipped += result.Skipped;
                     batch.Clear();
+
+                    // Inter-item delay to prevent overwhelming CPU/disk (configured via RecipeImport:BatchDelayMs)
+                    var batchDelayMs = _configuration.GetValue<int>("RecipeImport:BatchDelayMs", 0);
+                    if (batchDelayMs > 0)
+                        await Task.Delay(batchDelayMs, stoppingToken);
 
                     int currentTotal = consumerImported + consumerSkipped;
                     if (currentTotal >= lastLogTotal + 10000)

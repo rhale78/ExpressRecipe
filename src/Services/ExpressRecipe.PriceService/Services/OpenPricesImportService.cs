@@ -194,6 +194,11 @@ public class OpenPricesImportService : IOpenPricesImportService
                             batch.Clear();
                             firstItem = null;
                             lastItem = null;
+
+                            // Inter-item delay to prevent overwhelming CPU/disk (configured via PriceImport:BatchDelayMs)
+                            var batchDelayMs = _configuration.GetValue<int>("PriceImport:BatchDelayMs", 0);
+                            if (batchDelayMs > 0)
+                                await Task.Delay(batchDelayMs, cancellationToken).ConfigureAwait(false);
                         }
                     }
                     catch (Exception ex)
@@ -305,6 +310,11 @@ public class OpenPricesImportService : IOpenPricesImportService
                 batch.Clear();
                 firstItem = null;
                 lastItem = null;
+
+                // Inter-item delay to prevent overwhelming CPU/disk (configured via PriceImport:BatchDelayMs)
+                var batchDelayMs = _configuration.GetValue<int>("PriceImport:BatchDelayMs", 0);
+                if (batchDelayMs > 0)
+                    await Task.Delay(batchDelayMs, cancellationToken).ConfigureAwait(false);
             }
 
             if (result.Processed % 10000 == 0)

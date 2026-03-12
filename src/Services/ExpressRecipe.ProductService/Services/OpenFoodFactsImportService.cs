@@ -159,6 +159,11 @@ public class OpenFoodFactsImportService
                     result.TotalProcessed = processedCount;
                     stagingBatch.Clear();
                     _logger.LogInformation("[Delta] Progress: {Count} products staged so far", processedCount);
+
+                    // Inter-item delay to prevent overwhelming CPU/disk (configured via ProductImport:BatchDelayMs)
+                    var batchDelayMs = _configuration.GetValue<int>("ProductImport:BatchDelayMs", 0);
+                    if (batchDelayMs > 0)
+                        await Task.Delay(batchDelayMs, cancellationToken).ConfigureAwait(false);
                 }
 
                 page++;
