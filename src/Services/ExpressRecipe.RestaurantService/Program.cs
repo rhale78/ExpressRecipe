@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.RestaurantService.Data;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
@@ -25,6 +26,18 @@ builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository
 
 // Add controllers
 builder.Services.AddControllers();
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user restaurant rating data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.RestaurantService.Services.GdprEventSubscriber>();
+}
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);

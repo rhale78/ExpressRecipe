@@ -32,6 +32,9 @@ public interface IScannerRepository
     Task<List<CorrectionReportRecord>> GetCorrectionReportsAsync(string? status, int limit, CancellationToken ct = default);
     Task UpdateCorrectionStatusAsync(Guid reportId, string status, Guid reviewedBy, CancellationToken ct = default);
     Task<List<TrainingExportRow>> GetTrainingExportAsync(int limit, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class ScanHistoryDto

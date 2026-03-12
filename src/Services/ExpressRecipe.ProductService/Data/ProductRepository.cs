@@ -41,6 +41,9 @@ public interface IProductRepository
 
     // Admin manual import (bypasses approval queue)
     Task<Guid> ForceImportAsync(ManualProductImportRequest request, Guid adminId, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class ProductRepository : SqlHelper, IProductRepository
@@ -1359,5 +1362,16 @@ public class ProductRepository : SqlHelper, IProductRepository
             CreateParameter("@CreatedBy",       adminId));
 
         return id;
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM UserCoupon          WHERE UserId = @UserId;
+DELETE FROM UserMenuItemRating  WHERE UserId = @UserId;
+DELETE FROM UserRestaurantRating WHERE UserId = @UserId;
+UPDATE ProductRating SET IsDeleted = 1 WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
     }
 }

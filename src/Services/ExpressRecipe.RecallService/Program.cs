@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.RecallService.Data;
 using ExpressRecipe.RecallService.Services;
 using ExpressRecipe.Shared.Middleware;
@@ -82,12 +83,17 @@ builder.Services.AddHostedService<RecallMonitorWorker>();
 // Add controllers
 builder.Services.AddControllers();
 
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.RecallService API", Version = "v1" });
-// });
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user recall data on gdpr.user.delete events
+    builder.Services.AddHostedService<GdprEventSubscriber>();
+}
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);

@@ -25,6 +25,9 @@ public interface IRecallRepository
     Task<List<RecallSubscriptionDto>> GetUserSubscriptionsAsync(Guid userId);
     Task UnsubscribeAsync(Guid subscriptionId);
     Task<List<Guid>> GetAffectedUsersAsync(Guid recallId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class RecallDto

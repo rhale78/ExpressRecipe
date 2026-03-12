@@ -20,6 +20,9 @@ public interface IRestaurantRepository
     Task<UserRestaurantRatingDto?> GetUserRatingAsync(Guid restaurantId, Guid userId);
     Task<Guid> AddOrUpdateRatingAsync(Guid restaurantId, Guid userId, RateRestaurantRequest request);
     Task<bool> DeleteRatingAsync(Guid restaurantId, Guid userId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class RestaurantRepository : SqlHelper, IRestaurantRepository
@@ -409,5 +412,11 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             CreatedAt = GetDateTime(reader, "CreatedAt"),
             UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
         };
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = "DELETE FROM UserRestaurantRating WHERE UserId = @UserId;";
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
     }
 }

@@ -384,4 +384,16 @@ public class ScannerRepository : SqlHelper, IScannerRepository
         ct,
         CreateParameter("@Limit", limit));
     }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM VisionCapture   WHERE UserId = @UserId;
+DELETE FROM OCRResult       WHERE UserId = @UserId;
+DELETE FROM ScanAlert       WHERE UserId = @UserId;
+DELETE FROM ScanHistory     WHERE UserId = @UserId;
+DELETE FROM UnknownProduct  WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+    }
 }

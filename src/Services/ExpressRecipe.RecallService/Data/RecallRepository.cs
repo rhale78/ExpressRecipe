@@ -271,4 +271,13 @@ public class RecallRepository : SqlHelper, IRecallRepository
             reader => GetGuid(reader, "UserId"),
             CreateParameter("@RecallId", recallId));
     }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM RecallAlert        WHERE UserId = @UserId;
+DELETE FROM RecallSubscription WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+    }
 }

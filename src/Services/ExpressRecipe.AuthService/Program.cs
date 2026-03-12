@@ -1,6 +1,7 @@
 using ExpressRecipe.AuthService.Data;
 using ExpressRecipe.AuthService.Services;
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -66,6 +67,18 @@ builder.Services.AddControllers()
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user auth tokens on gdpr.user.delete events
+    builder.Services.AddHostedService<GdprEventSubscriber>();
+}
 
 var app = builder.Build();
 

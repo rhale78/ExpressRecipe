@@ -28,6 +28,9 @@ public interface IMenuItemRepository
     Task<UserMenuItemRatingDto?> GetUserRatingAsync(Guid menuItemId, Guid userId);
     Task<Guid> AddOrUpdateRatingAsync(Guid menuItemId, Guid userId, RateMenuItemRequest request);
     Task<bool> DeleteRatingAsync(Guid menuItemId, Guid userId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class MenuItemRepository : SqlHelper, IMenuItemRepository
@@ -565,5 +568,11 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
             UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
         };
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = "DELETE FROM UserMenuItemRating WHERE UserId = @UserId;";
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
     }
 }

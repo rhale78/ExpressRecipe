@@ -14,6 +14,9 @@ public interface IAuthRepository
     Task RevokeRefreshTokenAsync(string token);
     Task RevokeAllUserTokensAsync(Guid userId);
     Task<bool> EnsureAdminUserExistsAsync();
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class AuthRepository : IAuthRepository
@@ -299,5 +302,19 @@ public class AuthRepository : IAuthRepository
 
         await freshInsertCommand.ExecuteNonQueryAsync();
         return true;
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM ExternalCalendarToken WHERE UserId = @UserId;
+DELETE FROM ExternalLogin          WHERE UserId = @UserId;
+DELETE FROM RefreshToken           WHERE UserId = @UserId;";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync(ct);
     }
 }
