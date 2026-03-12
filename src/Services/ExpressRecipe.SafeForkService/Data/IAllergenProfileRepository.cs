@@ -17,4 +17,7 @@ public interface IAllergenProfileRepository
     Task<List<(Guid LinkedIngredientId, int Count)>> GetTopIngredientLinksAsync(Guid memberId, int minCount = 5, CancellationToken ct = default);
     Task<List<AllergenProfileEntryDto>> GetHouseholdHardExcludesAsync(IReadOnlyList<Guid> memberIds, CancellationToken ct = default);
     Task SoftDeleteAllForMemberAsync(Guid memberId, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteMemberDataAsync(Guid memberId, CancellationToken ct = default);
 }

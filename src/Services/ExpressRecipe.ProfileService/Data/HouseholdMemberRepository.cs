@@ -225,4 +225,35 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
             CreatedAt         = GetDateTime(reader, "CreatedAt")
         };
     }
+
+    public async Task<IReadOnlyList<Guid>> DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        // Find all member IDs linked to this user before updating
+        const string selectSql = @"
+SELECT Id FROM HouseholdMember
+WHERE LinkedUserId = @UserId AND IsDeleted = 0;";
+
+        List<Guid> memberIds = await ExecuteReaderAsync<Guid>(
+            selectSql,
+            reader => GetGuid(reader, "Id"),
+            CreateParameter("@UserId", userId));
+
+        if (memberIds.Count > 0)
+        {
+            // Soft-delete the member record so household data (name, type, etc.) is preserved
+            // for the household audit trail while the user's personal identifiers are cleared.
+            // LinkedUserId = NULL removes the PII link (GDPR Article 17 erasure of personal data);
+            // HasUserAccount = 0 prevents re-use of the slot; IsDeleted = 1 hides it from queries.
+            const string deleteSql = @"
+UPDATE HouseholdMember
+SET IsDeleted      = 1,
+    LinkedUserId   = NULL,
+    HasUserAccount = 0
+WHERE LinkedUserId = @UserId;";
+
+            await ExecuteNonQueryAsync(deleteSql, CreateParameter("@UserId", userId));
+        }
+
+        return memberIds;
+    }
 }

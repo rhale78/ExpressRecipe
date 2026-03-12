@@ -253,4 +253,16 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
             sql,
             CreateParameter("@MemberId", memberId));
     }
+
+    public async Task DeleteMemberDataAsync(Guid memberId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM AllergenProfileLink
+WHERE AllergenProfileId IN (
+    SELECT Id FROM AllergenProfile WHERE MemberId = @MemberId);
+DELETE FROM TemporarySchedule WHERE MemberId = @MemberId;
+DELETE FROM AllergenProfile    WHERE MemberId = @MemberId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@MemberId", memberId));
+    }
 }

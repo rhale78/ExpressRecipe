@@ -53,6 +53,13 @@ app.MapDefaultEndpoints();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

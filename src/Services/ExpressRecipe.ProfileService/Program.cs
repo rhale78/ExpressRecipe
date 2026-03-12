@@ -32,6 +32,8 @@ if (messagingEnabled)
 {
     builder.AddRabbitMqMessaging("messaging");
     builder.Services.AddSingleton<IProfileEventPublisher, ProfileEventPublisher>();
+    // GDPR: unlink member records and cascade delete event to downstream services
+    builder.Services.AddHostedService<GdprEventSubscriber>();
 }
 else
 {
@@ -59,6 +61,13 @@ app.MapDefaultEndpoints();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

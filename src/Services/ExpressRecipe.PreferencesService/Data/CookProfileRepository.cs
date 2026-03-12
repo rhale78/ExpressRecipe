@@ -218,4 +218,14 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
             sql,
             CreateParameter("@MemberId", memberId));
     }
+
+    public async Task DeleteMemberDataAsync(Guid memberId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM DismissedTip      WHERE MemberId = @MemberId;
+DELETE FROM TechniqueComfort  WHERE MemberId = @MemberId;
+DELETE FROM CookProfile       WHERE MemberId = @MemberId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@MemberId", memberId));
+    }
 }

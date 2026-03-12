@@ -28,6 +28,7 @@ public sealed class HouseholdMemberSubscriber : IHostedService
 
         await _bus.SubscribeAsync<HouseholdMemberAddedEvent>(HandleMemberAddedAsync, broadcastOpts, cancellationToken);
         await _bus.SubscribeAsync<HouseholdMemberRemovedEvent>(HandleMemberRemovedAsync, broadcastOpts, cancellationToken);
+        await _bus.SubscribeAsync<MemberGdprDeleteEvent>(HandleMemberGdprDeleteAsync, broadcastOpts, cancellationToken);
 
         _logger.LogInformation("[HouseholdMemberSubscriber] Subscribed to household member events");
     }
@@ -81,6 +82,32 @@ public sealed class HouseholdMemberSubscriber : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to soft-delete allergen profiles for member {MemberId}", evt.MemberId);
+        }
+    }
+
+    private async Task HandleMemberGdprDeleteAsync(
+        MemberGdprDeleteEvent evt,
+        MessageContext context,
+        CancellationToken ct)
+    {
+        _logger.LogWarning(
+            "[SafeForkService] GDPR member delete received for member {MemberId}", evt.MemberId);
+
+        try
+        {
+            using IServiceScope scope = _scopeFactory.CreateScope();
+            IAllergenProfileRepository repo =
+                scope.ServiceProvider.GetRequiredService<IAllergenProfileRepository>();
+
+            await repo.DeleteMemberDataAsync(evt.MemberId, ct);
+
+            _logger.LogInformation(
+                "[SafeForkService] GDPR: hard-deleted allergen data for member {MemberId}", evt.MemberId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "[SafeForkService] Error processing GDPR member delete for {MemberId}", evt.MemberId);
         }
     }
 }

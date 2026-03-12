@@ -15,4 +15,7 @@ public interface IHouseholdMemberRepository
     Task<List<HouseholdMemberDto>> GetExpiredTemporaryVisitorsAsync(CancellationToken ct = default);
     Task PurgeExpiredTemporaryVisitorsAsync(CancellationToken ct = default);
     Task<bool> UpdateMemberTypeAsync(Guid memberId, string memberType, Guid? sourceHouseholdId, CancellationToken ct = default);
+
+    // GDPR
+    Task<IReadOnlyList<Guid>> DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }

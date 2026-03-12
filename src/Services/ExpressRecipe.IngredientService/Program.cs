@@ -119,6 +119,13 @@ else
     app.Logger.LogWarning("Migrations directory not found at {Path}", migrationsPath);
 }
 
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
