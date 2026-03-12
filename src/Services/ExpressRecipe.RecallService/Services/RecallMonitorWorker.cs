@@ -9,18 +9,28 @@ public class RecallMonitorWorker : BackgroundService
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<RecallMonitorWorker> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
     private readonly TimeSpan _interval = TimeSpan.FromHours(1); // Check every hour
 
-    public RecallMonitorWorker(IServiceProvider serviceProvider, ILogger<RecallMonitorWorker> logger, IHttpClientFactory httpClientFactory)
+    public RecallMonitorWorker(IServiceProvider serviceProvider, ILogger<RecallMonitorWorker> logger, IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Recall Monitor Worker started");
+
+        // Check if auto-import is enabled (allows disabling at config level)
+        var autoImport = _configuration.GetValue<bool>("RecallImport:AutoImport", true);
+        if (!autoImport)
+        {
+            _logger.LogInformation("RecallMonitorWorker: auto-import is disabled in configuration. Worker will not run.");
+            return;
+        }
 
         // Wait 1 minute before first run to allow services to initialize
         await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
@@ -30,6 +40,12 @@ public class RecallMonitorWorker : BackgroundService
             try
             {
                 await CheckForNewRecallsAsync(stoppingToken);
+
+                // Inter-item delay to prevent overwhelming CPU/disk (configured via RecallImport:BatchDelayMs)
+                var batchDelayMs = _configuration.GetValue<int>("RecallImport:BatchDelayMs", 0);
+                if (batchDelayMs > 0)
+                    await Task.Delay(batchDelayMs, stoppingToken);
+
                 await Task.Delay(_interval, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

@@ -234,6 +234,11 @@ public class ProductDataImportWorker : BackgroundService
                         result.Errors.Count,
                         string.Join(", ", result.Errors.Take(5)));
                 }
+
+                // Inter-item delay to prevent overwhelming CPU/disk between delta cycles (configured via ProductImport:BatchDelayMs)
+                var batchDelayMs = _configuration.GetValue<int>("ProductImport:BatchDelayMs", 0);
+                if (batchDelayMs > 0)
+                    await Task.Delay(batchDelayMs, stoppingToken);
             }
             catch (OperationCanceledException)
             {

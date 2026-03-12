@@ -140,6 +140,11 @@ public class StoreLocationImportWorker : BackgroundService
             if (snapEnabled) await RunSnapImportAsync(stoppingToken);
             if (osmEnabled) await RunOsmImportAsync(stoppingToken);
             if (hifldEnabled) await RunHifldImportAsync(stoppingToken);
+
+            // Inter-item delay to prevent overwhelming CPU/disk between sources (configured via StoreLocationImport:BatchDelayMs)
+            var batchDelayMs = _configuration.GetValue<int>("StoreLocationImport:BatchDelayMs", 0);
+            if (batchDelayMs > 0)
+                await Task.Delay(batchDelayMs, stoppingToken);
         }
     }
 
