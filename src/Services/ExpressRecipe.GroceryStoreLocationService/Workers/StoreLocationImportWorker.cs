@@ -134,17 +134,14 @@ public class StoreLocationImportWorker : BackgroundService
             var osmEnabled = _configuration.GetValue<bool>("StoreLocationImport:OpenStreetMapEnabled", true);
             var overtureEnabled = _configuration.GetValue<bool>("StoreLocationImport:Overture:Enabled", false);
             var hifldEnabled = _configuration.GetValue<bool>("StoreLocationImport:Hifld:Enabled", false);
-
-            if (overtureEnabled) await RunOvertureImportAsync(stoppingToken);
-            if (openPricesEnabled) await RunOpenPricesImportAsync(stoppingToken);
-            if (snapEnabled) await RunSnapImportAsync(stoppingToken);
-            if (osmEnabled) await RunOsmImportAsync(stoppingToken);
-            if (hifldEnabled) await RunHifldImportAsync(stoppingToken);
-
-            // Inter-item delay to prevent overwhelming CPU/disk between sources (configured via StoreLocationImport:BatchDelayMs)
+            // Inter-import cool-down to prevent overwhelming CPU/disk between data sources (configured via StoreLocationImport:BatchDelayMs)
             var batchDelayMs = _configuration.GetValue<int>("StoreLocationImport:BatchDelayMs", 0);
-            if (batchDelayMs > 0)
-                await Task.Delay(batchDelayMs, stoppingToken);
+
+            if (overtureEnabled) { await RunOvertureImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
+            if (openPricesEnabled) { await RunOpenPricesImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
+            if (snapEnabled) { await RunSnapImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
+            if (osmEnabled) { await RunOsmImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
+            if (hifldEnabled) { await RunHifldImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
         }
     }
 

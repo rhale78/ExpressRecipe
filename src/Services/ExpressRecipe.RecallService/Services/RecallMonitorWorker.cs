@@ -41,12 +41,13 @@ public class RecallMonitorWorker : BackgroundService
             {
                 await CheckForNewRecallsAsync(stoppingToken);
 
-                // Inter-item delay to prevent overwhelming CPU/disk (configured via RecallImport:BatchDelayMs)
-                var batchDelayMs = _configuration.GetValue<int>("RecallImport:BatchDelayMs", 0);
-                if (batchDelayMs > 0)
-                    await Task.Delay(batchDelayMs, stoppingToken);
+        // Inter-item delay to prevent overwhelming CPU/disk between import checks (configured via RecallImport:BatchDelayMs)
+        // Note: this cool-down is applied after each import run, before the next regular interval begins
+        var batchDelayMs = _configuration.GetValue<int>("RecallImport:BatchDelayMs", 0);
+        if (batchDelayMs > 0)
+            await Task.Delay(batchDelayMs, stoppingToken);
 
-                await Task.Delay(_interval, stoppingToken);
+        await Task.Delay(_interval, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
