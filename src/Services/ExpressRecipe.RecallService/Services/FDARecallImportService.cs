@@ -709,15 +709,17 @@ public class FDARecallImportService
 
             // 2. MERGE into Recall table and capture IDs
             const string mergeSql = @"
+                DECLARE @OutputTable TABLE (Id UNIQUEIDENTIFIER, ExternalId NVARCHAR(100));
                 MERGE Recall AS target
                 USING #TempRecall AS source
                 ON (target.ExternalId = source.ExternalId AND target.Source = source.Source)
                 WHEN NOT MATCHED THEN
                     INSERT (Id, ExternalId, Source, Title, Description, Reason, Severity, RecallDate, PublishedDate, Status, ImportedAt)
                     VALUES (NEWID(), source.ExternalId, source.Source, source.Title, source.Description, source.Reason, source.Severity, source.RecallDate, source.PublishedDate, source.Status, GETUTCDATE())
-                OUTPUT INSERTED.Id, source.ExternalId INTO @OutputTable (Id, ExternalId);";
+                OUTPUT INSERTED.Id, source.ExternalId INTO @OutputTable (Id, ExternalId);
+                SELECT Id, ExternalId FROM @OutputTable";
 
-            using (var cmd = new SqlCommand($"DECLARE @OutputTable TABLE (Id UNIQUEIDENTIFIER, ExternalId NVARCHAR(100)); {mergeSql} SELECT Id, ExternalId FROM @OutputTable", connection, transaction))
+            using (var cmd = new SqlCommand(mergeSql, connection, transaction))
             {
                 var idMap = new Dictionary<string, Guid>();
                 using var reader = await cmd.ExecuteReaderAsync();

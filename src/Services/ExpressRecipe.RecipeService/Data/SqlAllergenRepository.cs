@@ -24,11 +24,14 @@ public class SqlAllergenRepository : SqlHelper, IAllergenRepository
             const string sql = @"
                 SELECT DISTINCT a.Id, a.Name
                 FROM Allergen a
-                WHERE LOWER(a.Name) IN (
-                    SELECT value
-                    FROM STRING_SPLIT(LOWER(@IngredientName), ' ')
-                )
-                   OR LOWER(@IngredientName) LIKE '%' + LOWER(a.Name) + '%'";
+                WHERE a.IsDeleted = 0
+                  AND (
+                    LOWER(a.Name) IN (
+                        SELECT value
+                        FROM STRING_SPLIT(LOWER(@IngredientName), ' ')
+                    )
+                    OR LOWER(@IngredientName) LIKE '%' + LOWER(a.Name) + '%'
+                  )";
 
             return await ExecuteReaderAsync(
                 sql,

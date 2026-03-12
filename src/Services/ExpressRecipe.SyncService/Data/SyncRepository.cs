@@ -42,7 +42,7 @@ public class SyncRepository : ISyncRepository
         const string sql = @"
             SELECT Id, UserId, DeviceId, EntityType, EntityId, Version, Operation, Data, ClientTimestamp, ServerTimestamp, IsSynced
             FROM SyncMetadata
-            WHERE UserId = @UserId AND DeviceId != @DeviceId AND ServerTimestamp > @Since
+            WHERE UserId = @UserId AND DeviceId != @DeviceId AND ServerTimestamp > @Since AND IsDeleted = 0
             ORDER BY ServerTimestamp ASC";
 
         await using var connection = new SqlConnection(_connectionString);
@@ -81,7 +81,7 @@ public class SyncRepository : ISyncRepository
         const string sql = @"
             SELECT Id, UserId, DeviceId, EntityType, EntityId, Version, Operation, Data, ClientTimestamp, ServerTimestamp, IsSynced
             FROM SyncMetadata
-            WHERE EntityType = @EntityType AND EntityId = @EntityId
+            WHERE EntityType = @EntityType AND EntityId = @EntityId AND IsDeleted = 0
             ORDER BY Version ASC";
 
         await using var connection = new SqlConnection(_connectionString);
@@ -119,7 +119,7 @@ public class SyncRepository : ISyncRepository
         const string sql = @"
             SELECT TOP 1 Id, UserId, DeviceId, EntityType, EntityId, Version, Operation, Data, ClientTimestamp, ServerTimestamp, IsSynced
             FROM SyncMetadata
-            WHERE EntityType = @EntityType AND EntityId = @EntityId
+            WHERE EntityType = @EntityType AND EntityId = @EntityId AND IsDeleted = 0
             ORDER BY Version DESC";
 
         await using var connection = new SqlConnection(_connectionString);
