@@ -178,28 +178,25 @@
         }
 
         <!-- Work Queue Widget -->
-        @if (QueueState.PendingCount > 0)
+        @if (_queuePreview?.Any() == true)
         {
             <div class="dashboard-queue-widget @(QueueState.HasCritical ? "queue-critical" : "")">
                 <div class="queue-widget-header">
                     <span class="queue-widget-icon">📋</span>
                     <h3>Work Queue</h3>
-                    <span class="queue-count-badge">@QueueState.PendingCount item@(QueueState.PendingCount != 1 ? "s" : "") need attention</span>
+                    <span class="queue-count-badge @(QueueState.HasCritical ? "badge-critical" : "")">@QueueState.PendingCount item@(QueueState.PendingCount != 1 ? "s" : "") @(QueueState.PendingCount == 1 ? "needs" : "need") attention</span>
                 </div>
 
-                @if (_queuePreview?.Any() == true)
-                {
-                    <div class="queue-preview-list">
-                        @foreach (WorkQueueItemDto item in _queuePreview.Take(3))
-                        {
-                            <div class="queue-preview-item priority-@GetQueueItemPriorityClass(item.Priority)">
-                                <span class="queue-item-icon">@GetQueueItemIcon(item.ItemType)</span>
-                                <span class="queue-item-title">@item.Title</span>
-                                <span class="queue-item-age">@GetRelativeTime(item.CreatedAt)</span>
-                            </div>
-                        }
-                    </div>
-                }
+                <div class="queue-preview-list">
+                    @foreach (WorkQueueItemDto item in _queuePreview.Take(3))
+                    {
+                        <div class="queue-preview-item priority-@GetQueueItemPriorityClass(item.Priority)">
+                            <span class="queue-item-icon">@GetQueueItemIcon(item.ItemType)</span>
+                            <span class="queue-item-title">@item.Title</span>
+                            <span class="queue-item-age">@GetRelativeTime(item.CreatedAt)</span>
+                        </div>
+                    }
+                </div>
 
                 <a href="/queue" class="btn btn-primary btn-sm queue-action-link">
                     View All →

@@ -4,6 +4,7 @@
 @using ExpressRecipe.Client.Shared.Models.MealPlanning
 @using ExpressRecipe.Client.Shared.Models.Shopping
 @using ExpressRecipe.Client.Shared.Services
+@using System.Globalization
 @inject IMealPlanApiClient MealPlanApi
 @inject IShoppingListApiClient ShoppingApi
 @inject NavigationManager Navigation
@@ -23,7 +24,7 @@
     <div class="discovery-filters">
         <div class="filter-group-inline">
             <label>Minimum match</label>
-            <select class="form-control-sm" @bind="_minMatch" @bind:after="Discover" disabled="@_isLoading">
+            <select class="form-control-sm" @bind="_minMatchStr" @bind:after="Discover" disabled="@_isLoading">
                 <option value="0.60">60%+</option>
                 <option value="0.70">70%+</option>
                 <option value="0.80">80%+</option>
@@ -90,7 +91,7 @@
         @if (!_result.Matches.Any())
         {
             <div class="empty-state">
-                <p>😔 No recipes match your current pantry at @((_minMatch * 100).ToString("F0"))%+ coverage.</p>
+                <p>😔 No recipes match your current pantry at @((MinMatch * 100).ToString("F0"))%+ coverage.</p>
                 <button class="btn btn-outline" @onclick="LowerThreshold">
                     Try 60% match
                 </button>
@@ -101,7 +102,7 @@
             <div class="discovery-results-grid">
                 @foreach (PantryRecipeMatchDto match in _result.Matches)
                 {
-                    <div class="discovery-recipe-card @(match.HasDietaryConflict ? "card-dietary-conflict" : "")">
+                    <div class="discovery-recipe-card">
                         <!-- Match % badge -->
                         <div class="match-badge match-@GetMatchTier(match.MatchPercent)">
                             @((match.MatchPercent * 100).ToString("F0"))% match
@@ -145,10 +146,6 @@
                                 </div>
                             }
 
-                            @if (match.HasDietaryConflict)
-                            {
-                                <div class="dietary-conflict-badge">⚠️ Allergen conflict</div>
-                            }
                         </div>
 
                         <!-- Actions -->
@@ -176,7 +173,8 @@
 </div>
 
 @code {
-    private decimal _minMatch = 0.80m;
+    private string _minMatchStr = "0.80";
+    private decimal MinMatch => decimal.Parse(_minMatchStr, CultureInfo.InvariantCulture);
     private string _sortBy = "match";
     private bool _respectDietary = true;
     private bool _isLoading = true;
@@ -188,9 +186,11 @@
 
     private async Task Discover()
     {
-        // Cancel any previous in-flight request
-        await _cts.CancelAsync();
+        // Cancel any previous in-flight request and dispose it
+        CancellationTokenSource oldCts = _cts;
+        await oldCts.CancelAsync();
         _cts = new CancellationTokenSource();
+        oldCts.Dispose();
         CancellationToken ct = _cts.Token;
 
         _isLoading = true;
@@ -202,7 +202,7 @@
             PantryDiscoveryResultDto? result = await MealPlanApi.GetPantryDiscoveryAsync(
                 new PantryDiscoveryOptionsDto
                 {
-                    MinMatchPercent = _minMatch,
+                    MinMatchPercent = MinMatch,
                     SortBy = _sortBy,
                     Limit = 24,
                     RespectDietaryRestrictions = _respectDietary
@@ -233,7 +233,7 @@
 
     private async Task LowerThreshold()
     {
-        _minMatch = 0.60m;
+        _minMatchStr = "0.60";
         await Discover();
     }
 
@@ -305,5 +305,9 @@
         _ => "partial"
     };
 
-    public void Dispose() => _cts.Cancel();
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }

@@ -6,7 +6,6 @@ public sealed record PantryDiscoveryOptionsDto
     public string SortBy { get; init; } = "match";   // match | rating | cookTime | added
     public int Limit { get; init; } = 24;
     public bool RespectDietaryRestrictions { get; init; } = true;
-    public bool ExcludePlannedMeals { get; init; } = true;
 }
 
 public sealed record PantryDiscoveryResultDto
@@ -27,5 +26,4 @@ public sealed record PantryRecipeMatchDto
     public int MatchedIngredientCount { get; init; }
     public int TotalIngredientCount { get; init; }
     public List<string> MissingIngredients { get; init; } = new();
-    public bool HasDietaryConflict { get; init; }
 }
