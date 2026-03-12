@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using ExpressRecipe.Client.Shared.Models.MealPlanning;
 
@@ -638,12 +639,10 @@ public class MealPlanApiClient : IMealPlanApiClient
 
         try
         {
-            HttpResponseMessage resp = await _httpClient.PostAsJsonAsync(
-                "/api/pantry-discovery/discover", options, ct);
-
-            return resp.IsSuccessStatusCode
-                ? await resp.Content.ReadFromJsonAsync<PantryDiscoveryResultDto>(cancellationToken: ct)
-                : null;
+            string minMatch = options.MinMatchPercent.ToString("F2", CultureInfo.InvariantCulture);
+            string sortBy = Uri.EscapeDataString(options.SortBy);
+            string url = $"/api/discover?minMatch={minMatch}&sortBy={sortBy}&limit={options.Limit}&respectDiet={options.RespectDietaryRestrictions}";
+            return await _httpClient.GetFromJsonAsync<PantryDiscoveryResultDto>(url, ct);
         }
         catch
         {
