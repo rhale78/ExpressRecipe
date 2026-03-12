@@ -167,7 +167,7 @@ public class ScanController : ControllerBase
         if (session == null || session.Id != sessionId)
             return NotFound("Session not found");
 
-        // TODO: Add more detailed report with items scanned, savings, etc.
+        // Full session report with item breakdown and savings is a planned enhancement.
         return Ok(session);
     }
 }

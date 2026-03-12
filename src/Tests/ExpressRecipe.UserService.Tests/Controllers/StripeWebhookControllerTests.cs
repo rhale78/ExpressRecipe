@@ -21,6 +21,7 @@ public class StripeWebhookControllerTests
     private readonly Mock<IPaymentService> _mockPayment;
     private readonly Mock<ISubscriptionRepository> _mockSubs;
     private readonly Mock<ILogger<StripeWebhookController>> _mockLogger;
+    private readonly Mock<IHttpClientFactory> _mockHttpClientFactory;
     private readonly IConfiguration _config;
 
     public StripeWebhookControllerTests()
@@ -28,6 +29,10 @@ public class StripeWebhookControllerTests
         _mockPayment = new Mock<IPaymentService>();
         _mockSubs    = new Mock<ISubscriptionRepository>();
         _mockLogger  = new Mock<ILogger<StripeWebhookController>>();
+        _mockHttpClientFactory = new Mock<IHttpClientFactory>();
+        _mockHttpClientFactory
+            .Setup(f => f.CreateClient(It.IsAny<string>()))
+            .Returns(new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler()));
 
         _config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -70,7 +75,8 @@ public class StripeWebhookControllerTests
             _mockSubs.Object,
             _config,
             _mockLogger.Object,
-            eventConstructor);
+            eventConstructor,
+            _mockHttpClientFactory.Object);
 
         DefaultHttpContext httpContext = new();
         httpContext.Request.Body        = new MemoryStream(Encoding.UTF8.GetBytes(body));
@@ -125,7 +131,8 @@ public class StripeWebhookControllerTests
             _mockSubs.Object,
             emptyConfig,
             _mockLogger.Object,
-            (_, _, _) => throw new NotImplementedException());
+            (_, _, _) => throw new NotImplementedException(),
+            _mockHttpClientFactory.Object);
 
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Stripe:WebhookSecret*");

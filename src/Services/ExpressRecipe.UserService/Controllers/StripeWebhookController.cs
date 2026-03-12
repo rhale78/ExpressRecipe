@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using Stripe;
+using System.Net.Http.Json;
 
 namespace ExpressRecipe.UserService.Controllers;
 
@@ -16,18 +17,21 @@ public sealed class StripeWebhookController : ControllerBase
     private readonly string _webhookSecret;
     private readonly ILogger<StripeWebhookController> _logger;
     private readonly Func<string, string, string, Event> _constructEvent;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public StripeWebhookController(
         IPaymentService payment,
         ISubscriptionRepository subs,
         IConfiguration config,
         ILogger<StripeWebhookController> logger,
-        Func<string, string, string, Event> constructEvent)
+        Func<string, string, string, Event> constructEvent,
+        IHttpClientFactory httpClientFactory)
     {
         _payment       = payment;
         _subs          = subs;
         _logger        = logger;
         _constructEvent = constructEvent;
+        _httpClientFactory = httpClientFactory;
 
         string? webhookSecret = config["Stripe:WebhookSecret"];
         if (string.IsNullOrWhiteSpace(webhookSecret))
@@ -159,7 +163,7 @@ public sealed class StripeWebhookController : ControllerBase
                     return;
                 }
                 _logger.LogInformation("Trial ending soon for user {UserId}", userId.Value);
-                // TODO: Send trial-ending notification via NotificationService
+                await SendTrialEndingNotificationAsync(userId.Value, sub.TrialEnd, ct);
                 break;
             }
 
@@ -181,4 +185,33 @@ public sealed class StripeWebhookController : ControllerBase
         => metadata.TryGetValue("userId", out string? id) && Guid.TryParse(id, out Guid guid)
             ? guid
             : null;
+
+    private async Task SendTrialEndingNotificationAsync(Guid userId, DateTime? trialEnd, CancellationToken ct)
+    {
+        try
+        {
+            HttpClient client = _httpClientFactory.CreateClient("NotificationService");
+            var trialEndDate = trialEnd.HasValue
+                ? trialEnd.Value.ToString("MMMM d, yyyy")
+                : "soon";
+            var payload = new
+            {
+                UserId = userId,
+                Type = "TrialEnding",
+                Priority = "High",
+                Title = "Your free trial is ending soon",
+                Message = $"Your free trial ends on {trialEndDate}. Upgrade your plan to keep full access."
+            };
+            var response = await client.PostAsJsonAsync("/api/Notification/internal", payload, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Failed to send trial-ending notification to user {UserId}: {StatusCode}",
+                    userId, response.StatusCode);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send trial-ending notification to user {UserId}", userId);
+        }
+    }
 }

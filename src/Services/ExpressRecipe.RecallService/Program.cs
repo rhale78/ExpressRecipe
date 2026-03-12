@@ -25,7 +25,7 @@ builder.Services.AddScoped<IRecallRepository>(sp =>
 // Configure HttpClient for FDA API
 builder.Services.AddHttpClient("FDA", client =>
 {
-    client.BaseAddress = new Uri("https://api.fda.gov/");
+    client.BaseAddress = new Uri(builder.Configuration["ExternalApis:FDA:BaseUrl"] ?? "https://api.fda.gov/");
     // Set to infinite when using resilience handler - Polly will manage timeouts
     client.Timeout = Timeout.InfiniteTimeSpan;
 })

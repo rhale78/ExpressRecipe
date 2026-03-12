@@ -91,7 +91,8 @@ public class RecipesController : ControllerBase
                 recipes = await _recipeRepository.GetAllRecipesAsync(pageSize, offset);
             }
 
-            // Apply additional filters in memory (TODO: Move to SQL for better performance)
+            // Note: category/cuisine/difficulty/time filters are applied in-memory after DB retrieval.
+            // Future: push these filters into the SQL query in IRecipeRepository.GetAllRecipesAsync()/SearchRecipesAsync().
             if (!string.IsNullOrWhiteSpace(category))
             {
                 recipes = recipes.Where(r => r.Category?.Equals(category, StringComparison.OrdinalIgnoreCase) == true).ToList();

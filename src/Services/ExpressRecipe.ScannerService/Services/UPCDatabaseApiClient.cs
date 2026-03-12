@@ -23,7 +23,8 @@ public class UPCDatabaseApiClient
         _logger = logger;
         _apiKey = configuration["UPCDatabase:ApiKey"];
 
-        _httpClient.BaseAddress = new Uri("https://api.upcitemdb.com/");
+        var baseUrl = configuration["ExternalApis:UPCDatabase:BaseUrl"] ?? "https://api.upcitemdb.com/";
+        _httpClient.BaseAddress = new Uri(baseUrl);
 
         if (!string.IsNullOrEmpty(_apiKey))
         {

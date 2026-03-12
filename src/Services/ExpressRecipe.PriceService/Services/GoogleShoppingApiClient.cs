@@ -33,7 +33,8 @@ public class GoogleShoppingApiClient : IExternalPriceApiClient
         _searchEngineId = configuration["ExternalApis:GoogleShopping:SearchEngineId"]
                           ?? configuration["GoogleShopping:SearchEngineId"];
 
-        _httpClient.BaseAddress = new Uri("https://www.googleapis.com/");
+        var baseUrl = configuration["ExternalApis:GoogleShopping:BaseUrl"] ?? "https://www.googleapis.com/";
+        _httpClient.BaseAddress = new Uri(baseUrl);
     }
 
     // IExternalPriceApiClient implementation

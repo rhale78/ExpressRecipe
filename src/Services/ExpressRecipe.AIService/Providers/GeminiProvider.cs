@@ -3,8 +3,11 @@ using ExpressRecipe.AIService.Configuration;
 namespace ExpressRecipe.AIService.Providers;
 
 /// <summary>
-/// Stub: returns mock result when APP_LOCAL_MODE=true.
-/// TODO: Implement when cloud deployment is live.
+/// Cloud AI provider stub. This provider requires cloud deployment configuration.
+/// <para>
+/// To enable: configure the provider credentials in appsettings.json under
+/// <c>AI:Providers:Gemini:ApiKey</c> and deploy to a cloud environment.
+/// </para>
 /// POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
 /// Config key: AI:Gemini:ApiKey
 /// </summary>
@@ -30,9 +33,9 @@ public sealed class GeminiProvider : IAIProvider
             });
         }
 
-        // TODO: Implement Gemini generateContent call when cloud is live
-        throw new NotImplementedException(
-            "GeminiProvider not yet implemented for cloud deployment.");
+        // Cloud deployment required: Implement HTTP POST to the Gemini generateContent endpoint.
+        // See: https://ai.google.dev/api/generate-content
+        throw new NotImplementedException("Gemini provider requires cloud deployment. Configure AI:Providers:Gemini:ApiKey.");
     }
 
     public Task<AIClassifyResult> ClassifyAsync(string prompt, string[] possibleClasses,

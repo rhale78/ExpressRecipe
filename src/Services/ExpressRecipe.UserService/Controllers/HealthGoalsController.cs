@@ -5,6 +5,20 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ExpressRecipe.UserService.Controllers;
 
+/// <summary>
+/// Paginated result wrapper.
+/// </summary>
+public sealed record PagedResult<T>(
+    List<T> Items,
+    int Total,
+    int Page,
+    int PageSize)
+{
+    public int TotalPages => (int)Math.Ceiling(Total / (double)PageSize);
+    public bool HasNextPage => Page < TotalPages;
+    public bool HasPreviousPage => Page > 1;
+}
+
 [ApiController]
 [Route("api/[controller]")]
 [AllowAnonymous]
@@ -27,16 +41,25 @@ public class HealthGoalsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<HealthGoalDto>>> GetAll()
     {
-        try
-        {
-            var goals = await _repository.GetAllAsync();
-            return Ok(goals);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving health goals");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        var goals = await _repository.GetAllAsync();
+        return Ok(goals);
+    }
+
+    /// <summary>
+    /// Get health goals with pagination.
+    /// <para>Prefer this endpoint for UI components; <see cref="GetAll"/> is retained for
+    /// backward compatibility and offline/cache pre-warming scenarios.</para>
+    /// </summary>
+    [HttpGet("paged")]
+    public async Task<ActionResult<PagedResult<HealthGoalDto>>> GetPaged(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? category = null)
+    {
+        if (page < 1) page = 1;
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        var (items, total) = await _repository.GetPagedAsync(page, pageSize, category);
+        return Ok(new PagedResult<HealthGoalDto>(items, total, page, pageSize));
     }
 
     /// <summary>
@@ -45,22 +68,14 @@ public class HealthGoalsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<HealthGoalDto>> GetById(Guid id)
     {
-        try
-        {
-            var goal = await _repository.GetByIdAsync(id);
+        var goal = await _repository.GetByIdAsync(id);
 
-            if (goal == null)
-            {
-                return NotFound(new { message = "Health goal not found" });
-            }
-
-            return Ok(goal);
-        }
-        catch (Exception ex)
+        if (goal == null)
         {
-            _logger.LogError(ex, "Error retrieving health goal {GoalId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
+            return NotFound(new { message = "Health goal not found" });
         }
+
+        return Ok(goal);
     }
 
     /// <summary>
@@ -69,16 +84,8 @@ public class HealthGoalsController : ControllerBase
     [HttpGet("category/{category}")]
     public async Task<ActionResult<List<HealthGoalDto>>> GetByCategory(string category)
     {
-        try
-        {
-            var goals = await _repository.GetByCategoryAsync(category);
-            return Ok(goals);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving health goals by category {Category}", category);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        var goals = await _repository.GetByCategoryAsync(category);
+        return Ok(goals);
     }
 
     /// <summary>
@@ -87,20 +94,12 @@ public class HealthGoalsController : ControllerBase
     [HttpGet("search")]
     public async Task<ActionResult<List<HealthGoalDto>>> Search([FromQuery] string q)
     {
-        try
+        if (string.IsNullOrWhiteSpace(q))
         {
-            if (string.IsNullOrWhiteSpace(q))
-            {
-                return BadRequest(new { message = "Search term is required" });
-            }
+            return BadRequest(new { message = "Search term is required" });
+        }
 
-            var goals = await _repository.SearchByNameAsync(q);
-            return Ok(goals);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error searching health goals");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        var goals = await _repository.SearchByNameAsync(q);
+        return Ok(goals);
     }
 }

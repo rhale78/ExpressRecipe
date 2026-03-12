@@ -3,8 +3,11 @@ using ExpressRecipe.AIService.Configuration;
 namespace ExpressRecipe.AIService.Providers;
 
 /// <summary>
-/// Stub: returns mock result when APP_LOCAL_MODE=true.
-/// TODO: Implement when cloud deployment is live.
+/// Cloud AI provider stub. This provider requires cloud deployment configuration.
+/// <para>
+/// To enable: configure the provider credentials in appsettings.json under
+/// <c>AI:Providers:AzureOpenAI:ApiKey</c> and deploy to a cloud environment.
+/// </para>
 /// POST https://{endpoint}/openai/deployments/{deployment}/chat/completions?api-version=...
 /// Config keys: AI:AzureOpenAI:Endpoint, AI:AzureOpenAI:ApiKey
 /// </summary>
@@ -30,9 +33,9 @@ public sealed class AzureOpenAIProvider : IAIProvider
             });
         }
 
-        // TODO: Implement Azure OpenAI chat/completions call when cloud is live
-        throw new NotImplementedException(
-            "AzureOpenAIProvider not yet implemented for cloud deployment.");
+        // Cloud deployment required: Implement HTTP POST to the Azure OpenAI completions endpoint.
+        // See: https://learn.microsoft.com/azure/cognitive-services/openai/reference
+        throw new NotImplementedException("AzureOpenAI provider requires cloud deployment. Configure AI:Providers:AzureOpenAI:ApiKey and endpoint.");
     }
 
     public Task<AIClassifyResult> ClassifyAsync(string prompt, string[] possibleClasses,

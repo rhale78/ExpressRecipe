@@ -81,8 +81,9 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
     public async Task<List<IngredientDto>> GetByCategoryAsync(string category)
     {
-        // Proxy to microservice
-        // TODO: Add GetByCategory to IIngredientServiceClient if needed
+        // GetByCategory is not yet exposed by IIngredientServiceClient.
+        // To implement: add GetByCategoryAsync(string category) to IIngredientServiceClient
+        // and implement the HTTP call in IngredientServiceClient.cs.
         return new List<IngredientDto>();
     }
 
@@ -94,13 +95,17 @@ public class IngredientRepository : SqlHelper, IIngredientRepository
 
     public async Task<bool> UpdateAsync(Guid id, UpdateIngredientRequest request, Guid? updatedBy = null)
     {
-        // TODO: Add Update to IIngredientServiceClient
+        // Update is not yet exposed by IIngredientServiceClient.
+        // To implement: add UpdateIngredientAsync(Guid id, UpdateIngredientRequest request) to IIngredientServiceClient
+        // and implement the HTTP call in IngredientServiceClient.cs.
         return true; 
     }
 
     public async Task<bool> DeleteAsync(Guid id, Guid? deletedBy = null)
     {
-        // TODO: Add Delete to IIngredientServiceClient
+        // Delete is not yet exposed by IIngredientServiceClient.
+        // To implement: add DeleteIngredientAsync(Guid id) to IIngredientServiceClient
+        // and implement the HTTP call in IngredientServiceClient.cs.
         return true;
     }
 

@@ -105,7 +105,9 @@ public class AIController : ControllerBase
     {
         try
         {
-            // TODO: Implement shopping optimization
+            // Shopping optimization stub: returns empty result.
+            // Full implementation will apply constraints (budget, dietary restrictions,
+            // store locations, price comparison) to optimize the shopping list.
             return Ok(new ShoppingOptimizationResult());
         }
         catch (Exception ex)

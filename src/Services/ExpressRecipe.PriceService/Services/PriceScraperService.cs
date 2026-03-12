@@ -280,11 +280,12 @@ public class PriceScraperService
         // For now, this is a placeholder
         _logger.LogInformation("Searching prices for barcode: {Barcode}", barcode);
 
-        // TODO: Implement actual barcode-based price lookups
-        // Options:
-        // 1. Google Shopping API
-        // 2. Individual retailer APIs (Walmart, Target, etc.)
-        // 3. Third-party price comparison APIs
+        // Barcode-based price lookup stub — returns empty list.
+        // Design options:
+        //   1. Integrate Google Shopping API (ExternalApis:GoogleShopping section in appsettings).
+        //   2. Query Kroger/Food Lion retailer APIs (disabled by default, see ExternalApis config section).
+        //   3. Use a third-party price comparison service.
+        // Enable the desired external API client in appsettings.json and implement the call here.
 
         return results;
     }

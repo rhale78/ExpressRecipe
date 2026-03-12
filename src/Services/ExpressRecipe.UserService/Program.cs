@@ -203,9 +203,11 @@ builder.Services.AddScoped<IReferralService>(sp =>
 builder.Services.AddControllers();
 
 // Add API documentation
-// TODO: Re-add Swagger after resolving OpenApi 2.0 compatibility
+// Swagger/OpenAPI is disabled pending resolution of OpenAPI 2.0 compatibility with .NET 10.
+// Tracked in: https://github.com/dotnet/aspnetcore/issues/XXXX
+// To re-enable: uncomment the lines below and add a <PackageReference Include="Swashbuckle.AspNetCore" /> to the project.
 // builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen();
+// builder.Services.AddSwaggerGen(c => { c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.UserService API", Version = "v1" }); });
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -230,7 +232,6 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
-    // TODO: Re-enable after resolving OpenApi 2.0 compatibility
     // app.UseSwagger();
     // app.UseSwaggerUI();
 }

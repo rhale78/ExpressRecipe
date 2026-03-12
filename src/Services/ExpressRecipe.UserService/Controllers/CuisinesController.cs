@@ -27,16 +27,24 @@ public class CuisinesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<CuisineDto>>> GetAll()
     {
-        try
-        {
-            var cuisines = await _repository.GetAllAsync();
-            return Ok(cuisines);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving cuisines");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        var cuisines = await _repository.GetAllAsync();
+        return Ok(cuisines);
+    }
+
+    /// <summary>
+    /// Get cuisines with pagination.
+    /// <para>Prefer this endpoint for UI components; <see cref="GetAll"/> is retained for
+    /// backward compatibility and offline/cache pre-warming scenarios.</para>
+    /// </summary>
+    [HttpGet("paged")]
+    public async Task<ActionResult<PagedResult<CuisineDto>>> GetPaged(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        if (page < 1) page = 1;
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        var (items, total) = await _repository.GetPagedAsync(page, pageSize);
+        return Ok(new PagedResult<CuisineDto>(items, total, page, pageSize));
     }
 
     /// <summary>
@@ -45,22 +53,14 @@ public class CuisinesController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CuisineDto>> GetById(Guid id)
     {
-        try
-        {
-            var cuisine = await _repository.GetByIdAsync(id);
+        var cuisine = await _repository.GetByIdAsync(id);
 
-            if (cuisine == null)
-            {
-                return NotFound(new { message = "Cuisine not found" });
-            }
-
-            return Ok(cuisine);
-        }
-        catch (Exception ex)
+        if (cuisine == null)
         {
-            _logger.LogError(ex, "Error retrieving cuisine {CuisineId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
+            return NotFound(new { message = "Cuisine not found" });
         }
+
+        return Ok(cuisine);
     }
 
     /// <summary>
@@ -69,20 +69,12 @@ public class CuisinesController : ControllerBase
     [HttpGet("search")]
     public async Task<ActionResult<List<CuisineDto>>> Search([FromQuery] string q)
     {
-        try
+        if (string.IsNullOrWhiteSpace(q))
         {
-            if (string.IsNullOrWhiteSpace(q))
-            {
-                return BadRequest(new { message = "Search term is required" });
-            }
+            return BadRequest(new { message = "Search term is required" });
+        }
 
-            var cuisines = await _repository.SearchByNameAsync(q);
-            return Ok(cuisines);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error searching cuisines");
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        var cuisines = await _repository.SearchByNameAsync(q);
+        return Ok(cuisines);
     }
 }
