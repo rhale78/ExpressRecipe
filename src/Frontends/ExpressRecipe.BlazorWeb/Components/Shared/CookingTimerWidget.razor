@@ -1,0 +1,122 @@
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Cooking
+@inject IMealPlanApiClient TimerApi
+@inject IToastService ToastService
+@implements IDisposable
+
+@if (_timers?.Any() == true)
+{
+    <div class="floating-timer-widget @(_collapsed ? "collapsed" : "")">
+        <div class="timer-widget-header" @onclick="ToggleCollapse">
+            <span>⏱️</span>
+            <span>Timers (@_timers.Count)</span>
+            <button class="timer-collapse-btn">@(_collapsed ? "▲" : "▼")</button>
+        </div>
+
+        @if (!_collapsed)
+        {
+            @foreach (CookingTimerDto timer in _timers)
+            {
+                <div class="timer-card timer-@timer.Status.ToLower()">
+                    <div class="timer-label">@timer.Label</div>
+                    <div class="timer-countdown @(timer.IsExpired ? "timer-expired" : "")">
+                        @FormatCountdown(timer)
+                    </div>
+                    <div class="timer-controls">
+                        @if (timer.Status == "Running")
+                        {
+                            <button @onclick="() => PauseTimer(timer.Id)" title="Pause">⏸</button>
+                        }
+                        @if (timer.Status == "Paused")
+                        {
+                            <button @onclick="() => StartTimer(timer.Id)" title="Resume">▶</button>
+                        }
+                        @if (timer.Status == "Expired")
+                        {
+                            <button class="ack-btn" @onclick="() => AckTimer(timer.Id)">✓ Done</button>
+                        }
+                        <button class="cancel-btn" @onclick="() => CancelTimer(timer.Id)" title="Cancel">✕</button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+}
+
+@code {
+    private List<CookingTimerDto>? _timers;
+    private bool                   _collapsed;
+    private System.Threading.Timer? _ticker;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshTimers();
+        _ticker = new System.Threading.Timer(
+            async _ =>
+            {
+                await RefreshTimers();
+                await InvokeAsync(StateHasChanged);
+            },
+            null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task RefreshTimers()
+    {
+        _timers = await TimerApi.GetActiveTimersAsync();
+    }
+
+    private void ToggleCollapse() { _collapsed = !_collapsed; }
+
+    private async Task PauseTimer(Guid id)
+    {
+        await TimerApi.PauseTimerAsync(id);
+        await RefreshTimers();
+    }
+
+    private async Task StartTimer(Guid id)
+    {
+        await TimerApi.StartTimerAsync(id);
+        await RefreshTimers();
+    }
+
+    private async Task AckTimer(Guid id)
+    {
+        await TimerApi.AcknowledgeTimerAsync(id);
+        await RefreshTimers();
+    }
+
+    private async Task CancelTimer(Guid id)
+    {
+        await TimerApi.CancelTimerAsync(id);
+        await RefreshTimers();
+    }
+
+    private static string FormatCountdown(CookingTimerDto timer)
+    {
+        if (timer.ExpiresAt == null || timer.Status == "Preset")
+        {
+            return FormatSeconds(timer.DurationSeconds);
+        }
+
+        TimeSpan remaining = timer.ExpiresAt.Value - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return "Done!";
+        }
+
+        return FormatSeconds((int)remaining.TotalSeconds);
+    }
+
+    private static string FormatSeconds(int totalSeconds)
+    {
+        int h = totalSeconds / 3600;
+        int m = (totalSeconds % 3600) / 60;
+        int s = totalSeconds % 60;
+        return h > 0
+            ? $"{h}:{m:D2}:{s:D2}"
+            : $"{m}:{s:D2}";
+    }
+
+    public void Dispose() { _ticker?.Dispose(); }
+}

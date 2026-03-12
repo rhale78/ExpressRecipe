@@ -1,3 +1,4 @@
+using ExpressRecipe.Client.Shared.Models.Cooking;
 using ExpressRecipe.Client.Shared.Models.Recipe;
 
 namespace ExpressRecipe.Client.Shared.Services;
@@ -35,8 +36,14 @@ public interface IRecipeApiClient
     Task<bool> ShareByEmailAsync(Guid recipeId, ShareRecipeEmailRequest request);
 
     // Recipe notes
-    Task<List<RecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId);
+    Task<List<UserRecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId);
+    Task<bool> AddRecipeNoteAsync(Guid recipeId, AddRecipeNoteRequest request);
     Task<bool> DismissRecipeNoteAsync(Guid recipeId, Guid noteId);
+
+    // Cook sessions
+    Task<Guid?> StartCookSessionAsync(StartCookSessionRequest request);
+    Task<bool> UpdateCookSessionAsync(Guid sessionId, UpdateCookSessionRequest request);
+    Task<List<CookSessionSummaryDto>?> GetCookHistoryAsync(Guid recipeId);
 }
 
 public class RecipeApiClient : ApiClientBase, IRecipeApiClient
@@ -178,13 +185,40 @@ public class RecipeApiClient : ApiClientBase, IRecipeApiClient
         return await PostAsync($"/api/recipes/{recipeId}/share", request);
     }
 
-    public async Task<List<RecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId)
+    public async Task<List<UserRecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId)
     {
-        return await GetAsync<List<RecipeNoteDto>>($"/api/recipes/{recipeId}/notes");
+        return await GetAsync<List<UserRecipeNoteDto>>($"/api/recipes/{recipeId}/notes");
+    }
+
+    public async Task<bool> AddRecipeNoteAsync(Guid recipeId, AddRecipeNoteRequest request)
+    {
+        return await PostAsync($"/api/recipes/{recipeId}/notes", request);
     }
 
     public async Task<bool> DismissRecipeNoteAsync(Guid recipeId, Guid noteId)
     {
         return await PatchAsync($"/api/recipes/{recipeId}/notes/{noteId}/dismiss");
+    }
+
+    public async Task<Guid?> StartCookSessionAsync(StartCookSessionRequest request)
+    {
+        var response = await PostAsync<StartCookSessionRequest, StartCookSessionResponse>(
+            "/api/cook-sessions/start", request);
+        return response?.Id;
+    }
+
+    public async Task<bool> UpdateCookSessionAsync(Guid sessionId, UpdateCookSessionRequest request)
+    {
+        return await PatchAsync($"/api/cook-sessions/{sessionId}", request);
+    }
+
+    public async Task<List<CookSessionSummaryDto>?> GetCookHistoryAsync(Guid recipeId)
+    {
+        return await GetAsync<List<CookSessionSummaryDto>>($"/api/cook-sessions?recipeId={recipeId}");
+    }
+
+    private class StartCookSessionResponse
+    {
+        public Guid Id { get; set; }
     }
 }

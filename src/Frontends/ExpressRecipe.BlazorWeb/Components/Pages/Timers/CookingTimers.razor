@@ -1,0 +1,187 @@
+@page "/cooking-timers"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Models.Cooking
+@using ExpressRecipe.Client.Shared.Services
+@inject IMealPlanApiClient TimerApi
+@inject IToastService ToastService
+@implements IDisposable
+
+<PageTitle>Cooking Timers - ExpressRecipe</PageTitle>
+
+<div class="timers-container">
+    <div class="timers-header">
+        <h1>⏱️ Cooking Timers</h1>
+        <button class="btn btn-primary" @onclick="ShowNewTimerForm">➕ New Timer</button>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="loading-state"><div class="spinner"></div><p>Loading timers...</p></div>
+    }
+    else if (!_timers.Any())
+    {
+        <div class="empty-state">
+            <p>⏱️ No active timers.</p>
+            <p>Add a timer while you cook and we'll notify you when it's done.</p>
+            <button class="btn btn-primary" @onclick="ShowNewTimerForm">Add Your First Timer</button>
+        </div>
+    }
+    else
+    {
+        <div class="timers-grid">
+            @foreach (CookingTimerDto timer in _timers)
+            {
+                <div class="timer-card-full timer-@timer.Status.ToLower()">
+                    <div class="timer-label-full">@timer.Label</div>
+                    @if (!string.IsNullOrEmpty(timer.RecipeName))
+                    {
+                        <div class="timer-recipe">for @timer.RecipeName</div>
+                    }
+                    <div class="timer-countdown-full @(timer.Status == "Expired" ? "timer-expired" : "")">
+                        @FormatCountdown(timer)
+                    </div>
+                    <div class="timer-status-badge status-@timer.Status.ToLower()">@timer.Status</div>
+                    <div class="timer-full-controls">
+                        @if (timer.Status is "Preset" or "Paused")
+                        {
+                            <button class="btn btn-success" @onclick="() => StartTimer(timer.Id)">▶ Start</button>
+                        }
+                        @if (timer.Status == "Running")
+                        {
+                            <button class="btn btn-secondary" @onclick="() => PauseTimer(timer.Id)">⏸ Pause</button>
+                        }
+                        @if (timer.Status == "Expired")
+                        {
+                            <button class="btn btn-primary" @onclick="() => AckTimer(timer.Id)">✓ Acknowledge</button>
+                        }
+                        @if (timer.Status is not "Expired" and not "Cancelled")
+                        {
+                            <button class="btn btn-outline" @onclick="() => CancelTimer(timer.Id)">✕ Cancel</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- New Timer Form -->
+    @if (_showNewTimerForm)
+    {
+        <div class="modal-overlay" @onclick="() => _showNewTimerForm = false">
+            <div class="modal-content" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <h3>➕ New Timer</h3>
+                    <button class="modal-close" @onclick="() => _showNewTimerForm = false">✕</button>
+                </div>
+                <div class="form-group">
+                    <label>Label</label>
+                    <input type="text" class="form-control" placeholder="e.g. Pasta boiling"
+                           @bind="_newLabel" />
+                </div>
+                <div class="form-group">
+                    <label>Duration</label>
+                    <div class="duration-inputs">
+                        <input type="number" class="form-control" placeholder="H" min="0" max="23"
+                               @bind="_newHours" />
+                        <span>h</span>
+                        <input type="number" class="form-control" placeholder="M" min="0" max="59"
+                               @bind="_newMinutes" />
+                        <span>m</span>
+                        <input type="number" class="form-control" placeholder="S" min="0" max="59"
+                               @bind="_newSeconds" />
+                        <span>s</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" @onclick="CreateTimer">Start Timer</button>
+                    <button class="btn btn-secondary" @onclick="() => _showNewTimerForm = false">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<CookingTimerDto> _timers          = new();
+    private bool                  _isLoading        = true;
+    private bool                  _showNewTimerForm;
+    private string                _newLabel         = string.Empty;
+    private int                   _newHours;
+    private int                   _newMinutes       = 10;
+    private int                   _newSeconds;
+    private System.Threading.Timer? _ticker;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTimers();
+        _ticker = new System.Threading.Timer(
+            async _ => { await LoadTimers(); await InvokeAsync(StateHasChanged); },
+            null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task LoadTimers()
+    {
+        _isLoading = false;
+        _timers    = await TimerApi.GetActiveTimersAsync() ?? new List<CookingTimerDto>();
+        StateHasChanged();
+    }
+
+    private void ShowNewTimerForm()
+    {
+        _newLabel   = string.Empty;
+        _newHours   = 0;
+        _newMinutes = 10;
+        _newSeconds = 0;
+        _showNewTimerForm = true;
+    }
+
+    private async Task CreateTimer()
+    {
+        int totalSeconds = (_newHours * 3600) + (_newMinutes * 60) + _newSeconds;
+        if (totalSeconds <= 0 || string.IsNullOrWhiteSpace(_newLabel))
+        {
+            return;
+        }
+
+        Guid? id = await TimerApi.CreateTimerAsync(
+            new CreateCookingTimerRequest
+            {
+                Label           = _newLabel,
+                DurationSeconds = totalSeconds,
+                AutoStart       = true
+            });
+
+        _showNewTimerForm = false;
+        if (id.HasValue)
+        {
+            ToastService.ShowSuccess($"Timer '{_newLabel}' started.");
+            await LoadTimers();
+        }
+    }
+
+    private async Task StartTimer(Guid id)  { await TimerApi.StartTimerAsync(id);        await LoadTimers(); }
+    private async Task PauseTimer(Guid id)  { await TimerApi.PauseTimerAsync(id);        await LoadTimers(); }
+    private async Task AckTimer(Guid id)    { await TimerApi.AcknowledgeTimerAsync(id);  await LoadTimers(); }
+    private async Task CancelTimer(Guid id) { await TimerApi.CancelTimerAsync(id);       await LoadTimers(); }
+
+    private static string FormatCountdown(CookingTimerDto timer)
+    {
+        if (timer.ExpiresAt == null || timer.Status is "Preset" or "Paused" or "Cancelled")
+        {
+            return FormatSeconds(timer.DurationSeconds);
+        }
+
+        TimeSpan remaining = timer.ExpiresAt.Value - DateTime.UtcNow;
+        return remaining <= TimeSpan.Zero ? "Done!" : FormatSeconds((int)remaining.TotalSeconds);
+    }
+
+    private static string FormatSeconds(int t)
+    {
+        int h = t / 3600;
+        int m = (t % 3600) / 60;
+        int s = t % 60;
+        return h > 0 ? $"{h}:{m:D2}:{s:D2}" : $"{m}:{s:D2}";
+    }
+
+    public void Dispose() { _ticker?.Dispose(); }
+}

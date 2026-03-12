@@ -4,6 +4,7 @@
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Recipe
 @using ExpressRecipe.Client.Shared.Models.Product
+@using ExpressRecipe.Client.Shared.Models.Cooking
 @using System.Security.Claims
 @using ExpressRecipe.BlazorWeb.Services
 @inject IRecipeApiClient RecipeApi
@@ -127,6 +128,28 @@
                     </button>
                 </div>
 
+                <!-- Cook Session Actions -->
+                <div class="recipe-cook-actions">
+                    @if (_activeCookSession == null)
+                    {
+                        <button class="btn btn-success btn-cook" @onclick="StartCooking">
+                            🍳 Start Cooking
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="cook-session-active">
+                            <span class="cook-in-progress">🍳 Cooking in progress…</span>
+                            <button class="btn btn-primary btn-sm" @onclick="OpenPostCookModal">
+                                ✓ I'm Done — Rate It
+                            </button>
+                            <button class="btn btn-outline btn-sm" @onclick="CancelCookSession">
+                                ✕ Cancel
+                            </button>
+                        </div>
+                    }
+                </div>
+
                 @if (!string.IsNullOrEmpty(_recipe.Source))
                 {
                     <div class="recipe-source">
@@ -167,7 +190,7 @@
             @if (_notes.Any())
             {
                 <div class="recipe-notes-bar">
-                    @foreach (RecipeNoteDto note in _notes)
+                    @foreach (UserRecipeNoteDto note in _notes)
                     {
                         <div class="recipe-note note-@note.NoteType.ToLowerInvariant()">
                             <span class="note-icon">@GetNoteIcon(note.NoteType)</span>
@@ -182,21 +205,67 @@
                 </div>
             }
 
-            <!-- Ingredients Section -->
-            <div class="ingredients-section">
-                <h2>Ingredients</h2>
-
-                @if (_recipe.Ingredients.GroupBy(i => i.GroupName ?? "").Any(g => !string.IsNullOrEmpty(g.Key)))
-                {
-                    // Grouped ingredients
-                    @foreach (var group in _recipe.Ingredients.GroupBy(i => i.GroupName ?? "").OrderBy(g => string.IsNullOrEmpty(g.Key) ? 0 : 1))
+            <!-- Tab Bar -->
+            <div class="recipe-tabs">
+                <button class="tab-btn @(_activeTab == "ingredients" ? "active" : "")"
+                        @onclick='() => _activeTab = "ingredients"'>
+                    🥕 Ingredients
+                </button>
+                <button class="tab-btn @(_activeTab == "steps" ? "active" : "")"
+                        @onclick='() => _activeTab = "steps"'>
+                    📋 Steps
+                </button>
+                <button class="tab-btn @(_activeTab == "history" ? "active" : "")"
+                        @onclick='() => _activeTab = "history"'>
+                    📖 History &amp; Notes
+                    @if (_cookHistory.Any())
                     {
-                        @if (!string.IsNullOrEmpty(group.Key))
+                        <span class="tab-badge">@_cookHistory.Count</span>
+                    }
+                </button>
+            </div>
+
+            <!-- Ingredients Tab -->
+            @if (_activeTab == "ingredients")
+            {
+                <div class="ingredients-section">
+                    <h2>Ingredients</h2>
+
+                    @if (_recipe.Ingredients.GroupBy(i => i.GroupName ?? "").Any(g => !string.IsNullOrEmpty(g.Key)))
+                    {
+                        @foreach (var group in _recipe.Ingredients.GroupBy(i => i.GroupName ?? "").OrderBy(g => string.IsNullOrEmpty(g.Key) ? 0 : 1))
                         {
-                            <h3 class="ingredient-group-title">@group.Key</h3>
+                            @if (!string.IsNullOrEmpty(group.Key))
+                            {
+                                <h3 class="ingredient-group-title">@group.Key</h3>
+                            }
+                            <ul class="ingredients-list">
+                                @foreach (var ingredient in group.OrderBy(i => i.OrderIndex))
+                                {
+                                    <li class="ingredient-item @(ingredient.IsOptional ? "optional" : "")">
+                                        <span class="ingredient-quantity">@ingredient.Quantity @ingredient.Unit</span>
+                                        <span class="ingredient-name">@ingredient.Name</span>
+                                        <button class="btn btn-sm btn-link p-0 ms-1 text-muted"
+                                                title="Find substitutes"
+                                                aria-label="Find substitutes for @ingredient.Name"
+                                                @onclick="() => ShowSubstitutes(ingredient.Id, ingredient.Name)">≡</button>
+                                        @if (ingredient.IsOptional)
+                                        {
+                                            <span class="ingredient-optional-label">(optional)</span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(ingredient.Notes))
+                                        {
+                                            <span class="ingredient-notes">@ingredient.Notes</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
                         }
+                    }
+                    else
+                    {
                         <ul class="ingredients-list">
-                            @foreach (var ingredient in group.OrderBy(i => i.OrderIndex))
+                            @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
                             {
                                 <li class="ingredient-item @(ingredient.IsOptional ? "optional" : "")">
                                     <span class="ingredient-quantity">@ingredient.Quantity @ingredient.Unit</span>
@@ -209,62 +278,104 @@
                                     {
                                         <span class="ingredient-optional-label">(optional)</span>
                                     }
-                                    @if (!string.IsNullOrEmpty(ingredient.Notes))
-                                    {
-                                        <span class="ingredient-notes">@ingredient.Notes</span>
-                                    }
                                 </li>
                             }
                         </ul>
                     }
+                </div>
+            }
+
+            <!-- Steps Tab -->
+            @if (_activeTab == "steps")
+            {
+                <div class="instructions-section">
+                    <h2>Instructions</h2>
+                    <ol class="instructions-list">
+                        @foreach (var step in _recipe.Steps.OrderBy(s => s.OrderIndex))
+                        {
+                            <li class="instruction-step">
+                                <div class="step-content">
+                                    <p class="step-instruction">@step.Instruction</p>
+                                    @if (step.DurationMinutes.HasValue)
+                                    {
+                                        <span class="step-duration">⏱️ @step.DurationMinutes min</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(step.Tips))
+                                    {
+                                        <div class="step-tips">
+                                            <strong>💡 Tip:</strong> @step.Tips
+                                        </div>
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ol>
+                </div>
+            }
+
+            <!-- History & Notes Tab -->
+            @if (_activeTab == "history")
+            {
+                <!-- Personal Notes -->
+                @if (_recipeNotes.Any(n => !n.IsDismissed))
+                {
+                    <div class="recipe-notes-section">
+                        <h3>📝 My Notes</h3>
+                        @foreach (UserRecipeNoteDto note in _recipeNotes.Where(n => !n.IsDismissed))
+                        {
+                            <div class="recipe-note-card note-@note.NoteType.ToLower()">
+                                <span class="note-type-badge">@note.NoteType</span>
+                                <p class="note-text">@note.NoteText</p>
+                                @if (note.IsFromAI)
+                                {
+                                    <span class="ai-note-badge">✨ AI Tip</span>
+                                }
+                                <button class="btn-link dismiss-note" @onclick="() => DismissRecipeNote(note.Id)">✕</button>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- Add a note -->
+                <div class="add-note-section">
+                    <h4>Add a Personal Note</h4>
+                    <select class="form-control form-control-sm" @bind="_newNoteType">
+                        <option>Tip</option><option>Warning</option><option>Substitution</option>
+                        <option>Equipment</option><option>General</option>
+                    </select>
+                    <textarea class="form-control" rows="2" placeholder="Your note…" @bind="_newNoteText"></textarea>
+                    <button class="btn btn-primary btn-sm" @onclick="AddNote">Save Note</button>
+                </div>
+
+                <!-- Cook History -->
+                <h3>🍳 Cook History</h3>
+                @if (!_cookHistory.Any())
+                {
+                    <p class="empty-message">You haven't cooked this recipe yet.</p>
                 }
                 else
                 {
-                    // Simple list
-                    <ul class="ingredients-list">
-                        @foreach (var ingredient in _recipe.Ingredients.OrderBy(i => i.OrderIndex))
+                    <div class="cook-history-list">
+                        @foreach (CookSessionSummaryDto session in _cookHistory.OrderByDescending(s => s.CookedAt))
                         {
-                            <li class="ingredient-item @(ingredient.IsOptional ? "optional" : "")">
-                                <span class="ingredient-quantity">@ingredient.Quantity @ingredient.Unit</span>
-                                <span class="ingredient-name">@ingredient.Name</span>
-                                <button class="btn btn-sm btn-link p-0 ms-1 text-muted"
-                                        title="Find substitutes"
-                                        aria-label="Find substitutes for @ingredient.Name"
-                                        @onclick="() => ShowSubstitutes(ingredient.Id, ingredient.Name)">≡</button>
-                                @if (ingredient.IsOptional)
+                            <div class="cook-history-item">
+                                <div class="cook-history-date">@session.CookedAt.ToString("MMM dd, yyyy")</div>
+                                @if (session.Rating.HasValue)
                                 {
-                                    <span class="ingredient-optional-label">(optional)</span>
-                                }
-                            </li>
-                        }
-                    </ul>
-                }
-            </div>
-
-            <!-- Instructions Section -->
-            <div class="instructions-section">
-                <h2>Instructions</h2>
-                <ol class="instructions-list">
-                    @foreach (var step in _recipe.Steps.OrderBy(s => s.OrderIndex))
-                    {
-                        <li class="instruction-step">
-                            <div class="step-content">
-                                <p class="step-instruction">@step.Instruction</p>
-                                @if (step.DurationMinutes.HasValue)
-                                {
-                                    <span class="step-duration">⏱️ @step.DurationMinutes min</span>
-                                }
-                                @if (!string.IsNullOrEmpty(step.Tips))
-                                {
-                                    <div class="step-tips">
-                                        <strong>💡 Tip:</strong> @step.Tips
+                                    <div class="cook-history-rating">
+                                        @string.Concat(Enumerable.Repeat("★", session.Rating.Value))
+                                        @string.Concat(Enumerable.Repeat("☆", 5 - session.Rating.Value))
                                     </div>
                                 }
+                                @if (!string.IsNullOrWhiteSpace(session.GeneralNotes))
+                                {
+                                    <p class="cook-history-notes">@session.GeneralNotes</p>
+                                }
                             </div>
-                        </li>
-                    }
-                </ol>
-            </div>
+                        }
+                    </div>
+                }
+            }
         </div>
 
         <!-- Nutrition Information -->
@@ -336,6 +447,70 @@
     }
 </div>
 
+<!-- Post-Cook Rating Modal -->
+@if (_showPostCookModal)
+{
+    <div class="modal-overlay" @onclick="() => _showPostCookModal = false">
+        <div class="modal-content" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h3>⭐ How did it go?</h3>
+                <button class="modal-close" @onclick="() => _showPostCookModal = false">✕</button>
+            </div>
+
+            <!-- Star Rating -->
+            <div class="form-group">
+                <label>Rating</label>
+                <div class="star-rating-input">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        int star = i;
+                        <button class="star-btn @(_cookRating >= star ? "star-filled" : "")"
+                                @onclick="() => _cookRating = star">★</button>
+                    }
+                </div>
+            </div>
+
+            <!-- Would make again? -->
+            <div class="form-group">
+                <label>Would you make this again?</label>
+                <div class="btn-group-toggle">
+                    <button class="btn btn-sm @(_wouldMakeAgain == true ? "btn-success" : "btn-outline")"
+                            @onclick="() => _wouldMakeAgain = true">👍 Yes</button>
+                    <button class="btn btn-sm @(_wouldMakeAgain == false ? "btn-danger" : "btn-outline")"
+                            @onclick="() => _wouldMakeAgain = false">👎 No</button>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <textarea class="form-control" rows="2" placeholder="How did it turn out?"
+                          @bind="_cookNotes"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Any issues? (optional)</label>
+                <textarea class="form-control" rows="2" placeholder="What went wrong?"
+                          @bind="_cookIssues"></textarea>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_cookIssues))
+            {
+                <div class="form-group">
+                    <label>What would you fix next time?</label>
+                    <textarea class="form-control" rows="2" placeholder="What I'd do differently…"
+                              @bind="_cookFix"></textarea>
+                </div>
+            }
+
+            <div class="modal-footer">
+                <button class="btn btn-primary" @onclick="SaveCookSession">Save</button>
+                <button class="btn btn-secondary" @onclick="() => _showPostCookModal = false">Skip</button>
+            </div>
+        </div>
+    </div>
+}
+
 <SubstituteSheet IngredientId="_substituteIngredientId"
                  IngredientName="@_substituteIngredientName"
                  RecipeId="RecipeId"
@@ -375,8 +550,26 @@
     // Share modal state
     private bool _showShareModal;
 
-    // Recipe notes
-    private List<RecipeNoteDto> _notes = new();
+    // Tab state
+    private string _activeTab = "ingredients";
+
+    // Recipe notes bar
+    private List<UserRecipeNoteDto> _notes = new();
+
+    // Cook session state
+    private Guid?  _activeCookSession;
+    private bool   _showPostCookModal;
+    private int?   _cookRating;
+    private bool?  _wouldMakeAgain;
+    private string _cookNotes  = string.Empty;
+    private string _cookIssues = string.Empty;
+    private string _cookFix    = string.Empty;
+
+    // History tab state
+    private List<CookSessionSummaryDto> _cookHistory  = new();
+    private List<UserRecipeNoteDto>     _recipeNotes  = new();
+    private string                      _newNoteType  = "General";
+    private string                      _newNoteText  = string.Empty;
 
     private static string GetNoteIcon(string noteType) => noteType switch
     {
@@ -429,7 +622,9 @@
             _isFavorite = await RecipeApi.IsFavoriteAsync(RecipeId);
 
             // Load personal recipe notes
-            _notes = await RecipeApi.GetRecipeNotesAsync(RecipeId) ?? new List<RecipeNoteDto>();
+            _notes = await RecipeApi.GetRecipeNotesAsync(RecipeId) ?? new List<UserRecipeNoteDto>();
+            _recipeNotes = _notes;
+            _cookHistory = await RecipeApi.GetCookHistoryAsync(RecipeId) ?? new List<CookSessionSummaryDto>();
         }
         catch (Exception ex)
         {
@@ -476,6 +671,95 @@
         catch (Exception ex)
         {
             _errorMessage = $"Failed to dismiss note: {ex.Message}";
+        }
+    }
+
+    private async Task DismissRecipeNote(Guid noteId)
+    {
+        bool ok = await RecipeApi.DismissRecipeNoteAsync(RecipeId, noteId);
+        if (ok)
+        {
+            UserRecipeNoteDto? note = _recipeNotes.FirstOrDefault(n => n.Id == noteId);
+            if (note != null)
+            {
+                _recipeNotes = _recipeNotes.Where(n => n.Id != noteId).ToList();
+                _notes = _notes.Where(n => n.Id != noteId).ToList();
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task StartCooking()
+    {
+        Guid? sessionId = await RecipeApi.StartCookSessionAsync(
+            new StartCookSessionRequest { RecipeId = RecipeId });
+
+        if (sessionId.HasValue)
+        {
+            _activeCookSession = sessionId.Value;
+            ToastService.ShowInfo("Cooking session started. Good luck! 🍳");
+            StateHasChanged();
+        }
+    }
+
+    private void OpenPostCookModal()
+    {
+        _cookRating     = null;
+        _wouldMakeAgain = null;
+        _cookNotes      = string.Empty;
+        _cookIssues     = string.Empty;
+        _cookFix        = string.Empty;
+        _showPostCookModal = true;
+    }
+
+    private async Task SaveCookSession()
+    {
+        if (_activeCookSession == null)
+        {
+            return;
+        }
+
+        bool ok = await RecipeApi.UpdateCookSessionAsync(
+            _activeCookSession.Value,
+            new UpdateCookSessionRequest
+            {
+                RecipeId       = RecipeId,
+                Rating         = _cookRating,
+                WouldMakeAgain = _wouldMakeAgain,
+                GeneralNotes   = string.IsNullOrWhiteSpace(_cookNotes)  ? null : _cookNotes,
+                IssueNotes     = string.IsNullOrWhiteSpace(_cookIssues) ? null : _cookIssues,
+                FixNotes       = string.IsNullOrWhiteSpace(_cookFix)    ? null : _cookFix
+            });
+
+        _showPostCookModal = false;
+        _activeCookSession = null;
+
+        if (ok)
+        {
+            _cookHistory = await RecipeApi.GetCookHistoryAsync(RecipeId) ?? new List<CookSessionSummaryDto>();
+            ToastService.ShowSuccess("Cook session saved. Thanks for the feedback!");
+        }
+    }
+
+    private void CancelCookSession() { _activeCookSession = null; }
+
+    private async Task AddNote()
+    {
+        if (string.IsNullOrWhiteSpace(_newNoteText))
+        {
+            return;
+        }
+
+        bool ok = await RecipeApi.AddRecipeNoteAsync(
+            RecipeId,
+            new AddRecipeNoteRequest { NoteType = _newNoteType, NoteText = _newNoteText });
+
+        if (ok)
+        {
+            _newNoteText  = string.Empty;
+            _recipeNotes  = await RecipeApi.GetRecipeNotesAsync(RecipeId) ?? new List<UserRecipeNoteDto>();
+            _notes        = _recipeNotes;
+            StateHasChanged();
         }
     }
 

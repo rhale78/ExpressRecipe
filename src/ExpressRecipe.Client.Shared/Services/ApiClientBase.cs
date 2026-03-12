@@ -167,6 +167,23 @@ public abstract class ApiClientBase
         }
     }
 
+    protected async Task<bool> PatchAsync<TRequest>(string endpoint, TRequest data, CancellationToken ct = default)
+    {
+        await SetAuthorizationHeaderAsync();
+
+        try
+        {
+            using HttpRequestMessage request = new(HttpMethod.Patch, endpoint);
+            request.Content = System.Net.Http.Json.JsonContent.Create(data, options: JsonOptions);
+            HttpResponseMessage response = await HttpClient.SendAsync(request, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ApiException("Network error occurred", ex);
+        }
+    }
+
     private async Task SetAuthorizationHeaderAsync()
     {
         var token = await _tokenProvider.GetAccessTokenAsync();

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using ExpressRecipe.Client.Shared.Models.Cooking;
 using ExpressRecipe.Client.Shared.Models.MealPlanning;
 
 namespace ExpressRecipe.Client.Shared.Services;
@@ -55,6 +56,14 @@ public interface IMealPlanApiClient
     // Attendees
     Task<List<MealAttendeeDto>?> GetMealAttendeesAsync(Guid mealId);
     Task<bool> UpdateMealAttendeesAsync(Guid mealId, List<MealAttendeeDto> attendees);
+
+    // Cooking Timers
+    Task<List<CookingTimerDto>?> GetActiveTimersAsync();
+    Task<Guid?> CreateTimerAsync(CreateCookingTimerRequest request);
+    Task<bool> StartTimerAsync(Guid timerId);
+    Task<bool> PauseTimerAsync(Guid timerId);
+    Task<bool> CancelTimerAsync(Guid timerId);
+    Task<bool> AcknowledgeTimerAsync(Guid timerId);
 }
 
 public class MealPlanApiClient : IMealPlanApiClient
@@ -619,8 +628,114 @@ public class MealPlanApiClient : IMealPlanApiClient
         }
     }
 
+    // ── Cooking Timers ─────────────────────────────────────────────────────────
+
+    public async Task<List<CookingTimerDto>?> GetActiveTimersAsync()
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<List<CookingTimerDto>>("/api/timers");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<Guid?> CreateTimerAsync(CreateCookingTimerRequest request)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            var response = await _httpClient.PostAsJsonAsync("/api/timers", new
+            {
+                label           = request.Label,
+                durationSeconds = request.DurationSeconds,
+                recipeId        = request.RecipeId,
+                startImmediately = request.AutoStart
+            });
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<CreateTimerResponse>();
+            return result?.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> StartTimerAsync(Guid timerId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsync($"/api/timers/{timerId}/start", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> PauseTimerAsync(Guid timerId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsync($"/api/timers/{timerId}/pause", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> CancelTimerAsync(Guid timerId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsync($"/api/timers/{timerId}/cancel", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> AcknowledgeTimerAsync(Guid timerId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsync($"/api/timers/{timerId}/acknowledge", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private class CloneMealResponse { public Guid Id { get; set; } }
     private class SaveTemplateResponse { public Guid Id { get; set; } }
     private class ApplyTemplateResponse { public Guid PlanId { get; set; } }
     private class AddCourseResponse { public Guid Id { get; set; } }
+    private class CreateTimerResponse { public Guid Id { get; set; } }
 }
