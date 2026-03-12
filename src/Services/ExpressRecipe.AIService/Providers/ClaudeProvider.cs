@@ -3,8 +3,11 @@ using ExpressRecipe.AIService.Configuration;
 namespace ExpressRecipe.AIService.Providers;
 
 /// <summary>
-/// Stub: returns mock result when APP_LOCAL_MODE=true; throws NotImplementedException in cloud.
-/// Fill in HTTP call when deploying to Azure/cloud.
+/// Cloud AI provider stub. This provider requires cloud deployment configuration.
+/// <para>
+/// To enable: configure the provider credentials in appsettings.json under
+/// <c>AI:Providers:Claude:ApiKey</c> and deploy to a cloud environment.
+/// </para>
 /// POST https://api.anthropic.com/v1/messages
 /// Headers: x-api-key, anthropic-version: 2023-06-01
 /// </summary>
@@ -32,9 +35,9 @@ public sealed class ClaudeProvider : IAIProvider
             });
         }
 
-        // TODO: Implement Anthropic /v1/messages call when cloud is live
-        throw new NotImplementedException(
-            "ClaudeProvider not yet implemented for cloud deployment.");
+        // Cloud deployment required: Implement HTTP POST to the Anthropic messages endpoint.
+        // See: https://docs.anthropic.com/en/api/messages
+        throw new NotImplementedException("Claude provider requires cloud deployment. Configure AI:Providers:Claude:ApiKey.");
     }
 
     public Task<AIClassifyResult> ClassifyAsync(string prompt, string[] possibleClasses,

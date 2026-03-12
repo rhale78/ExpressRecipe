@@ -12,12 +12,13 @@ public class OpenFoodFactsApiClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenFoodFactsApiClient> _logger;
 
-    public OpenFoodFactsApiClient(HttpClient httpClient, ILogger<OpenFoodFactsApiClient> logger)
+    public OpenFoodFactsApiClient(HttpClient httpClient, IConfiguration configuration, ILogger<OpenFoodFactsApiClient> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
 
-        _httpClient.BaseAddress = new Uri("https://world.openfoodfacts.org/");
+        var baseUrl = configuration["ExternalApis:OpenFoodFacts:BaseUrl"] ?? "https://world.openfoodfacts.org/";
+        _httpClient.BaseAddress = new Uri(baseUrl);
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "ExpressRecipe/1.0 (dietary management app)");
     }
 

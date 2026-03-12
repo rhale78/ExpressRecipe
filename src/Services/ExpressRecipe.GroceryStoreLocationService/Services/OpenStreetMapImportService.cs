@@ -13,7 +13,7 @@ public class OpenStreetMapImportService
     private readonly ILogger<OpenStreetMapImportService> _logger;
     private readonly IConfiguration _configuration;
 
-    private const string OverpassApiUrl = "https://overpass-api.de/api/interpreter";
+    private string OverpassApiUrl => _configuration["StoreLocationImport:OsmOverpassApiUrl"] ?? "https://overpass-api.de/api/interpreter";
     private const string DataSource = "OPENSTREETMAP";
 
     public OpenStreetMapImportService(

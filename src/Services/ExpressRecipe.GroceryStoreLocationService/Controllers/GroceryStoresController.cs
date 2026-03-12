@@ -88,6 +88,10 @@ public class GroceryStoresController : ControllerBase
         [FromQuery] double radiusMiles = 10.0,
         [FromQuery] int limit = 50)
     {
+        if (lat < -90.0 || lat > 90.0)
+            return BadRequest(new { message = "lat must be between -90 and 90." });
+        if (lon < -180.0 || lon > 180.0)
+            return BadRequest(new { message = "lon must be between -180 and 180." });
         limit = Math.Clamp(limit, 1, 200);
         radiusMiles = Math.Clamp(radiusMiles, 0.1, 100.0);
 
@@ -161,6 +165,7 @@ public class GroceryStoresController : ControllerBase
 
     /// <summary>GET /api/grocerystores/import/status - Get last import status per source</summary>
     [HttpGet("import/status")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetImportStatus()
     {
         var snapLog = await _repository.GetLastImportAsync("USDA_SNAP");

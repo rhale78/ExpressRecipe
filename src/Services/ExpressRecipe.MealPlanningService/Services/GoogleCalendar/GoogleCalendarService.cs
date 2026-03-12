@@ -34,13 +34,15 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
     private readonly IHttpClientFactory _http;
     private readonly IGoogleCalendarTokenRepository _tokens;
     private readonly ILogger<GoogleCalendarService> _logger;
-    private const string CalendarApiBase = "https://www.googleapis.com/calendar/v3";
+    private readonly IConfiguration _config;
+    private string CalendarApiBase => _config["ExternalApis:GoogleCalendar:ApiBase"] ?? "https://www.googleapis.com/calendar/v3";
 
-    public GoogleCalendarService(IHttpClientFactory http, IGoogleCalendarTokenRepository tokens, ILogger<GoogleCalendarService> logger)
+    public GoogleCalendarService(IHttpClientFactory http, IGoogleCalendarTokenRepository tokens, ILogger<GoogleCalendarService> logger, IConfiguration config)
     {
         _http   = http;
         _tokens = tokens;
         _logger = logger;
+        _config = config;
     }
 
     public async Task<bool> IsConnectedAsync(Guid userId, CancellationToken ct = default)
@@ -145,7 +147,7 @@ public sealed class GoogleCalendarService : IGoogleCalendarService
             return null;
         }
         HttpResponseMessage resp = await _http.CreateClient("GoogleCalendar").PostAsync(
-            "https://oauth2.googleapis.com/token",
+            _config["ExternalApis:GoogleCalendar:TokenEndpoint"] ?? "https://oauth2.googleapis.com/token",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 { "client_id",     clientId },

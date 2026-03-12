@@ -20,7 +20,6 @@ builder.Services.AddMemoryCache();
 
 // Add authentication (shared JWT bearer configuration)
 builder.AddExpressRecipeAuthentication();
-builder.Services.AddAuthorization();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("inventorydb")

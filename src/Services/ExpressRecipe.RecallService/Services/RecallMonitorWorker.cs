@@ -89,8 +89,8 @@ public class RecallMonitorWorker : BackgroundService
                 // Note: ImportUSDARecallsAsync() is deprecated - no public USDA API exists
                 // Meat/poultry recalls are now imported from FDA API above
 
-                // TODO: Check user subscriptions and send alerts
-                // This would require cross-service communication with NotificationService
+                // Notify users who may be affected by the new recalls.
+                // NotifyAffectedUsersAsync queries affected users and posts alerts via NotificationService.
                 if (result.SuccessCount > 0 || meatPoultryResult.SuccessCount > 0)
                 {
                     await NotifyAffectedUsersAsync(repository, interval, cancellationToken);

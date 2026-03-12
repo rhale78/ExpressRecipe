@@ -26,7 +26,8 @@ public class USDAFoodDataImportService
         _logger = logger;
         _apiKey = configuration["USDA:ApiKey"] ?? throw new InvalidOperationException("USDA API key not configured");
 
-        _httpClient.BaseAddress = new Uri("https://api.nal.usda.gov/fdc/v1/");
+        var baseUrl = configuration["ExternalApis:USDA:FoodDataBaseUrl"] ?? "https://api.nal.usda.gov/fdc/v1/";
+        _httpClient.BaseAddress = new Uri(baseUrl);
     }
 
     /// <summary>

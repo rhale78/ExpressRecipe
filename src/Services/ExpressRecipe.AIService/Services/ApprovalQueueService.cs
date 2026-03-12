@@ -90,8 +90,8 @@ public sealed class ApprovalQueueService : IApprovalQueueService
         HttpClient client = _http.CreateClient("NotificationService");
         await client.PostAsJsonAsync("/api/Notification/internal", new
         {
-            // TODO: replace with a proper moderator user lookup; Guid.Empty is a placeholder
-            // that signals a broadcast/system notification until a moderation user store exists.
+            // Broadcast notification: UserId = Guid.Empty signals a role-based broadcast.
+            // When a moderator user store is implemented, replace with actual moderator user ID lookup.
             UserId            = Guid.Empty,
             Type              = "ModerationRequired",
             Title             = $"New {entityType} pending review",

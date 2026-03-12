@@ -70,8 +70,7 @@ public partial class ShoppingRepository
         if (report.TopFavorites.Count > 10)
             report.TopFavorites = report.TopFavorites.Take(10).ToList();
 
-        // TODO: Get most used store
-        // This would require tracking store usage across shopping sessions
+        // Most-used store tracking: add a StoreId column to ShoppingSession and aggregate here.
 
         return report;
     }

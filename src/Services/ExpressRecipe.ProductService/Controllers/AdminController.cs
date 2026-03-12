@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.Shared.DTOs.Product;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace ExpressRecipe.ProductService.Controllers;
@@ -22,7 +23,7 @@ public class AdminController : ControllerBase
     private readonly ILogger<AdminController> _logger;
 
     // In-memory tracking of import jobs (in production, use database or distributed cache)
-    private static readonly Dictionary<Guid, ImportJobStatus> _importJobs = new();
+    private static readonly ConcurrentDictionary<Guid, ImportJobStatus> _importJobs = new();
 
     public AdminController(
         USDAFoodDataImportService usdaImportService,

@@ -58,16 +58,8 @@ public class WorkQueueController : ControllerBase
         try { householdId = GetHouseholdId(); }
         catch (InvalidOperationException) { return Unauthorized(); }
 
-        try
-        {
-            var items = await _repo.GetPendingItemsAsync(householdId, ct);
-            return Ok(items);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving work-queue items for household {HouseholdId}", householdId);
-            return StatusCode(500, new { message = "An error occurred while retrieving work-queue items" });
-        }
+        var items = await _repo.GetPendingItemsAsync(householdId, ct);
+        return Ok(items);
     }
 
     /// <summary>
@@ -80,20 +72,12 @@ public class WorkQueueController : ControllerBase
         try { householdId = GetHouseholdId(); }
         catch (InvalidOperationException) { return Unauthorized(); }
 
-        try
-        {
-            var item = await _repo.GetByIdAsync(id, ct);
-            if (item == null) return NotFound();
-            if (item.HouseholdId != householdId) return Forbid();
+        var item = await _repo.GetByIdAsync(id, ct);
+        if (item == null) return NotFound();
+        if (item.HouseholdId != householdId) return Forbid();
 
-            await _repo.MarkDoneAsync(id, ct);
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error marking work-queue item {ItemId} as done", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        await _repo.MarkDoneAsync(id, ct);
+        return NoContent();
     }
 
     /// <summary>
@@ -107,21 +91,16 @@ public class WorkQueueController : ControllerBase
         try { householdId = GetHouseholdId(); }
         catch (InvalidOperationException) { return Unauthorized(); }
 
+        var item = await _repo.GetByIdAsync(id, ct);
+        if (item == null) return NotFound();
+        if (item.HouseholdId != householdId) return Forbid();
+
         try
         {
-            var item = await _repo.GetByIdAsync(id, ct);
-            if (item == null) return NotFound();
-            if (item.HouseholdId != householdId) return Forbid();
-
             await _repo.ActionItemAsync(id, GetUserId(), req.ActionTaken, req.ActionData, ct);
-            return NoContent();
         }
         catch (InvalidOperationException) { return Unauthorized(); }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error actioning work-queue item {ItemId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        return NoContent();
     }
 
     /// <summary>
@@ -134,21 +113,16 @@ public class WorkQueueController : ControllerBase
         try { householdId = GetHouseholdId(); }
         catch (InvalidOperationException) { return Unauthorized(); }
 
+        var item = await _repo.GetByIdAsync(id, ct);
+        if (item == null) return NotFound();
+        if (item.HouseholdId != householdId) return Forbid();
+
         try
         {
-            var item = await _repo.GetByIdAsync(id, ct);
-            if (item == null) return NotFound();
-            if (item.HouseholdId != householdId) return Forbid();
-
             await _repo.DismissItemAsync(id, GetUserId(), ct);
-            return NoContent();
         }
         catch (InvalidOperationException) { return Unauthorized(); }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error dismissing work-queue item {ItemId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        return NoContent();
     }
 
     /// <summary>
@@ -162,25 +136,17 @@ public class WorkQueueController : ControllerBase
         try { userId = GetUserId(); householdId = GetHouseholdId(); }
         catch (InvalidOperationException) { return Unauthorized(); }
 
-        try
-        {
-            var item = await _repo.GetByIdAsync(id, ct);
-            if (item == null) return NotFound();
-            if (item.HouseholdId != householdId) return Forbid();
+        var item = await _repo.GetByIdAsync(id, ct);
+        if (item == null) return NotFound();
+        if (item.HouseholdId != householdId) return Forbid();
 
-            // Enforce a minimum snooze: if ResumeAt is in the past or present, snooze until tomorrow.
-            DateTime resumeAt = request.ResumeAt > DateTime.UtcNow
-                ? request.ResumeAt
-                : DateTime.UtcNow.Date.AddDays(1);
+        // Enforce a minimum snooze: if ResumeAt is in the past or present, snooze until tomorrow.
+        DateTime resumeAt = request.ResumeAt > DateTime.UtcNow
+            ? request.ResumeAt
+            : DateTime.UtcNow.Date.AddDays(1);
 
-            await _repo.SnoozeAsync(id, userId, resumeAt, request.Notes, ct);
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error snoozing work-queue item {ItemId}", id);
-            return StatusCode(500, new { message = "An error occurred" });
-        }
+        await _repo.SnoozeAsync(id, userId, resumeAt, request.Notes, ct);
+        return NoContent();
     }
 
     /// <summary>
@@ -203,29 +169,21 @@ public class WorkQueueController : ControllerBase
                 return Unauthorized(new { error = "Invalid or missing X-Internal-Api-Key header" });
         }
 
-        try
-        {
-            if (request.HouseholdId == Guid.Empty)
-                return BadRequest(new { message = "HouseholdId is required" });
+        if (request.HouseholdId == Guid.Empty)
+            return BadRequest(new { message = "HouseholdId is required" });
 
-            if (string.IsNullOrWhiteSpace(request.Title))
-                return BadRequest(new { message = "Title is required" });
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest(new { message = "Title is required" });
 
-            if (string.IsNullOrWhiteSpace(request.ItemType))
-                return BadRequest(new { message = "ItemType is required" });
+        if (string.IsNullOrWhiteSpace(request.ItemType))
+            return BadRequest(new { message = "ItemType is required" });
 
-            var id = await _repo.UpsertAsync(request, ct);
-            _logger.LogInformation(
-                "WorkQueueItem upserted: {Id} type={Type} household={HouseholdId}",
-                id, request.ItemType, request.HouseholdId);
+        var id = await _repo.UpsertAsync(request, ct);
+        _logger.LogInformation(
+            "WorkQueueItem upserted: {Id} type={Type} household={HouseholdId}",
+            id, request.ItemType, request.HouseholdId);
 
-            return Ok(new { id });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error upserting work-queue item for household {HouseholdId}", request.HouseholdId);
-            return StatusCode(500, new { message = "An error occurred while upserting work-queue item" });
-        }
+        return Ok(new { id });
     }
 
     private static bool IsValidApiKey(string? provided, string configured)

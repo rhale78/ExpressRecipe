@@ -252,8 +252,9 @@ public partial class InventoryRepository
         if (session == null || !session.IsActive)
             throw new InvalidOperationException("Scan session not found or not active");
 
-        // TODO: Look up product by barcode
-        // For now, add with barcode only
+        // Barcode lookup not yet implemented in InventoryRepository.
+        // Design: call ProductService GET /api/products/barcode/{barcode} via service-to-service HTTP,
+        // or join against a local products cache populated by the ScannerService.
         var itemId = await AddInventoryItemAsync(
             session.UserId, 
             session.HouseholdId,

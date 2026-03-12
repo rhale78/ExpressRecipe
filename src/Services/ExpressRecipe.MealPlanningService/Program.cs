@@ -19,7 +19,6 @@ builder.AddServiceDefaults();
 
 // Add authentication (shared JWT bearer configuration)
 builder.AddExpressRecipeAuthentication();
-builder.Services.AddAuthorization();
 
 // Register database connection
 string connectionString = builder.Configuration.GetConnectionString("mealplandb")

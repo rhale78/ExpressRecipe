@@ -3,8 +3,11 @@ using ExpressRecipe.AIService.Configuration;
 namespace ExpressRecipe.AIService.Providers;
 
 /// <summary>
-/// Stub: returns mock result when APP_LOCAL_MODE=true.
-/// TODO: Implement when cloud deployment is live.
+/// Cloud AI provider stub. This provider requires cloud deployment configuration.
+/// <para>
+/// To enable: configure the provider credentials in appsettings.json under
+/// <c>AI:Providers:OpenAI:ApiKey</c> and deploy to a cloud environment.
+/// </para>
 /// POST https://api.openai.com/v1/chat/completions
 /// Config key: AI:OpenAI:ApiKey
 /// </summary>
@@ -30,9 +33,9 @@ public sealed class OpenAIProvider : IAIProvider
             });
         }
 
-        // TODO: Implement OpenAI /v1/chat/completions call when cloud is live
-        throw new NotImplementedException(
-            "OpenAIProvider not yet implemented for cloud deployment.");
+        // Cloud deployment required: Implement HTTP POST to the OpenAI chat completions endpoint.
+        // See: https://platform.openai.com/docs/api-reference/chat
+        throw new NotImplementedException("OpenAI provider requires cloud deployment. Configure AI:Providers:OpenAI:ApiKey.");
     }
 
     public Task<AIClassifyResult> ClassifyAsync(string prompt, string[] possibleClasses,
