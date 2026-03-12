@@ -4,6 +4,7 @@
 @using ExpressRecipe.Client.Shared.Services
 @using ExpressRecipe.Client.Shared.Models.Product
 @using ExpressRecipe.Client.Shared.Models.Inventory
+@using ExpressRecipe.BlazorWeb.Components.Pages.Allergy
 @inject IScannerApiClient ScannerClient
 @inject IVisionApiClient VisionClient
 @inject IProductApiClient ProductApi
@@ -297,6 +298,14 @@
                                     </div>
                                 </div>
                             }
+                            @if (_currentResult.ProductId.HasValue)
+                            {
+                                <div class="scan-reaction-row">
+                                    <button class="btn btn-warning btn-sm" @onclick="OpenScannerReactionModal">
+                                        ⚠️ Had a Reaction to This?
+                                    </button>
+                                </div>
+                            }
                         }
                         else
                         {
@@ -331,6 +340,8 @@
         </div>
     </NotAuthorized>
 </AuthorizeView>
+
+<LogReactionModal @ref="_scannerReactionModal" OnIncidentLogged="HandleScannerReactionSaved" />
 
 @code {
     private enum InputMode { Camera, File, Manual }
@@ -935,5 +946,18 @@
     {
         public string Upc { get; set; } = string.Empty;
         public string? CaptureBase64 { get; set; }
+    }
+
+    private LogReactionModal? _scannerReactionModal;
+
+    private async Task OpenScannerReactionModal()
+    {
+        if (_scannerReactionModal != null)
+            await _scannerReactionModal.ShowAsync(_currentResult?.ProductId, _currentResult?.ProductName);
+    }
+
+    private void HandleScannerReactionSaved()
+    {
+        ToastService.ShowSuccess("Reaction logged.");
     }
 }
