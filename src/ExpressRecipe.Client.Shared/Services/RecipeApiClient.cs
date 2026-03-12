@@ -1,3 +1,4 @@
+using ExpressRecipe.Client.Shared.Models.Cooking;
 using ExpressRecipe.Client.Shared.Models.Recipe;
 
 namespace ExpressRecipe.Client.Shared.Services;
@@ -35,8 +36,14 @@ public interface IRecipeApiClient
     Task<bool> ShareByEmailAsync(Guid recipeId, ShareRecipeEmailRequest request);
 
     // Recipe notes
-    Task<List<RecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId);
+    Task<List<UserRecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId);
+    Task<bool> AddRecipeNoteAsync(Guid recipeId, AddRecipeNoteRequest request);
     Task<bool> DismissRecipeNoteAsync(Guid recipeId, Guid noteId);
+
+    // Cook sessions
+    Task<Guid?> StartCookSessionAsync(StartCookSessionRequest request);
+    Task<bool> UpdateCookSessionAsync(Guid sessionId, UpdateCookSessionRequest request);
+    Task<List<CookSessionSummaryDto>?> GetCookHistoryAsync(Guid recipeId);
 }
 
 public class RecipeApiClient : ApiClientBase, IRecipeApiClient
@@ -178,13 +185,45 @@ public class RecipeApiClient : ApiClientBase, IRecipeApiClient
         return await PostAsync($"/api/recipes/{recipeId}/share", request);
     }
 
-    public async Task<List<RecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId)
+    public async Task<List<UserRecipeNoteDto>?> GetRecipeNotesAsync(Guid recipeId)
     {
-        return await GetAsync<List<RecipeNoteDto>>($"/api/recipes/{recipeId}/notes");
+        return await GetAsync<List<UserRecipeNoteDto>>($"/api/recipes/{recipeId}/notes");
+    }
+
+    public async Task<bool> AddRecipeNoteAsync(Guid recipeId, AddRecipeNoteRequest request)
+    {
+        return await PostAsync($"/api/recipes/{recipeId}/notes", request);
     }
 
     public async Task<bool> DismissRecipeNoteAsync(Guid recipeId, Guid noteId)
     {
         return await PatchAsync($"/api/recipes/{recipeId}/notes/{noteId}/dismiss");
+    }
+
+    public Task<Guid?> StartCookSessionAsync(StartCookSessionRequest request)
+    {
+        // Session tracking is local UI state; the session is persisted when the user saves it.
+        return Task.FromResult<Guid?>(Guid.NewGuid());
+    }
+
+    public async Task<bool> UpdateCookSessionAsync(Guid sessionId, UpdateCookSessionRequest request)
+    {
+        // Logs the completed cook session via the existing POST /api/cook-sessions endpoint.
+        return await PostAsync("/api/cook-sessions", new
+        {
+            recipeId       = request.RecipeId,
+            householdId    = Guid.Empty,
+            rating         = request.Rating,
+            wouldMakeAgain = request.WouldMakeAgain,
+            generalNotes   = request.GeneralNotes,
+            issueNotes     = request.IssueNotes,
+            fixNotes       = request.FixNotes,
+            aiHelpUsed     = false
+        });
+    }
+
+    public async Task<List<CookSessionSummaryDto>?> GetCookHistoryAsync(Guid recipeId)
+    {
+        return await GetAsync<List<CookSessionSummaryDto>>($"/api/cook-sessions?recipeId={recipeId}");
     }
 }

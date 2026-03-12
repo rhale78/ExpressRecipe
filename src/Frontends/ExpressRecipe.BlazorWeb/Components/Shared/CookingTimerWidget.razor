@@ -1,0 +1,160 @@
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Cooking
+@inject IMealPlanApiClient TimerApi
+@inject IToastService ToastService
+@implements IAsyncDisposable
+
+@if (_timers?.Any() == true)
+{
+    <div class="floating-timer-widget @(_collapsed ? "collapsed" : "")">
+        <div class="timer-widget-header" @onclick="ToggleCollapse">
+            <span>⏱️</span>
+            <span>Timers (@_timers.Count)</span>
+            <button class="timer-collapse-btn">@(_collapsed ? "▲" : "▼")</button>
+        </div>
+
+        @if (!_collapsed)
+        {
+            @foreach (CookingTimerDto timer in _timers)
+            {
+                <div class="timer-card timer-@timer.Status.ToLower()">
+                    <div class="timer-label">@timer.Label</div>
+                    <div class="timer-countdown @(timer.IsExpired ? "timer-expired" : "")">
+                        @FormatCountdown(timer)
+                    </div>
+                    <div class="timer-controls">
+                        @if (timer.Status == "Running")
+                        {
+                            <button @onclick="() => PauseTimer(timer.Id)" title="Pause">⏸</button>
+                        }
+                        @if (timer.Status == "Paused")
+                        {
+                            <button @onclick="() => ResumeTimer(timer.Id)" title="Resume">▶</button>
+                        }
+                        @if (timer.Status == "Preset")
+                        {
+                            <button @onclick="() => StartTimer(timer.Id)" title="Start">▶</button>
+                        }
+                        @if (timer.Status == "Expired")
+                        {
+                            <button class="ack-btn" @onclick="() => AckTimer(timer.Id)">✓ Done</button>
+                        }
+                        <button class="cancel-btn" @onclick="() => CancelTimer(timer.Id)" title="Cancel">✕</button>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+}
+
+@code {
+    private List<CookingTimerDto>? _timers;
+    private bool                   _collapsed;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshTimers();
+        _cts = new CancellationTokenSource();
+        _ = RunPollingLoopAsync(_cts.Token);
+    }
+
+    private async Task RunPollingLoopAsync(CancellationToken ct)
+    {
+        using PeriodicTimer ticker = new(TimeSpan.FromSeconds(10));
+        try
+        {
+            while (await ticker.WaitForNextTickAsync(ct))
+            {
+                try
+                {
+                    await RefreshTimers();
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Swallow individual tick failures; keep polling.
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task RefreshTimers()
+    {
+        _timers = await TimerApi.GetActiveTimersAsync();
+    }
+
+    private void ToggleCollapse() { _collapsed = !_collapsed; }
+
+    private async Task PauseTimer(Guid id)
+    {
+        if (!await TimerApi.PauseTimerAsync(id))
+            ToastService.ShowError("Failed to pause timer.");
+        await RefreshTimers();
+    }
+
+    private async Task StartTimer(Guid id)
+    {
+        if (!await TimerApi.StartTimerAsync(id))
+            ToastService.ShowError("Failed to start timer.");
+        await RefreshTimers();
+    }
+
+    private async Task ResumeTimer(Guid id)
+    {
+        if (!await TimerApi.ResumeTimerAsync(id))
+            ToastService.ShowError("Failed to resume timer.");
+        await RefreshTimers();
+    }
+
+    private async Task AckTimer(Guid id)
+    {
+        if (!await TimerApi.AcknowledgeTimerAsync(id))
+            ToastService.ShowError("Failed to acknowledge timer.");
+        await RefreshTimers();
+    }
+
+    private async Task CancelTimer(Guid id)
+    {
+        if (!await TimerApi.CancelTimerAsync(id))
+            ToastService.ShowError("Failed to cancel timer.");
+        await RefreshTimers();
+    }
+
+    private static string FormatCountdown(CookingTimerDto timer)
+    {
+        if (timer.Status is "Expired")
+            return "Done!";
+
+        // For running timers use ExpiresAt for a real-time countdown
+        if (timer.Status == "Running" && timer.ExpiresAt.HasValue)
+        {
+            TimeSpan remaining = timer.ExpiresAt.Value - DateTime.UtcNow;
+            return remaining <= TimeSpan.Zero ? "Done!" : FormatSeconds((int)remaining.TotalSeconds);
+        }
+
+        // For paused/preset timers use the server-computed remaining seconds
+        return FormatSeconds(timer.RemainingSeconds > 0 ? timer.RemainingSeconds : timer.DurationSeconds);
+    }
+
+    private static string FormatSeconds(int totalSeconds)
+    {
+        int h = totalSeconds / 3600;
+        int m = (totalSeconds % 3600) / 60;
+        int s = totalSeconds % 60;
+        return h > 0
+            ? $"{h}:{m:D2}:{s:D2}"
+            : $"{m}:{s:D2}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_cts != null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+        }
+    }
+}

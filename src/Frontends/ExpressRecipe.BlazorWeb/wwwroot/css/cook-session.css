@@ -1,0 +1,153 @@
+/* ── Cook Session Actions ────────────────────────────────────── */
+.recipe-cook-actions { margin: 1rem 0; }
+.btn-cook { font-size: 1rem; padding: 0.75rem 1.75rem; }
+.cook-session-active {
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    background: #f0fdf4; border: 1px solid #bbf7d0;
+    border-radius: 8px; padding: 0.75rem 1rem;
+}
+.cook-in-progress { color: #166534; font-weight: 600; }
+
+/* ── Recipe Tab Bar ──────────────────────────────────────────── */
+.recipe-tabs {
+    display: flex; gap: 0.25rem; flex-wrap: wrap;
+    border-bottom: 2px solid #e5e7eb; margin-bottom: 1.25rem;
+}
+.tab-btn {
+    background: none; border: none; cursor: pointer;
+    padding: 0.625rem 1rem; font-size: 0.9rem; font-weight: 500;
+    color: #6b7280; border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+    display: inline-flex; align-items: center; gap: 0.35rem;
+}
+.tab-btn:hover { color: #374151; }
+.tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; }
+.tab-badge {
+    background: #2563eb; color: #fff; border-radius: 10px;
+    padding: 0.1rem 0.45rem; font-size: 0.7rem; font-weight: 700;
+}
+
+/* ── Star Rating ─────────────────────────────────────────────── */
+.star-rating-input { display: flex; gap: 0.25rem; }
+.star-btn {
+    font-size: 1.75rem; background: none; border: none; cursor: pointer;
+    color: #d1d5db; transition: color 0.1s; line-height: 1;
+}
+.star-btn.star-filled,
+.star-btn:hover { color: #f59e0b; }
+
+/* ── Recipe Notes (history tab) ─────────────────────────────── */
+.recipe-notes-section { margin-bottom: 1.25rem; }
+.recipe-note-card {
+    position: relative;
+    display: flex; flex-direction: column; gap: 0.3rem;
+    background: #fffbeb; border: 1px solid #fde68a;
+    border-left: 3px solid #f59e0b;
+    border-radius: 7px; padding: 0.6rem 0.875rem;
+    margin-bottom: 0.5rem;
+}
+.recipe-note-card.note-warning  { border-left-color: #dc2626; background: #fef2f2; }
+.recipe-note-card.note-tip      { border-left-color: #2563eb; background: #eff6ff; }
+.recipe-note-card.note-substitution { border-left-color: #16a34a; background: #f0fdf4; }
+.note-type-badge {
+    display: inline-block; background: rgba(0,0,0,0.07);
+    border-radius: 10px; padding: 0.1rem 0.5rem;
+    font-size: 0.75rem; font-weight: 600; width: fit-content;
+}
+.note-text { margin: 0; font-size: 0.9rem; }
+.ai-note-badge { font-size: 0.75rem; color: #7c3aed; }
+.dismiss-note {
+    position: absolute; top: 0.4rem; right: 0.5rem;
+    color: #9ca3af; font-size: 0.85rem;
+}
+.add-note-section { background: #f9fafb; border-radius: 8px; padding: 0.875rem; margin-bottom: 1rem; }
+.add-note-section h4 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+
+/* ── Cook History ────────────────────────────────────────────── */
+.cook-history-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.cook-history-item {
+    background: #f9fafb; border: 1px solid #e5e7eb;
+    border-radius: 7px; padding: 0.6rem 0.875rem;
+}
+.cook-history-date { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.2rem; }
+.cook-history-rating { color: #f59e0b; font-size: 1rem; margin-bottom: 0.2rem; }
+.cook-history-notes { margin: 0; font-size: 0.875rem; color: #374151; }
+.empty-message { color: #6b7280; font-style: italic; margin: 0.5rem 0; }
+
+/* ── Floating Timer Widget ───────────────────────────────────── */
+.floating-timer-widget {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 9000;
+    background: #1e293b;
+    color: #f1f5f9;
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    min-width: 220px;
+    max-width: 280px;
+    overflow: hidden;
+}
+
+.floating-timer-widget.collapsed { min-width: 0; }
+
+.timer-widget-header {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.625rem 1rem; cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-weight: 600;
+}
+
+.timer-collapse-btn {
+    margin-left: auto; background: none; border: none;
+    color: #94a3b8; cursor: pointer; font-size: 0.85rem;
+}
+
+.timer-card {
+    padding: 0.625rem 1rem;
+    border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.timer-label { font-size: 0.85rem; color: #94a3b8; }
+.timer-countdown { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.timer-expired { color: #f87171; animation: timer-pulse 1s infinite; }
+@keyframes timer-pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+.timer-controls { display: flex; gap: 0.35rem; margin-top: 0.35rem; }
+.timer-controls button {
+    background: rgba(255,255,255,0.12); border: none; color: #f1f5f9;
+    border-radius: 6px; padding: 0.25rem 0.5rem; cursor: pointer; font-size: 0.8rem;
+}
+.timer-controls .ack-btn  { background: rgba(34,197,94,0.25); }
+.timer-controls .cancel-btn { background: rgba(239,68,68,0.2); }
+
+/* ── Full Timer Page ─────────────────────────────────────────── */
+.timers-container { max-width: 900px; margin: 0 auto; padding: 1.25rem; }
+.timers-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+.timers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+
+.timer-card-full {
+    background: #1e293b; color: #f1f5f9;
+    border-radius: 14px; padding: 1.25rem;
+    display: flex; flex-direction: column; gap: 0.5rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.timer-card-full.timer-expired { border: 2px solid #f87171; animation: timer-pulse 1.2s infinite; }
+.timer-label-full { font-size: 0.9rem; color: #94a3b8; }
+.timer-recipe { font-size: 0.8rem; color: #64748b; }
+.timer-countdown-full { font-size: 2.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.timer-status-badge {
+    display: inline-block; border-radius: 12px; padding: 0.15rem 0.6rem;
+    font-size: 0.75rem; font-weight: 700;
+}
+.status-running { background: rgba(34,197,94,0.25); color: #4ade80; }
+.status-paused  { background: rgba(234,179,8,0.25); color: #fbbf24; }
+.status-preset  { background: rgba(148,163,184,0.2); color: #94a3b8; }
+.status-expired { background: rgba(239,68,68,0.25); color: #f87171; }
+
+.timer-full-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+.duration-inputs { display: flex; align-items: center; gap: 0.4rem; }
+.duration-inputs input { width: 4rem; text-align: center; }
+
+/* ── Would-make-again toggle ─────────────────────────────────── */
+.btn-group-toggle { display: flex; gap: 0.5rem; }
