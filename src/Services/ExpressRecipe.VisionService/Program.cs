@@ -13,8 +13,6 @@ builder.AddServiceDefaults();
 // Add authentication
 builder.AddExpressRecipeAuthentication();
 
-builder.Services.AddAuthorization();
-
 // Bind configuration sections
 OnnxVisionOptions onnxOptions = new OnnxVisionOptions();
 builder.Configuration.GetSection("Vision:Onnx").Bind(onnxOptions);

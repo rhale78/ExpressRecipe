@@ -21,6 +21,7 @@ public class CuisineRepository : SqlHelper, ICuisineRepository
         const string sql = @"
             SELECT Id, Name, Description
             FROM Cuisine
+            WHERE IsDeleted = 0
             ORDER BY Name";
 
         return await ExecuteReaderAsync(
@@ -38,7 +39,7 @@ public class CuisineRepository : SqlHelper, ICuisineRepository
         const string sql = @"
             SELECT Id, Name, Description
             FROM Cuisine
-            WHERE Id = @Id";
+            WHERE Id = @Id AND IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
             sql,
@@ -58,7 +59,7 @@ public class CuisineRepository : SqlHelper, ICuisineRepository
         const string sql = @"
             SELECT Id, Name, Description
             FROM Cuisine
-            WHERE Name LIKE @SearchTerm
+            WHERE Name LIKE @SearchTerm AND IsDeleted = 0
             ORDER BY Name";
 
         return await ExecuteReaderAsync(

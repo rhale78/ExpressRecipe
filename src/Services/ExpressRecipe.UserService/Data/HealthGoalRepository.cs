@@ -22,6 +22,7 @@ public class HealthGoalRepository : SqlHelper, IHealthGoalRepository
         const string sql = @"
             SELECT Id, Name, Description, Category
             FROM HealthGoal
+            WHERE IsDeleted = 0
             ORDER BY Category, Name";
 
         return await ExecuteReaderAsync(
@@ -40,7 +41,7 @@ public class HealthGoalRepository : SqlHelper, IHealthGoalRepository
         const string sql = @"
             SELECT Id, Name, Description, Category
             FROM HealthGoal
-            WHERE Id = @Id";
+            WHERE Id = @Id AND IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
             sql,
@@ -61,7 +62,7 @@ public class HealthGoalRepository : SqlHelper, IHealthGoalRepository
         const string sql = @"
             SELECT Id, Name, Description, Category
             FROM HealthGoal
-            WHERE Category = @Category
+            WHERE Category = @Category AND IsDeleted = 0
             ORDER BY Name";
 
         return await ExecuteReaderAsync(
@@ -81,7 +82,7 @@ public class HealthGoalRepository : SqlHelper, IHealthGoalRepository
         const string sql = @"
             SELECT Id, Name, Description, Category
             FROM HealthGoal
-            WHERE Name LIKE @SearchTerm
+            WHERE Name LIKE @SearchTerm AND IsDeleted = 0
             ORDER BY Category, Name";
 
         return await ExecuteReaderAsync(

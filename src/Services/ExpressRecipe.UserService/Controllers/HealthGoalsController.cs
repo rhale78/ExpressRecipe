@@ -1,11 +1,13 @@
 using ExpressRecipe.Shared.DTOs.User;
 using ExpressRecipe.UserService.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ExpressRecipe.UserService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[AllowAnonymous]
 public class HealthGoalsController : ControllerBase
 {
     private readonly IHealthGoalRepository _repository;

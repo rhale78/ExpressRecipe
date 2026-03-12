@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Collections.Concurrent;
 using ExpressRecipe.RecallService.Services;
 
 namespace ExpressRecipe.RecallService.Controllers;
@@ -16,7 +17,7 @@ public class AdminController : ControllerBase
     private readonly ILogger<AdminController> _logger;
 
     // In-memory tracking of import jobs (in production, use database or distributed cache)
-    private static readonly Dictionary<Guid, ImportJobStatus> _importJobs = new();
+    private static readonly ConcurrentDictionary<Guid, ImportJobStatus> _importJobs = new();
 
     public AdminController(
         FDARecallImportService fdaImportService,
