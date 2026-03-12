@@ -122,6 +122,7 @@
         @if (_allergenSuspects?.Any() == true)
         {
             <div class="dashboard-suspect-alert">
+                <button class="suspect-alert-dismiss" @onclick="DismissAllergenAlert" title="Dismiss">✕</button>
                 <AllergyDisclaimer />
                 <div class="suspect-alert-header">
                     <span>⚠️</span>
@@ -137,7 +138,7 @@
                         </div>
                     }
                 </div>
-                <a href="/allergy/suspects" class="btn btn-warning btn-sm">Review →</a>
+                <a href="/allergy" class="btn btn-warning btn-sm">Review →</a>
             </div>
         }
 
@@ -532,6 +533,8 @@
             StateHasChanged();
         }
     }
+
+    private void DismissAllergenAlert() { _allergenSuspects = null; }
 
     private string GetMealTypeIcon(string mealType)
     {

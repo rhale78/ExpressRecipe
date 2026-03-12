@@ -56,12 +56,13 @@ public class AllergyApiClient : ApiClientBase, IAllergyApiClient
         var suspects = await GetSuspectsAsync();
         if (suspects == null) return new List<SuspectedAllergenSummaryDto>();
         return suspects
-            .Where(s => s.ConfidenceScore >= ActionableThreshold)
+            .Where(s => s.ConfidenceScore >= ActionableThreshold && !s.IsPromotedToConfirmed)
+            .OrderByDescending(s => s.ConfidenceScore)
+            .Take(10)
             .Select(s => new SuspectedAllergenSummaryDto
             {
                 Id              = s.Id,
                 IngredientName  = s.IngredientName,
-                MemberName      = string.Empty,
                 ConfidenceScore = s.ConfidenceScore,
                 IncidentCount   = s.IncidentCount
             })
