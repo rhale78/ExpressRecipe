@@ -3,6 +3,7 @@ using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.ScannerService.Data;
 using ExpressRecipe.ScannerService.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +22,11 @@ var connectionString = builder.Configuration.GetConnectionString("scandb")
 
 // Register repositories
 builder.Services.AddScoped<IScannerRepository>(sp =>
-    new ScannerRepository(connectionString, sp.GetRequiredService<ILogger<ScannerRepository>>()));
+    new ScannerRepository(connectionString, sp.GetRequiredService<ILogger<ScannerRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Register external API clients
 builder.Services.AddHttpClient<OpenFoodFactsApiClient>();

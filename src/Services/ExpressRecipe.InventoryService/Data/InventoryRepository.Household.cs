@@ -100,6 +100,19 @@ public partial class InventoryRepository
 
     public async Task<HouseholdDto?> GetHouseholdByIdAsync(Guid householdId)
     {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}household:{householdId}",
+                async (ct) => await GetHouseholdByIdFromDbAsync(householdId),
+                expiration: TimeSpan.FromMinutes(30));
+        }
+
+        return await GetHouseholdByIdFromDbAsync(householdId);
+    }
+
+    private async Task<HouseholdDto?> GetHouseholdByIdFromDbAsync(Guid householdId)
+    {
         const string sql = @"
             SELECT 
                 h.Id, h.Name, h.Description, h.CreatedBy, h.CreatedAt,

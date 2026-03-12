@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 using System.Text.Json;
 
 namespace ExpressRecipe.ScannerService.Data;
@@ -6,10 +7,14 @@ namespace ExpressRecipe.ScannerService.Data;
 public class ScannerRepository : SqlHelper, IScannerRepository
 {
     private readonly ILogger<ScannerRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "scan:";
 
-    public ScannerRepository(string connectionString, ILogger<ScannerRepository> logger) : base(connectionString)
+    public ScannerRepository(string connectionString, ILogger<ScannerRepository> logger, HybridCacheService? cache = null)
+        : base(connectionString)
     {
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateScanAsync(Guid userId, string barcode, string? productId, bool wasRecognized, string scanType)
@@ -50,6 +55,19 @@ public class ScannerRepository : SqlHelper, IScannerRepository
     }
 
     public async Task<ScanHistoryDto?> GetScanAsync(Guid scanId)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{scanId}",
+                async (ct) => await GetScanFromDbAsync(scanId),
+                expiration: TimeSpan.FromHours(24));
+        }
+
+        return await GetScanFromDbAsync(scanId);
+    }
+
+    private async Task<ScanHistoryDto?> GetScanFromDbAsync(Guid scanId)
     {
         const string sql = @"
             SELECT Id, UserId, Barcode, ProductId, WasRecognized, ScanType, CreatedAt

@@ -2,6 +2,7 @@ using ExpressRecipe.Data.Common;
 using ExpressRecipe.AnalyticsService.Data;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,7 +21,11 @@ var connectionString = builder.Configuration.GetConnectionString("analyticsdb")
 
 // Register repositories
 builder.Services.AddScoped<IAnalyticsRepository>(sp =>
-    new AnalyticsRepository(connectionString));
+    new AnalyticsRepository(connectionString, sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Add controllers
 builder.Services.AddControllers();

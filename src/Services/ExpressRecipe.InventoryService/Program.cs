@@ -26,7 +26,12 @@ var connectionString = builder.Configuration.GetConnectionString("inventorydb")
 builder.Services.AddScoped<IInventoryRepository>(sp =>
     new InventoryRepository(connectionString,
         sp.GetRequiredService<ILogger<InventoryRepository>>(),
-        sp.GetRequiredService<IHttpClientFactory>()));
+        sp.GetRequiredService<IHttpClientFactory>(),
+        sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Register HTTP clients for inter-service calls
 builder.Services.AddHttpClient("RecipeService", client =>
