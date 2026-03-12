@@ -11,6 +11,9 @@ public class CookingTimerDto
     public DateTime? StartedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public string Status { get; set; } = string.Empty;
+    public DateTime? PausedAt { get; set; }
+    public int PausedSeconds { get; set; }
+    public int RemainingSeconds { get; set; }
     public bool IsExpired => Status == "Expired";
 }
 

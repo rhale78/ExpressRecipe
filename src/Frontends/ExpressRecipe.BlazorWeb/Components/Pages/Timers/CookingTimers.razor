@@ -4,7 +4,7 @@
 @using ExpressRecipe.Client.Shared.Services
 @inject IMealPlanApiClient TimerApi
 @inject IToastService ToastService
-@implements IDisposable
+@implements IAsyncDisposable
 
 <PageTitle>Cooking Timers - ExpressRecipe</PageTitle>
 
@@ -42,9 +42,13 @@
                     </div>
                     <div class="timer-status-badge status-@timer.Status.ToLower()">@timer.Status</div>
                     <div class="timer-full-controls">
-                        @if (timer.Status is "Preset" or "Paused")
+                        @if (timer.Status == "Preset")
                         {
                             <button class="btn btn-success" @onclick="() => StartTimer(timer.Id)">▶ Start</button>
+                        }
+                        @if (timer.Status == "Paused")
+                        {
+                            <button class="btn btn-success" @onclick="() => ResumeTimer(timer.Id)">▶ Resume</button>
                         }
                         @if (timer.Status == "Running")
                         {
@@ -109,21 +113,40 @@
     private int                   _newHours;
     private int                   _newMinutes       = 10;
     private int                   _newSeconds;
-    private System.Threading.Timer? _ticker;
+    private CancellationTokenSource? _cts;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadTimers();
-        _ticker = new System.Threading.Timer(
-            async _ => { await LoadTimers(); await InvokeAsync(StateHasChanged); },
-            null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+        _cts = new CancellationTokenSource();
+        _ = RunPollingLoopAsync(_cts.Token);
+    }
+
+    private async Task RunPollingLoopAsync(CancellationToken ct)
+    {
+        using PeriodicTimer ticker = new(TimeSpan.FromSeconds(10));
+        try
+        {
+            while (await ticker.WaitForNextTickAsync(ct))
+            {
+                try
+                {
+                    _timers = await TimerApi.GetActiveTimersAsync() ?? new List<CookingTimerDto>();
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Swallow individual tick failures; keep polling.
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
     }
 
     private async Task LoadTimers()
     {
         _timers    = await TimerApi.GetActiveTimersAsync() ?? new List<CookingTimerDto>();
         _isLoading = false;
-        StateHasChanged();
     }
 
     private void ShowNewTimerForm()
@@ -166,6 +189,13 @@
         await LoadTimers();
     }
 
+    private async Task ResumeTimer(Guid id)
+    {
+        if (!await TimerApi.ResumeTimerAsync(id))
+            ToastService.ShowError("Failed to resume timer.");
+        await LoadTimers();
+    }
+
     private async Task PauseTimer(Guid id)
     {
         if (!await TimerApi.PauseTimerAsync(id))
@@ -189,13 +219,18 @@
 
     private static string FormatCountdown(CookingTimerDto timer)
     {
-        if (timer.ExpiresAt == null || timer.Status is "Preset" or "Paused" or "Cancelled")
+        if (timer.Status is "Expired")
+            return "Done!";
+
+        // For running timers use ExpiresAt for a real-time countdown
+        if (timer.Status == "Running" && timer.ExpiresAt.HasValue)
         {
-            return FormatSeconds(timer.DurationSeconds);
+            TimeSpan remaining = timer.ExpiresAt.Value - DateTime.UtcNow;
+            return remaining <= TimeSpan.Zero ? "Done!" : FormatSeconds((int)remaining.TotalSeconds);
         }
 
-        TimeSpan remaining = timer.ExpiresAt.Value - DateTime.UtcNow;
-        return remaining <= TimeSpan.Zero ? "Done!" : FormatSeconds((int)remaining.TotalSeconds);
+        // For paused/preset timers use the server-computed remaining seconds
+        return FormatSeconds(timer.RemainingSeconds > 0 ? timer.RemainingSeconds : timer.DurationSeconds);
     }
 
     private static string FormatSeconds(int t)
@@ -206,5 +241,12 @@
         return h > 0 ? $"{h}:{m:D2}:{s:D2}" : $"{m}:{s:D2}";
     }
 
-    public void Dispose() { _ticker?.Dispose(); }
+    public async ValueTask DisposeAsync()
+    {
+        if (_cts != null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+        }
+    }
 }

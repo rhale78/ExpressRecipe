@@ -200,25 +200,30 @@ public class RecipeApiClient : ApiClientBase, IRecipeApiClient
         return await PatchAsync($"/api/recipes/{recipeId}/notes/{noteId}/dismiss");
     }
 
-    public async Task<Guid?> StartCookSessionAsync(StartCookSessionRequest request)
+    public Task<Guid?> StartCookSessionAsync(StartCookSessionRequest request)
     {
-        var response = await PostAsync<StartCookSessionRequest, StartCookSessionResponse>(
-            "/api/cook-sessions/start", request);
-        return response?.Id;
+        // Session tracking is local UI state; the session is persisted when the user saves it.
+        return Task.FromResult<Guid?>(Guid.NewGuid());
     }
 
     public async Task<bool> UpdateCookSessionAsync(Guid sessionId, UpdateCookSessionRequest request)
     {
-        return await PatchAsync($"/api/cook-sessions/{sessionId}", request);
+        // Logs the completed cook session via the existing POST /api/cook-sessions endpoint.
+        return await PostAsync("/api/cook-sessions", new
+        {
+            recipeId       = request.RecipeId,
+            householdId    = Guid.Empty,
+            rating         = request.Rating,
+            wouldMakeAgain = request.WouldMakeAgain,
+            generalNotes   = request.GeneralNotes,
+            issueNotes     = request.IssueNotes,
+            fixNotes       = request.FixNotes,
+            aiHelpUsed     = false
+        });
     }
 
     public async Task<List<CookSessionSummaryDto>?> GetCookHistoryAsync(Guid recipeId)
     {
         return await GetAsync<List<CookSessionSummaryDto>>($"/api/cook-sessions?recipeId={recipeId}");
-    }
-
-    private class StartCookSessionResponse
-    {
-        public Guid Id { get; set; }
     }
 }

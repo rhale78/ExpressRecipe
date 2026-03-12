@@ -61,6 +61,7 @@ public interface IMealPlanApiClient
     Task<List<CookingTimerDto>?> GetActiveTimersAsync();
     Task<Guid?> CreateTimerAsync(CreateCookingTimerRequest request);
     Task<bool> StartTimerAsync(Guid timerId);
+    Task<bool> ResumeTimerAsync(Guid timerId);
     Task<bool> PauseTimerAsync(Guid timerId);
     Task<bool> CancelTimerAsync(Guid timerId);
     Task<bool> AcknowledgeTimerAsync(Guid timerId);
@@ -671,6 +672,22 @@ public class MealPlanApiClient : IMealPlanApiClient
         try
         {
             var response = await _httpClient.PostAsync($"/api/timers/{timerId}/start", null);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> ResumeTimerAsync(Guid timerId)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return false;
+
+        try
+        {
+            var response = await _httpClient.PostAsync($"/api/timers/{timerId}/resume", null);
             return response.IsSuccessStatusCode;
         }
         catch

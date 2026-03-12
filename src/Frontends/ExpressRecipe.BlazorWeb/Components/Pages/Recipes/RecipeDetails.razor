@@ -735,13 +735,16 @@
                 FixNotes       = string.IsNullOrWhiteSpace(_cookFix)    ? null : _cookFix
             });
 
-        _showPostCookModal = false;
-        _activeCookSession = null;
-
         if (ok)
         {
+            _showPostCookModal = false;
+            _activeCookSession = null;
             _cookHistory = await RecipeApi.GetCookHistoryAsync(RecipeId) ?? new List<CookSessionSummaryDto>();
             ToastService.ShowSuccess("Cook session saved. Thanks for the feedback!");
+        }
+        else
+        {
+            ToastService.ShowError("Unable to save cook session. Please try again.");
         }
     }
 
