@@ -3,6 +3,7 @@ using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.RecallService.Data;
 using ExpressRecipe.RecallService.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +22,11 @@ var connectionString = builder.Configuration.GetConnectionString("recalldb")
 
 // Register repositories
 builder.Services.AddScoped<IRecallRepository>(sp =>
-    new RecallRepository(connectionString, sp.GetRequiredService<ILogger<RecallRepository>>()));
+    new RecallRepository(connectionString, sp.GetRequiredService<ILogger<RecallRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Configure HttpClient for FDA API
 builder.Services.AddHttpClient("FDA", client =>

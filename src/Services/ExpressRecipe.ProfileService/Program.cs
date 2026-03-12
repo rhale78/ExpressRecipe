@@ -3,6 +3,7 @@ using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.ProfileService.Data;
 using ExpressRecipe.ProfileService.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +20,12 @@ builder.AddExpressRecipeAuthentication();
 string connectionString = builder.Configuration.GetConnectionString("profilesdb")
     ?? throw new InvalidOperationException("Database connection string 'profilesdb' not found");
 
-builder.Services.AddScoped<IHouseholdMemberRepository>(_ => new HouseholdMemberRepository(connectionString));
+builder.Services.AddScoped<IHouseholdMemberRepository>(sp =>
+    new HouseholdMemberRepository(connectionString, sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 builder.Services.AddScoped<IHouseholdMemberService, HouseholdMemberService>();
 
 builder.Services.AddHostedService<GuestExpiryWorker>();

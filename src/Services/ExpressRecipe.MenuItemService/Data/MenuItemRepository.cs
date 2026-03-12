@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
@@ -35,8 +36,13 @@ public interface IMenuItemRepository
 
 public class MenuItemRepository : SqlHelper, IMenuItemRepository
 {
-    public MenuItemRepository(string connectionString) : base(connectionString)
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "menuitem:";
+
+    public MenuItemRepository(string connectionString, HybridCacheService? cache = null)
+        : base(connectionString)
     {
+        _cache = cache;
     }
 
     public async Task<List<MenuItemDto>> SearchAsync(MenuItemSearchRequest request)
@@ -97,6 +103,19 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     }
 
     public async Task<MenuItemDto?> GetByIdAsync(Guid id)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{id}",
+                async (ct) => await GetByIdFromDbAsync(id),
+                expiration: TimeSpan.FromHours(1));
+        }
+
+        return await GetByIdFromDbAsync(id);
+    }
+
+    private async Task<MenuItemDto?> GetByIdFromDbAsync(Guid id)
     {
         const string sql = @"
             SELECT mi.Id, mi.RestaurantId, mi.Name, mi.Description, mi.Category,
@@ -180,6 +199,9 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             CreateParameter("@IsSeasonalItem", request.IsSeasonalItem),
             CreateParameter("@UpdatedBy", updatedBy));
 
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
+
         return rowsAffected > 0;
     }
 
@@ -197,6 +219,9 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             sql,
             CreateParameter("@Id", id),
             CreateParameter("@DeletedBy", deletedBy));
+
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
 
         return rowsAffected > 0;
     }

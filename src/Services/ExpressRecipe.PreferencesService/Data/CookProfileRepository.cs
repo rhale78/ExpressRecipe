@@ -1,17 +1,37 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.PreferencesService.Contracts.Requests;
 using ExpressRecipe.PreferencesService.Contracts.Responses;
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.PreferencesService.Data;
 
 public class CookProfileRepository : SqlHelper, ICookProfileRepository
 {
-    public CookProfileRepository(string connectionString) : base(connectionString)
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "cookprofile:";
+
+    public CookProfileRepository(string connectionString, HybridCacheService? cache = null)
+        : base(connectionString)
     {
+        _cache = cache;
     }
 
     public async Task<CookProfileDto?> GetByMemberIdAsync(Guid memberId, CancellationToken ct = default)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}member:{memberId}",
+                async (_ct) => await GetByMemberIdFromDbAsync(memberId, _ct),
+                expiration: TimeSpan.FromHours(1),
+                cancellationToken: ct);
+        }
+
+        return await GetByMemberIdFromDbAsync(memberId, ct);
+    }
+
+    private async Task<CookProfileDto?> GetByMemberIdFromDbAsync(Guid memberId, CancellationToken ct = default)
     {
         const string sql = @"
             SELECT Id, MemberId, CooksForHousehold, CookingFrequency,
@@ -77,6 +97,9 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
             CreateParameter("@OverallSkillLevel", request.OverallSkillLevel),
             CreateParameter("@CookRole", request.CookRole),
             CreateParameter("@EatingDisorderRecovery", request.EatingDisorderRecovery));
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}member:{memberId}");
 
         return result ?? Guid.Empty;
     }
@@ -217,6 +240,9 @@ public class CookProfileRepository : SqlHelper, ICookProfileRepository
         await ExecuteNonQueryAsync(
             sql,
             CreateParameter("@MemberId", memberId));
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}member:{memberId}");
     }
 
     public async Task DeleteMemberDataAsync(Guid memberId, CancellationToken ct = default)
@@ -227,5 +253,8 @@ DELETE FROM TechniqueComfort  WHERE MemberId = @MemberId;
 DELETE FROM CookProfile       WHERE MemberId = @MemberId;";
 
         await ExecuteNonQueryAsync(sql, CreateParameter("@MemberId", memberId));
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}member:{memberId}");
     }
 }

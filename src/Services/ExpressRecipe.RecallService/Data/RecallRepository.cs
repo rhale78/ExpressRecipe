@@ -1,14 +1,19 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.RecallService.Data;
 
 public class RecallRepository : SqlHelper, IRecallRepository
 {
     private readonly ILogger<RecallRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "recall:";
 
-    public RecallRepository(string connectionString, ILogger<RecallRepository> logger) : base(connectionString)
+    public RecallRepository(string connectionString, ILogger<RecallRepository> logger, HybridCacheService? cache = null)
+        : base(connectionString)
     {
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateRecallAsync(string recallNumber, string source, string title, string description, string severity, DateTime recallDate, string? reason, string? distributionArea)
@@ -55,6 +60,19 @@ public class RecallRepository : SqlHelper, IRecallRepository
 
     public async Task<List<RecallDto>> GetRecentRecallsAsync(int limit = 100)
     {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}recent:{limit}",
+                async (ct) => await GetRecentRecallsFromDbAsync(limit),
+                expiration: TimeSpan.FromMinutes(15)) ?? new List<RecallDto>();
+        }
+
+        return await GetRecentRecallsFromDbAsync(limit);
+    }
+
+    private async Task<List<RecallDto>> GetRecentRecallsFromDbAsync(int limit)
+    {
         const string sql = @"
             SELECT TOP (@Limit) r.Id, r.ExternalId, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.Status, r.PublishedDate,
                    (SELECT COUNT(*) FROM RecallProduct rp WHERE rp.RecallId = r.Id) AS AffectedProductCount
@@ -88,6 +106,19 @@ public class RecallRepository : SqlHelper, IRecallRepository
 
     public async Task<RecallDto?> GetRecallAsync(Guid recallId)
     {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{recallId}",
+                async (ct) => await GetRecallFromDbAsync(recallId),
+                expiration: TimeSpan.FromHours(2));
+        }
+
+        return await GetRecallFromDbAsync(recallId);
+    }
+
+    private async Task<RecallDto?> GetRecallFromDbAsync(Guid recallId)
+    {
         const string sql = @"
             SELECT r.Id, r.ExternalId, r.Source, r.Title, r.Description, r.Severity, r.RecallDate, r.Reason, r.Status, r.PublishedDate,
                    (SELECT COUNT(*) FROM RecallProduct rp WHERE rp.RecallId = r.Id) AS AffectedProductCount
@@ -104,6 +135,9 @@ public class RecallRepository : SqlHelper, IRecallRepository
         await ExecuteNonQueryAsync(sql,
             CreateParameter("@RecallId", recallId),
             CreateParameter("@Status", status));
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{recallId}");
     }
 
     public async Task AddProductToRecallAsync(Guid recallId, string productName, string? brand, string? upc, string? lotCode)

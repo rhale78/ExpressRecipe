@@ -3,6 +3,7 @@ using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.PreferencesService.Data;
 using ExpressRecipe.PreferencesService.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -19,8 +20,13 @@ builder.AddExpressRecipeAuthentication();
 string connectionString = builder.Configuration.GetConnectionString("preferencesdb")
     ?? throw new InvalidOperationException("Database connection string 'preferencesdb' not found");
 
-builder.Services.AddScoped<ICookProfileRepository>(_ => new CookProfileRepository(connectionString));
+builder.Services.AddScoped<ICookProfileRepository>(sp =>
+    new CookProfileRepository(connectionString, sp.GetService<HybridCacheService>()));
 builder.Services.AddScoped<ICookProfileService, CookProfileService>();
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 bool messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
 string? messagingConnectionString = builder.Configuration.GetConnectionString("messaging");

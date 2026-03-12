@@ -22,7 +22,12 @@ builder.AddExpressRecipeAuthentication();
 var connectionString = builder.Configuration.GetConnectionString("restaurantdb")
     ?? throw new InvalidOperationException("Database connection string 'restaurantdb' not found");
 
-builder.Services.AddScoped<IRestaurantRepository>(sp => new RestaurantRepository(connectionString));
+builder.Services.AddScoped<IRestaurantRepository>(sp =>
+    new RestaurantRepository(connectionString, sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Add controllers
 builder.Services.AddControllers();

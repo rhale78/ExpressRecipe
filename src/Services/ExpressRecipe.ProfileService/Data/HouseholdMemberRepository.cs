@@ -1,13 +1,19 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.ProfileService.Contracts.Requests;
 using ExpressRecipe.ProfileService.Contracts.Responses;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.ProfileService.Data;
 
 public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 {
-    public HouseholdMemberRepository(string connectionString) : base(connectionString)
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "member:";
+
+    public HouseholdMemberRepository(string connectionString, HybridCacheService? cache = null)
+        : base(connectionString)
     {
+        _cache = cache;
     }
 
     public async Task<List<HouseholdMemberDto>> GetByHouseholdIdAsync(Guid householdId, CancellationToken ct = default)
@@ -27,6 +33,20 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
     }
 
     public async Task<HouseholdMemberDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{id}",
+                async (_ct) => await GetByIdFromDbAsync(id),
+                expiration: TimeSpan.FromMinutes(30),
+                cancellationToken: ct);
+        }
+
+        return await GetByIdFromDbAsync(id);
+    }
+
+    private async Task<HouseholdMemberDto?> GetByIdFromDbAsync(Guid id)
     {
         const string sql = @"
             SELECT Id, HouseholdId, MemberType, DisplayName, BirthYear,
@@ -90,6 +110,9 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
             CreateParameter("@HasUserAccount", request.HasUserAccount),
             CreateParameter("@UpdatedBy", updatedBy));
 
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{memberId}");
+
         return rowsAffected > 0;
     }
 
@@ -106,6 +129,9 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
             sql,
             CreateParameter("@Id", memberId),
             CreateParameter("@UpdatedBy", deletedBy));
+
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{memberId}");
 
         return rowsAffected > 0;
     }

@@ -22,7 +22,12 @@ builder.AddExpressRecipeAuthentication();
 var connectionString = builder.Configuration.GetConnectionString("menuitemdb")
     ?? throw new InvalidOperationException("Database connection string 'menuitemdb' not found");
 
-builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
+builder.Services.AddScoped<IMenuItemRepository>(sp =>
+    new MenuItemRepository(connectionString, sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Add controllers
 builder.Services.AddControllers();
