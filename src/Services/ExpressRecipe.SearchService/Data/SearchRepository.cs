@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 using System.Text.Json;
 
 namespace ExpressRecipe.SearchService.Data;
@@ -6,10 +7,14 @@ namespace ExpressRecipe.SearchService.Data;
 public class SearchRepository : SqlHelper, ISearchRepository
 {
     private readonly ILogger<SearchRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "search:";
 
-    public SearchRepository(string connectionString, ILogger<SearchRepository> logger) : base(connectionString)
+    public SearchRepository(string connectionString, ILogger<SearchRepository> logger, HybridCacheService? cache = null)
+        : base(connectionString)
     {
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> IndexEntityAsync(string entityType, Guid entityId, string title, string description, string? category, List<string> tags, Dictionary<string, string> metadata)
@@ -155,6 +160,19 @@ public class SearchRepository : SqlHelper, ISearchRepository
 
     public async Task<List<SearchSuggestionDto>> GetSuggestionsAsync(string partialQuery, int limit = 10)
     {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}suggest:{partialQuery.ToLowerInvariant()}:{limit}",
+                async (ct) => await GetSuggestionsFromDbAsync(partialQuery, limit),
+                expiration: TimeSpan.FromMinutes(5)) ?? new List<SearchSuggestionDto>();
+        }
+
+        return await GetSuggestionsFromDbAsync(partialQuery, limit);
+    }
+
+    private async Task<List<SearchSuggestionDto>> GetSuggestionsFromDbAsync(string partialQuery, int limit)
+    {
         const string sql = @"
             SELECT TOP (@Limit)
                 DISTINCT Title AS Suggestion,
@@ -260,6 +278,20 @@ public class SearchRepository : SqlHelper, ISearchRepository
     }
 
     public async Task<List<PopularSearchDto>> GetPopularSearchesAsync(string? entityType = null, int daysBack = 30, int limit = 20)
+    {
+        if (_cache != null)
+        {
+            var key = $"{CachePrefix}popular:{entityType ?? "all"}:{daysBack}:{limit}";
+            return await _cache.GetOrSetAsync(
+                key,
+                async (ct) => await GetPopularSearchesFromDbAsync(entityType, daysBack, limit),
+                expiration: TimeSpan.FromMinutes(30)) ?? new List<PopularSearchDto>();
+        }
+
+        return await GetPopularSearchesFromDbAsync(entityType, daysBack, limit);
+    }
+
+    private async Task<List<PopularSearchDto>> GetPopularSearchesFromDbAsync(string? entityType, int daysBack, int limit)
     {
         var sql = @"
             SELECT TOP (@Limit)

@@ -23,7 +23,11 @@ var connectionString = builder.Configuration.GetConnectionString("communitydb")
 
 // Register repositories
 builder.Services.AddScoped<ICommunityRepository>(sp =>
-    new CommunityRepository(connectionString, sp.GetRequiredService<ILogger<CommunityRepository>>()));
+    new CommunityRepository(connectionString, sp.GetRequiredService<ILogger<CommunityRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 builder.Services.AddScoped<IApprovalQueueRepository>(sp =>
     new ApprovalQueueRepository(connectionString));
 

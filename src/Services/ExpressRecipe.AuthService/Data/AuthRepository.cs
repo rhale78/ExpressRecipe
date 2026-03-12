@@ -1,4 +1,5 @@
 using ExpressRecipe.AuthService.Models;
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.AuthService.Data;
@@ -23,11 +24,14 @@ public class AuthRepository : IAuthRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<AuthRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "auth:user:";
 
-    public AuthRepository(string connectionString, ILogger<AuthRepository> logger)
+    public AuthRepository(string connectionString, ILogger<AuthRepository> logger, HybridCacheService? cache = null)
     {
         _connectionString = connectionString;
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateUserAsync(string email, string passwordHash, string firstName, string lastName)
@@ -87,6 +91,19 @@ public class AuthRepository : IAuthRepository
 
     public async Task<AuthUser?> GetUserByIdAsync(Guid userId)
     {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{userId}",
+                async (ct) => await GetUserByIdFromDbAsync(userId),
+                expiration: TimeSpan.FromMinutes(5));
+        }
+
+        return await GetUserByIdFromDbAsync(userId);
+    }
+
+    private async Task<AuthUser?> GetUserByIdFromDbAsync(Guid userId)
+    {
         const string sql = @"
             SELECT Id, Email, PasswordHash, FirstName, LastName, EmailVerified, IsActive, CreatedAt, LastLoginAt
             FROM [User]
@@ -129,6 +146,9 @@ public class AuthRepository : IAuthRepository
         command.Parameters.AddWithValue("@UserId", userId);
 
         await command.ExecuteNonQueryAsync();
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{userId}");
     }
 
     public async Task<Guid> CreateRefreshTokenAsync(Guid userId, string token, DateTime expiresAt)
@@ -316,5 +336,8 @@ DELETE FROM RefreshToken           WHERE UserId = @UserId;";
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
         await command.ExecuteNonQueryAsync(ct);
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{userId}");
     }
 }

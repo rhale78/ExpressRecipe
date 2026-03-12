@@ -3,6 +3,7 @@ using ExpressRecipe.AuthService.Services;
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -29,7 +30,11 @@ var connectionString = builder.Configuration.GetConnectionString("authdb")
     ?? throw new InvalidOperationException("Database connection string 'authdb' not found");
 
 builder.Services.AddScoped<IAuthRepository>(sp =>
-    new AuthRepository(connectionString, sp.GetRequiredService<ILogger<AuthRepository>>()));
+    new AuthRepository(connectionString, sp.GetRequiredService<ILogger<AuthRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Register services
 builder.Services.AddScoped<TokenService>();

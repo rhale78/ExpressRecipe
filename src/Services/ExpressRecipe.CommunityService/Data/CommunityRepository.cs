@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 using System.Text.Json;
 
 namespace ExpressRecipe.CommunityService.Data;
@@ -6,10 +7,14 @@ namespace ExpressRecipe.CommunityService.Data;
 public class CommunityRepository : SqlHelper, ICommunityRepository
 {
     private readonly ILogger<CommunityRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "community:";
 
-    public CommunityRepository(string connectionString, ILogger<CommunityRepository> logger) : base(connectionString)
+    public CommunityRepository(string connectionString, ILogger<CommunityRepository> logger, HybridCacheService? cache = null)
+        : base(connectionString)
     {
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateContributionAsync(Guid userId, string contributionType, Guid? recipeId, Guid? productId, string? content, int points)
@@ -19,13 +24,22 @@ public class CommunityRepository : SqlHelper, ICommunityRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @ContributionType, @RecipeId, @ProductId, @Content, @Points, GETUTCDATE())";
 
-        return (await ExecuteScalarAsync<Guid>(sql,
+        Guid result = (await ExecuteScalarAsync<Guid>(sql,
             CreateParameter("@UserId", userId),
             CreateParameter("@ContributionType", contributionType),
             CreateParameter("@RecipeId", recipeId ?? (object)DBNull.Value),
             CreateParameter("@ProductId", productId ?? (object)DBNull.Value),
             CreateParameter("@Content", content ?? (object)DBNull.Value),
             CreateParameter("@Points", points)))!;
+
+        // Evict all leaderboard period variants since a new contribution changes rankings
+        if (_cache != null)
+        {
+            foreach (var period in new[] { "day", "week", "month", "year" })
+                await _cache.RemoveAsync($"{CachePrefix}leaderboard:{period}:100");
+        }
+
+        return result;
     }
 
     public async Task<List<UserContributionDto>> GetUserContributionsAsync(Guid userId, int limit = 50)
@@ -52,6 +66,20 @@ public class CommunityRepository : SqlHelper, ICommunityRepository
     }
 
     public async Task<LeaderboardDto> GetLeaderboardAsync(string period, int limit = 100)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}leaderboard:{period}:{limit}",
+                async (ct) => await GetLeaderboardFromDbAsync(period, limit),
+                expiration: TimeSpan.FromMinutes(5))
+                ?? new LeaderboardDto { Period = period, Entries = new() };
+        }
+
+        return await GetLeaderboardFromDbAsync(period, limit);
+    }
+
+    private async Task<LeaderboardDto> GetLeaderboardFromDbAsync(string period, int limit)
     {
         var startDate = period.ToLower() switch
         {

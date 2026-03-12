@@ -2,6 +2,7 @@ using ExpressRecipe.Data.Common;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.SearchService.Data;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,7 +21,11 @@ var connectionString = builder.Configuration.GetConnectionString("searchdb")
 
 // Register repositories
 builder.Services.AddScoped<ISearchRepository>(sp =>
-    new SearchRepository(connectionString, sp.GetRequiredService<ILogger<SearchRepository>>()));
+    new SearchRepository(connectionString, sp.GetRequiredService<ILogger<SearchRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Add controllers
 builder.Services.AddControllers();
