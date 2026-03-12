@@ -40,6 +40,13 @@ public class RecallRepository : SqlHelper, IRecallRepository
             await AddProductToRecallAsync(id, title, null, null, distributionArea);
         }
 
+        // A new recall changes the "recent" list — evict common limit variants
+        if (_cache != null)
+        {
+            foreach (var lim in new[] { 50, 100, 200 })
+                await _cache.RemoveAsync($"{CachePrefix}recent:{lim}");
+        }
+
         return id;
     }
 

@@ -150,7 +150,13 @@ public partial class InventoryRepository
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
 
-        return await AddHouseholdMemberInternalAsync(householdId, userId, role, invitedBy, connection, null);
+        var newMemberId = await AddHouseholdMemberInternalAsync(householdId, userId, role, invitedBy, connection, null);
+
+        // Evict the household cache — MemberCount is embedded in the cached HouseholdDto
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}household:{householdId}");
+
+        return newMemberId;
     }
 
     private async Task<Guid> AddHouseholdMemberInternalAsync(Guid householdId, Guid userId, string role, Guid invitedBy, SqlConnection connection, SqlTransaction? transaction)
@@ -246,6 +252,19 @@ public partial class InventoryRepository
 
     public async Task RemoveHouseholdMemberAsync(Guid memberId)
     {
+        // Look up the household id before deactivating so we can evict the cache
+        Guid? householdId = null;
+        if (_cache != null)
+        {
+            const string selectSql = "SELECT HouseholdId FROM HouseholdMember WHERE Id = @MemberId";
+            await using var selectConn = new SqlConnection(_connectionString);
+            await selectConn.OpenAsync();
+            await using var selectCmd = new SqlCommand(selectSql, selectConn);
+            selectCmd.Parameters.AddWithValue("@MemberId", memberId);
+            var result = await selectCmd.ExecuteScalarAsync();
+            if (result is Guid hid) householdId = hid;
+        }
+
         const string sql = "UPDATE HouseholdMember SET IsActive = 0 WHERE Id = @MemberId";
 
         await using var connection = new SqlConnection(_connectionString);
@@ -256,6 +275,9 @@ public partial class InventoryRepository
 
         await command.ExecuteNonQueryAsync();
         _logger.LogInformation("Removed household member {MemberId}", memberId);
+
+        if (_cache != null && householdId.HasValue)
+            await _cache.RemoveAsync($"{CachePrefix}household:{householdId.Value}");
     }
 
     #endregion

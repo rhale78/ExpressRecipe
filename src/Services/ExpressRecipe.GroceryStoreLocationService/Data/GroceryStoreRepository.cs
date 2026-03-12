@@ -410,6 +410,9 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
         var parameters = BuildUpsertParameters(request);
         parameters.Add(new SqlParameter("@Id", id));
         await ExecuteNonQueryAsync(sql, parameters.ToArray());
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
     }
 
     private async Task<Guid> InsertNewStoreAsync(UpsertGroceryStoreRequest request)

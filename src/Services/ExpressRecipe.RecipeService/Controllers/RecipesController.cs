@@ -54,6 +54,16 @@ public class RecipesController : ControllerBase
         return userId;
     }
 
+    // Evict cached recipe-with-ingredients summary lists for the most common limit values.
+    // The cache key is recipes:with-ingredients:{limit}; since any recipe mutation can affect
+    // any cached list, we evict the limits callers are most likely to request.
+    private async Task EvictIngredientSummaryCacheAsync()
+    {
+        if (_cache is null) return;
+        foreach (var limit in new[] { 50, 100, 200, 500, 1000 })
+            await _cache.RemoveAsync($"recipes:with-ingredients:{limit}");
+    }
+
     /// <summary>
     /// Search and list recipes with filtering
     /// </summary>
@@ -349,6 +359,10 @@ public class RecipesController : ControllerBase
             await _events.PublishUpdatedAsync(id, request.Name, request.Category, request.Cuisine,
                 userId.Value, changedFields);
 
+            // Evict the with-ingredients summary cache for common limit values
+            if (_cache is not null)
+                await EvictIngredientSummaryCacheAsync();
+
             return NoContent();
         }
         catch (Exception ex)
@@ -389,6 +403,10 @@ public class RecipesController : ControllerBase
             _logger.LogInformation("Recipe {RecipeId} deleted by user {UserId}", id, userId.Value);
 
             await _events.PublishDeletedAsync(id, userId.Value);
+
+            // Evict the with-ingredients summary cache for common limit values
+            if (_cache is not null)
+                await EvictIngredientSummaryCacheAsync();
 
             return NoContent();
         }

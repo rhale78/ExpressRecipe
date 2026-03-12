@@ -185,6 +185,9 @@ public class NotificationRepository : SqlHelper, INotificationRepository
         // Soft delete — use HardDeleteNotificationAsync for GDPR erasure
         const string sql = "UPDATE Notification SET IsDeleted = 1, DeletedAt = GETUTCDATE() WHERE Id = @NotificationId";
         await ExecuteNonQueryAsync(sql, CreateParameter("@NotificationId", notificationId));
+
+        if (_cache is not null)
+            _ = _cache.RemoveAsync($"notification:{notificationId}");
     }
 
     public async Task HardDeleteNotificationAsync(Guid notificationId)
@@ -192,6 +195,9 @@ public class NotificationRepository : SqlHelper, INotificationRepository
         // Permanent deletion — for GDPR right-to-erasure requests only
         const string sql = "DELETE FROM Notification WHERE Id = @NotificationId";
         await ExecuteNonQueryAsync(sql, CreateParameter("@NotificationId", notificationId));
+
+        if (_cache is not null)
+            _ = _cache.RemoveAsync($"notification:{notificationId}");
     }
 
     public async Task DeleteAllReadAsync(Guid userId)
