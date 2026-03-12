@@ -89,7 +89,7 @@ public class FeatureFlagsController : ControllerBase
             return BadRequest("FeatureKey is required");
 
         await _repo.UpsertFlagAsync(flag, ct);
-        _service.InvalidateCache(flag.FeatureKey);
+        await _service.InvalidateCacheAsync(flag.FeatureKey, ct);
         _logger.LogInformation("Feature flag {FeatureKey} upserted by admin", flag.FeatureKey);
         return Ok();
     }
@@ -115,7 +115,7 @@ public class FeatureFlagsController : ControllerBase
         if (request.Description    != null)      existing.Description       = request.Description;
 
         await _repo.UpsertFlagAsync(existing, ct);
-        _service.InvalidateCache(featureKey);
+        await _service.InvalidateCacheAsync(featureKey, ct);
         _logger.LogInformation("Feature flag {FeatureKey} patched by admin", featureKey);
         return Ok(existing);
     }

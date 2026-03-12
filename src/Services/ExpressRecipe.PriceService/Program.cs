@@ -106,7 +106,6 @@ builder.Services.AddHttpClient<PriceScraperService>();
 builder.Services.AddHttpClient<GoogleShoppingApiClient>();
 
 // Register new external price API clients (all disabled by default via config)
-builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<KrogerApiClient>();
 builder.Services.AddHttpClient<FlippApiClient>();
 builder.Services.AddHttpClient<FoodLionApiClient>();

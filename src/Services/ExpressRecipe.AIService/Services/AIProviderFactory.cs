@@ -1,6 +1,5 @@
 using ExpressRecipe.AIService.Providers;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace ExpressRecipe.AIService.Services;
 
@@ -8,19 +7,20 @@ namespace ExpressRecipe.AIService.Services;
 /// Factory that resolves the correct <see cref="IAIProvider"/> for a given use-case
 /// by looking up the <c>AIProviderConfig</c> table. Falls back to the default Ollama
 /// model when the DB is unavailable or the use-case has no configured entry.
-/// Results are cached in-memory for 1 hour because use-case→model mappings are static.
+/// Results are cached via .NET 9 HybridCache for 1 hour because use-case→model mappings
+/// are static configuration that rarely changes.
 /// </summary>
 public sealed class AIProviderFactory : IAIProviderFactory
 {
     private readonly IOllamaService _ollamaService;
     private readonly string? _connectionString;
     private readonly string _defaultModel;
-    private readonly IMemoryCache _cache;
+    private readonly HybridCache _cache;
     private readonly ILogger<AIProviderFactory> _logger;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
 
     public AIProviderFactory(IOllamaService ollamaService, IConfiguration configuration,
-        IMemoryCache cache, ILogger<AIProviderFactory> logger)
+        HybridCache cache, ILogger<AIProviderFactory> logger)
     {
         _ollamaService = ollamaService;
         _connectionString = configuration.GetConnectionString("aidb");
@@ -39,15 +39,12 @@ public sealed class AIProviderFactory : IAIProviderFactory
         if (!string.IsNullOrEmpty(_connectionString))
         {
             string cacheKey = $"aimodel:{useCase}";
-            if (!_cache.TryGetValue(cacheKey, out string? cachedModel))
-            {
-                cachedModel = await LookupModelForUseCaseAsync(useCase, ct);
-                if (cachedModel is not null)
-                {
-                    _cache.Set(cacheKey, cachedModel, CacheTtl);
-                }
-            }
-            model = cachedModel ?? _defaultModel;
+            string? resolved = await _cache.GetOrCreateAsync<string?>(
+                cacheKey,
+                async innerCt => await LookupModelForUseCaseAsync(useCase, innerCt),
+                new HybridCacheEntryOptions { Expiration = CacheTtl, LocalCacheExpiration = CacheTtl },
+                cancellationToken: ct);
+            model = resolved ?? _defaultModel;
         }
 
         return new OllamaAIProvider(_ollamaService, model, _logger);
@@ -57,9 +54,9 @@ public sealed class AIProviderFactory : IAIProviderFactory
     {
         try
         {
-            await using SqlConnection conn = new(_connectionString!);
+            await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_connectionString!);
             await conn.OpenAsync(ct);
-            await using SqlCommand cmd = new(
+            await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(
                 "SELECT TOP 1 ModelName FROM AIProviderConfig WHERE UseCase = @UseCase AND IsActive = 1",
                 conn);
             cmd.Parameters.AddWithValue("@UseCase", useCase);

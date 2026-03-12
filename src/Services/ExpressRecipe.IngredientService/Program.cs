@@ -35,7 +35,6 @@ builder.Services.AddScoped<IIngredientMatchingService>(sp =>
 
 // HybridCache (L1 in-memory + optional L2 Redis)
 builder.AddHybridCache();
-builder.Services.AddSingleton<HybridCacheService>();
 
 // Parsing Services
 builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>();

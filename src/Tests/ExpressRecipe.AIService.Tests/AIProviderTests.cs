@@ -66,11 +66,10 @@ public class AIProviderTests
     private static HybridCache BuildHybridCache()
     {
         ServiceCollection services = new();
-        services.AddMemoryCache();
-        services.AddDistributedMemoryCache();
 #pragma warning disable EXTEXP0018
         services.AddHybridCache();
 #pragma warning restore EXTEXP0018
+        services.AddLogging();
         return services.BuildServiceProvider().GetRequiredService<HybridCache>();
     }
 

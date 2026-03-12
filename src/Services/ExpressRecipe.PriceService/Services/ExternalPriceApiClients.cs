@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace ExpressRecipe.PriceService.Services;
 
@@ -15,7 +15,7 @@ public sealed class KrogerApiClient : IExternalPriceApiClient
     public const string DataSourceCode = "KROGER";
 
     private readonly HttpClient _httpClient;
-    private readonly IMemoryCache _cache;
+    private readonly HybridCache _cache;
     private readonly ILogger<KrogerApiClient> _logger;
     private readonly string? _clientId;
     private readonly string? _clientSecret;
@@ -25,7 +25,7 @@ public sealed class KrogerApiClient : IExternalPriceApiClient
 
     public KrogerApiClient(
         HttpClient httpClient,
-        IMemoryCache cache,
+        HybridCache cache,
         IConfiguration configuration,
         ILogger<KrogerApiClient> logger)
     {
@@ -95,7 +95,6 @@ public sealed class KrogerApiClient : IExternalPriceApiClient
     private async Task<string?> GetBearerTokenAsync(CancellationToken ct)
     {
         const string cacheKey = "kroger:bearer_token";
-        if (_cache.TryGetValue(cacheKey, out string? cached)) { return cached; }
 
         if (string.IsNullOrEmpty(_clientId) || string.IsNullOrEmpty(_clientSecret))
         {
@@ -103,30 +102,41 @@ public sealed class KrogerApiClient : IExternalPriceApiClient
             return null;
         }
 
-        var credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{_clientId}:{_clientSecret}"));
-        using var tokenRequest = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/connect/oauth2/token");
-        tokenRequest.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
-        tokenRequest.Content = new FormUrlEncodedContent(new[]
-        {
-            new KeyValuePair<string, string>("grant_type", "client_credentials"),
-            new KeyValuePair<string, string>("scope", "product.compact")
-        });
+        return await _cache.GetOrCreateAsync<string?>(
+            cacheKey,
+            async innerCt =>
+            {
+                var credentials = Convert.ToBase64String(
+                    System.Text.Encoding.UTF8.GetBytes($"{_clientId}:{_clientSecret}"));
+                using var tokenRequest = new HttpRequestMessage(
+                    HttpMethod.Post, $"{_baseUrl}/connect/oauth2/token");
+                tokenRequest.Headers.Authorization =
+                    new AuthenticationHeaderValue("Basic", credentials);
+                tokenRequest.Content = new FormUrlEncodedContent(new[]
+                {
+                    new KeyValuePair<string, string>("grant_type", "client_credentials"),
+                    new KeyValuePair<string, string>("scope", "product.compact")
+                });
 
-        using var tokenResponse = await _httpClient.SendAsync(tokenRequest, ct);
-        if (!tokenResponse.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("Kroger: Token request failed with {StatusCode}", tokenResponse.StatusCode);
-            return null;
-        }
+                using var tokenResponse = await _httpClient.SendAsync(tokenRequest, innerCt);
+                if (!tokenResponse.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("Kroger: Token request failed with {StatusCode}",
+                        tokenResponse.StatusCode);
+                    return null;
+                }
 
-        var json = await tokenResponse.Content.ReadAsStringAsync(ct);
-        var tokenResult = JsonSerializer.Deserialize<KrogerTokenResponse>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        var token = tokenResult?.AccessToken;
-        if (!string.IsNullOrEmpty(token))
-        {
-            _cache.Set(cacheKey, token, TimeSpan.FromMinutes(29));
-        }
-        return token;
+                var json = await tokenResponse.Content.ReadAsStringAsync(innerCt);
+                var tokenResult = JsonSerializer.Deserialize<KrogerTokenResponse>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return tokenResult?.AccessToken;
+            },
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromMinutes(29),
+                LocalCacheExpiration = TimeSpan.FromMinutes(29)
+            },
+            cancellationToken: ct);
     }
 
     // ── Kroger response shapes ─────────────────────────────────────────────

@@ -55,8 +55,8 @@ builder.Services.AddScoped<Services.IOllamaService, Services.OllamaService>();
 
 // ── AI Provider infrastructure ───────────────────────────────────────────────
 
-// In-memory cache for AI provider config lookups
-builder.Services.AddMemoryCache();
+// HybridCache (L1 in-memory + optional L2 distributed) for provider config lookups
+builder.AddHybridCache();
 
 // Local-mode flag (APP_LOCAL_MODE=true disables cloud provider HTTP calls)
 builder.Services.AddSingleton<ILocalModeConfig, LocalModeConfig>();
@@ -76,7 +76,7 @@ builder.Services.AddSingleton<Providers.IAIProviderFactory>(sp =>
     new Services.AIProviderFactory(
         sp.GetRequiredService<Services.IOllamaService>(),
         sp.GetRequiredService<IConfiguration>(),
-        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+        sp.GetRequiredService<Microsoft.Extensions.Caching.Hybrid.HybridCache>(),
         sp.GetRequiredService<ILogger<Services.AIProviderFactory>>()));
 
 // Cooking assistant service

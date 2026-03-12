@@ -1,7 +1,9 @@
 using ExpressRecipe.PriceService.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
-using Moq;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace ExpressRecipe.PriceService.Tests.Services;
@@ -21,16 +23,26 @@ public class KrogerApiClientTests
             .Build();
     }
 
+    private static HybridCache BuildHybridCache()
+    {
+#pragma warning disable EXTEXP0018
+        var services = new ServiceCollection();
+        services.AddHybridCache();
+        services.AddLogging();
+        return services.BuildServiceProvider().GetRequiredService<HybridCache>();
+#pragma warning restore EXTEXP0018
+    }
+
     [Fact]
     public async Task GetPricesAsync_WhenDisabled_ReturnsEmptyWithoutHttpCall()
     {
         var handler = new FakeHttpMessageHandler(System.Net.HttpStatusCode.OK, "should not be called");
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.kroger.com/v1") };
         var config = BuildConfig(enabled: false);
-        var cache = new Mock<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
-        var logger = new Mock<Microsoft.Extensions.Logging.ILogger<KrogerApiClient>>();
+        var cache = BuildHybridCache();
+        var logger = NullLogger<KrogerApiClient>.Instance;
 
-        var client = new KrogerApiClient(httpClient, cache.Object, config, logger.Object);
+        var client = new KrogerApiClient(httpClient, cache, config, logger);
 
         client.IsEnabled.Should().BeFalse();
         var result = await client.GetPricesAsync("012345678901", CancellationToken.None);

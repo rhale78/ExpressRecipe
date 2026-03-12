@@ -15,9 +15,6 @@ builder.AddLayeredConfiguration(args);
 // Add Aspire service defaults (telemetry, health checks, service discovery)
 builder.AddServiceDefaults();
 
-// Add memory cache for rate limiting
-builder.Services.AddMemoryCache();
-
 // Add authentication (shared JWT bearer configuration)
 builder.AddExpressRecipeAuthentication();
 

@@ -1,6 +1,6 @@
 using ExpressRecipe.Shared.Services.FeatureGates;
 using ExpressRecipe.UserService.Data;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
@@ -17,7 +17,7 @@ namespace ExpressRecipe.UserService.Services;
 ///   <item>Layer 3a — Rollout percentage (deterministic hash of featureKey:userId)</item>
 ///   <item>Layer 3b — Subscription tier requirement (FeatureFlag.RequiredTier)</item>
 /// </list>
-/// Results are cached in-process for 30 seconds to reduce DB load.
+/// Results are cached via .NET 9 HybridCache for 30 seconds to reduce DB load.
 /// </summary>
 public sealed class FeatureFlagService : IFeatureFlagService
 {
@@ -33,12 +33,12 @@ public sealed class FeatureFlagService : IFeatureFlagService
         };
 
     private readonly IFeatureFlagRepository _repo;
-    private readonly IMemoryCache _cache;
+    private readonly HybridCache _cache;
     private readonly ILogger<FeatureFlagService> _logger;
 
     public FeatureFlagService(
         IFeatureFlagRepository repo,
-        IMemoryCache cache,
+        HybridCache cache,
         ILogger<FeatureFlagService> logger)
     {
         _repo   = repo;
@@ -51,24 +51,24 @@ public sealed class FeatureFlagService : IFeatureFlagService
         string userTier, CancellationToken ct = default)
     {
         string cacheKey = $"ff:enabled:{featureKey}:{userId}:{userTier}";
-        if (_cache.TryGetValue(cacheKey, out FeatureCheckResult? cached) && cached != null)
-            return cached;
-
-        FeatureCheckResult result;
-        try
-        {
-            result = await EvaluateCoreAsync(featureKey, userId, userTier, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error evaluating feature flag {FeatureKey} for user {UserId}; defaulting to enabled (fail-open)",
-                featureKey, userId);
-            result = new FeatureCheckResult(true, FeatureCheckReason.Enabled);
-        }
-
-        _cache.Set(cacheKey, result, CacheTtl);
-        return result;
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async innerCt =>
+            {
+                try
+                {
+                    return await EvaluateCoreAsync(featureKey, userId, userTier, innerCt);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Error evaluating feature flag {FeatureKey} for user {UserId}; defaulting to enabled (fail-open)",
+                        featureKey, userId);
+                    return new FeatureCheckResult(true, FeatureCheckReason.Enabled);
+                }
+            },
+            new HybridCacheEntryOptions { Expiration = CacheTtl, LocalCacheExpiration = CacheTtl },
+            cancellationToken: ct);
     }
 
     /// <inheritdoc/>
@@ -76,21 +76,23 @@ public sealed class FeatureFlagService : IFeatureFlagService
         CancellationToken ct = default)
     {
         string cacheKey = $"ff:global:{featureKey}";
-        if (_cache.TryGetValue(cacheKey, out bool cached)) return cached;
-
-        try
-        {
-            var flag = await _repo.GetFlagAsync(featureKey, ct);
-            bool enabled = flag?.IsEnabled ?? false;
-            _cache.Set(cacheKey, enabled, CacheTtl);
-            return enabled;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error evaluating global feature flag {FeatureKey}", featureKey);
-            return true; // fail-open
-        }
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async innerCt =>
+            {
+                try
+                {
+                    var flag = await _repo.GetFlagAsync(featureKey, innerCt);
+                    return flag?.IsEnabled ?? false;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error evaluating global feature flag {FeatureKey}", featureKey);
+                    return true; // fail-open
+                }
+            },
+            new HybridCacheEntryOptions { Expiration = CacheTtl, LocalCacheExpiration = CacheTtl },
+            cancellationToken: ct);
     }
 
     /// <summary>
@@ -103,9 +105,10 @@ public sealed class FeatureFlagService : IFeatureFlagService
     /// restarting the service.
     /// </para>
     /// </summary>
-    public void InvalidateCache(string featureKey)
+    public async Task InvalidateCacheAsync(string featureKey,
+        CancellationToken ct = default)
     {
-        _cache.Remove($"ff:global:{featureKey}");
+        await _cache.RemoveAsync($"ff:global:{featureKey}", ct);
         _logger.LogInformation("Feature flag cache invalidated for {FeatureKey}", featureKey);
     }
 

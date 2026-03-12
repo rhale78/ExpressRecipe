@@ -21,9 +21,6 @@ builder.AddExpressRecipeAuthentication();
 var connectionString = builder.Configuration.GetConnectionString("notificationdb")
     ?? throw new InvalidOperationException("Database connection string 'notificationdb' not found");
 
-// Add memory cache for rate limiting
-builder.Services.AddMemoryCache();
-
 // Register HybridCache for caching read (immutable) notifications
 builder.AddHybridCache();
 builder.Services.AddSingleton<HybridCacheService>();
