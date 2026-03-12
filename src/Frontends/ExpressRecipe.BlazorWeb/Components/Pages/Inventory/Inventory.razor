@@ -498,8 +498,6 @@
 
     // Reaction modal
     private LogReactionModal? _inventoryReactionModal;
-    private Guid? _reactionProductId;
-    private string _reactionProductName = string.Empty;
 
     private sealed record ScanResult(bool Success, string Message);
 
@@ -845,15 +843,12 @@
 
     private async Task OpenInventoryReactionModal(InventoryItemDto item)
     {
-        _reactionProductId   = item.ProductId;
-        _reactionProductName = item.Name;
         if (_inventoryReactionModal != null)
-            await _inventoryReactionModal.ShowAsync(_reactionProductId, _reactionProductName);
+            await _inventoryReactionModal.ShowAsync(item.ProductId, item.Name);
     }
 
-    private async Task HandleInventoryReactionSaved()
+    private void HandleInventoryReactionSaved()
     {
         ToastService.ShowSuccess("Reaction logged. Check your Allergy Log for suspect updates.");
-        await Task.CompletedTask;
     }
 }

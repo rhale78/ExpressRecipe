@@ -373,9 +373,8 @@
             await _reactionModal.ShowAsync(_product.Id, _product.Name);
     }
 
-    private async Task HandleReactionSaved()
+    private void HandleReactionSaved()
     {
         ToastService.ShowSuccess("Reaction logged. Run differential analysis from Allergy Log to update suspect list.");
-        await Task.CompletedTask;
     }
 }

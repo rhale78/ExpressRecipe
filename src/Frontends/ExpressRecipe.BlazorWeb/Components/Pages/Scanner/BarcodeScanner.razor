@@ -956,9 +956,8 @@
             await _scannerReactionModal.ShowAsync(_currentResult?.ProductId, _currentResult?.ProductName);
     }
 
-    private async Task HandleScannerReactionSaved()
+    private void HandleScannerReactionSaved()
     {
         ToastService.ShowSuccess("Reaction logged.");
-        await Task.CompletedTask;
     }
 }
