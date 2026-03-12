@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.AnalyticsService.Data;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,14 +25,18 @@ builder.Services.AddScoped<IAnalyticsRepository>(sp =>
 // Add controllers
 builder.Services.AddControllers();
 
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.AnalyticsService API", Version = "v1" });
-// });
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
 
-// CORS
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user analytics data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.AnalyticsService.Services.GdprEventSubscriber>();
+}
+
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 
 var app = builder.Build();

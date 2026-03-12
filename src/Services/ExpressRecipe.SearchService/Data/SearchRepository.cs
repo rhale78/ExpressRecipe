@@ -385,4 +385,14 @@ public class SearchRepository : SqlHelper, ISearchRepository
         // In production, this would generate new recommendations based on user history
         _logger.LogInformation("Refreshed recommendations for user {UserId}", userId);
     }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM Recommendation  WHERE UserId = @UserId;
+DELETE FROM SearchHistory   WHERE UserId = @UserId;
+DELETE FROM UserPreference  WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+    }
 }

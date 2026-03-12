@@ -29,6 +29,9 @@ public interface IAnalyticsRepository
     Task SaveAggregateMetricAsync(string metricName, string aggregationType, DateTime periodStart, DateTime periodEnd, decimal value, Dictionary<string, string>? dimensions);
     Task<List<AggregateMetricDto>> GetMetricsAsync(string metricName, DateTime startDate, DateTime endDate, Dictionary<string, string>? filters = null);
     Task<Dictionary<string, decimal>> GetDashboardMetricsAsync(Guid userId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class UserEventDto

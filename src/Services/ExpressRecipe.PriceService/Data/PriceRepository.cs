@@ -1134,4 +1134,13 @@ public class PriceRepository : SqlHelper, IPriceRepository
         LastPriceId = GetGuidNullable(r, "LastPriceId"),
         DataSource = GetString(r, "DataSource") ?? string.Empty
     };
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM UserPriceSearchProfile WHERE UserId = @UserId;
+DELETE FROM PriceWatchSubscription WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+    }
 }

@@ -405,4 +405,15 @@ public class AnalyticsRepository : SqlHelper, IAnalyticsRepository
         "year" => (DateTime.UtcNow.AddDays(-365), DateTime.UtcNow),
         _ => (DateTime.UtcNow.AddDays(-30), DateTime.UtcNow)
     };
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM PatternDetection  WHERE UserId = @UserId;
+DELETE FROM Insight           WHERE UserId = @UserId;
+DELETE FROM UsageStatistics   WHERE UserId = @UserId;
+DELETE FROM UserEvent         WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+    }
 }

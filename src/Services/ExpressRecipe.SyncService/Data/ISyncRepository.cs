@@ -31,6 +31,9 @@ public interface ISyncRepository
 
     // Sync Statistics
     Task<SyncStatsDto> GetSyncStatsAsync(Guid userId, Guid? deviceId = null);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class SyncMetadataDto

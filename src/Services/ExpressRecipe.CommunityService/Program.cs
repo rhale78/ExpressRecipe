@@ -1,6 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.CommunityService.Data;
 using ExpressRecipe.CommunityService.Services;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 using RabbitMQ.Client;
@@ -71,12 +72,17 @@ builder.Services.AddScoped<IApprovalQueueService>(sp =>
 // Add controllers
 builder.Services.AddControllers();
 
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.CommunityService API", Version = "v1" });
-// });
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: anonymise user community data on gdpr.user.delete and gdpr.user.forget events
+    builder.Services.AddHostedService<GdprEventSubscriber>();
+}
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);

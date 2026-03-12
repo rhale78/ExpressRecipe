@@ -138,6 +138,8 @@ if (messagingEnabled)
     builder.AddRabbitMqMessaging("messaging");
     builder.Services.AddHostedService<RecipeCookedEventSubscriber>();
     builder.Services.AddHostedService<MealDelayStorageSubscriber>();
+    // GDPR: hard-delete user inventory data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.InventoryService.Services.GdprEventSubscriber>();
 }
 
 // Register unit conversion (uses HttpIngredientDensityResolver to call ProductService)

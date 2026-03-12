@@ -75,6 +75,9 @@ public interface IRecipeRepository
 
     // Pantry discovery support
     Task<List<RecipeIngredientSummary>> GetRecipesWithIngredientSummaryAsync(int limit = 500, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 /// <summary>

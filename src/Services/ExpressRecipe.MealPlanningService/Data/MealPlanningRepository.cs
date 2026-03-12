@@ -979,4 +979,18 @@ public class MealPlanningRepository : IMealPlanningRepository
             CreatedAt = reader.GetDateTime(7),
             TemplateJson = reader.IsDBNull(8) ? string.Empty : reader.GetString(8)
         };
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM CookingHistory WHERE UserId = @UserId;
+DELETE FROM PlannedMeal    WHERE UserId = @UserId;
+DELETE FROM MealPlan       WHERE UserId = @UserId;";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync(ct);
+    }
 }

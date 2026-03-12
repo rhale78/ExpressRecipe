@@ -105,6 +105,9 @@ public interface IShoppingRepository
 
     // Complete shopping session + notify inventory service
     Task<ShoppingSessionSummaryDto> CompleteShoppingSessionAsync(Guid sessionId, Guid userId, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class ShoppingListDto

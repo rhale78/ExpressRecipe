@@ -401,4 +401,20 @@ public class CommunityRepository : SqlHelper, ICommunityRepository
             CreatedAt = GetDateTime(reader, "CreatedAt")
         }, parameters);
     }
+
+    /// <summary>
+    /// GDPR Right to be Forgotten: anonymises the user's identity in community records while
+    /// preserving contribution data for database integrity. UserId is zeroed to Guid.Empty,
+    /// product-submission photos are cleared, and review comment text is replaced.
+    /// </summary>
+    public async Task AnonymizeUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+UPDATE UserContribution  SET UserId = '00000000-0000-0000-0000-000000000000' WHERE UserId = @UserId;
+UPDATE ProductSubmission SET UserId = '00000000-0000-0000-0000-000000000000', Photo = NULL WHERE UserId = @UserId;
+UPDATE CommunityReview   SET UserId = '00000000-0000-0000-0000-000000000000', Comment = '[deleted]' WHERE UserId = @UserId;
+DELETE FROM UserReport   WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+    }
 }

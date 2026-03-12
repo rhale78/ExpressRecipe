@@ -170,6 +170,9 @@ if (messagingEnabled)
     // Subscribe to PriceDropEvents and forward work-queue items to MealPlanningService
     builder.Services.AddHostedService<PriceDropQueueSubscriber>();
 
+    // GDPR: hard-delete user price data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.PriceService.Services.GdprEventSubscriber>();
+
     // Register the price-processing saga workflow
     builder.Services.AddSqlSagaRepository<PriceProcessingSagaState>(connectionString, "PriceProcessingSagaState");
     builder.Services.AddSagaWorkflow(PriceProcessingWorkflow.Build());

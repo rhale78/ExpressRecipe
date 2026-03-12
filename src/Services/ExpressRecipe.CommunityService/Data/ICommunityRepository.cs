@@ -38,6 +38,10 @@ public interface ICommunityRepository
 
     /// <summary>Returns the UserId of the owner of a product submission, or null if not found.</summary>
     Task<Guid?> GetSubmissionUserIdAsync(Guid submissionId, CancellationToken ct = default);
+
+    // GDPR – Right to be Forgotten: anonymise references to the user in community records
+    // so that public contribution history is preserved but PII is removed.
+    Task AnonymizeUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class UserContributionDto

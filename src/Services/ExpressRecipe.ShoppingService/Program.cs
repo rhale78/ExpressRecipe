@@ -1,4 +1,5 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.ShoppingService.Data;
 using ExpressRecipe.ShoppingService.Services;
 using ExpressRecipe.Shared.Middleware;
@@ -68,6 +69,18 @@ builder.Services.AddScoped<IUnitConversionService>(sp =>
 
 // Add controllers
 builder.Services.AddControllers();
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user shopping data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.ShoppingService.Services.GdprEventSubscriber>();
+}
 
 // Add Swagger
 // builder.Services.AddEndpointsApiExplorer();

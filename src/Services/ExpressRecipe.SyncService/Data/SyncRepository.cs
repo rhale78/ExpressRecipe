@@ -342,4 +342,14 @@ public class SyncRepository : SqlHelper, ISyncRepository
         ErrorMessage = SqlHelper.GetString(reader, "ErrorMessage"),
         QueuedAt = SqlHelper.GetDateTime(reader, "QueuedAt")
     };
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM SyncQueue          WHERE UserId = @UserId;
+DELETE FROM DeviceRegistration WHERE UserId = @UserId;
+DELETE FROM SyncConflict       WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+    }
 }

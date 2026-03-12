@@ -75,6 +75,9 @@ if (rabbitEnabled)
 
     // Register event subscriber as background service
     builder.Services.AddHostedService<NotificationEventSubscriber>();
+
+    // GDPR: hard-delete user notifications on gdpr.user.delete events
+    builder.Services.AddHostedService<GdprEventSubscriber>();
 }
 
 // Add controllers
