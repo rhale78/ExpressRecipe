@@ -6,7 +6,6 @@ using ExpressRecipe.Messaging.Core.Abstractions;
 using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
 using ExpressRecipe.MealPlanningService.Services.Printing;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using ExpressRecipe.Shared.Middleware;
 using Microsoft.Extensions.Caching.Hybrid;
 
@@ -18,19 +17,8 @@ builder.AddLayeredConfiguration(args);
 // Add Aspire service defaults (telemetry, health checks, service discovery)
 builder.AddServiceDefaults();
 
-// Add authentication
-builder.Services.AddAuthentication("Bearer")
-    .AddJwtBearer("Bearer", options =>
-    {
-        options.Authority = builder.Configuration["Auth:Authority"] ?? "http://localhost:5000";
-        options.RequireHttpsMetadata = false;
-        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
-        {
-            ValidateAudience = false,
-            NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier
-        };
-    });
-
+// Add authentication (shared JWT bearer configuration)
+builder.AddExpressRecipeAuthentication();
 builder.Services.AddAuthorization();
 
 // Register database connection

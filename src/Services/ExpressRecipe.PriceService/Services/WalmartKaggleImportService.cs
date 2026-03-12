@@ -160,6 +160,11 @@ public class WalmartKaggleImportService
                     {
                         _logger.LogInformation("WalmartKaggle: Processed {Processed} rows, imported {Imported}", processed, imported);
                     }
+
+                    // Inter-item delay to prevent overwhelming CPU/disk (configured via PriceImport:BatchDelayMs)
+                    var batchDelayMs = _configuration.GetValue<int>("PriceImport:BatchDelayMs", 0);
+                    if (batchDelayMs > 0)
+                        await Task.Delay(batchDelayMs, cancellationToken);
                 }
             }
 

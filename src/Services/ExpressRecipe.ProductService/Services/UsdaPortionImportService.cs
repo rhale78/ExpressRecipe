@@ -114,6 +114,11 @@ public sealed class UsdaPortionImportService : SqlHelper
             if (processed % 1000 == 0)
             {
                 _logger.LogDebug("USDA portion import progress: {Processed} processed, {Upserted} upserted", processed, upserted);
+
+                // Inter-item delay to prevent overwhelming CPU/disk (configured via ProductImport:UsdaPortion:BatchDelayMs)
+                var batchDelayMs = _configuration.GetValue<int>("ProductImport:UsdaPortion:BatchDelayMs", 0);
+                if (batchDelayMs > 0)
+                    await Task.Delay(batchDelayMs, ct);
             }
         }
 
@@ -150,20 +155,31 @@ public sealed class UsdaPortionImportService : SqlHelper
 /// <summary>
 /// Hosted service that triggers USDA import on startup if the density table is empty.
 /// Migrations always complete before hosted services start, so no delay is needed.
+/// Config: ProductImport:UsdaPortion:AutoImport (default true)
 /// </summary>
 public sealed class UsdaPortionImportWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<UsdaPortionImportWorker> _logger;
+    private readonly IConfiguration _configuration;
 
-    public UsdaPortionImportWorker(IServiceScopeFactory scopeFactory, ILogger<UsdaPortionImportWorker> logger)
+    public UsdaPortionImportWorker(IServiceScopeFactory scopeFactory, ILogger<UsdaPortionImportWorker> logger, IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Check if auto-import is enabled (allows disabling at config level)
+        var autoImport = _configuration.GetValue<bool>("ProductImport:UsdaPortion:AutoImport", true);
+        if (!autoImport)
+        {
+            _logger.LogInformation("UsdaPortionImportWorker: auto-import is disabled in configuration. Worker will not run.");
+            return;
+        }
+
         await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
         UsdaPortionImportService svc = scope.ServiceProvider.GetRequiredService<UsdaPortionImportService>();
 

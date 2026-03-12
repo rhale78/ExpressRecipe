@@ -32,7 +32,13 @@ public class OptimizationController : ControllerBase
         _sessionService = sessionService;
     }
 
-    private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private Guid GetUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(value, out var id))
+            throw new UnauthorizedAccessException("Invalid or missing user identity claim.");
+        return id;
+    }
 
     // ── Optimization ──────────────────────────────────────────────────────────
 

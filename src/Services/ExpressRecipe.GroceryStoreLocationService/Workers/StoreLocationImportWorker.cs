@@ -137,11 +137,31 @@ public class StoreLocationImportWorker : BackgroundService
             // Inter-import cool-down to prevent overwhelming CPU/disk between data sources (configured via StoreLocationImport:BatchDelayMs)
             var batchDelayMs = _configuration.GetValue<int>("StoreLocationImport:BatchDelayMs", 0);
 
-            if (overtureEnabled) { await RunOvertureImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
-            if (openPricesEnabled) { await RunOpenPricesImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
-            if (snapEnabled) { await RunSnapImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
-            if (osmEnabled) { await RunOsmImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
-            if (hifldEnabled) { await RunHifldImportAsync(stoppingToken); if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken); }
+            if (overtureEnabled)
+            {
+                await RunOvertureImportAsync(stoppingToken);
+                if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken);
+            }
+            if (openPricesEnabled)
+            {
+                await RunOpenPricesImportAsync(stoppingToken);
+                if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken);
+            }
+            if (snapEnabled)
+            {
+                await RunSnapImportAsync(stoppingToken);
+                if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken);
+            }
+            if (osmEnabled)
+            {
+                await RunOsmImportAsync(stoppingToken);
+                if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken);
+            }
+            if (hifldEnabled)
+            {
+                await RunHifldImportAsync(stoppingToken);
+                if (batchDelayMs > 0) await Task.Delay(batchDelayMs, stoppingToken);
+            }
         }
     }
 
