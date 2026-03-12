@@ -1223,6 +1223,6 @@ DELETE FROM RecipeComment          WHERE UserId = @UserId;
 DELETE FROM UserFavoriteRecipe     WHERE UserId = @UserId;
 DELETE FROM UserRecipeRating       WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

@@ -1,0 +1,281 @@
+@page "/cookbooks"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Models.Cookbook
+@using ExpressRecipe.Client.Shared.Services
+@inject ICookbookApiClient CookbookApi
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Cookbooks - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="cookbooks-container">
+            <div class="cookbooks-header">
+                <h1>📚 Cookbooks</h1>
+                <div class="header-actions">
+                    <button class="btn btn-primary" @onclick="NavigateToCreate">
+                        ➕ New Cookbook
+                    </button>
+                </div>
+            </div>
+
+            <p class="cookbooks-subtitle">
+                Organise your recipes into cookbooks, share them with friends, or discover public collections.
+            </p>
+
+            <!-- Tabs -->
+            <div class="cookbook-tabs">
+                <button class="tab-btn @(_activeTab == "mine" ? "active" : "")" @onclick="@(() => SetTab("mine"))">
+                    📝 My Cookbooks (@_myCookbooks.Count)
+                </button>
+                <button class="tab-btn @(_activeTab == "favorites" ? "active" : "")" @onclick="@(() => SetTab("favorites"))">
+                    ⭐ Favorites (@_favorites.Count)
+                </button>
+                <button class="tab-btn @(_activeTab == "public" ? "active" : "")" @onclick="@(() => SetTab("public"))">
+                    🌐 Discover
+                </button>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading cookbooks…</p>
+                </div>
+            }
+            else
+            {
+                <!-- Public tab has search -->
+                @if (_activeTab == "public")
+                {
+                    <div class="search-bar">
+                        <input type="text"
+                               class="search-input"
+                               placeholder="Search public cookbooks…"
+                               @bind="_publicSearch"
+                               @bind:event="oninput"
+                               @onkeypress="HandleSearchKeyPress" />
+                        <button class="btn btn-primary" @onclick="SearchPublic">🔍 Search</button>
+                    </div>
+                }
+
+                @if (!ActiveItems.Any())
+                {
+                    <div class="empty-state">
+                        @if (_activeTab == "mine")
+                        {
+                            <p>📖 You haven't created any cookbooks yet.</p>
+                            <button class="btn btn-primary" @onclick="NavigateToCreate">Create Your First Cookbook</button>
+                        }
+                        else if (_activeTab == "favorites")
+                        {
+                            <p>⭐ You haven't favourited any cookbooks yet.</p>
+                        }
+                        else
+                        {
+                            <p>🔍 No public cookbooks found.</p>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="cookbooks-grid">
+                        @foreach (var cb in ActiveItems)
+                        {
+                            <div class="cookbook-card" @onclick="@(() => ViewCookbook(cb.Id))">
+                                <div class="cookbook-cover">
+                                    @if (!string.IsNullOrEmpty(cb.CoverImageUrl))
+                                    {
+                                        <img src="@cb.CoverImageUrl" alt="@cb.Title" class="cover-image" />
+                                    }
+                                    else
+                                    {
+                                        <div class="cover-placeholder">📚</div>
+                                    }
+                                    <div class="visibility-badge @cb.Visibility.ToLower()">@cb.Visibility</div>
+                                </div>
+                                <div class="cookbook-info">
+                                    <h3 class="cookbook-title">@cb.Title</h3>
+                                    @if (!string.IsNullOrEmpty(cb.Subtitle))
+                                    {
+                                        <p class="cookbook-subtitle-text">@cb.Subtitle</p>
+                                    }
+                                    @if (!string.IsNullOrEmpty(cb.AuthorName))
+                                    {
+                                        <p class="cookbook-author">by @cb.AuthorName</p>
+                                    }
+                                    <div class="cookbook-meta">
+                                        <span title="Recipes">🍽️ @cb.RecipeCount</span>
+                                        <span title="Sections">📑 @cb.SectionCount</span>
+                                        @if (cb.AverageRating > 0)
+                                        {
+                                            <span title="Rating">⭐ @cb.AverageRating.ToString("F1")</span>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="cookbook-actions" @onclick:stopPropagation="true">
+                                    @if (_activeTab == "mine")
+                                    {
+                                        <button class="icon-btn" title="Edit" @onclick="@(() => EditCookbook(cb.Id))">✏️</button>
+                                        <button class="icon-btn danger" title="Delete" @onclick="@(() => ConfirmDelete(cb))">🗑️</button>
+                                    }
+                                    else
+                                    {
+                                        <button class="icon-btn @(cb.IsUserFavorite ? "active" : "")"
+                                                title="@(cb.IsUserFavorite ? "Remove Favourite" : "Add to Favourites")"
+                                                @onclick="@(() => ToggleFavourite(cb))">
+                                            @(cb.IsUserFavorite ? "⭐" : "☆")
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            <!-- Delete confirmation modal -->
+            @if (_deletingCookbook != null)
+            {
+                <div class="modal-overlay" @onclick="CancelDelete">
+                    <div class="modal-box" @onclick:stopPropagation="true">
+                        <h3>Delete Cookbook</h3>
+                        <p>Are you sure you want to delete <strong>@_deletingCookbook.Title</strong>? This cannot be undone.</p>
+                        <div class="modal-actions">
+                            <button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                            <button class="btn btn-danger" @onclick="DeleteCookbook">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="auth-prompt">
+            <p>Please <a href="/login">log in</a> to view your cookbooks.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _isLoading = true;
+    private string _activeTab = "mine";
+    private string _publicSearch = string.Empty;
+
+    private List<CookbookSummaryDto> _myCookbooks = new();
+    private List<CookbookSummaryDto> _favorites = new();
+    private List<CookbookSummaryDto> _publicResults = new();
+
+    private CookbookSummaryDto? _deletingCookbook;
+
+    private List<CookbookSummaryDto> ActiveItems => _activeTab == "mine" ? _myCookbooks
+                                                  : _activeTab == "favorites" ? _favorites
+                                                  : _publicResults;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        try
+        {
+            var mine = await CookbookApi.GetMyCookbooksAsync();
+            _myCookbooks = mine ?? new();
+
+            var favs = await CookbookApi.GetFavoriteCookbooksAsync();
+            _favorites = favs ?? new();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to load cookbooks: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task SetTab(string tab)
+    {
+        _activeTab = tab;
+        if (tab == "public" && !_publicResults.Any())
+            await SearchPublic();
+    }
+
+    private async Task SearchPublic()
+    {
+        _isLoading = true;
+        try
+        {
+            var result = await CookbookApi.SearchCookbooksAsync(new CookbookSearchRequest
+            {
+                SearchTerm = _publicSearch,
+                Visibility = "Public",
+                PageSize = 50
+            });
+            _publicResults = result?.Items ?? new();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Search failed: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SearchPublic();
+    }
+
+    private async Task ToggleFavourite(CookbookSummaryDto cb)
+    {
+        bool ok;
+        if (cb.IsUserFavorite)
+        {
+            ok = await CookbookApi.UnfavoriteCookbookAsync(cb.Id);
+            if (ok) cb.IsUserFavorite = false;
+        }
+        else
+        {
+            ok = await CookbookApi.FavoriteCookbookAsync(cb.Id);
+            if (ok) cb.IsUserFavorite = true;
+        }
+
+        if (!ok)
+            ToastService.ShowError("Could not update favourite.");
+        else
+            await LoadData();
+    }
+
+    private void ViewCookbook(Guid id) => Navigation.NavigateTo($"/cookbooks/{id}");
+    private void EditCookbook(Guid id) => Navigation.NavigateTo($"/cookbooks/{id}/edit");
+    private void NavigateToCreate() => Navigation.NavigateTo("/cookbooks/create");
+
+    private void ConfirmDelete(CookbookSummaryDto cb) => _deletingCookbook = cb;
+    private void CancelDelete() => _deletingCookbook = null;
+
+    private async Task DeleteCookbook()
+    {
+        if (_deletingCookbook == null) return;
+        var ok = await CookbookApi.DeleteCookbookAsync(_deletingCookbook.Id);
+        if (ok)
+        {
+            ToastService.ShowSuccess($"'{_deletingCookbook.Title}' deleted.");
+            _myCookbooks.RemoveAll(c => c.Id == _deletingCookbook.Id);
+        }
+        else
+        {
+            ToastService.ShowError("Failed to delete cookbook.");
+        }
+        _deletingCookbook = null;
+    }
+}

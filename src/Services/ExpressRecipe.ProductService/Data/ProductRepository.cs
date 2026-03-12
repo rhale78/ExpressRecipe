@@ -1372,6 +1372,6 @@ DELETE FROM UserMenuItemRating  WHERE UserId = @UserId;
 DELETE FROM UserRestaurantRating WHERE UserId = @UserId;
 UPDATE ProductRating SET IsDeleted = 1 WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

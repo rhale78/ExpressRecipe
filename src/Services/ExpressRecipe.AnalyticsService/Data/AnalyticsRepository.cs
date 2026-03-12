@@ -443,6 +443,6 @@ DELETE FROM Insight           WHERE UserId = @UserId;
 DELETE FROM UsageStatistics   WHERE UserId = @UserId;
 DELETE FROM UserEvent         WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

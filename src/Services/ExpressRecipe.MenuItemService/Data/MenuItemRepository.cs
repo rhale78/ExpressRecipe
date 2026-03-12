@@ -598,6 +598,6 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
     {
         const string sql = "DELETE FROM UserMenuItemRating WHERE UserId = @UserId;";
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

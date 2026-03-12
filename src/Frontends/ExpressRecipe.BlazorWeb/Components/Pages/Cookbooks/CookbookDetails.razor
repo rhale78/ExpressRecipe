@@ -1,0 +1,342 @@
+@page "/cookbooks/{Id:guid}"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Models.Cookbook
+@using ExpressRecipe.Client.Shared.Services
+@inject ICookbookApiClient CookbookApi
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_cookbook?.Title ?? "Cookbook") - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized Context="authCtx">
+        @if (_isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <p>Loading cookbook…</p>
+            </div>
+        }
+        else if (_cookbook == null)
+        {
+            <div class="empty-state">
+                <p>Cookbook not found.</p>
+                <button class="btn btn-secondary" @onclick="GoBack">← Back to Cookbooks</button>
+            </div>
+        }
+        else
+        {
+            <div class="cookbooks-container cookbook-detail">
+
+                <!-- Top navigation bar -->
+                <div class="cookbook-detail-header">
+                    <button class="btn btn-secondary btn-sm" @onclick="GoBack">← Back</button>
+                    <div class="header-actions">
+                        <button class="btn btn-outline" @onclick="ToggleFavourite">
+                            @(_cookbook.IsUserFavorite ? "⭐ Unfavourite" : "☆ Favourite")
+                        </button>
+                        @if (_isOwner)
+                        {
+                            <button class="btn btn-outline" @onclick="EditCookbook">✏️ Edit</button>
+                        }
+                    </div>
+                </div>
+
+                <!-- Cover + Meta hero -->
+                <div class="cookbook-hero">
+                    <div class="cookbook-cover-large">
+                        @if (!string.IsNullOrEmpty(_cookbook.CoverImageUrl))
+                        {
+                            <img src="@_cookbook.CoverImageUrl" alt="@_cookbook.Title" class="cover-image-large" />
+                        }
+                        else
+                        {
+                            <div class="cover-placeholder-large">📚</div>
+                        }
+                    </div>
+                    <div class="cookbook-hero-info">
+                        <h1>@_cookbook.Title</h1>
+                        @if (!string.IsNullOrEmpty(_cookbook.Subtitle))
+                        {
+                            <h2 class="cookbook-subtitle-display">@_cookbook.Subtitle</h2>
+                        }
+                        @if (!string.IsNullOrEmpty(_cookbook.AuthorName))
+                        {
+                            <p class="cookbook-author-display">by @_cookbook.AuthorName</p>
+                        }
+                        @if (!string.IsNullOrEmpty(_cookbook.Description))
+                        {
+                            <p class="cookbook-description">@_cookbook.Description</p>
+                        }
+                        <div class="cookbook-stats">
+                            <span>🍽️ @TotalRecipeCount recipes</span>
+                            <span>📑 @_cookbook.Sections.Count sections</span>
+                            @if (_cookbook.AverageRating > 0)
+                            {
+                                <span>⭐ @_cookbook.AverageRating.ToString("F1") (@_cookbook.RatingCount)</span>
+                            }
+                            <span class="visibility-badge @_cookbook.Visibility.ToLower()">@_cookbook.Visibility</span>
+                        </div>
+                        <div class="rating-row">
+                            <span class="rating-label">Your rating:</span>
+                            @for (int s = 1; s <= 5; s++)
+                            {
+                                var star = s;
+                                <button class="star-btn @(star <= _userRating ? "selected" : "")"
+                                        @onclick="@(() => RateCookbook(star))">★</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Introduction -->
+                @if (!string.IsNullOrEmpty(_cookbook.IntroductionContent))
+                {
+                    <div class="cookbook-section-block">
+                        <h2>Introduction</h2>
+                        <div class="prose">@_cookbook.IntroductionContent</div>
+                    </div>
+                }
+
+                <!-- Unsectioned recipes -->
+                @if (_cookbook.UnsectionedRecipes.Any())
+                {
+                    <div class="cookbook-section-block">
+                        <h2>Recipes</h2>
+                        @RenderRecipeRows(_cookbook.UnsectionedRecipes)
+                    </div>
+                }
+
+                <!-- Sections with their recipes -->
+                @foreach (var cbSection in _cookbook.Sections.OrderBy(s => s.SortOrder))
+                {
+                    <div class="cookbook-section-block">
+                        <div class="section-header">
+                            <h2>@cbSection.Title</h2>
+                            @if (!string.IsNullOrEmpty(cbSection.CategoryOrMealType))
+                            {
+                                <span class="section-category">@cbSection.CategoryOrMealType</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(cbSection.Description))
+                        {
+                            <p class="section-description">@cbSection.Description</p>
+                        }
+                        @if (cbSection.Recipes.Any())
+                        {
+                            @RenderRecipeRows(cbSection.Recipes)
+                        }
+                        else
+                        {
+                            <p class="empty-section">No recipes in this section yet.</p>
+                        }
+                    </div>
+                }
+
+                <!-- Notes -->
+                @if (!string.IsNullOrEmpty(_cookbook.NotesContent))
+                {
+                    <div class="cookbook-section-block">
+                        <h2>Notes</h2>
+                        <div class="prose">@_cookbook.NotesContent</div>
+                    </div>
+                }
+
+                <!-- Comments -->
+                <div class="cookbook-section-block comments-section">
+                    <h2>Comments (@_cookbook.CommentCount)</h2>
+                    @if (_comments.Any())
+                    {
+                        @foreach (var comment in _comments)
+                        {
+                            <div class="comment-item">
+                                <p class="comment-body">@comment.Content</p>
+                                <span class="comment-date">@comment.CreatedAt.ToString("MMM d, yyyy")</span>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="empty-state-inline">No comments yet. Be the first!</p>
+                    }
+                    <div class="comment-form">
+                        <textarea class="comment-input"
+                                  placeholder="Add a comment…"
+                                  @bind="_newComment"
+                                  rows="3"></textarea>
+                        <button class="btn btn-primary"
+                                @onclick="PostComment"
+                                disabled="@(string.IsNullOrWhiteSpace(_newComment))">
+                            Post Comment
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <div class="auth-prompt">
+            <p>Please <a href="/login">log in</a> to view cookbooks.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private bool _isLoading = true;
+    private CookbookDto? _cookbook;
+    private List<CookbookCommentDto> _comments = new();
+    private bool _isOwner;
+    private string _newComment = string.Empty;
+    private int _userRating;
+
+    private int TotalRecipeCount =>
+        (_cookbook?.Sections.Sum(s => s.Recipes.Count) ?? 0)
+        + (_cookbook?.UnsectionedRecipes.Count ?? 0);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadCookbook();
+    }
+
+    private async Task LoadCookbook()
+    {
+        _isLoading = true;
+        try
+        {
+            _cookbook = await CookbookApi.GetCookbookAsync(Id);
+            if (_cookbook != null)
+            {
+                if (AuthenticationStateTask != null)
+                {
+                    var auth = await AuthenticationStateTask;
+                    var sub = auth.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    if (Guid.TryParse(sub, out var userId))
+                        _isOwner = _cookbook.OwnerId == userId;
+                }
+                _comments = await CookbookApi.GetCommentsAsync(Id) ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to load cookbook: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private RenderFragment RenderRecipeRows(List<CookbookRecipeDto> recipes) => builder =>
+    {
+        int seq = 0;
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "cookbook-recipe-list");
+        foreach (var recipe in recipes.OrderBy(r => r.SortOrder))
+        {
+            builder.OpenElement(seq++, "div");
+            builder.AddAttribute(seq++, "class", "cookbook-recipe-row");
+
+            builder.OpenElement(seq++, "span");
+            builder.AddAttribute(seq++, "class", "recipe-name");
+            builder.AddContent(seq++, recipe.RecipeName);
+            builder.CloseElement();
+
+            if (!string.IsNullOrEmpty(recipe.Notes))
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", "recipe-notes");
+                builder.AddContent(seq++, recipe.Notes);
+                builder.CloseElement();
+            }
+
+            if (recipe.PageNumber.HasValue)
+            {
+                builder.OpenElement(seq++, "span");
+                builder.AddAttribute(seq++, "class", "recipe-page");
+                builder.AddContent(seq++, $"p.{recipe.PageNumber}");
+                builder.CloseElement();
+            }
+
+            if (_isOwner)
+            {
+                var recipeId = recipe.Id;
+                builder.OpenElement(seq++, "button");
+                builder.AddAttribute(seq++, "class", "icon-btn danger remove-recipe-btn");
+                builder.AddAttribute(seq++, "title", "Remove from cookbook");
+                builder.AddAttribute(seq++, "onclick",
+                    EventCallback.Factory.Create(this, async () => await RemoveRecipe(recipeId)));
+                builder.AddContent(seq++, "✕");
+                builder.CloseElement();
+            }
+
+            builder.CloseElement(); // .cookbook-recipe-row
+        }
+        builder.CloseElement(); // .cookbook-recipe-list
+    };
+
+    private async Task RemoveRecipe(Guid cookbookRecipeId)
+    {
+        if (_cookbook == null) return;
+        var ok = await CookbookApi.RemoveRecipeFromCookbookAsync(_cookbook.Id, cookbookRecipeId);
+        if (ok)
+        {
+            foreach (var s in _cookbook.Sections)
+                s.Recipes.RemoveAll(r => r.Id == cookbookRecipeId);
+            _cookbook.UnsectionedRecipes.RemoveAll(r => r.Id == cookbookRecipeId);
+        }
+        else
+        {
+            ToastService.ShowError("Failed to remove recipe.");
+        }
+    }
+
+    private async Task ToggleFavourite()
+    {
+        if (_cookbook == null) return;
+        bool ok = _cookbook.IsUserFavorite
+            ? await CookbookApi.UnfavoriteCookbookAsync(Id)
+            : await CookbookApi.FavoriteCookbookAsync(Id);
+        if (ok)
+            _cookbook.IsUserFavorite = !_cookbook.IsUserFavorite;
+        else
+            ToastService.ShowError("Could not update favourite.");
+    }
+
+    private async Task RateCookbook(int stars)
+    {
+        _userRating = stars;
+        var ok = await CookbookApi.RateCookbookAsync(Id, stars);
+        if (!ok) ToastService.ShowError("Failed to save rating.");
+        else ToastService.ShowSuccess("Rating saved.");
+    }
+
+    private async Task PostComment()
+    {
+        if (string.IsNullOrWhiteSpace(_newComment)) return;
+        var commentId = await CookbookApi.AddCommentAsync(Id, _newComment);
+        if (commentId.HasValue)
+        {
+            _comments.Add(new CookbookCommentDto
+            {
+                Id = commentId.Value,
+                CookbookId = Id,
+                Content = _newComment,
+                CreatedAt = DateTime.UtcNow
+            });
+            _newComment = string.Empty;
+            if (_cookbook != null) _cookbook.CommentCount++;
+        }
+        else
+        {
+            ToastService.ShowError("Failed to post comment.");
+        }
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/cookbooks");
+    private void EditCookbook() => Navigation.NavigateTo($"/cookbooks/{Id}/edit");
+}

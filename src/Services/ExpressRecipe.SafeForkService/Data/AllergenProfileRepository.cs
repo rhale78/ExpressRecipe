@@ -251,6 +251,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId));
     }
 
@@ -263,6 +264,6 @@ WHERE AllergenProfileId IN (
 DELETE FROM TemporarySchedule WHERE MemberId = @MemberId;
 DELETE FROM AllergenProfile    WHERE MemberId = @MemberId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@MemberId", memberId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@MemberId", memberId));
     }
 }

@@ -892,6 +892,6 @@ DELETE FROM CookbookSection  WHERE CookbookId IN (SELECT Id FROM Cookbook WHERE 
 DELETE FROM CookbookShare    WHERE UserId = @UserId OR SharedWithUserId = @UserId;
 DELETE FROM Cookbook         WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

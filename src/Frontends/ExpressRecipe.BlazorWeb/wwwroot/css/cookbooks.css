@@ -1,0 +1,544 @@
+/* ============================================================
+   Cookbooks – ExpressRecipe
+   ============================================================ */
+
+/* ---- Page container ---------------------------------------- */
+.cookbooks-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.5rem;
+}
+
+/* ---- Header ------------------------------------------------- */
+.cookbooks-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.cookbooks-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.cookbooks-subtitle {
+    color: var(--text-secondary, #6b7280);
+    margin-bottom: 1.25rem;
+}
+
+/* ---- Tabs --------------------------------------------------- */
+.cookbook-tabs {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--border-color, #e5e7eb);
+    margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 0.6rem 1.1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary, #6b7280);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    margin-bottom: -2px;
+}
+
+.tab-btn:hover {
+    color: var(--primary, #2563eb);
+}
+
+.tab-btn.active {
+    color: var(--primary, #2563eb);
+    border-bottom-color: var(--primary, #2563eb);
+}
+
+/* ---- Search bar --------------------------------------------- */
+.search-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color, #d1d5db);
+    border-radius: 0.375rem;
+    font-size: 0.95rem;
+}
+
+/* ---- Grid --------------------------------------------------- */
+.cookbooks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.25rem;
+}
+
+/* ---- Card --------------------------------------------------- */
+.cookbook-card {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.15s;
+    display: flex;
+    flex-direction: column;
+}
+
+.cookbook-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.cookbook-cover {
+    position: relative;
+    height: 160px;
+    background: var(--surface-alt, #f3f4f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cover-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cover-placeholder {
+    font-size: 3.5rem;
+}
+
+.visibility-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.25rem;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+}
+
+.visibility-badge.public  { background: #10b981; }
+.visibility-badge.shared  { background: #3b82f6; }
+.visibility-badge.private { background: #6b7280; }
+
+.cookbook-info {
+    padding: 0.85rem;
+    flex: 1;
+}
+
+.cookbook-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+}
+
+.cookbook-subtitle-text {
+    font-size: 0.82rem;
+    color: var(--text-secondary, #6b7280);
+    margin: 0 0 0.25rem;
+}
+
+.cookbook-author {
+    font-size: 0.82rem;
+    color: var(--text-secondary, #6b7280);
+    margin: 0 0 0.5rem;
+}
+
+.cookbook-meta {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary, #6b7280);
+}
+
+.cookbook-actions {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.5rem 0.85rem;
+    border-top: 1px solid var(--border-color, #f0f0f0);
+    justify-content: flex-end;
+}
+
+/* ---- Icon buttons ------------------------------------------ */
+.icon-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 0.35rem;
+    padding: 0.25rem 0.45rem;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    transition: background 0.15s;
+}
+
+.icon-btn:hover  { background: var(--surface-alt, #f3f4f6); }
+.icon-btn.active { color: #f59e0b; }
+.icon-btn.danger:hover { background: #fee2e2; color: #dc2626; }
+
+/* ---- Empty / Loading states --------------------------------- */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary, #6b7280);
+}
+
+.empty-state p { margin-bottom: 1rem; }
+
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    color: var(--text-secondary, #6b7280);
+}
+
+.spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid var(--border-color, #e5e7eb);
+    border-top-color: var(--primary, #2563eb);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Modal -------------------------------------------------- */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-box {
+    background: var(--card-bg, #fff);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.modal-box h3 { margin: 0 0 0.75rem; }
+.modal-box p  { margin: 0 0 1.25rem; }
+
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+/* ============================================================
+   Detail Page
+   ============================================================ */
+.cookbook-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.cookbook-hero {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.cookbook-cover-large {
+    width: 200px;
+    height: 260px;
+    flex-shrink: 0;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: var(--surface-alt, #f3f4f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cover-image-large {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cover-placeholder-large { font-size: 5rem; }
+
+.cookbook-hero-info { flex: 1; min-width: 0; }
+
+.cookbook-hero-info h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem;
+}
+
+.cookbook-subtitle-display {
+    font-size: 1.15rem;
+    font-weight: 400;
+    color: var(--text-secondary, #6b7280);
+    margin: 0 0 0.35rem;
+}
+
+.cookbook-author-display {
+    color: var(--text-secondary, #6b7280);
+    margin: 0 0 0.75rem;
+}
+
+.cookbook-description {
+    line-height: 1.6;
+    margin: 0 0 0.75rem;
+}
+
+.cookbook-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary, #6b7280);
+    margin-bottom: 1rem;
+    align-items: center;
+}
+
+.rating-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.rating-label { font-size: 0.85rem; color: var(--text-secondary, #6b7280); }
+
+.star-btn {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    color: var(--border-color, #d1d5db);
+    line-height: 1;
+    padding: 0;
+    transition: color 0.1s;
+}
+
+.star-btn.selected,
+.star-btn:hover { color: #f59e0b; }
+
+/* ---- Sections & recipes ------------------------------------ */
+.cookbook-section-block {
+    border-top: 1px solid var(--border-color, #e5e7eb);
+    padding-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.cookbook-section-block h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.section-category {
+    font-size: 0.78rem;
+    background: var(--surface-alt, #f3f4f6);
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    color: var(--text-secondary, #6b7280);
+}
+
+.section-description {
+    color: var(--text-secondary, #6b7280);
+    font-size: 0.9rem;
+    margin: 0 0 0.75rem;
+}
+
+.empty-section {
+    font-size: 0.9rem;
+    color: var(--text-secondary, #6b7280);
+    font-style: italic;
+}
+
+.cookbook-recipe-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.cookbook-recipe-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-alt, #f9fafb);
+    border-radius: 0.4rem;
+    font-size: 0.9rem;
+}
+
+.recipe-name  { flex: 1; font-weight: 500; }
+.recipe-notes { font-size: 0.82rem; color: var(--text-secondary, #6b7280); }
+.recipe-page  { font-size: 0.78rem; color: var(--text-secondary, #6b7280); }
+
+.remove-recipe-btn { margin-left: auto; }
+
+/* ---- Comments ---------------------------------------------- */
+.comments-section {}
+
+.comment-item {
+    padding: 0.75rem;
+    background: var(--surface-alt, #f9fafb);
+    border-radius: 0.4rem;
+    margin-bottom: 0.6rem;
+}
+
+.comment-body { margin: 0 0 0.25rem; line-height: 1.5; }
+
+.comment-date {
+    font-size: 0.78rem;
+    color: var(--text-secondary, #6b7280);
+}
+
+.empty-state-inline {
+    font-size: 0.9rem;
+    color: var(--text-secondary, #6b7280);
+    font-style: italic;
+    margin-bottom: 0.75rem;
+}
+
+.comment-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.comment-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color, #d1d5db);
+    border-radius: 0.375rem;
+    font-size: 0.9rem;
+    resize: vertical;
+}
+
+/* ============================================================
+   Create / Edit Form
+   ============================================================ */
+.cookbook-form-card {
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 0.75rem;
+    padding: 1.75rem;
+    max-width: 680px;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+}
+
+.form-label .required { color: #dc2626; }
+
+.form-control {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color, #d1d5db);
+    border-radius: 0.375rem;
+    font-size: 0.95rem;
+    background: #fff;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary, #2563eb);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #6b7280);
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.field-error {
+    font-size: 0.82rem;
+    color: #dc2626;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.cover-preview {
+    margin-top: 0.5rem;
+    max-height: 140px;
+    border-radius: 0.35rem;
+    object-fit: cover;
+}
+
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 0.4rem;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+}
+
+/* ---- Auth prompt ------------------------------------------- */
+.auth-prompt {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary, #6b7280);
+}
+
+/* ---- Buttons ----------------------------------------------- */
+.btn         { padding: 0.5rem 1rem; border-radius: 0.375rem; border: 1px solid transparent; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: background 0.15s, opacity 0.15s; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-primary  { background: var(--primary, #2563eb); color: #fff; border-color: var(--primary, #2563eb); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-dark, #1d4ed8); }
+.btn-secondary { background: var(--surface-alt, #f3f4f6); color: var(--text, #111827); border-color: var(--border-color, #d1d5db); }
+.btn-secondary:hover:not(:disabled) { background: var(--border-color, #e5e7eb); }
+.btn-outline   { background: transparent; color: var(--primary, #2563eb); border-color: var(--primary, #2563eb); }
+.btn-outline:hover:not(:disabled) { background: rgba(37,99,235,0.08); }
+.btn-danger    { background: #dc2626; color: #fff; border-color: #dc2626; }
+.btn-danger:hover:not(:disabled) { background: #b91c1c; }
+.btn-sm { padding: 0.3rem 0.6rem; font-size: 0.82rem; }
+
+/* ---- Responsive -------------------------------------------- */
+@media (max-width: 600px) {
+    .cookbooks-grid { grid-template-columns: 1fr; }
+    .cookbook-hero  { flex-direction: column; }
+    .cookbook-cover-large { width: 100%; height: 200px; }
+}

@@ -442,6 +442,6 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
     {
         const string sql = "DELETE FROM UserRestaurantRating WHERE UserId = @UserId;";
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

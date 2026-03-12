@@ -319,6 +319,6 @@ public class RecallRepository : SqlHelper, IRecallRepository
 DELETE FROM RecallAlert        WHERE UserId = @UserId;
 DELETE FROM RecallSubscription WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

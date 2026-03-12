@@ -1141,6 +1141,6 @@ public class PriceRepository : SqlHelper, IPriceRepository
 DELETE FROM UserPriceSearchProfile WHERE UserId = @UserId;
 DELETE FROM PriceWatchSubscription WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }
