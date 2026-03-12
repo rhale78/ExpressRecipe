@@ -1,16 +1,12 @@
+using ExpressRecipe.Data.Common;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
 namespace ExpressRecipe.InventoryService.Data;
 
-public sealed class StorageLocationExtendedRepository : IStorageLocationExtendedRepository
+public sealed class StorageLocationExtendedRepository : SqlHelper, IStorageLocationExtendedRepository
 {
-    private readonly string _connectionString;
-
-    public StorageLocationExtendedRepository(string connectionString)
-    {
-        _connectionString = connectionString;
-    }
+    public StorageLocationExtendedRepository(string connectionString) : base(connectionString) { }
 
     public async Task<List<StorageLocationExtendedDto>> GetLocationsAsync(
         Guid householdId, Guid? addressId, CancellationToken ct = default)
@@ -23,7 +19,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
             + (addressId.HasValue ? " AND s.AddressId = @AddressId" : "")
             + " ORDER BY s.Name";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
@@ -57,7 +53,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
             FROM StorageLocation s
             WHERE s.Id = @Id AND s.IsDeleted = 0";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = locationId });
@@ -90,7 +86,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
               AND s.OutageActive = 0
             ORDER BY ItemCount ASC";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -130,7 +126,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
               AND s.IsDeleted = 0
               AND s.OutageActive = 1";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -170,7 +166,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND IsDeleted = 0";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = locationId });
@@ -191,7 +187,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND IsDeleted = 0";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = locationId });
@@ -207,7 +203,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
                 UpdatedAt = GETUTCDATE()
             WHERE Id = @Id AND IsDeleted = 0";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = locationId });
@@ -223,7 +219,7 @@ public sealed class StorageLocationExtendedRepository : IStorageLocationExtended
         const string deleteSql = "DELETE FROM StorageLocationFoodCategory WHERE StorageLocationId = @LocationId";
         const string insertSql = "INSERT INTO StorageLocationFoodCategory (StorageLocationId, FoodCategory) VALUES (@LocationId, @Category)";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlTransaction transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
         try

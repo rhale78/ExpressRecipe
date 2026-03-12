@@ -1,16 +1,14 @@
-using Microsoft.Data.SqlClient;
+using ExpressRecipe.Data.Common;
 using System.Text.Json;
 
 namespace ExpressRecipe.SyncService.Data;
 
-public class SyncRepository : ISyncRepository
+public class SyncRepository : SqlHelper, ISyncRepository
 {
-    private readonly string _connectionString;
     private readonly ILogger<SyncRepository> _logger;
 
-    public SyncRepository(string connectionString, ILogger<SyncRepository> logger)
+    public SyncRepository(string connectionString, ILogger<SyncRepository> logger) : base(connectionString)
     {
-        _connectionString = connectionString;
         _logger = logger;
     }
 
@@ -21,21 +19,31 @@ public class SyncRepository : ISyncRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @DeviceId, @EntityType, @EntityId, @Version, @Operation, @Data, @ClientTimestamp, GETUTCDATE(), 0)";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-        command.Parameters.AddWithValue("@Version", version);
-        command.Parameters.AddWithValue("@Operation", operation);
-        command.Parameters.AddWithValue("@Data", data);
-        command.Parameters.AddWithValue("@ClientTimestamp", clientTimestamp);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@DeviceId", deviceId),
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId),
+            CreateParameter("@Version", version),
+            CreateParameter("@Operation", operation),
+            CreateParameter("@Data", data),
+            CreateParameter("@ClientTimestamp", clientTimestamp)))!;
     }
+
+    private static SyncMetadataDto MapSyncMetadata(System.Data.IDataRecord reader) => new SyncMetadataDto
+    {
+        Id = SqlHelper.GetGuid(reader, "Id"),
+        UserId = SqlHelper.GetGuid(reader, "UserId"),
+        DeviceId = SqlHelper.GetGuid(reader, "DeviceId"),
+        EntityType = SqlHelper.GetString(reader, "EntityType")!,
+        EntityId = SqlHelper.GetGuid(reader, "EntityId"),
+        Version = SqlHelper.GetInt32(reader, "Version"),
+        Operation = SqlHelper.GetString(reader, "Operation")!,
+        Data = SqlHelper.GetString(reader, "Data")!,
+        ClientTimestamp = SqlHelper.GetDateTime(reader, "ClientTimestamp"),
+        ServerTimestamp = SqlHelper.GetDateTime(reader, "ServerTimestamp"),
+        IsSynced = SqlHelper.GetBoolean(reader, "IsSynced")
+    };
 
     public async Task<List<SyncMetadataDto>> GetPendingSyncsAsync(Guid userId, Guid deviceId, DateTime since)
     {
@@ -45,35 +53,10 @@ public class SyncRepository : ISyncRepository
             WHERE UserId = @UserId AND DeviceId != @DeviceId AND ServerTimestamp > @Since AND IsDeleted = 0
             ORDER BY ServerTimestamp ASC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-        command.Parameters.AddWithValue("@Since", since);
-
-        var syncs = new List<SyncMetadataDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            syncs.Add(new SyncMetadataDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                DeviceId = reader.GetGuid(2),
-                EntityType = reader.GetString(3),
-                EntityId = reader.GetGuid(4),
-                Version = reader.GetInt32(5),
-                Operation = reader.GetString(6),
-                Data = reader.GetString(7),
-                ClientTimestamp = reader.GetDateTime(8),
-                ServerTimestamp = reader.GetDateTime(9),
-                IsSynced = reader.GetBoolean(10)
-            });
-        }
-
-        return syncs;
+        return await ExecuteReaderAsync<SyncMetadataDto>(sql, MapSyncMetadata,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@DeviceId", deviceId),
+            CreateParameter("@Since", since));
     }
 
     public async Task<List<SyncMetadataDto>> GetEntityHistoryAsync(string entityType, Guid entityId)
@@ -84,34 +67,9 @@ public class SyncRepository : ISyncRepository
             WHERE EntityType = @EntityType AND EntityId = @EntityId AND IsDeleted = 0
             ORDER BY Version ASC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-
-        var syncs = new List<SyncMetadataDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            syncs.Add(new SyncMetadataDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                DeviceId = reader.GetGuid(2),
-                EntityType = reader.GetString(3),
-                EntityId = reader.GetGuid(4),
-                Version = reader.GetInt32(5),
-                Operation = reader.GetString(6),
-                Data = reader.GetString(7),
-                ClientTimestamp = reader.GetDateTime(8),
-                ServerTimestamp = reader.GetDateTime(9),
-                IsSynced = reader.GetBoolean(10)
-            });
-        }
-
-        return syncs;
+        return await ExecuteReaderAsync<SyncMetadataDto>(sql, MapSyncMetadata,
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId));
     }
 
     public async Task<SyncMetadataDto?> GetLatestVersionAsync(string entityType, Guid entityId)
@@ -122,46 +80,17 @@ public class SyncRepository : ISyncRepository
             WHERE EntityType = @EntityType AND EntityId = @EntityId AND IsDeleted = 0
             ORDER BY Version DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var results = await ExecuteReaderAsync<SyncMetadataDto>(sql, MapSyncMetadata,
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId));
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            return new SyncMetadataDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                DeviceId = reader.GetGuid(2),
-                EntityType = reader.GetString(3),
-                EntityId = reader.GetGuid(4),
-                Version = reader.GetInt32(5),
-                Operation = reader.GetString(6),
-                Data = reader.GetString(7),
-                ClientTimestamp = reader.GetDateTime(8),
-                ServerTimestamp = reader.GetDateTime(9),
-                IsSynced = reader.GetBoolean(10)
-            };
-        }
-
-        return null;
+        return results.FirstOrDefault();
     }
 
     public async Task MarkAsSyncedAsync(Guid syncId, Guid deviceId, DateTime syncedAt)
     {
         const string sql = "UPDATE SyncMetadata SET IsSynced = 1 WHERE Id = @SyncId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@SyncId", syncId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@SyncId", syncId));
     }
 
     public async Task<Guid> CreateConflictAsync(Guid userId, string entityType, Guid entityId, Guid device1Id, Guid device2Id, string serverData, string device1Data, string device2Data)
@@ -171,20 +100,15 @@ public class SyncRepository : ISyncRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @EntityType, @EntityId, @Device1Id, @Device2Id, @ServerData, @Device1Data, @Device2Data, 'Unresolved', GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-        command.Parameters.AddWithValue("@Device1Id", device1Id);
-        command.Parameters.AddWithValue("@Device2Id", device2Id);
-        command.Parameters.AddWithValue("@ServerData", serverData);
-        command.Parameters.AddWithValue("@Device1Data", device1Data);
-        command.Parameters.AddWithValue("@Device2Data", device2Data);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId),
+            CreateParameter("@Device1Id", device1Id),
+            CreateParameter("@Device2Id", device2Id),
+            CreateParameter("@ServerData", serverData),
+            CreateParameter("@Device1Data", device1Data),
+            CreateParameter("@Device2Data", device2Data)))!;
     }
 
     public async Task<List<SyncConflictDto>> GetUnresolvedConflictsAsync(Guid userId)
@@ -195,13 +119,7 @@ public class SyncRepository : ISyncRepository
             WHERE UserId = @UserId AND Status = 'Unresolved'
             ORDER BY DetectedAt ASC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        return await ReadSyncConflicts(reader => reader);
+        return await ExecuteReaderAsync<SyncConflictDto>(sql, MapSyncConflict, CreateParameter("@UserId", userId));
     }
 
     public async Task<List<SyncConflictDto>> GetEntityConflictsAsync(string entityType, Guid entityId)
@@ -212,14 +130,9 @@ public class SyncRepository : ISyncRepository
             WHERE EntityType = @EntityType AND EntityId = @EntityId
             ORDER BY DetectedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-
-        return await ReadSyncConflicts(reader => reader);
+        return await ExecuteReaderAsync<SyncConflictDto>(sql, MapSyncConflict,
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId));
     }
 
     public async Task ResolveConflictAsync(Guid conflictId, string resolution, string resolvedData, Guid resolvedBy)
@@ -229,16 +142,11 @@ public class SyncRepository : ISyncRepository
             SET Status = 'Resolved', Resolution = @Resolution, ResolvedData = @ResolvedData, ResolvedBy = @ResolvedBy, ResolvedAt = GETUTCDATE()
             WHERE Id = @ConflictId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ConflictId", conflictId);
-        command.Parameters.AddWithValue("@Resolution", resolution);
-        command.Parameters.AddWithValue("@ResolvedData", resolvedData);
-        command.Parameters.AddWithValue("@ResolvedBy", resolvedBy);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@ConflictId", conflictId),
+            CreateParameter("@Resolution", resolution),
+            CreateParameter("@ResolvedData", resolvedData),
+            CreateParameter("@ResolvedBy", resolvedBy));
     }
 
     public async Task<Guid> EnqueueSyncAsync(Guid userId, Guid deviceId, string entityType, Guid entityId, string operation, string data, int priority)
@@ -248,19 +156,14 @@ public class SyncRepository : ISyncRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @DeviceId, @EntityType, @EntityId, @Operation, @Data, @Priority, 'Queued', 0, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-        command.Parameters.AddWithValue("@Operation", operation);
-        command.Parameters.AddWithValue("@Data", data);
-        command.Parameters.AddWithValue("@Priority", priority);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@DeviceId", deviceId),
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId),
+            CreateParameter("@Operation", operation),
+            CreateParameter("@Data", data),
+            CreateParameter("@Priority", priority)))!;
     }
 
     public async Task<List<SyncQueueDto>> GetQueuedSyncsAsync(Guid userId, Guid deviceId, int limit = 100)
@@ -271,15 +174,10 @@ public class SyncRepository : ISyncRepository
             WHERE UserId = @UserId AND DeviceId = @DeviceId AND Status = 'Queued'
             ORDER BY Priority DESC, QueuedAt ASC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-
-        return await ReadSyncQueue(reader => reader);
+        return await ExecuteReaderAsync<SyncQueueDto>(sql, MapSyncQueue,
+            CreateParameter("@Limit", limit),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@DeviceId", deviceId));
     }
 
     public async Task<List<SyncQueueDto>> GetFailedSyncsAsync(Guid userId, Guid deviceId)
@@ -290,14 +188,9 @@ public class SyncRepository : ISyncRepository
             WHERE UserId = @UserId AND DeviceId = @DeviceId AND Status = 'Failed'
             ORDER BY QueuedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-
-        return await ReadSyncQueue(reader => reader);
+        return await ExecuteReaderAsync<SyncQueueDto>(sql, MapSyncQueue,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@DeviceId", deviceId));
     }
 
     public async Task UpdateSyncStatusAsync(Guid queueId, string status, string? errorMessage, int retryCount)
@@ -307,29 +200,17 @@ public class SyncRepository : ISyncRepository
             SET Status = @Status, ErrorMessage = @ErrorMessage, RetryCount = @RetryCount
             WHERE Id = @QueueId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@QueueId", queueId);
-        command.Parameters.AddWithValue("@Status", status);
-        command.Parameters.AddWithValue("@ErrorMessage", errorMessage ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@RetryCount", retryCount);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@QueueId", queueId),
+            CreateParameter("@Status", status),
+            CreateParameter("@ErrorMessage", errorMessage ?? (object)DBNull.Value),
+            CreateParameter("@RetryCount", retryCount));
     }
 
     public async Task RemoveFromQueueAsync(Guid queueId)
     {
         const string sql = "DELETE FROM SyncQueue WHERE Id = @QueueId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@QueueId", queueId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@QueueId", queueId));
     }
 
     public async Task<Guid> RegisterDeviceAsync(Guid userId, string deviceName, string deviceType, string osVersion, string appVersion)
@@ -339,18 +220,26 @@ public class SyncRepository : ISyncRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @DeviceName, @DeviceType, @OsVersion, @AppVersion, GETUTCDATE(), 1)";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@DeviceName", deviceName);
-        command.Parameters.AddWithValue("@DeviceType", deviceType);
-        command.Parameters.AddWithValue("@OsVersion", osVersion);
-        command.Parameters.AddWithValue("@AppVersion", appVersion);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@DeviceName", deviceName),
+            CreateParameter("@DeviceType", deviceType),
+            CreateParameter("@OsVersion", osVersion),
+            CreateParameter("@AppVersion", appVersion)))!;
     }
+
+    private static DeviceRegistrationDto MapDevice(System.Data.IDataRecord reader) => new DeviceRegistrationDto
+    {
+        Id = SqlHelper.GetGuid(reader, "Id"),
+        UserId = SqlHelper.GetGuid(reader, "UserId"),
+        DeviceName = SqlHelper.GetString(reader, "DeviceName")!,
+        DeviceType = SqlHelper.GetString(reader, "DeviceType")!,
+        OsVersion = SqlHelper.GetString(reader, "OsVersion")!,
+        AppVersion = SqlHelper.GetString(reader, "AppVersion")!,
+        RegisteredAt = SqlHelper.GetDateTime(reader, "RegisteredAt"),
+        LastSyncAt = SqlHelper.GetNullableDateTime(reader, "LastSyncAt"),
+        IsActive = SqlHelper.GetBoolean(reader, "IsActive")
+    };
 
     public async Task<List<DeviceRegistrationDto>> GetUserDevicesAsync(Guid userId)
     {
@@ -360,31 +249,7 @@ public class SyncRepository : ISyncRepository
             WHERE UserId = @UserId
             ORDER BY LastSyncAt DESC NULLS LAST, RegisteredAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        var devices = new List<DeviceRegistrationDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            devices.Add(new DeviceRegistrationDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                DeviceName = reader.GetString(2),
-                DeviceType = reader.GetString(3),
-                OsVersion = reader.GetString(4),
-                AppVersion = reader.GetString(5),
-                RegisteredAt = reader.GetDateTime(6),
-                LastSyncAt = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
-                IsActive = reader.GetBoolean(8)
-            });
-        }
-
-        return devices;
+        return await ExecuteReaderAsync<DeviceRegistrationDto>(sql, MapDevice, CreateParameter("@UserId", userId));
     }
 
     public async Task<DeviceRegistrationDto?> GetDeviceAsync(Guid deviceId)
@@ -394,57 +259,22 @@ public class SyncRepository : ISyncRepository
             FROM DeviceRegistration
             WHERE Id = @DeviceId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            return new DeviceRegistrationDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                DeviceName = reader.GetString(2),
-                DeviceType = reader.GetString(3),
-                OsVersion = reader.GetString(4),
-                AppVersion = reader.GetString(5),
-                RegisteredAt = reader.GetDateTime(6),
-                LastSyncAt = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
-                IsActive = reader.GetBoolean(8)
-            };
-        }
-
-        return null;
+        var results = await ExecuteReaderAsync<DeviceRegistrationDto>(sql, MapDevice, CreateParameter("@DeviceId", deviceId));
+        return results.FirstOrDefault();
     }
 
     public async Task UpdateDeviceLastSyncAsync(Guid deviceId, DateTime lastSyncAt)
     {
         const string sql = "UPDATE DeviceRegistration SET LastSyncAt = @LastSyncAt WHERE Id = @DeviceId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-        command.Parameters.AddWithValue("@LastSyncAt", lastSyncAt);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@DeviceId", deviceId),
+            CreateParameter("@LastSyncAt", lastSyncAt));
     }
 
     public async Task UnregisterDeviceAsync(Guid deviceId)
     {
         const string sql = "UPDATE DeviceRegistration SET IsActive = 0 WHERE Id = @DeviceId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@DeviceId", deviceId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@DeviceId", deviceId));
     }
 
     public async Task<SyncStatsDto> GetSyncStatsAsync(Guid userId, Guid? deviceId = null)
@@ -461,43 +291,55 @@ public class SyncRepository : ISyncRepository
         if (deviceId.HasValue)
             sql += " AND DeviceId = @DeviceId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
+        var paramList = new List<System.Data.Common.DbParameter> { CreateParameter("@UserId", userId) };
         if (deviceId.HasValue)
-            command.Parameters.AddWithValue("@DeviceId", deviceId.Value);
+            paramList.Add(CreateParameter("@DeviceId", deviceId.Value));
 
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
+        var results = await ExecuteReaderAsync<SyncStatsDto>(sql, reader => new SyncStatsDto
         {
-            return new SyncStatsDto
-            {
-                UserId = userId,
-                DeviceId = deviceId,
-                TotalSyncs = 0,
-                PendingSyncs = reader.GetInt32(0),
-                FailedSyncs = reader.GetInt32(1),
-                Conflicts = reader.GetInt32(2),
-                LastSyncAt = reader.IsDBNull(3) ? null : reader.GetDateTime(3)
-            };
-        }
+            UserId = userId,
+            DeviceId = deviceId,
+            TotalSyncs = 0,
+            PendingSyncs = GetInt32(reader, "PendingSyncs"),
+            FailedSyncs = GetInt32(reader, "FailedSyncs"),
+            Conflicts = GetInt32(reader, "Conflicts"),
+            LastSyncAt = GetNullableDateTime(reader, "LastSyncAt")
+        }, paramList.ToArray());
 
-        return new SyncStatsDto { UserId = userId, DeviceId = deviceId };
+        return results.FirstOrDefault() ?? new SyncStatsDto { UserId = userId, DeviceId = deviceId };
     }
 
-    private async Task<List<SyncConflictDto>> ReadSyncConflicts(Func<SqlDataReader, SqlDataReader> readerFunc)
+    private static SyncConflictDto MapSyncConflict(System.Data.IDataRecord reader) => new SyncConflictDto
     {
-        var conflicts = new List<SyncConflictDto>();
-        // Would need actual reader implementation
-        return conflicts;
-    }
+        Id = SqlHelper.GetGuid(reader, "Id"),
+        UserId = SqlHelper.GetGuid(reader, "UserId"),
+        EntityType = SqlHelper.GetString(reader, "EntityType")!,
+        EntityId = SqlHelper.GetGuid(reader, "EntityId"),
+        Device1Id = SqlHelper.GetGuid(reader, "Device1Id"),
+        Device2Id = SqlHelper.GetGuid(reader, "Device2Id"),
+        ServerData = SqlHelper.GetString(reader, "ServerData")!,
+        Device1Data = SqlHelper.GetString(reader, "Device1Data")!,
+        Device2Data = SqlHelper.GetString(reader, "Device2Data")!,
+        Status = SqlHelper.GetString(reader, "Status")!,
+        Resolution = SqlHelper.GetString(reader, "Resolution"),
+        ResolvedData = SqlHelper.GetString(reader, "ResolvedData"),
+        DetectedAt = SqlHelper.GetDateTime(reader, "DetectedAt"),
+        ResolvedAt = SqlHelper.GetNullableDateTime(reader, "ResolvedAt")
+    };
 
-    private async Task<List<SyncQueueDto>> ReadSyncQueue(Func<SqlDataReader, SqlDataReader> readerFunc)
+    private static SyncQueueDto MapSyncQueue(System.Data.IDataRecord reader) => new SyncQueueDto
     {
-        var queue = new List<SyncQueueDto>();
-        // Would need actual reader implementation
-        return queue;
-    }
+        Id = SqlHelper.GetGuid(reader, "Id"),
+        UserId = SqlHelper.GetGuid(reader, "UserId"),
+        DeviceId = SqlHelper.GetGuid(reader, "DeviceId"),
+        EntityType = SqlHelper.GetString(reader, "EntityType")!,
+        EntityId = SqlHelper.GetGuid(reader, "EntityId"),
+        Operation = SqlHelper.GetString(reader, "Operation")!,
+        Data = SqlHelper.GetString(reader, "Data")!,
+        Priority = SqlHelper.GetInt32(reader, "Priority"),
+        Status = SqlHelper.GetString(reader, "Status")!,
+        RetryCount = SqlHelper.GetInt32(reader, "RetryCount"),
+        ErrorMessage = SqlHelper.GetString(reader, "ErrorMessage"),
+        QueuedAt = SqlHelper.GetDateTime(reader, "QueuedAt")
+    };
 }

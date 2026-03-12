@@ -1,16 +1,14 @@
-using Microsoft.Data.SqlClient;
+using ExpressRecipe.Data.Common;
 using System.Text.Json;
 
 namespace ExpressRecipe.SearchService.Data;
 
-public class SearchRepository : ISearchRepository
+public class SearchRepository : SqlHelper, ISearchRepository
 {
-    private readonly string _connectionString;
     private readonly ILogger<SearchRepository> _logger;
 
-    public SearchRepository(string connectionString, ILogger<SearchRepository> logger)
+    public SearchRepository(string connectionString, ILogger<SearchRepository> logger) : base(connectionString)
     {
-        _connectionString = connectionString;
         _logger = logger;
     }
 
@@ -28,19 +26,14 @@ public class SearchRepository : ISearchRepository
                 VALUES (@EntityType, @EntityId, @Title, @Description, @Category, @Tags, @Metadata, GETUTCDATE(), GETUTCDATE())
             OUTPUT INSERTED.Id;";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-        command.Parameters.AddWithValue("@Title", title);
-        command.Parameters.AddWithValue("@Description", description);
-        command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Tags", JsonSerializer.Serialize(tags));
-        command.Parameters.AddWithValue("@Metadata", JsonSerializer.Serialize(metadata));
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId),
+            CreateParameter("@Title", title),
+            CreateParameter("@Description", description),
+            CreateParameter("@Category", (object?)category ?? DBNull.Value),
+            CreateParameter("@Tags", JsonSerializer.Serialize(tags)),
+            CreateParameter("@Metadata", JsonSerializer.Serialize(metadata))))!;
     }
 
     public async Task UpdateIndexAsync(Guid indexId, string title, string description, string? category, List<string> tags)
@@ -50,31 +43,20 @@ public class SearchRepository : ISearchRepository
             SET Title = @Title, Description = @Description, Category = @Category, Tags = @Tags, UpdatedAt = GETUTCDATE()
             WHERE Id = @IndexId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@IndexId", indexId);
-        command.Parameters.AddWithValue("@Title", title);
-        command.Parameters.AddWithValue("@Description", description);
-        command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Tags", JsonSerializer.Serialize(tags));
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@IndexId", indexId),
+            CreateParameter("@Title", title),
+            CreateParameter("@Description", description),
+            CreateParameter("@Category", (object?)category ?? DBNull.Value),
+            CreateParameter("@Tags", JsonSerializer.Serialize(tags)));
     }
 
     public async Task RemoveFromIndexAsync(string entityType, Guid entityId)
     {
         const string sql = "DELETE FROM SearchIndex WHERE EntityType = @EntityType AND EntityId = @EntityId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId));
     }
 
     public async Task RebuildIndexAsync(string entityType)
@@ -131,36 +113,34 @@ public class SearchRepository : ISearchRepository
             ORDER BY Relevance DESC, Title
             OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@LikeQuery", $"%{query}%");
-        command.Parameters.AddWithValue("@EntityType", entityType ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Offset", offset);
-        command.Parameters.AddWithValue("@Limit", limit);
-
         var items = new List<SearchItemDto>();
         int totalCount = 0;
 
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var rows = await ExecuteReaderAsync<(SearchItemDto Item, int Total)>(sql, reader =>
         {
-            if (totalCount == 0)
-                totalCount = reader.GetInt32(0);
-
-            items.Add(new SearchItemDto
+            var total = GetInt32(reader, "TotalCount");
+            return (new SearchItemDto
             {
-                EntityType = reader.GetString(1),
-                EntityId = reader.GetGuid(2),
-                Title = reader.GetString(3),
-                Description = reader.GetString(4),
-                Category = reader.IsDBNull(5) ? null : reader.GetString(5),
-                Tags = JsonSerializer.Deserialize<List<string>>(reader.GetString(6)) ?? new(),
-                Metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(7)) ?? new(),
-                Relevance = reader.GetInt32(8)
-            });
+                EntityType = GetString(reader, "EntityType")!,
+                EntityId = GetGuid(reader, "EntityId"),
+                Title = GetString(reader, "Title")!,
+                Description = GetString(reader, "Description")!,
+                Category = GetString(reader, "Category"),
+                Tags = JsonSerializer.Deserialize<List<string>>(GetString(reader, "Tags")!) ?? new(),
+                Metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(GetString(reader, "Metadata")!) ?? new(),
+                Relevance = GetInt32(reader, "Relevance")
+            }, total);
+        },
+        CreateParameter("@LikeQuery", $"%{query}%"),
+        CreateParameter("@EntityType", (object?)entityType ?? DBNull.Value),
+        CreateParameter("@Category", (object?)category ?? DBNull.Value),
+        CreateParameter("@Offset", offset),
+        CreateParameter("@Limit", limit));
+
+        foreach (var (item, total) in rows)
+        {
+            if (totalCount == 0) totalCount = total;
+            items.Add(item);
         }
 
         return new SearchResultDto
@@ -185,26 +165,14 @@ public class SearchRepository : ISearchRepository
             GROUP BY Title, EntityType
             ORDER BY Frequency DESC, Title";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Query", $"{partialQuery}%");
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        var suggestions = new List<SearchSuggestionDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<SearchSuggestionDto>(sql, reader => new SearchSuggestionDto
         {
-            suggestions.Add(new SearchSuggestionDto
-            {
-                Suggestion = reader.GetString(0),
-                EntityType = reader.GetString(1),
-                Frequency = reader.GetInt32(2)
-            });
-        }
-
-        return suggestions;
+            Suggestion = GetString(reader, "Suggestion")!,
+            EntityType = GetString(reader, "EntityType")!,
+            Frequency = GetInt32(reader, "Frequency")
+        },
+        CreateParameter("@Query", $"{partialQuery}%"),
+        CreateParameter("@Limit", limit));
     }
 
     public async Task<SearchResultDto> SearchByTagsAsync(List<string> tags, string? entityType = null, int limit = 50)
@@ -214,7 +182,6 @@ public class SearchRepository : ISearchRepository
             FROM SearchIndex
             WHERE ";
 
-        // Build tag matching query
         var tagConditions = new List<string>();
         for (int i = 0; i < tags.Count; i++)
         {
@@ -227,32 +194,25 @@ public class SearchRepository : ISearchRepository
 
         sql += " ORDER BY Title OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
+        var paramList = new List<System.Data.Common.DbParameter>();
         for (int i = 0; i < tags.Count; i++)
         {
-            command.Parameters.AddWithValue($"@Tag{i}", $"%{tags[i]}%");
+            paramList.Add(CreateParameter($"@Tag{i}", $"%{tags[i]}%"));
         }
-        command.Parameters.AddWithValue("@EntityType", entityType ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Limit", limit);
+        paramList.Add(CreateParameter("@EntityType", (object?)entityType ?? DBNull.Value));
+        paramList.Add(CreateParameter("@Limit", limit));
 
-        var items = new List<SearchItemDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var items = await ExecuteReaderAsync<SearchItemDto>(sql, reader => new SearchItemDto
         {
-            items.Add(new SearchItemDto
-            {
-                EntityType = reader.GetString(0),
-                EntityId = reader.GetGuid(1),
-                Title = reader.GetString(2),
-                Description = reader.GetString(3),
-                Category = reader.IsDBNull(4) ? null : reader.GetString(4),
-                Tags = JsonSerializer.Deserialize<List<string>>(reader.GetString(5)) ?? new(),
-                Metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(6)) ?? new()
-            });
-        }
+            EntityType = GetString(reader, "EntityType")!,
+            EntityId = GetGuid(reader, "EntityId"),
+            Title = GetString(reader, "Title")!,
+            Description = GetString(reader, "Description")!,
+            Category = GetString(reader, "Category"),
+            Tags = JsonSerializer.Deserialize<List<string>>(GetString(reader, "Tags")!) ?? new(),
+            Metadata = JsonSerializer.Deserialize<Dictionary<string, string>>(GetString(reader, "Metadata")!) ?? new()
+        },
+        paramList.ToArray());
 
         return new SearchResultDto
         {
@@ -269,17 +229,12 @@ public class SearchRepository : ISearchRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @Query, @EntityType, @ResultCount, @HadResults, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Query", query);
-        command.Parameters.AddWithValue("@EntityType", entityType ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@ResultCount", resultCount);
-        command.Parameters.AddWithValue("@HadResults", hadResults);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Query", query),
+            CreateParameter("@EntityType", (object?)entityType ?? DBNull.Value),
+            CreateParameter("@ResultCount", resultCount),
+            CreateParameter("@HadResults", hadResults)))!;
     }
 
     public async Task<List<SearchHistoryDto>> GetUserSearchHistoryAsync(Guid userId, int limit = 20)
@@ -290,30 +245,18 @@ public class SearchRepository : ISearchRepository
             WHERE UserId = @UserId
             ORDER BY SearchedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        var history = new List<SearchHistoryDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<SearchHistoryDto>(sql, reader => new SearchHistoryDto
         {
-            history.Add(new SearchHistoryDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                Query = reader.GetString(2),
-                EntityType = reader.IsDBNull(3) ? null : reader.GetString(3),
-                ResultCount = reader.GetInt32(4),
-                HadResults = reader.GetBoolean(5),
-                SearchedAt = reader.GetDateTime(6)
-            });
-        }
-
-        return history;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            Query = GetString(reader, "Query")!,
+            EntityType = GetString(reader, "EntityType"),
+            ResultCount = GetInt32(reader, "ResultCount"),
+            HadResults = GetBoolean(reader, "HadResults"),
+            SearchedAt = GetDateTime(reader, "SearchedAt")
+        },
+        CreateParameter("@UserId", userId),
+        CreateParameter("@Limit", limit));
     }
 
     public async Task<List<PopularSearchDto>> GetPopularSearchesAsync(string? entityType = null, int daysBack = 30, int limit = 20)
@@ -334,41 +277,22 @@ public class SearchRepository : ISearchRepository
             GROUP BY Query, EntityType
             ORDER BY SearchCount DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-        command.Parameters.AddWithValue("@DaysBack", daysBack);
-        command.Parameters.AddWithValue("@EntityType", entityType ?? (object)DBNull.Value);
-
-        var popular = new List<PopularSearchDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<PopularSearchDto>(sql, reader => new PopularSearchDto
         {
-            popular.Add(new PopularSearchDto
-            {
-                Query = reader.GetString(0),
-                EntityType = reader.IsDBNull(1) ? null : reader.GetString(1),
-                SearchCount = reader.GetInt32(2),
-                UniqueUsers = reader.GetInt32(3)
-            });
-        }
-
-        return popular;
+            Query = GetString(reader, "Query")!,
+            EntityType = GetString(reader, "EntityType"),
+            SearchCount = GetInt32(reader, "SearchCount"),
+            UniqueUsers = GetInt32(reader, "UniqueUsers")
+        },
+        CreateParameter("@Limit", limit),
+        CreateParameter("@DaysBack", daysBack),
+        CreateParameter("@EntityType", (object?)entityType ?? DBNull.Value));
     }
 
     public async Task ClearUserSearchHistoryAsync(Guid userId)
     {
         const string sql = "DELETE FROM SearchHistory WHERE UserId = @UserId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
     }
 
     public async Task SaveSearchPreferenceAsync(Guid userId, string preferenceKey, string preferenceValue)
@@ -383,15 +307,10 @@ public class SearchRepository : ISearchRepository
                 INSERT (UserId, PreferenceKey, PreferenceValue, CreatedAt, UpdatedAt)
                 VALUES (@UserId, @PreferenceKey, @PreferenceValue, GETUTCDATE(), GETUTCDATE());";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@PreferenceKey", preferenceKey);
-        command.Parameters.AddWithValue("@PreferenceValue", preferenceValue);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@PreferenceKey", preferenceKey),
+            CreateParameter("@PreferenceValue", preferenceValue));
     }
 
     public async Task<Dictionary<string, string>> GetUserPreferencesAsync(Guid userId)
@@ -401,34 +320,19 @@ public class SearchRepository : ISearchRepository
             FROM UserPreference
             WHERE UserId = @UserId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var rows = await ExecuteReaderAsync<(string Key, string Value)>(sql,
+            reader => (GetString(reader, "PreferenceKey")!, GetString(reader, "PreferenceValue")!),
+            CreateParameter("@UserId", userId));
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        var preferences = new Dictionary<string, string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            preferences[reader.GetString(0)] = reader.GetString(1);
-        }
-
-        return preferences;
+        return rows.ToDictionary(r => r.Key, r => r.Value);
     }
 
     public async Task DeleteSearchPreferenceAsync(Guid userId, string preferenceKey)
     {
         const string sql = "DELETE FROM UserPreference WHERE UserId = @UserId AND PreferenceKey = @PreferenceKey";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@PreferenceKey", preferenceKey);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@PreferenceKey", preferenceKey));
     }
 
     public async Task<Guid> CreateRecommendationAsync(Guid userId, string entityType, Guid entityId, string reason, decimal score)
@@ -438,17 +342,12 @@ public class SearchRepository : ISearchRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @EntityType, @EntityId, @Reason, @Score, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-        command.Parameters.AddWithValue("@Reason", reason);
-        command.Parameters.AddWithValue("@Score", score);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId),
+            CreateParameter("@Reason", reason),
+            CreateParameter("@Score", score)))!;
     }
 
     public async Task<List<RecommendationDto>> GetUserRecommendationsAsync(Guid userId, string? entityType = null, int limit = 20)
@@ -463,45 +362,25 @@ public class SearchRepository : ISearchRepository
 
         sql += " ORDER BY Score DESC, GeneratedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@EntityType", entityType ?? (object)DBNull.Value);
-
-        var recommendations = new List<RecommendationDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<RecommendationDto>(sql, reader => new RecommendationDto
         {
-            recommendations.Add(new RecommendationDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                EntityType = reader.GetString(2),
-                EntityId = reader.GetGuid(3),
-                Reason = reader.GetString(4),
-                Score = reader.GetDecimal(5),
-                GeneratedAt = reader.GetDateTime(6)
-            });
-        }
-
-        return recommendations;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            EntityType = GetString(reader, "EntityType")!,
+            EntityId = GetGuid(reader, "EntityId"),
+            Reason = GetString(reader, "Reason")!,
+            Score = GetDecimal(reader, "Score"),
+            GeneratedAt = GetDateTime(reader, "GeneratedAt")
+        },
+        CreateParameter("@Limit", limit),
+        CreateParameter("@UserId", userId),
+        CreateParameter("@EntityType", (object?)entityType ?? DBNull.Value));
     }
 
     public async Task RefreshRecommendationsAsync(Guid userId)
     {
-        // Delete old recommendations
         const string deleteSql = "DELETE FROM Recommendation WHERE UserId = @UserId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(deleteSql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(deleteSql, CreateParameter("@UserId", userId));
 
         // In production, this would generate new recommendations based on user history
         _logger.LogInformation("Refreshed recommendations for user {UserId}", userId);
