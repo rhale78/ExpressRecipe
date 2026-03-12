@@ -1,6 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.NotificationService.Hubs;
 using ExpressRecipe.NotificationService.Services;
+using ExpressRecipe.Shared.Services;
 using System.Text.Json;
 
 namespace ExpressRecipe.NotificationService.Data;
@@ -9,14 +10,20 @@ public class NotificationRepository : SqlHelper, INotificationRepository
 {
     private readonly ILogger<NotificationRepository> _logger;
     private readonly NotificationBroadcastService? _broadcastService;
+    private readonly HybridCacheService? _cache;
+
+    // Read notifications are immutable — cache them for 30 minutes.
+    private static readonly TimeSpan ReadNotificationCacheTtl = TimeSpan.FromMinutes(30);
 
     public NotificationRepository(
         string connectionString,
         ILogger<NotificationRepository> logger,
-        NotificationBroadcastService? broadcastService = null) : base(connectionString)
+        NotificationBroadcastService? broadcastService = null,
+        HybridCacheService? cache = null) : base(connectionString)
     {
         _logger = logger;
         _broadcastService = broadcastService;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateNotificationAsync(Guid userId, string type, string title, string message, string? actionUrl, Dictionary<string, string>? metadata)
@@ -83,6 +90,15 @@ public class NotificationRepository : SqlHelper, INotificationRepository
 
     public async Task<NotificationDto?> GetNotificationAsync(Guid notificationId)
     {
+        // Serve already-read notifications from cache — they no longer change.
+        var cacheKey = $"notification:{notificationId}";
+        if (_cache is not null)
+        {
+            var cached = await _cache.GetAsync<NotificationDto>(cacheKey);
+            if (cached is not null)
+                return cached;
+        }
+
         const string sql = @"
             SELECT Id, UserId, Type, Title, Message, ActionUrl, Metadata, IsRead, ReadAt, CreatedAt
             FROM Notification
@@ -103,7 +119,13 @@ public class NotificationRepository : SqlHelper, INotificationRepository
         },
         CreateParameter("@NotificationId", notificationId));
 
-        return results.FirstOrDefault();
+        var dto = results.FirstOrDefault();
+
+        // Cache read notifications — they are effectively immutable once read.
+        if (dto is not null && dto.IsRead && _cache is not null)
+            await _cache.SetAsync(cacheKey, dto, ReadNotificationCacheTtl);
+
+        return dto;
     }
 
     public async Task MarkAsReadAsync(Guid notificationId)
@@ -113,6 +135,10 @@ public class NotificationRepository : SqlHelper, INotificationRepository
 
         const string sql = "UPDATE Notification SET IsRead = 1, ReadAt = GETUTCDATE() WHERE Id = @NotificationId";
         await ExecuteNonQueryAsync(sql, CreateParameter("@NotificationId", notificationId));
+
+        // Evict stale cache so the next GetNotificationAsync call re-caches with IsRead=true.
+        if (_cache is not null)
+            _ = _cache.RemoveAsync($"notification:{notificationId}");
 
         // Broadcast updated unread count
         if (userId.HasValue && _broadcastService != null)
@@ -129,6 +155,10 @@ public class NotificationRepository : SqlHelper, INotificationRepository
 
         const string sql = "UPDATE Notification SET IsRead = 0, ReadAt = NULL WHERE Id = @NotificationId";
         await ExecuteNonQueryAsync(sql, CreateParameter("@NotificationId", notificationId));
+
+        // Evict cache since the notification is no longer in a read (cacheable) state.
+        if (_cache is not null)
+            _ = _cache.RemoveAsync($"notification:{notificationId}");
 
         // Broadcast updated unread count
         if (userId.HasValue && _broadcastService != null)

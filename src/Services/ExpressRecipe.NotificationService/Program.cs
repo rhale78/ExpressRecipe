@@ -24,6 +24,10 @@ var connectionString = builder.Configuration.GetConnectionString("notificationdb
 // Add memory cache for rate limiting
 builder.Services.AddMemoryCache();
 
+// Register HybridCache for caching read (immutable) notifications
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
+
 // Register SignalR for real-time notifications
 builder.Services.AddSignalR();
 
@@ -38,7 +42,8 @@ builder.Services.AddScoped<INotificationRepository>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<NotificationRepository>>();
     var broadcastService = sp.GetRequiredService<NotificationBroadcastService>();
-    return new NotificationRepository(connectionString, logger, broadcastService);
+    var cache = sp.GetRequiredService<HybridCacheService>();
+    return new NotificationRepository(connectionString, logger, broadcastService, cache);
 });
 
 // Conditionally register RabbitMQ for event subscription

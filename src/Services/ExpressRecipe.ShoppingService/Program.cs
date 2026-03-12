@@ -2,6 +2,7 @@ using ExpressRecipe.Data.Common;
 using ExpressRecipe.ShoppingService.Data;
 using ExpressRecipe.ShoppingService.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 using ExpressRecipe.Shared.Units;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,10 @@ builder.AddServiceDefaults();
 // Add authentication (shared JWT bearer configuration)
 builder.AddExpressRecipeAuthentication();
 
+// Register cache (used for completed/archived shopping lists which are immutable)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
+
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("shoppingdb")
     ?? throw new InvalidOperationException("Database connection string 'shoppingdb' not found");
@@ -26,7 +31,8 @@ builder.Services.AddScoped<IShoppingRepository>(sp =>
     new ShoppingRepository(
         connectionString,
         sp.GetRequiredService<ILogger<ShoppingRepository>>(),
-        sp.GetRequiredService<IHttpClientFactory>()));
+        sp.GetRequiredService<IHttpClientFactory>(),
+        sp.GetRequiredService<HybridCacheService>()));
 
 // Register HTTP clients for external service integration
 builder.Services.AddHttpClient("PriceService", client =>

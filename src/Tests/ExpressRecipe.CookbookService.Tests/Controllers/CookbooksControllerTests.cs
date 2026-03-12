@@ -2,6 +2,7 @@ using ExpressRecipe.CookbookService.Controllers;
 using ExpressRecipe.CookbookService.Data;
 using ExpressRecipe.CookbookService.Models;
 using ExpressRecipe.CookbookService.Tests.Helpers;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -39,9 +40,9 @@ public class CookbooksControllerTests
         var result = await _controller.GetCookbooks(null, null);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var search = Assert.IsType<CookbookSearchResult>(ok.Value);
+        var search = Assert.IsType<PagedResult<CookbookSummaryDto>>(ok.Value);
         Assert.Single(search.Items);
-        Assert.Equal(1, search.TotalCount);
+        Assert.Equal(1, search.Total);
     }
 
     [Fact]

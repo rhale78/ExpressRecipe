@@ -42,6 +42,11 @@ public partial class ShoppingRepository
         command.Parameters.AddWithValue("@ListId", listId);
 
         await command.ExecuteNonQueryAsync();
+
+        // Evict the active-list cache entry so the next read reflects Completed status.
+        if (_cache is not null)
+            _ = _cache.RemoveAsync($"shopping:list:{listId}");
+
         _logger.LogInformation("Completed shopping list {ListId}", listId);
     }
 
@@ -59,6 +64,11 @@ public partial class ShoppingRepository
         command.Parameters.AddWithValue("@ListId", listId);
 
         await command.ExecuteNonQueryAsync();
+
+        // Evict any previous cache entry so the next read re-caches with Archived status.
+        if (_cache is not null)
+            _ = _cache.RemoveAsync($"shopping:list:{listId}");
+
         _logger.LogInformation("Archived shopping list {ListId}", listId);
     }
 
