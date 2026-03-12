@@ -21,7 +21,7 @@ public class HouseholdControllerTests
     {
         _mockRepository = new Mock<IInventoryRepository>();
         _mockLogger = new Mock<ILogger<HouseholdController>>();
-        _controller = new HouseholdController(_mockLogger.Object, _mockRepository.Object);
+        _controller = new HouseholdController(_mockRepository.Object);
         _testUserId = Guid.NewGuid();
         _controller.ControllerContext = ControllerTestHelpers.CreateAuthenticatedContext(_testUserId);
     }

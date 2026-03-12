@@ -1,6 +1,7 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.User;
 using Microsoft.Data.SqlClient;
+using System.Data.Common;
 
 namespace ExpressRecipe.UserService.Data;
 
@@ -116,11 +117,11 @@ public class HealthGoalRepository : SqlHelper, IHealthGoalRepository
 
         var countParams = category != null
             ? new[] { CreateParameter("@Category", category) }
-            : System.Array.Empty<System.Data.Common.DbParameter>();
+            : Array.Empty<DbParameter>();
 
         int total = await ExecuteScalarAsync<int>(countSql, countParams);
 
-        var dataParams = new System.Collections.Generic.List<System.Data.Common.DbParameter>
+        var dataParams = new List<DbParameter>
         {
             CreateParameter("@Offset", offset),
             CreateParameter("@PageSize", pageSize)

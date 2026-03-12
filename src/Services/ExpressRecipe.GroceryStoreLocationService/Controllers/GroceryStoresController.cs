@@ -89,9 +89,9 @@ public class GroceryStoresController : ControllerBase
         [FromQuery] int limit = 50)
     {
         if (lat < -90.0 || lat > 90.0)
-            return BadRequest("lat must be between -90 and 90.");
+            return BadRequest(new { message = "lat must be between -90 and 90." });
         if (lon < -180.0 || lon > 180.0)
-            return BadRequest("lon must be between -180 and 180.");
+            return BadRequest(new { message = "lon must be between -180 and 180." });
         limit = Math.Clamp(limit, 1, 200);
         radiusMiles = Math.Clamp(radiusMiles, 0.1, 100.0);
 

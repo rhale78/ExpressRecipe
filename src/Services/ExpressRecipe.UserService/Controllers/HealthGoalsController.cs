@@ -1,23 +1,10 @@
 using ExpressRecipe.Shared.DTOs.User;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.UserService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ExpressRecipe.UserService.Controllers;
-
-/// <summary>
-/// Paginated result wrapper.
-/// </summary>
-public sealed record PagedResult<T>(
-    List<T> Items,
-    int Total,
-    int Page,
-    int PageSize)
-{
-    public int TotalPages => (int)Math.Ceiling(Total / (double)PageSize);
-    public bool HasNextPage => Page < TotalPages;
-    public bool HasPreviousPage => Page > 1;
-}
 
 [ApiController]
 [Route("api/[controller]")]

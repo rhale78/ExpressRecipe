@@ -1,4 +1,5 @@
 using ExpressRecipe.Shared.DTOs.User;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.UserService.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
