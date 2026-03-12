@@ -72,7 +72,7 @@
 
         <!-- Quick Feature Access -->
         <div class="quick-access-grid">
-            <a href="/pantry-discovery" class="quick-access-card">
+            <a href="/discover" class="quick-access-card">
                 <span>🔎</span>
                 <span>What Can I Make?</span>
             </a>
@@ -80,7 +80,7 @@
                 <span>🩺</span>
                 <span>Log a Reaction</span>
             </a>
-            <a href="/cooking-timers" class="quick-access-card">
+            <a href="/meal-planning" class="quick-access-card">
                 <span>⏱️</span>
                 <span>Cooking Timers</span>
             </a>
@@ -96,7 +96,7 @@
             <div class="dashboard-discovery-alert">
                 <span class="discovery-alert-icon">🔬</span>
                 <div class="discovery-alert-body">
-                    <strong>@_allergenDiscoveries.Count new allergen discovery@(_allergenDiscoveries.Count != 1 ? "ies" : "")</strong>
+                    <strong>@_allergenDiscoveries.Count new allergen @(_allergenDiscoveries.Count == 1 ? "discovery" : "discoveries")</strong>
                     <p>Potential allergens were found when items were disposed from inventory.</p>
                 </div>
                 <a href="/inventory" class="btn btn-warning btn-sm">Review →</a>
@@ -586,7 +586,6 @@
             try
             {
                 _queuePreview = await WorkQueueApi.GetItemsAsync();
-                await QueueState.RefreshAsync();
             }
             catch
             {
