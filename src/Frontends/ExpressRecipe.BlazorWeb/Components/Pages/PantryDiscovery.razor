@@ -1,0 +1,292 @@
+@page "/pantry-discovery"
+@rendermode InteractiveServer
+@using ExpressRecipe.Client.Shared.Models.MealPlanning
+@using ExpressRecipe.Client.Shared.Models.Inventory
+@using ExpressRecipe.Client.Shared.Models.Shopping
+@using ExpressRecipe.Client.Shared.Services
+@inject IMealPlanApiClient MealPlanApi
+@inject IShoppingListApiClient ShoppingApi
+@inject NavigationManager Navigation
+@inject IToastService ToastService
+
+<PageTitle>What Can I Make? — ExpressRecipe</PageTitle>
+
+<div class="discovery-page-container">
+    <div class="discovery-page-header">
+        <h1>🔎 What Can I Make Right Now?</h1>
+        <p class="discovery-page-subtitle">
+            Recipes matched to what's already in your pantry, fridge, and freezer.
+        </p>
+    </div>
+
+    <!-- Filters Bar -->
+    <div class="discovery-filters">
+        <div class="filter-group-inline">
+            <label>Minimum match</label>
+            <select class="form-control-sm" @bind="_minMatch" @bind:after="Discover">
+                <option value="0.60">60%+</option>
+                <option value="0.70">70%+</option>
+                <option value="0.80">80%+</option>
+                <option value="0.90">90%+</option>
+                <option value="1.00">100% (exact)</option>
+            </select>
+        </div>
+
+        <div class="filter-group-inline">
+            <label>Sort by</label>
+            <select class="form-control-sm" @bind="_sortBy" @bind:after="Discover">
+                <option value="match">Best Match</option>
+                <option value="rating">Top Rated</option>
+                <option value="cookTime">Quickest</option>
+            </select>
+        </div>
+
+        <div class="filter-group-inline">
+            <label class="toggle-label">
+                <input type="checkbox" @bind="_excludePlanned" @bind:after="Discover" />
+                Hide already planned
+            </label>
+        </div>
+
+        <div class="filter-group-inline">
+            <label class="toggle-label">
+                <input type="checkbox" @bind="_respectDietary" @bind:after="Discover" />
+                Apply dietary filters
+            </label>
+        </div>
+
+        <button class="btn btn-outline btn-sm" @onclick="Discover" disabled="@_isLoading">
+            🔄 Refresh
+        </button>
+    </div>
+
+    <!-- Household Scope -->
+    <div class="discovery-scope">
+        <HouseholdSwitcher OnHouseholdChanged="HandleHouseholdChanged" />
+    </div>
+
+    <!-- Results -->
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Checking your pantry...</p>
+        </div>
+    }
+    else if (_result == null)
+    {
+        <div class="empty-state">
+            <p>🥘 Set up your inventory first, then come back here!</p>
+            <a href="/inventory/add" class="btn btn-primary">Add Inventory Items →</a>
+        </div>
+    }
+    else
+    {
+        <!-- Stats bar -->
+        <div class="discovery-stats">
+            <span>🧺 <strong>@_result.TotalPantryIngredients</strong> pantry ingredients checked</span>
+            <span>🍳 <strong>@_result.Matches.Count</strong> recipes found</span>
+            @if (_result.CachedAt > DateTime.MinValue)
+            {
+                <span class="cache-note">Results as of @_result.CachedAt.ToLocalTime().ToString("h:mmtt")</span>
+            }
+        </div>
+
+        @if (!_result.Matches.Any())
+        {
+            <div class="empty-state">
+                <p>😔 No recipes match your current pantry at @((_minMatch * 100).ToString("F0"))%+ coverage.</p>
+                <button class="btn btn-outline" @onclick="LowerThreshold">
+                    Try 60% match
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="discovery-results-grid">
+                @foreach (PantryRecipeMatchDto match in _result.Matches)
+                {
+                    <div class="discovery-recipe-card @(match.HasDietaryConflict ? "card-dietary-conflict" : "")">
+                        <!-- Match % badge -->
+                        <div class="match-badge match-@GetMatchTier(match.MatchPercent)">
+                            @((match.MatchPercent * 100).ToString("F0"))% match
+                        </div>
+
+                        <!-- Recipe image -->
+                        @if (!string.IsNullOrWhiteSpace(match.ImageUrl))
+                        {
+                            <img src="@match.ImageUrl" alt="@match.RecipeName"
+                                 class="discovery-recipe-image" />
+                        }
+                        else
+                        {
+                            <div class="discovery-recipe-placeholder">🍽️</div>
+                        }
+
+                        <!-- Info -->
+                        <div class="discovery-recipe-info">
+                            <h3 class="discovery-recipe-name">@match.RecipeName</h3>
+                            <div class="discovery-recipe-meta">
+                                @if (match.CookTimeMinutes > 0)
+                                {
+                                    <span>⏱️ @match.CookTimeMinutes min</span>
+                                }
+                                @if (match.AverageRating > 0)
+                                {
+                                    <span>⭐ @match.AverageRating.ToString("F1")</span>
+                                }
+                                <span>🥬 @match.MatchedIngredientCount/@match.TotalIngredientCount ingredients</span>
+                            </div>
+
+                            @if (match.MissingIngredients.Any())
+                            {
+                                <div class="missing-ingredients">
+                                    <span class="missing-label">You need:</span>
+                                    @string.Join(", ", match.MissingIngredients.Take(3))
+                                    @if (match.MissingIngredients.Count > 3)
+                                    {
+                                        <span> +@(match.MissingIngredients.Count - 3) more</span>
+                                    }
+                                </div>
+                            }
+
+                            @if (match.HasDietaryConflict)
+                            {
+                                <div class="dietary-conflict-badge">⚠️ Allergen conflict</div>
+                            }
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="discovery-recipe-actions">
+                            <a href="/recipes/@match.RecipeId" class="btn btn-primary btn-sm">
+                                View Recipe
+                            </a>
+                            <button class="btn btn-outline btn-sm"
+                                    @onclick="() => AddToMealPlan(match)">
+                                ➕ Plan It
+                            </button>
+                            @if (match.MissingIngredients.Any())
+                            {
+                                <button class="btn btn-outline btn-sm"
+                                        @onclick="() => AddMissingToList(match)">
+                                    🛒 Buy Missing
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private decimal _minMatch = 0.80m;
+    private string _sortBy = "match";
+    private bool _excludePlanned = true;
+    private bool _respectDietary = true;
+    private Guid? _householdId;
+    private bool _isLoading = true;
+    private PantryDiscoveryResultDto? _result;
+
+    protected override async Task OnInitializedAsync() => await Discover();
+
+    private async Task Discover()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _result = await MealPlanApi.GetPantryDiscoveryAsync(
+            new PantryDiscoveryOptionsDto
+            {
+                MinMatchPercent = _minMatch,
+                SortBy = _sortBy,
+                Limit = 24,
+                RespectDietaryRestrictions = _respectDietary,
+                ExcludePlannedMeals = _excludePlanned
+            });
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task HandleHouseholdChanged(HouseholdDto? household)
+    {
+        _householdId = household?.Id;
+        await Discover();
+    }
+
+    private async Task LowerThreshold()
+    {
+        _minMatch = 0.60m;
+        await Discover();
+    }
+
+    private void AddToMealPlan(PantryRecipeMatchDto match)
+        => Navigation.NavigateTo($"/meal-planning?addRecipe={match.RecipeId}");
+
+    private async Task AddMissingToList(PantryRecipeMatchDto match)
+    {
+        try
+        {
+            Guid? listId = await GetOrCreateDefaultShoppingListAsync();
+            if (listId is null)
+            {
+                ToastService.ShowError("Could not find or create a shopping list.");
+                return;
+            }
+
+            int added = 0;
+            foreach (string ingredient in match.MissingIngredients)
+            {
+                Guid? itemId = await ShoppingApi.AddItemAsync(new AddShoppingListItemRequest
+                {
+                    ShoppingListId = listId.Value,
+                    Name = ingredient,
+                    Quantity = 1,
+                    Unit = "unit",
+                    Source = "PantryDiscovery",
+                    Notes = $"Missing for: {match.RecipeName}"
+                });
+                if (itemId.HasValue) { added++; }
+            }
+
+            if (added > 0)
+            {
+                ToastService.ShowSuccess(
+                    $"Added {added} item{(added == 1 ? "" : "s")} from '{match.RecipeName}' to your shopping list.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to add items: {ex.Message}");
+        }
+    }
+
+    private async Task<Guid?> GetOrCreateDefaultShoppingListAsync()
+    {
+        try
+        {
+            ShoppingListSearchResult? result = await ShoppingApi.SearchShoppingListsAsync(
+                new ShoppingListSearchRequest { Status = "Active", PageSize = 1 });
+            if (result?.Lists?.Count > 0) { return result.Lists[0].Id; }
+
+            return await ShoppingApi.CreateShoppingListAsync(
+                new CreateShoppingListRequest { Name = "My Shopping List" });
+        }
+        catch
+        {
+            // Return null on failure; caller shows an error toast
+            return null;
+        }
+    }
+
+    private static string GetMatchTier(decimal pct) => pct switch
+    {
+        >= 1.00m => "perfect",
+        >= 0.90m => "excellent",
+        >= 0.80m => "great",
+        >= 0.70m => "good",
+        _ => "partial"
+    };
+}

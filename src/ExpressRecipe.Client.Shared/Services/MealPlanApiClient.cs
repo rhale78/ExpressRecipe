@@ -55,6 +55,10 @@ public interface IMealPlanApiClient
     // Attendees
     Task<List<MealAttendeeDto>?> GetMealAttendeesAsync(Guid mealId);
     Task<bool> UpdateMealAttendeesAsync(Guid mealId, List<MealAttendeeDto> attendees);
+
+    // Pantry Discovery
+    Task<PantryDiscoveryResultDto?> GetPantryDiscoveryAsync(PantryDiscoveryOptionsDto options,
+        CancellationToken ct = default);
 }
 
 public class MealPlanApiClient : IMealPlanApiClient
@@ -623,4 +627,28 @@ public class MealPlanApiClient : IMealPlanApiClient
     private class SaveTemplateResponse { public Guid Id { get; set; } }
     private class ApplyTemplateResponse { public Guid PlanId { get; set; } }
     private class AddCourseResponse { public Guid Id { get; set; } }
+
+    // ── Pantry Discovery ───────────────────────────────────────────────────────
+
+    public async Task<PantryDiscoveryResultDto?> GetPantryDiscoveryAsync(
+        PantryDiscoveryOptionsDto options, CancellationToken ct = default)
+    {
+        if (!await EnsureAuthenticatedAsync())
+            return null;
+
+        try
+        {
+            HttpResponseMessage resp = await _httpClient.PostAsJsonAsync(
+                "/api/pantry-discovery/discover", options, ct);
+
+            return resp.IsSuccessStatusCode
+                ? await resp.Content.ReadFromJsonAsync<PantryDiscoveryResultDto>(cancellationToken: ct)
+                : null;
+        }
+        catch
+        {
+            // Suppress network/deserialization errors; callers check for null
+            return null;
+        }
+    }
 }
