@@ -995,7 +995,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 MaxViews = maxViews,
                 Recipe = recipe
             };
-        }, new SqlParameter("@Token", token));
+        }, ct, new SqlParameter("@Token", token));
 
         return results.FirstOrDefault();
     }
@@ -1103,7 +1103,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                 UpdatedAt = reader.IsDBNull(updOrd) ? null : reader.GetDateTime(updOrd)
             };
-        }, new SqlParameter("@HouseholdId", householdId));
+        }, ct, new SqlParameter("@HouseholdId", householdId));
     }
 
     public async Task<List<RecipeIngredientSummary>> GetRecipesWithIngredientSummaryAsync(

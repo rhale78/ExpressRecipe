@@ -86,7 +86,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             FROM AllergyIncident2 i
             WHERE i.Id = @Id AND i.IsDeleted = 0";
 
-        var incidents = await ExecuteReaderAsync(sql, MapIncident, CreateParameter("@Id", id));
+        var incidents = await ExecuteReaderAsync(sql, MapIncident, ct, CreateParameter("@Id", id));
         var incident = incidents.FirstOrDefault();
         if (incident == null) return null;
 
@@ -109,7 +109,7 @@ public class AllergyIncidentRepository : SqlHelper, IAllergyIncidentRepository
             ORDER BY i.IncidentDate DESC
             OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY";
 
-        var incidents = await ExecuteReaderAsync(sql, MapIncident,
+        var incidents = await ExecuteReaderAsync(sql, MapIncident, ct,
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@MemberId",    (object?)memberId ?? DBNull.Value),
             CreateParameter("@Limit",       limit));

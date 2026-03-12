@@ -59,7 +59,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             WHERE UserId = @UserId AND IsActive = 1
             ORDER BY CreatedAt ASC";
 
-        return await ExecuteScalarAsync<string?>(sql, new SqlParameter("@UserId", userId));
+        return await ExecuteScalarAsync<string?>(sql, ct, new SqlParameter("@UserId", userId));
     }
 
     public async Task<string> CreateReferralCodeAsync(Guid userId, string code, CancellationToken ct = default)
@@ -68,7 +68,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             INSERT INTO ReferralCode (Id, UserId, Code, IsActive, UsageCount, CreatedAt)
             VALUES (NEWID(), @UserId, @Code, 1, 0, GETUTCDATE())";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             new SqlParameter("@UserId", userId),
             new SqlParameter("@Code", code));
 
@@ -82,7 +82,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             FROM ReferralCode
             WHERE UserId = @UserId AND IsActive = 1";
 
-        return await ExecuteScalarAsync<int>(sql, new SqlParameter("@UserId", userId));
+        return await ExecuteScalarAsync<int>(sql, ct, new SqlParameter("@UserId", userId));
     }
 
     public async Task<bool> CodeExistsAsync(string code, CancellationToken ct = default)
@@ -92,7 +92,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             FROM ReferralCode
             WHERE Code = @Code";
 
-        return await ExecuteScalarAsync<int>(sql, new SqlParameter("@Code", code)) > 0;
+        return await ExecuteScalarAsync<int>(sql, ct, new SqlParameter("@Code", code)) > 0;
     }
 
     public async Task<ReferralCodeDto?> GetCodeByValueAsync(string code, CancellationToken ct = default)
@@ -113,6 +113,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
                 UsageCount = GetInt(reader, "UsageCount") ?? 0,
                 CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
+            ct,
             new SqlParameter("@Code", code));
 
         return results.FirstOrDefault();
@@ -125,7 +126,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             SET ReferredByCode = @Code
             WHERE UserId = @UserId AND ReferredByCode IS NULL";
 
-        var rowsAffected = await ExecuteNonQueryAsync(sql,
+        var rowsAffected = await ExecuteNonQueryAsync(sql, ct,
             new SqlParameter("@UserId", newUserId),
             new SqlParameter("@Code", code));
 
@@ -141,7 +142,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
               AND YEAR(ConvertedAt) = YEAR(GETUTCDATE())
               AND MONTH(ConvertedAt) = MONTH(GETUTCDATE())";
 
-        return await ExecuteScalarAsync<int>(sql, new SqlParameter("@ReferrerId", referrerId));
+        return await ExecuteScalarAsync<int>(sql, ct, new SqlParameter("@ReferrerId", referrerId));
     }
 
     public async Task RecordConversionAsync(Guid referralCodeId, Guid referrerId, Guid referredUserId, int pointsAwarded, CancellationToken ct = default)
@@ -150,7 +151,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             INSERT INTO ReferralConversion (Id, ReferralCodeId, ReferrerId, ReferredUserId, ConvertedAt, PointsAwarded)
             VALUES (NEWID(), @ReferralCodeId, @ReferrerId, @ReferredUserId, GETUTCDATE(), @PointsAwarded)";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             new SqlParameter("@ReferralCodeId", referralCodeId),
             new SqlParameter("@ReferrerId", referrerId),
             new SqlParameter("@ReferredUserId", referredUserId),
@@ -164,7 +165,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             SET UsageCount = UsageCount + 1
             WHERE Id = @Id";
 
-        await ExecuteNonQueryAsync(sql, new SqlParameter("@Id", codeId));
+        await ExecuteNonQueryAsync(sql, ct, new SqlParameter("@Id", codeId));
     }
 
     public async Task<string?> GetReferredByCodeAsync(Guid userId, CancellationToken ct = default)
@@ -174,7 +175,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             FROM UserProfile
             WHERE UserId = @UserId";
 
-        return await ExecuteScalarAsync<string?>(sql, new SqlParameter("@UserId", userId));
+        return await ExecuteScalarAsync<string?>(sql, ct, new SqlParameter("@UserId", userId));
     }
 
     public async Task<string> CreateShareLinkAsync(Guid userId, string entityType, Guid entityId, string token, DateTime expiresAt, CancellationToken ct = default)
@@ -183,7 +184,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             INSERT INTO ShareLink (Id, CreatedBy, EntityType, EntityId, Token, ExpiresAt, ViewCount, CreatedAt)
             VALUES (NEWID(), @CreatedBy, @EntityType, @EntityId, @Token, @ExpiresAt, 0, GETUTCDATE())";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             new SqlParameter("@CreatedBy", userId),
             new SqlParameter("@EntityType", entityType),
             new SqlParameter("@EntityId", entityId),
@@ -201,7 +202,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             WHERE CreatedBy = @CreatedBy
               AND CAST(CreatedAt AS DATE) = CAST(GETUTCDATE() AS DATE)";
 
-        return await ExecuteScalarAsync<int>(sql, new SqlParameter("@CreatedBy", userId));
+        return await ExecuteScalarAsync<int>(sql, ct, new SqlParameter("@CreatedBy", userId));
     }
 
     public async Task<ShareLinkDto?> GetShareLinkByTokenAsync(string token, CancellationToken ct = default)
@@ -224,6 +225,7 @@ public class ReferralRepository : SqlHelper, IReferralRepository
                 ViewCount = GetInt(reader, "ViewCount") ?? 0,
                 CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow
             },
+            ct,
             new SqlParameter("@Token", token));
 
         return results.FirstOrDefault();
@@ -236,6 +238,6 @@ public class ReferralRepository : SqlHelper, IReferralRepository
             SET ViewCount = ViewCount + 1
             WHERE Id = @Id";
 
-        await ExecuteNonQueryAsync(sql, new SqlParameter("@Id", linkId));
+        await ExecuteNonQueryAsync(sql, ct, new SqlParameter("@Id", linkId));
     }
 }

@@ -464,8 +464,6 @@ public class PriceRepository : SqlHelper, IPriceRepository
     }
 
     // ── Product lifecycle reactions ──────────────────────────────────────────
-    // Note: SqlHelper.ExecuteNonQueryAsync has no CancellationToken overload, so ct
-    // is accepted for interface compliance but cannot be forwarded to the base class.
 
     public async Task<int> DeactivatePricesByProductIdAsync(Guid productId, CancellationToken ct = default)
     {
@@ -474,7 +472,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
             SET    IsActive = 0, UpdatedAt = GETUTCDATE()
             WHERE  ProductId = @ProductId AND IsActive = 1";
 
-        return await ExecuteNonQueryAsync(sql, CreateParameter("@ProductId", productId));
+        return await ExecuteNonQueryAsync(sql, ct, CreateParameter("@ProductId", productId));
     }
 
     public async Task<int> UpdateProductNameOnPricesAsync(Guid productId, string newName, CancellationToken ct = default)
@@ -488,6 +486,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
 
         return await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@ProductId", productId),
             CreateParameter("@NewName", newName));
     }
@@ -501,6 +500,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
 
         return await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@ProductId", productId),
             CreateParameter("@NewUpc", (object?)newUpc ?? DBNull.Value));
     }
@@ -638,7 +638,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
                  @BasePrice, @FinalPrice, @Currency, @Unit, @Quantity, @PricePerOz, @PricePerHundredG,
                  @DataSource, @ExternalId, @ObservedAt, GETUTCDATE())";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@ProductId", record.ProductId),
             CreateParameter("@Upc", record.Upc),
             CreateParameter("@ProductName", record.ProductName),
@@ -768,7 +768,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
 
         sql.Append(" ORDER BY ObservedAt DESC");
 
-        return await ExecuteReaderAsync(sql.ToString(), MapPriceHistory, parameters.ToArray());
+        return await ExecuteReaderAsync(sql.ToString(), MapPriceHistory, ct, parameters.ToArray());
     }
 
     public async Task<PriceHistoryStatsDto> GetPriceStatsAsync(Guid productId, Guid? storeId, int daysBack, CancellationToken ct = default)
@@ -819,7 +819,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
             NewestObservation = GetNullableDateTime(r, "NewestObservation"),
             AvgPricePerOz = GetDecimalNullable(r, "AvgPricePerOz"),
             AvgPricePerHundredG = GetDecimalNullable(r, "AvgPricePerHundredG")
-        }, parameters.ToArray());
+        }, ct, parameters.ToArray());
 
         var row = rows.FirstOrDefault();
         if (row == null || row.ObservationCount == 0)
@@ -840,7 +840,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
                 WHERE ProductId = @ProductId30{storeFilter}
                   AND ObservedAt >= DATEADD(day, -30, GETUTCDATE())
                 ORDER BY ObservedAt ASC";
-            var oldPrices = await ExecuteReaderAsync(p30Sql, r => GetDecimal(r, "FinalPrice"), p30Params.ToArray());
+            var oldPrices = await ExecuteReaderAsync(p30Sql, r => GetDecimal(r, "FinalPrice"), ct, p30Params.ToArray());
             if (oldPrices.Count > 0)
             {
                 priceChange30Days = row.CurrentPrice - oldPrices[0];
@@ -913,7 +913,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
                     ? GetDecimalNullable(r, "PricePerHundredG")
                     : null,
             ObservedAt = GetDateTime(r, "ObservedAt")
-        }, parameters.ToArray());
+        }, ct, parameters.ToArray());
     }
 
     // ── Store-product linking ─────────────────────────────────────────────────
@@ -932,7 +932,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
                 INSERT (StoreId, ProductId, Upc, IsInStock, LastSeenAt, DataSource)
                 VALUES (@StoreId, @ProductId, @Upc, 1, GETUTCDATE(), @DataSource);";
 
-        await ExecuteNonQueryAsync(sql,
+        await ExecuteNonQueryAsync(sql, ct,
             CreateParameter("@StoreId", storeId),
             CreateParameter("@ProductId", productId),
             CreateParameter("@Upc", upc),
@@ -947,7 +947,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
             WHERE ProductId = @ProductId
             ORDER BY LastSeenAt DESC";
 
-        return await ExecuteReaderAsync(sql, MapStoreProductLink, CreateParameter("@ProductId", productId));
+        return await ExecuteReaderAsync(sql, MapStoreProductLink, ct, CreateParameter("@ProductId", productId));
     }
 
     public async Task<List<StoreProductLinkDto>> GetProductsForStoreAsync(Guid storeId, int page, int pageSize, CancellationToken ct = default)
@@ -959,7 +959,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
             ORDER BY LastSeenAt DESC
             OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY";
 
-        return await ExecuteReaderAsync(sql, MapStoreProductLink,
+        return await ExecuteReaderAsync(sql, MapStoreProductLink, ct,
             CreateParameter("@StoreId", storeId),
             CreateParameter("@Offset", (page - 1) * pageSize),
             CreateParameter("@PageSize", pageSize));
@@ -986,7 +986,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
             ? ((request.OriginalPrice - request.SalePrice) / request.OriginalPrice) * 100
             : 0;
 
-        return await ExecuteScalarAsync<Guid>(sql,
+        return await ExecuteScalarAsync<Guid>(sql, ct,
             CreateParameter("@ProductId", request.ProductId),
             CreateParameter("@StoreId", request.StoreId),
             CreateParameter("@DealType", request.DealType),
@@ -1032,7 +1032,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
             GetPercentOff = GetDecimalNullable(r, "GetPercentOff"),
             CouponCode = GetNullableString(r, "CouponCode"),
             RebateAmount = GetDecimalNullable(r, "RebateAmount")
-        }, CreateParameter("@ProductId", productId), CreateParameter("@StoreId", storeId));
+        }, ct, CreateParameter("@ProductId", productId), CreateParameter("@StoreId", storeId));
 
         var dto = new EffectivePriceDto
         {
@@ -1048,7 +1048,7 @@ public class PriceRepository : SqlHelper, IPriceRepository
                 SELECT TOP 1 Price FROM ProductPrice
                 WHERE ProductId = @ProductId AND StoreId = @StoreId AND IsActive = 1
                 ORDER BY ObservedAt DESC";
-            var prices = await ExecuteReaderAsync(priceSql, r => GetDecimal(r, "Price"),
+            var prices = await ExecuteReaderAsync(priceSql, r => GetDecimal(r, "Price"), ct,
                 CreateParameter("@ProductId", productId), CreateParameter("@StoreId", storeId));
             dto.BasePrice = prices.Count > 0 ? prices[0] : 0;
             dto.EffectivePrice = dto.BasePrice;

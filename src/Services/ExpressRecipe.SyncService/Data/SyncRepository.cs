@@ -350,6 +350,6 @@ DELETE FROM SyncQueue          WHERE UserId = @UserId;
 DELETE FROM DeviceRegistration WHERE UserId = @UserId;
 DELETE FROM SyncConflict       WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

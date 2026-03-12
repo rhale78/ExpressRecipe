@@ -412,6 +412,6 @@ DELETE FROM ScanAlert       WHERE UserId = @UserId;
 DELETE FROM ScanHistory     WHERE UserId = @UserId;
 DELETE FROM UnknownProduct  WHERE UserId = @UserId;";
 
-        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

@@ -29,6 +29,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
         return await ExecuteReaderAsync(
             sql,
             MapDto,
+            ct,
             CreateParameter("@HouseholdId", householdId));
     }
 
@@ -79,6 +80,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@MemberType", request.MemberType),
@@ -104,6 +106,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@DisplayName", string.IsNullOrWhiteSpace(request.DisplayName) ? null : (object)request.DisplayName),
             CreateParameter("@BirthYear", request.BirthYear),
@@ -127,6 +130,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@UpdatedBy", deletedBy));
 
@@ -152,6 +156,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@DisplayName", request.DisplayName),
@@ -177,6 +182,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@DisplayName", request.DisplayName),
@@ -197,7 +203,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
               AND GuestExpiresAt < GETUTCDATE()
               AND IsDeleted = 0";
 
-        return await ExecuteReaderAsync(sql, MapDto);
+        return await ExecuteReaderAsync(sql, MapDto, ct);
     }
 
     public async Task PurgeExpiredTemporaryVisitorsAsync(CancellationToken ct = default)
@@ -210,7 +216,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
               AND GuestExpiresAt < GETUTCDATE()
               AND IsDeleted = 0";
 
-        await ExecuteNonQueryAsync(sql);
+        await ExecuteNonQueryAsync(sql, ct);
     }
 
     public async Task<bool> UpdateMemberTypeAsync(Guid memberId, string memberType, Guid? sourceHouseholdId, CancellationToken ct = default)
@@ -224,6 +230,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@MemberType", memberType),
             CreateParameter("@SourceHouseholdId", sourceHouseholdId));
@@ -262,6 +269,7 @@ WHERE LinkedUserId = @UserId AND IsDeleted = 0;";
         List<Guid> memberIds = await ExecuteReaderAsync<Guid>(
             selectSql,
             reader => GetGuid(reader, "Id"),
+            ct,
             CreateParameter("@UserId", userId));
 
         if (memberIds.Count > 0)
@@ -277,7 +285,7 @@ SET IsDeleted      = 1,
     HasUserAccount = 0
 WHERE LinkedUserId = @UserId;";
 
-            await ExecuteNonQueryAsync(deleteSql, CreateParameter("@UserId", userId));
+            await ExecuteNonQueryAsync(deleteSql, ct, CreateParameter("@UserId", userId));
         }
 
         return memberIds;
