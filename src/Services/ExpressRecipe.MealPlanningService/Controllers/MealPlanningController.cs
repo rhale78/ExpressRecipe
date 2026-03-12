@@ -8,6 +8,7 @@ using ExpressRecipe.MealPlanningService.Logging;
 using ExpressRecipe.MealPlanningService.Services;
 using ExpressRecipe.MealPlanningService.Services.Printing;
 using ExpressRecipe.MealPlanningService.Services.GoogleCalendar;
+using ExpressRecipe.Shared.Models;
 
 namespace ExpressRecipe.MealPlanningService.Controllers;
 
@@ -157,7 +158,7 @@ public class MealPlanningController : ControllerBase
         var page = Math.Max(1, request.Page);
         var pageSize = request.PageSize > 0 ? request.PageSize : 20;
         plans = plans.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-        return Ok(new { Plans = plans, Total = total, Page = page, PageSize = pageSize });
+        return Ok(new PagedResult<MealPlanDto>(plans, total, page, pageSize));
     }
 
     [HttpPost("quick-plan")]

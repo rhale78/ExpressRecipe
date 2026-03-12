@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using ExpressRecipe.NotificationService.Data;
+using ExpressRecipe.Shared.Models;
 
 namespace ExpressRecipe.NotificationService.Controllers;
 
@@ -226,7 +227,7 @@ public class NotificationController : ControllerBase
             var paged = notifications.Skip((page - 1) * pageSize).Take(pageSize).ToList();
             var unreadCount = notifications.Count(n => !n.IsRead);
 
-            return Ok(new { Notifications = paged, TotalCount = total, UnreadCount = unreadCount, Page = page, PageSize = pageSize });
+            return Ok(new { Data = new PagedResult<NotificationDto>(paged, total, page, pageSize), UnreadCount = unreadCount });
         }
         catch (Exception ex)
         {

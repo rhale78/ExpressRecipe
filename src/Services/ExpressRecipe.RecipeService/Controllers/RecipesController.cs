@@ -3,6 +3,7 @@ using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.CQRS.Commands;
 using ExpressRecipe.RecipeService.CQRS.Queries;
 using ExpressRecipe.RecipeService.Services;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -58,7 +59,7 @@ public class RecipesController : ControllerBase
     /// </summary>
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ActionResult<RecipeSearchResult>> SearchRecipes(
+    public async Task<ActionResult<PagedResult<RecipeDto>>> SearchRecipes(
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? category = null,
         [FromQuery] string? cuisine = null,
@@ -134,13 +135,7 @@ public class RecipesController : ControllerBase
                 _ => sortDescending ? recipes.OrderByDescending(r => r.CreatedAt).ToList() : recipes.OrderBy(r => r.CreatedAt).ToList()
             };
 
-            return Ok(new RecipeSearchResult
-            {
-                Recipes = recipes,
-                TotalCount = recipes.Count,
-                Page = page,
-                PageSize = pageSize
-            });
+            return Ok(new PagedResult<RecipeDto>(recipes, recipes.Count, page, pageSize));
         }
         catch (Exception ex)
         {
@@ -817,14 +812,6 @@ public class RecipesController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while retrieving recipes" });
         }
     }
-}
-
-public class RecipeSearchResult
-{
-    public List<RecipeDto> Recipes { get; set; } = new();
-    public int TotalCount { get; set; }
-    public int Page { get; set; }
-    public int PageSize { get; set; }
 }
 
 /// <summary>

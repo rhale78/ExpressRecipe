@@ -163,14 +163,6 @@ public class CookbookSearchRequest
     public int PageSize { get; set; } = 20;
 }
 
-public class CookbookSearchResult
-{
-    public List<CookbookSummaryDto> Items { get; set; } = new();
-    public int TotalCount { get; set; }
-    public int Page { get; set; }
-    public int PageSize { get; set; }
-}
-
 public class ReorderRequest
 {
     public List<Guid> Ids { get; set; } = new();

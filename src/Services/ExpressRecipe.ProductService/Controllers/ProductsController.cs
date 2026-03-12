@@ -3,6 +3,7 @@ using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Logging;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.Shared.Messages;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -60,7 +61,7 @@ public class ProductsController : ControllerBase
     /// Search for products
     /// </summary>
     [HttpGet("search")]
-    public async Task<ActionResult<ProductSearchResult>> Search([FromQuery] ProductSearchRequest request)
+    public async Task<ActionResult<PagedResult<ProductDto>>> Search([FromQuery] ProductSearchRequest request)
     {
         try
         {
@@ -70,15 +71,7 @@ public class ProductsController : ControllerBase
 
             await Task.WhenAll(productsTask, countTask);
 
-            var result = new ProductSearchResult
-            {
-                Products = await productsTask,
-                TotalCount = await countTask,
-                Page = request.PageNumber,
-                PageSize = request.PageSize
-            };
-
-            return Ok(result);
+            return Ok(new PagedResult<ProductDto>(await productsTask, await countTask, request.PageNumber, request.PageSize));
         }
         catch (Exception ex)
         {
