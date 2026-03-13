@@ -201,6 +201,16 @@ builder.Services.AddHttpClient<ICookbookApiClient, CookbookApiClient>(client =>
     client.BaseAddress = new Uri("http://cookbookservice");
 });
 
+builder.Services.AddHttpClient<IRestaurantApiClient, RestaurantApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://restaurantservice");
+});
+
+builder.Services.AddHttpClient<IMenuItemApiClient, MenuItemApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://menuitemservice");
+});
+
 // Register local storage services
 builder.Services.AddScoped(typeof(LocalStorageRepository<>));
 builder.Services.AddScoped<SyncQueueService>();

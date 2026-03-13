@@ -1,0 +1,216 @@
+@page "/restaurants/{RestaurantId:guid}/menu-items/create"
+@page "/menu-items/{Id:guid}/edit"
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.MenuItem
+@inject IMenuItemApiClient MenuItemClient
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(_isEdit ? "Edit Menu Item" : "Add Menu Item") – ExpressRecipe</PageTitle>
+
+<div class="restaurants-header">
+    <h1>@(_isEdit ? "✏️ Edit Menu Item" : "🍴 Add Menu Item")</h1>
+    <button class="btn btn-secondary" @onclick="GoBack">← Back</button>
+</div>
+
+@if (_isLoading)
+{
+    <div class="loading-spinner">⏳ Loading…</div>
+}
+else
+{
+    @if (_errorMessage != null)
+    {
+        <div class="error-message">@_errorMessage</div>
+    }
+
+    <div class="form-section">
+        <h3 class="form-section-title">Menu Item Details</h3>
+        <div class="form-grid">
+            <div class="form-group span-full">
+                <label class="form-label">Name *</label>
+                <input class="form-control" type="text" placeholder="e.g. Cheeseburger" @bind="_name" />
+            </div>
+            <div class="form-group span-full">
+                <label class="form-label">Description</label>
+                <textarea class="form-control" placeholder="Brief description…" rows="3" @bind="_description"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <input class="form-control" type="text" placeholder="e.g. Burgers, Salads" @bind="_category" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Price</label>
+                <input class="form-control" type="number" step="0.01" min="0" placeholder="0.00" @bind="_price" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Currency</label>
+                <select class="form-control" @bind="_currency">
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="GBP">GBP</option>
+                    <option value="CAD">CAD</option>
+                    <option value="AUD">AUD</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Serving Size</label>
+                <input class="form-control" type="text" placeholder="e.g. 250g" @bind="_servingSize" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Serving Unit</label>
+                <input class="form-control" type="text" placeholder="e.g. oz, ml, piece" @bind="_servingUnit" />
+            </div>
+            <div class="form-group span-full">
+                <label class="form-label">Image URL</label>
+                <input class="form-control" type="url" placeholder="https://…" @bind="_imageUrl" />
+            </div>
+            <div class="form-group">
+                <label class="form-check">
+                    <input type="checkbox" @bind="_isAvailable" />
+                    Available on menu
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-check">
+                    <input type="checkbox" @bind="_isSeasonalItem" />
+                    Seasonal item
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+        <button class="btn btn-primary" disabled="@_isSaving" @onclick="Save">
+            @(_isSaving ? "Saving…" : (_isEdit ? "💾 Save Changes" : "🍴 Add to Menu"))
+        </button>
+        <button class="btn btn-secondary" @onclick="GoBack">Cancel</button>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid? RestaurantId { get; set; }
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private string? _errorMessage;
+
+    private string _name = string.Empty;
+    private string? _description;
+    private string? _category;
+    private decimal? _price;
+    private string _currency = "USD";
+    private string? _servingSize;
+    private string? _servingUnit;
+    private string? _imageUrl;
+    private bool _isAvailable = true;
+    private bool _isSeasonalItem;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var item = await MenuItemClient.GetMenuItemAsync(Id!.Value);
+                if (item != null)
+                {
+                    RestaurantId = item.RestaurantId;
+                    _name = item.Name;
+                    _description = item.Description;
+                    _category = item.Category;
+                    _price = item.Price;
+                    _currency = item.Currency;
+                    _servingSize = item.ServingSize;
+                    _servingUnit = item.ServingUnit;
+                    _imageUrl = item.ImageUrl;
+                    _isAvailable = item.IsAvailable;
+                    _isSeasonalItem = item.IsSeasonalItem;
+                }
+                else
+                {
+                    _errorMessage = "Menu item not found.";
+                }
+            }
+            catch (Exception ex)
+            {
+                _errorMessage = $"Failed to load menu item: {ex.Message}";
+            }
+        }
+        _isLoading = false;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _errorMessage = "Menu item name is required.";
+            return;
+        }
+
+        _isSaving = true;
+        _errorMessage = null;
+
+        try
+        {
+            if (_isEdit)
+            {
+                var success = await MenuItemClient.UpdateMenuItemAsync(Id!.Value, new UpdateMenuItemRequest
+                {
+                    Name = _name.Trim(),
+                    Description = _description,
+                    Category = _category,
+                    Price = _price,
+                    Currency = _currency,
+                    ServingSize = _servingSize,
+                    ServingUnit = _servingUnit,
+                    ImageUrl = _imageUrl,
+                    IsAvailable = _isAvailable,
+                    IsSeasonalItem = _isSeasonalItem
+                });
+                if (success) GoBack();
+                else _errorMessage = "Update failed. Please try again.";
+            }
+            else
+            {
+                if (!RestaurantId.HasValue)
+                {
+                    _errorMessage = "Restaurant context is missing.";
+                    return;
+                }
+                var newId = await MenuItemClient.CreateMenuItemAsync(new CreateMenuItemRequest
+                {
+                    RestaurantId = RestaurantId!.Value,
+                    Name = _name.Trim(),
+                    Description = _description,
+                    Category = _category,
+                    Price = _price,
+                    Currency = _currency,
+                    ServingSize = _servingSize,
+                    ServingUnit = _servingUnit,
+                    ImageUrl = _imageUrl,
+                    IsAvailable = _isAvailable,
+                    IsSeasonalItem = _isSeasonalItem
+                });
+                if (newId.HasValue) GoBack();
+                else _errorMessage = "Failed to create menu item. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        if (RestaurantId.HasValue) Nav.NavigateTo($"/restaurants/{RestaurantId.Value}");
+        else Nav.NavigateTo("/restaurants");
+    }
+}

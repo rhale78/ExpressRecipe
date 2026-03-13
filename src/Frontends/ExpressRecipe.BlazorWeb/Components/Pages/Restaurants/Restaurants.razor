@@ -1,0 +1,216 @@
+@page "/restaurants"
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Restaurant
+@inject IRestaurantApiClient RestaurantClient
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>Restaurants – ExpressRecipe</PageTitle>
+
+<div class="restaurants-header">
+    <h1>🍽️ Restaurants</h1>
+    <button class="btn btn-primary" @onclick="NavigateToCreate">+ Add Restaurant</button>
+</div>
+
+<div class="search-bar">
+    <input type="text"
+           class="search-input"
+           placeholder="Search by name…"
+           @bind="_searchTerm"
+           @bind:event="oninput"
+           @onkeydown="HandleSearchKeyPress" />
+    <input type="text"
+           class="search-input"
+           placeholder="Cuisine type…"
+           @bind="_cuisineFilter"
+           @bind:event="oninput" />
+    <input type="text"
+           class="search-input"
+           placeholder="City…"
+           @bind="_cityFilter"
+           @bind:event="oninput" />
+    <button class="btn btn-primary" @onclick="Search">🔍 Search</button>
+    <button class="btn btn-secondary" @onclick="ClearFilters">Clear</button>
+</div>
+
+@if (_isLoading)
+{
+    <div class="loading-spinner">⏳ Loading restaurants…</div>
+}
+else if (_errorMessage != null)
+{
+    <div class="error-message">@_errorMessage</div>
+}
+else if (!_restaurants.Any())
+{
+    <div class="empty-state">
+        <p>🍽️ No restaurants found.</p>
+        <button class="btn btn-primary" @onclick="NavigateToCreate">Add the First Restaurant</button>
+    </div>
+}
+else
+{
+    <div class="restaurants-grid">
+        @foreach (var r in _restaurants)
+        {
+            <div class="restaurant-card">
+                @if (!string.IsNullOrEmpty(r.ImageUrl))
+                {
+                    <img class="restaurant-card-image" src="@r.ImageUrl" alt="@r.Name" />
+                }
+                else
+                {
+                    <div class="restaurant-card-image-placeholder">🍽️</div>
+                }
+
+                <div class="restaurant-card-body">
+                    <h3 class="restaurant-card-title">@r.Name</h3>
+                    <div class="restaurant-card-meta">
+                        @if (!string.IsNullOrEmpty(r.CuisineType))
+                        {
+                            <span class="meta-tag">🍜 @r.CuisineType</span>
+                        }
+                        @if (!string.IsNullOrEmpty(r.PriceRange))
+                        {
+                            <span class="meta-tag">@r.PriceRange</span>
+                        }
+                        @if (!string.IsNullOrEmpty(r.City))
+                        {
+                            <span class="meta-tag">📍 @r.City@(!string.IsNullOrEmpty(r.State) ? ", " + r.State : "")</span>
+                        }
+                    </div>
+                    @if (r.AverageRating.HasValue && r.RatingCount > 0)
+                    {
+                        <span class="rating-badge">⭐ @r.AverageRating.Value.ToString("F1") (@r.RatingCount)</span>
+                    }
+                    <span class="approval-badge @r.ApprovalStatus.ToLower()">@r.ApprovalStatus</span>
+                </div>
+
+                <div class="restaurant-card-actions">
+                    <button class="btn btn-secondary btn-sm" @onclick="() => ViewRestaurant(r.Id)">View Menu</button>
+                    <button class="btn btn-secondary btn-sm" @onclick="() => EditRestaurant(r.Id)">✏️ Edit</button>
+                    <button class="btn btn-danger btn-sm" @onclick="() => ConfirmDelete(r)">🗑️</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="pagination">
+        <button class="btn btn-secondary btn-sm" disabled="@(_page <= 1)" @onclick="PrevPage">← Prev</button>
+        <span class="page-info">Page @_page</span>
+        <button class="btn btn-secondary btn-sm" disabled="@(_restaurants.Count < _pageSize)" @onclick="NextPage">Next →</button>
+    </div>
+}
+
+@if (_deletingRestaurant != null)
+{
+    <div class="confirm-overlay">
+        <div class="confirm-dialog">
+            <h4>Delete Restaurant?</h4>
+            <p>Are you sure you want to delete <strong>@_deletingRestaurant.Name</strong>? This action cannot be undone.</p>
+            <div class="confirm-dialog-actions">
+                <button class="btn btn-secondary" @onclick="CancelDelete">Cancel</button>
+                <button class="btn btn-danger" @onclick="DeleteConfirmed">Delete</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _isLoading = true;
+    private string? _errorMessage;
+    private List<RestaurantDto> _restaurants = new();
+    private string _searchTerm = string.Empty;
+    private string _cuisineFilter = string.Empty;
+    private string _cityFilter = string.Empty;
+    private int _page = 1;
+    private const int _pageSize = 20;
+    private RestaurantDto? _deletingRestaurant;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRestaurantsAsync();
+    }
+
+    private async Task LoadRestaurantsAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        try
+        {
+            var result = await RestaurantClient.SearchRestaurantsAsync(new RestaurantSearchRequest
+            {
+                SearchTerm = string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
+                CuisineType = string.IsNullOrWhiteSpace(_cuisineFilter) ? null : _cuisineFilter,
+                City = string.IsNullOrWhiteSpace(_cityFilter) ? null : _cityFilter,
+                PageNumber = _page,
+                PageSize = _pageSize
+            });
+            _restaurants = result?.Items ?? new();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load restaurants: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task Search()
+    {
+        _page = 1;
+        await LoadRestaurantsAsync();
+    }
+
+    private async Task ClearFilters()
+    {
+        _searchTerm = string.Empty;
+        _cuisineFilter = string.Empty;
+        _cityFilter = string.Empty;
+        _page = 1;
+        await LoadRestaurantsAsync();
+    }
+
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Search();
+    }
+
+    private async Task PrevPage()
+    {
+        if (_page > 1) { _page--; await LoadRestaurantsAsync(); }
+    }
+
+    private async Task NextPage()
+    {
+        _page++;
+        await LoadRestaurantsAsync();
+    }
+
+    private void ViewRestaurant(Guid id) => Nav.NavigateTo($"/restaurants/{id}");
+    private void EditRestaurant(Guid id) => Nav.NavigateTo($"/restaurants/{id}/edit");
+    private void NavigateToCreate() => Nav.NavigateTo("/restaurants/create");
+
+    private void ConfirmDelete(RestaurantDto restaurant) => _deletingRestaurant = restaurant;
+    private void CancelDelete() => _deletingRestaurant = null;
+
+    private async Task DeleteConfirmed()
+    {
+        if (_deletingRestaurant == null) return;
+        try
+        {
+            await RestaurantClient.DeleteRestaurantAsync(_deletingRestaurant.Id);
+            _restaurants.Remove(_deletingRestaurant);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Delete failed: {ex.Message}";
+        }
+        finally
+        {
+            _deletingRestaurant = null;
+        }
+    }
+}
