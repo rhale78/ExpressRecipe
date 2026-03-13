@@ -50,7 +50,7 @@ public class RestaurantApiClient : ApiClientBase, IRestaurantApiClient
 
         var items = await GetAsync<List<RestaurantDto>>($"/api/restaurants/search?{string.Join("&", qs)}");
         if (items == null) return null;
-        return new RestaurantSearchResult { Items = items, TotalCount = items.Count, PageNumber = request.PageNumber, PageSize = request.PageSize };
+        return new RestaurantSearchResult { Items = items, PageNumber = request.PageNumber, PageSize = request.PageSize };
     }
 
     public async Task<Guid?> CreateRestaurantAsync(CreateRestaurantRequest request)

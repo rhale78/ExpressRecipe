@@ -69,7 +69,7 @@ public class RecipesController : ControllerBase
     /// </summary>
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ActionResult<PagedResult<RecipeDto>>> SearchRecipes(
+    public async Task<ActionResult<RecipeSearchResult>> SearchRecipes(
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? category = null,
         [FromQuery] string? cuisine = null,
@@ -145,7 +145,13 @@ public class RecipesController : ControllerBase
                 _ => sortDescending ? recipes.OrderByDescending(r => r.CreatedAt).ToList() : recipes.OrderBy(r => r.CreatedAt).ToList()
             };
 
-            return Ok(new PagedResult<RecipeDto>(recipes, recipes.Count, page, pageSize));
+            return Ok(new RecipeSearchResult
+            {
+                Recipes = recipes,
+                TotalCount = recipes.Count,
+                Page = page,
+                PageSize = pageSize
+            });
         }
         catch (Exception ex)
         {

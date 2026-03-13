@@ -61,7 +61,7 @@ public class ProductsController : ControllerBase
     /// Search for products
     /// </summary>
     [HttpGet("search")]
-    public async Task<ActionResult<PagedResult<ProductDto>>> Search([FromQuery] ProductSearchRequest request)
+    public async Task<ActionResult<ProductSearchResult>> Search([FromQuery] ProductSearchRequest request)
     {
         try
         {
@@ -71,7 +71,15 @@ public class ProductsController : ControllerBase
 
             await Task.WhenAll(productsTask, countTask);
 
-            return Ok(new PagedResult<ProductDto>(await productsTask, await countTask, request.PageNumber, request.PageSize));
+            var result = new ProductSearchResult
+            {
+                Products = await productsTask,
+                TotalCount = await countTask,
+                Page = request.PageNumber,
+                PageSize = request.PageSize
+            };
+
+            return Ok(result);
         }
         catch (Exception ex)
         {

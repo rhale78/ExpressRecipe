@@ -95,14 +95,14 @@ public class AuthRepository : IAuthRepository
         {
             return await _cache.GetOrSetAsync(
                 $"{CachePrefix}id:{userId}",
-                async (ct) => await GetUserByIdFromDbAsync(userId),
+                async (ct) => await GetUserByIdFromDbAsync(userId, ct),
                 expiration: TimeSpan.FromMinutes(5));
         }
 
         return await GetUserByIdFromDbAsync(userId);
     }
 
-    private async Task<AuthUser?> GetUserByIdFromDbAsync(Guid userId)
+    private async Task<AuthUser?> GetUserByIdFromDbAsync(Guid userId, CancellationToken ct = default)
     {
         const string sql = @"
             SELECT Id, Email, PasswordHash, FirstName, LastName, EmailVerified, IsActive, CreatedAt, LastLoginAt
@@ -110,12 +110,12 @@ public class AuthRepository : IAuthRepository
             WHERE Id = @UserId AND IsDeleted = 0";
 
         await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(ct);
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
 
-        await using var reader = await command.ExecuteReaderAsync();
+        await using var reader = await command.ExecuteReaderAsync(ct);
         if (await reader.ReadAsync())
         {
             return new AuthUser

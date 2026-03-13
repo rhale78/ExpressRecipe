@@ -82,7 +82,8 @@ public partial class ShoppingRepository : IShoppingRepository
     public async Task<ShoppingListDto?> GetShoppingListAsync(Guid listId, Guid userId)
     {
         // Completed and archived lists are immutable — serve from cache if available.
-        var cacheKey = $"shopping:list:{listId}";
+        // Include userId in the key to prevent cross-user cache leakage.
+        var cacheKey = $"shopping:list:{userId}:{listId}";
         if (_cache is not null)
         {
             var cached = await _cache.GetAsync<ShoppingListDto>(cacheKey);

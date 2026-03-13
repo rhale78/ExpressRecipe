@@ -227,7 +227,7 @@ public class NotificationController : ControllerBase
             var paged = notifications.Skip((page - 1) * pageSize).Take(pageSize).ToList();
             var unreadCount = notifications.Count(n => !n.IsRead);
 
-            return Ok(new { Data = new PagedResult<NotificationDto>(paged, total, page, pageSize), UnreadCount = unreadCount });
+            return Ok(new { Notifications = paged, TotalCount = total, UnreadCount = unreadCount, Page = page, PageSize = pageSize });
         }
         catch (Exception ex)
         {

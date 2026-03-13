@@ -19,7 +19,6 @@ builder.AddExpressRecipeAuthentication();
 
 // Register cache (used for completed/archived shopping lists which are immutable)
 builder.AddHybridCache();
-builder.Services.AddSingleton<HybridCacheService>();
 
 // Register database connection
 var connectionString = builder.Configuration.GetConnectionString("shoppingdb")

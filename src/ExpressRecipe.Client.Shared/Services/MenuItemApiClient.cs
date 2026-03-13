@@ -43,7 +43,7 @@ public class MenuItemApiClient : ApiClientBase, IMenuItemApiClient
 
         var items = await GetAsync<List<MenuItemDto>>($"/api/menuitems/search?{string.Join("&", qs)}");
         if (items == null) return null;
-        return new MenuItemSearchResult { Items = items, TotalCount = items.Count, PageNumber = request.PageNumber, PageSize = request.PageSize };
+        return new MenuItemSearchResult { Items = items, PageNumber = request.PageNumber, PageSize = request.PageSize };
     }
 
     public async Task<Guid?> CreateMenuItemAsync(CreateMenuItemRequest request)
