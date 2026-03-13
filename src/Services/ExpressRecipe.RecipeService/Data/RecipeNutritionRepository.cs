@@ -46,6 +46,7 @@ public sealed class RecipeNutritionRepository : SqlHelper, IRecipeNutritionRepos
                     DietaryFiber: reader.IsDBNull(4) ? 0m : (decimal)reader[4],
                     Sodium: reader.IsDBNull(5) ? 0m : (decimal)reader[5]);
             },
+            ct,
             new SqlParameter("@RecipeId", recipeId));
 
         return rows.FirstOrDefault();

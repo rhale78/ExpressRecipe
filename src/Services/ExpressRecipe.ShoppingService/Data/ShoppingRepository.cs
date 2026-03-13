@@ -1,3 +1,4 @@
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.ShoppingService.Data;
@@ -7,12 +8,17 @@ public partial class ShoppingRepository : IShoppingRepository
     private readonly string _connectionString;
     private readonly ILogger<ShoppingRepository> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly HybridCacheService? _cache;
 
-    public ShoppingRepository(string connectionString, ILogger<ShoppingRepository> logger, IHttpClientFactory httpClientFactory)
+    // Cache completed/archived lists for 2 hours; they don't change.
+    private static readonly TimeSpan CompletedListCacheTtl = TimeSpan.FromHours(2);
+
+    public ShoppingRepository(string connectionString, ILogger<ShoppingRepository> logger, IHttpClientFactory httpClientFactory, HybridCacheService? cache = null)
     {
         _connectionString = connectionString;
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateShoppingListAsync(Guid userId, Guid? householdId, string name, string? description, string listType = "Standard", Guid? storeId = null)
@@ -75,9 +81,20 @@ public partial class ShoppingRepository : IShoppingRepository
 
     public async Task<ShoppingListDto?> GetShoppingListAsync(Guid listId, Guid userId)
     {
+        // Completed and archived lists are immutable — serve from cache if available.
+        // Include userId in the key to prevent cross-user cache leakage.
+        var cacheKey = $"shopping:list:{userId}:{listId}";
+        if (_cache is not null)
+        {
+            var cached = await _cache.GetAsync<ShoppingListDto>(cacheKey);
+            if (cached is not null)
+                return cached;
+        }
+
         const string sql = @"
             SELECT 
                 sl.Id, sl.UserId, sl.Name, sl.Description, sl.CreatedAt, sl.UpdatedAt,
+                ISNULL(sl.Status, 'Active') AS Status,
                 (SELECT COUNT(*) FROM ShoppingListItem WHERE ShoppingListId = sl.Id AND IsDeleted = 0) AS ItemCount,
                 (SELECT COUNT(*) FROM ShoppingListItem WHERE ShoppingListId = sl.Id AND IsChecked = 1 AND IsDeleted = 0) AS CheckedCount
             FROM ShoppingList sl
@@ -93,22 +110,28 @@ public partial class ShoppingRepository : IShoppingRepository
         command.Parameters.AddWithValue("@UserId", userId);
 
         await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            return new ShoppingListDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                Name = reader.GetString(2),
-                Description = reader.IsDBNull(3) ? null : reader.GetString(3),
-                CreatedAt = reader.GetDateTime(4),
-                UpdatedAt = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
-                ItemCount = reader.GetInt32(6),
-                CheckedCount = reader.GetInt32(7)
-            };
-        }
+        if (!await reader.ReadAsync())
+            return null;
 
-        return null;
+        var dto = new ShoppingListDto
+        {
+            Id = reader.GetGuid(0),
+            UserId = reader.GetGuid(1),
+            Name = reader.GetString(2),
+            Description = reader.IsDBNull(3) ? null : reader.GetString(3),
+            CreatedAt = reader.GetDateTime(4),
+            UpdatedAt = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+            Status = reader.GetString(6),
+            ItemCount = reader.GetInt32(7),
+            CheckedCount = reader.GetInt32(8)
+        };
+
+        // Cache completed and archived lists — their item content is final.
+        // Do NOT cache active lists; items are added/checked in real time.
+        if (_cache is not null && dto.Status is "Completed" or "Archived")
+            await _cache.SetAsync(cacheKey, dto, CompletedListCacheTtl);
+
+        return dto;
     }
 
     public async Task UpdateShoppingListAsync(Guid listId, string name, string? description, Guid? storeId = null)

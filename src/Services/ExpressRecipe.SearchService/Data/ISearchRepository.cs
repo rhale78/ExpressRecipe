@@ -28,6 +28,9 @@ public interface ISearchRepository
     Task<Guid> CreateRecommendationAsync(Guid userId, string entityType, Guid entityId, string reason, decimal score);
     Task<List<RecommendationDto>> GetUserRecommendationsAsync(Guid userId, string? entityType = null, int limit = 20);
     Task RefreshRecommendationsAsync(Guid userId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class SearchResultDto

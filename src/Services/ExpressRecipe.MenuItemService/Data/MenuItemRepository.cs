@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
@@ -28,12 +29,20 @@ public interface IMenuItemRepository
     Task<UserMenuItemRatingDto?> GetUserRatingAsync(Guid menuItemId, Guid userId);
     Task<Guid> AddOrUpdateRatingAsync(Guid menuItemId, Guid userId, RateMenuItemRequest request);
     Task<bool> DeleteRatingAsync(Guid menuItemId, Guid userId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class MenuItemRepository : SqlHelper, IMenuItemRepository
 {
-    public MenuItemRepository(string connectionString) : base(connectionString)
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "menuitem:";
+
+    public MenuItemRepository(string connectionString, HybridCacheService? cache = null)
+        : base(connectionString)
     {
+        _cache = cache;
     }
 
     public async Task<List<MenuItemDto>> SearchAsync(MenuItemSearchRequest request)
@@ -94,6 +103,19 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
     }
 
     public async Task<MenuItemDto?> GetByIdAsync(Guid id)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{id}",
+                async (ct) => await GetByIdFromDbAsync(id),
+                expiration: TimeSpan.FromHours(1));
+        }
+
+        return await GetByIdFromDbAsync(id);
+    }
+
+    private async Task<MenuItemDto?> GetByIdFromDbAsync(Guid id)
     {
         const string sql = @"
             SELECT mi.Id, mi.RestaurantId, mi.Name, mi.Description, mi.Category,
@@ -177,6 +199,9 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             CreateParameter("@IsSeasonalItem", request.IsSeasonalItem),
             CreateParameter("@UpdatedBy", updatedBy));
 
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
+
         return rowsAffected > 0;
     }
 
@@ -194,6 +219,9 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             sql,
             CreateParameter("@Id", id),
             CreateParameter("@DeletedBy", deletedBy));
+
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
 
         return rowsAffected > 0;
     }
@@ -565,5 +593,11 @@ public class MenuItemRepository : SqlHelper, IMenuItemRepository
             CreatedAt = GetNullableDateTime(reader, "CreatedAt") ?? DateTime.UtcNow,
             UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
         };
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = "DELETE FROM UserMenuItemRating WHERE UserId = @UserId;";
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

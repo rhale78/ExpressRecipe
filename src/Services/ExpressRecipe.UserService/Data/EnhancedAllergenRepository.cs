@@ -104,7 +104,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                    ua.Notes, ua.CreatedAt, ua.UpdatedAt
             FROM UserAllergen ua
             INNER JOIN Allergen a ON ua.AllergenId = a.Id
-            WHERE ua.UserId = @UserId
+            WHERE ua.UserId = @UserId AND ua.IsDeleted = 0
             ORDER BY ua.SeverityLevel DESC, a.Name";
 
         var allergens = await ExecuteReaderAsync(
@@ -147,7 +147,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                    ua.Notes, ua.CreatedAt, ua.UpdatedAt
             FROM UserAllergen ua
             INNER JOIN Allergen a ON ua.AllergenId = a.Id
-            WHERE ua.Id = @Id";
+            WHERE ua.Id = @Id AND ua.IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
             sql,
@@ -270,7 +270,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                    uia.LastReactionDate, uia.DiagnosedBy, uia.DiagnosisDate,
                    uia.Notes, uia.CreatedAt, uia.UpdatedAt
             FROM UserIngredientAllergy uia
-            WHERE uia.UserId = @UserId
+            WHERE uia.UserId = @UserId AND uia.IsDeleted = 0
             ORDER BY uia.SeverityLevel DESC, uia.IngredientName";
 
         var allergies = await ExecuteReaderAsync(
@@ -313,7 +313,7 @@ public class EnhancedAllergenRepository : SqlHelper, IEnhancedAllergenRepository
                    uia.LastReactionDate, uia.DiagnosedBy, uia.DiagnosisDate,
                    uia.Notes, uia.CreatedAt, uia.UpdatedAt
             FROM UserIngredientAllergy uia
-            WHERE uia.Id = @Id";
+            WHERE uia.Id = @Id AND uia.IsDeleted = 0";
 
         var results = await ExecuteReaderAsync(
             sql,

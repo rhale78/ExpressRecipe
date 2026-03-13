@@ -1,13 +1,19 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.ProfileService.Contracts.Requests;
 using ExpressRecipe.ProfileService.Contracts.Responses;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.ProfileService.Data;
 
 public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 {
-    public HouseholdMemberRepository(string connectionString) : base(connectionString)
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "member:";
+
+    public HouseholdMemberRepository(string connectionString, HybridCacheService? cache = null)
+        : base(connectionString)
     {
+        _cache = cache;
     }
 
     public async Task<List<HouseholdMemberDto>> GetByHouseholdIdAsync(Guid householdId, CancellationToken ct = default)
@@ -23,10 +29,25 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
         return await ExecuteReaderAsync(
             sql,
             MapDto,
+            ct,
             CreateParameter("@HouseholdId", householdId));
     }
 
     public async Task<HouseholdMemberDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{id}",
+                async (_ct) => await GetByIdFromDbAsync(id),
+                expiration: TimeSpan.FromMinutes(30),
+                cancellationToken: ct);
+        }
+
+        return await GetByIdFromDbAsync(id);
+    }
+
+    private async Task<HouseholdMemberDto?> GetByIdFromDbAsync(Guid id)
     {
         const string sql = @"
             SELECT Id, HouseholdId, MemberType, DisplayName, BirthYear,
@@ -59,6 +80,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@MemberType", request.MemberType),
@@ -84,11 +106,15 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@DisplayName", string.IsNullOrWhiteSpace(request.DisplayName) ? null : (object)request.DisplayName),
             CreateParameter("@BirthYear", request.BirthYear),
             CreateParameter("@HasUserAccount", request.HasUserAccount),
             CreateParameter("@UpdatedBy", updatedBy));
+
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{memberId}");
 
         return rowsAffected > 0;
     }
@@ -104,8 +130,12 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@UpdatedBy", deletedBy));
+
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{memberId}");
 
         return rowsAffected > 0;
     }
@@ -126,6 +156,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@DisplayName", request.DisplayName),
@@ -151,6 +182,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@HouseholdId", householdId),
             CreateParameter("@DisplayName", request.DisplayName),
@@ -171,7 +203,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
               AND GuestExpiresAt < GETUTCDATE()
               AND IsDeleted = 0";
 
-        return await ExecuteReaderAsync(sql, MapDto);
+        return await ExecuteReaderAsync(sql, MapDto, ct);
     }
 
     public async Task PurgeExpiredTemporaryVisitorsAsync(CancellationToken ct = default)
@@ -184,7 +216,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
               AND GuestExpiresAt < GETUTCDATE()
               AND IsDeleted = 0";
 
-        await ExecuteNonQueryAsync(sql);
+        await ExecuteNonQueryAsync(sql, ct);
     }
 
     public async Task<bool> UpdateMemberTypeAsync(Guid memberId, string memberType, Guid? sourceHouseholdId, CancellationToken ct = default)
@@ -198,6 +230,7 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", memberId),
             CreateParameter("@MemberType", memberType),
             CreateParameter("@SourceHouseholdId", sourceHouseholdId));
@@ -224,5 +257,37 @@ public class HouseholdMemberRepository : SqlHelper, IHouseholdMemberRepository
             SourceHouseholdId = GetGuidNullable(reader, "SourceHouseholdId"),
             CreatedAt         = GetDateTime(reader, "CreatedAt")
         };
+    }
+
+    public async Task<IReadOnlyList<Guid>> DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        // Find all member IDs linked to this user before updating
+        const string selectSql = @"
+SELECT Id FROM HouseholdMember
+WHERE LinkedUserId = @UserId AND IsDeleted = 0;";
+
+        List<Guid> memberIds = await ExecuteReaderAsync<Guid>(
+            selectSql,
+            reader => GetGuid(reader, "Id"),
+            ct,
+            CreateParameter("@UserId", userId));
+
+        if (memberIds.Count > 0)
+        {
+            // Soft-delete the member record so household data (name, type, etc.) is preserved
+            // for the household audit trail while the user's personal identifiers are cleared.
+            // LinkedUserId = NULL removes the PII link (GDPR Article 17 erasure of personal data);
+            // HasUserAccount = 0 prevents re-use of the slot; IsDeleted = 1 hides it from queries.
+            const string deleteSql = @"
+UPDATE HouseholdMember
+SET IsDeleted      = 1,
+    LinkedUserId   = NULL,
+    HasUserAccount = 0
+WHERE LinkedUserId = @UserId;";
+
+            await ExecuteNonQueryAsync(deleteSql, ct, CreateParameter("@UserId", userId));
+        }
+
+        return memberIds;
     }
 }

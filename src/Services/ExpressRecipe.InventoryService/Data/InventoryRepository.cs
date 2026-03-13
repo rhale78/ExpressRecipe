@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Net.Http.Json;
+using ExpressRecipe.Shared.Services;
 
 namespace ExpressRecipe.InventoryService.Data;
 
@@ -9,13 +10,16 @@ public partial class InventoryRepository : IInventoryRepository
     private readonly string _connectionString;
     private readonly ILogger<InventoryRepository> _logger;
     private readonly IHttpClientFactory? _httpClientFactory;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "inventory:";
 
     public InventoryRepository(string connectionString, ILogger<InventoryRepository> logger,
-        IHttpClientFactory? httpClientFactory = null)
+        IHttpClientFactory? httpClientFactory = null, HybridCacheService? cache = null)
     {
         _connectionString  = connectionString;
         _logger            = logger;
         _httpClientFactory = httpClientFactory;
+        _cache             = cache;
     }
 
     public async Task<Guid> AddInventoryItemAsync(Guid userId, Guid? productId, string? customName,

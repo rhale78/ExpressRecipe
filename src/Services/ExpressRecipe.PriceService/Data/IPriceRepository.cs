@@ -71,6 +71,9 @@ public interface IPriceRepository
     // Enhanced deals
     Task<Guid> CreateEnhancedDealAsync(CreateEnhancedDealRequest request, CancellationToken ct = default);
     Task<EffectivePriceDto> CalculateEffectivePriceAsync(Guid productId, Guid storeId, int quantity, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class StoreDto

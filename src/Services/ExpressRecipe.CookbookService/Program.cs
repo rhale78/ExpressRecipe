@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.CookbookService.Data;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -31,6 +32,18 @@ builder.Services.AddScoped<ICookbookRepository>(sp =>
     new CookbookRepository(connectionString));
 
 builder.Services.AddControllers();
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user cookbook data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.CookbookService.Services.GdprEventSubscriber>();
+}
 
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
 

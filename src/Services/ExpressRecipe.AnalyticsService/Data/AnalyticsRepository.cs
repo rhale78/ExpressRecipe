@@ -1,11 +1,19 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 using System.Text.Json;
 
 namespace ExpressRecipe.AnalyticsService.Data;
 
 public class AnalyticsRepository : SqlHelper, IAnalyticsRepository
 {
-    public AnalyticsRepository(string connectionString) : base(connectionString) { }
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "analytics:";
+
+    public AnalyticsRepository(string connectionString, HybridCacheService? cache = null)
+        : base(connectionString)
+    {
+        _cache = cache;
+    }
 
     // ── User Events ──────────────────────────────────────────────────────────
 
@@ -109,6 +117,13 @@ public class AnalyticsRepository : SqlHelper, IAnalyticsRepository
                 CreateParameter("@PeriodStart", periodStart),
                 CreateParameter("@PeriodEnd", periodEnd));
         }
+
+        // Evict summary cache for this user so next read reflects the new stats
+        if (_cache != null)
+        {
+            foreach (var period in new[] { "day", "week", "month", "year" })
+                await _cache.RemoveAsync($"{CachePrefix}summary:{userId}:{period}");
+        }
     }
 
     public async Task<List<UsageStatisticsDto>> GetUserUsageStatsAsync(Guid userId, DateTime startDate, DateTime endDate)
@@ -165,6 +180,20 @@ public class AnalyticsRepository : SqlHelper, IAnalyticsRepository
     }
 
     public async Task<UsageSummaryDto> GetUsageSummaryAsync(Guid userId, string period)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}summary:{userId}:{period}",
+                async (ct) => await GetUsageSummaryFromDbAsync(userId, period),
+                expiration: TimeSpan.FromMinutes(10))
+                ?? new UsageSummaryDto { UserId = userId, Period = period };
+        }
+
+        return await GetUsageSummaryFromDbAsync(userId, period);
+    }
+
+    private async Task<UsageSummaryDto> GetUsageSummaryFromDbAsync(Guid userId, string period)
     {
         var (start, end) = GetPeriodRange(period);
         const string sql = @"
@@ -405,4 +434,15 @@ public class AnalyticsRepository : SqlHelper, IAnalyticsRepository
         "year" => (DateTime.UtcNow.AddDays(-365), DateTime.UtcNow),
         _ => (DateTime.UtcNow.AddDays(-30), DateTime.UtcNow)
     };
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM PatternDetection  WHERE UserId = @UserId;
+DELETE FROM Insight           WHERE UserId = @UserId;
+DELETE FROM UsageStatistics   WHERE UserId = @UserId;
+DELETE FROM UserEvent         WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
+    }
 }

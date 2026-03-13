@@ -57,4 +57,7 @@ public interface ICookbookRepository
     Task<bool> IsOwnerAsync(Guid cookbookId, Guid userId);
     Task<bool> CanViewAsync(Guid cookbookId, Guid userId);
     Task<bool> CanEditAsync(Guid cookbookId, Guid userId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }

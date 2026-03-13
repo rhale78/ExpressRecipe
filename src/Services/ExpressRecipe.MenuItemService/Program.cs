@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.MenuItemService.Data;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
 using ExpressRecipe.Shared.Services;
 
@@ -21,10 +22,27 @@ builder.AddExpressRecipeAuthentication();
 var connectionString = builder.Configuration.GetConnectionString("menuitemdb")
     ?? throw new InvalidOperationException("Database connection string 'menuitemdb' not found");
 
-builder.Services.AddScoped<IMenuItemRepository>(sp => new MenuItemRepository(connectionString));
+builder.Services.AddScoped<IMenuItemRepository>(sp =>
+    new MenuItemRepository(connectionString, sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Add controllers
 builder.Services.AddControllers();
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user menu-item rating data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.MenuItemService.Services.GdprEventSubscriber>();
+}
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -47,6 +65,13 @@ app.MapDefaultEndpoints();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

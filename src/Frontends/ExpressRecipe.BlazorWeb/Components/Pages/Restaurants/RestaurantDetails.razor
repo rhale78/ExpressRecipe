@@ -1,0 +1,343 @@
+@page "/restaurants/{Id:guid}"
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Restaurant
+@using ExpressRecipe.Client.Shared.Models.MenuItem
+@inject IRestaurantApiClient RestaurantClient
+@inject IMenuItemApiClient MenuItemClient
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(_restaurant?.Name ?? "Restaurant") – ExpressRecipe</PageTitle>
+
+@if (_isLoading)
+{
+    <div class="loading-spinner">⏳ Loading restaurant…</div>
+}
+else if (_errorMessage != null)
+{
+    <div class="error-message">@_errorMessage</div>
+    <button class="btn btn-secondary" @onclick="GoBack">← Back</button>
+}
+else if (_restaurant != null)
+{
+    <!-- Hero -->
+    <div class="restaurant-hero">
+        @if (!string.IsNullOrEmpty(_restaurant.ImageUrl))
+        {
+            <img class="restaurant-hero-image" src="@_restaurant.ImageUrl" alt="@_restaurant.Name" />
+        }
+        else
+        {
+            <div class="restaurant-hero-placeholder">🍽️</div>
+        }
+        <div class="restaurant-hero-overlay">
+            <div class="restaurant-hero-title">@_restaurant.Name</div>
+            <div class="restaurant-hero-subtitle">
+                @if (!string.IsNullOrEmpty(_restaurant.CuisineType)) { <span>🍜 @_restaurant.CuisineType &nbsp;·&nbsp; </span> }
+                @if (!string.IsNullOrEmpty(_restaurant.PriceRange))  { <span>@_restaurant.PriceRange &nbsp;·&nbsp; </span> }
+                @if (_restaurant.AverageRating.HasValue && _restaurant.RatingCount > 0) { <span>⭐ @_restaurant.AverageRating.Value.ToString("F1") (@_restaurant.RatingCount ratings)</span> }
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions row -->
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem;">
+        <button class="btn btn-secondary" @onclick="GoBack">← Back</button>
+        <button class="btn btn-secondary" @onclick="NavigateToEdit">✏️ Edit</button>
+        @if (_restaurant.ApprovalStatus != "Approved")
+        {
+            <button class="btn btn-primary" @onclick="() => ApproveAsync(true)">✅ Approve</button>
+            <button class="btn btn-danger" @onclick="ShowRejectDialog">❌ Reject</button>
+        }
+        <span class="approval-badge @_restaurant.ApprovalStatus.ToLower()" style="align-self:center;">@_restaurant.ApprovalStatus</span>
+    </div>
+
+    <!-- Info grid -->
+    <div class="restaurant-info-grid">
+        @if (!string.IsNullOrEmpty(_restaurant.Address))
+        {
+            <div class="info-card">
+                <span class="info-card-label">Address</span>
+                <span class="info-card-value">@_restaurant.Address, @_restaurant.City @_restaurant.State @_restaurant.ZipCode</span>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(_restaurant.PhoneNumber))
+        {
+            <div class="info-card">
+                <span class="info-card-label">Phone</span>
+                <span class="info-card-value">@_restaurant.PhoneNumber</span>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(_restaurant.Website))
+        {
+            <div class="info-card">
+                <span class="info-card-label">Website</span>
+                <span class="info-card-value"><a href="@_restaurant.Website" target="_blank" rel="noopener">@_restaurant.Website</a></span>
+            </div>
+        }
+        @if (_restaurant.IsChain)
+        {
+            <div class="info-card">
+                <span class="info-card-label">Type</span>
+                <span class="info-card-value">🏢 Chain restaurant</span>
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_restaurant.Description))
+    {
+        <div class="form-section" style="margin-bottom:1.5rem;">
+            <p style="margin:0;color:#444;">@_restaurant.Description</p>
+        </div>
+    }
+
+    <!-- My Rating -->
+    <div class="form-section" style="margin-bottom:1.5rem;">
+        <h3 class="form-section-title">⭐ My Rating</h3>
+        <div class="rating-widget">
+            @for (int s = 1; s <= 5; s++)
+            {
+                var star = s;
+                <button class="star-btn @(star <= _myRating ? "filled" : "")"
+                        @onclick="() => SetRating(star)">★</button>
+            }
+        </div>
+        @if (_myRating > 0)
+        {
+            <div style="margin-top:.75rem;">
+                <textarea class="form-control" placeholder="Write a review (optional)…" rows="3"
+                          @bind="_myReview"></textarea>
+                <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+                    <button class="btn btn-primary btn-sm" @onclick="SubmitRating">Save Rating</button>
+                    @if (_hasExistingRating)
+                    {
+                        <button class="btn btn-danger btn-sm" @onclick="DeleteRating">Remove Rating</button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Menu Items -->
+    <div class="menu-section">
+        <div class="menu-section-header">
+            <h3>🧾 Menu</h3>
+            <div style="display:flex;gap:.5rem;align-items:center;">
+                <input type="text" class="search-input" style="max-width:200px;"
+                       placeholder="Search menu…"
+                       @bind="_menuSearch"
+                       @bind:event="oninput"
+                       @onkeypress="HandleMenuSearchKeyPress" />
+                <button class="btn btn-primary btn-sm" @onclick="AddMenuItem">+ Add Item</button>
+            </div>
+        </div>
+
+        @if (_menuLoading)
+        {
+            <div class="loading-spinner">⏳ Loading menu…</div>
+        }
+        else if (!_menuItems.Any())
+        {
+            <div class="empty-state">
+                <p>🍽️ No menu items yet.</p>
+                <button class="btn btn-primary btn-sm" @onclick="AddMenuItem">Add First Item</button>
+            </div>
+        }
+        else
+        {
+            <!-- Group by category -->
+            @foreach (var categoryGroup in MenuItemsByCategory)
+            {
+                <h4 style="margin:1.25rem 0 .75rem;font-size:1rem;color:#555;font-weight:700;border-bottom:1px solid #f0f0f0;padding-bottom:.4rem;">
+                    @(categoryGroup.Key ?? "Uncategorised")
+                </h4>
+                <div class="menu-items-grid">
+                    @foreach (var item in categoryGroup.Items)
+                    {
+                        <div class="menu-item-card">
+                            @if (!string.IsNullOrEmpty(item.ImageUrl))
+                            {
+                                <img class="menu-item-image" src="@item.ImageUrl" alt="@item.Name" />
+                            }
+                            else
+                            {
+                                <div class="menu-item-placeholder">🍴</div>
+                            }
+                            <div class="menu-item-body">
+                                <div class="menu-item-name">@item.Name</div>
+                                @if (!string.IsNullOrEmpty(item.Description))
+                                {
+                                    <div class="menu-item-description">@item.Description</div>
+                                }
+                                <div class="menu-item-footer">
+                                    @if (item.Price.HasValue)
+                                    {
+                                        <span class="menu-item-price">@item.Price.Value.ToString("C")</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.Category))
+                                    {
+                                        <span class="menu-item-category">@item.Category</span>
+                                    }
+                                    @if (!item.IsAvailable)
+                                    {
+                                        <span class="unavailable-tag">Unavailable</span>
+                                    }
+                                </div>
+                                @if (item.AverageRating.HasValue && item.RatingCount > 0)
+                                {
+                                    <span class="rating-badge" style="font-size:.8rem;">⭐ @item.AverageRating.Value.ToString("F1")</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+}
+
+@if (_showRejectDialog)
+{
+    <div class="confirm-overlay">
+        <div class="confirm-dialog">
+            <h4>Reject Restaurant</h4>
+            <p>Optionally provide a rejection reason:</p>
+            <textarea class="form-control" rows="3" @bind="_rejectionReason" placeholder="Reason (optional)…"></textarea>
+            <div class="confirm-dialog-actions" style="margin-top:1rem;">
+                <button class="btn btn-secondary" @onclick="() => _showRejectDialog = false">Cancel</button>
+                <button class="btn btn-danger" @onclick="() => ApproveAsync(false)">Reject</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool _isLoading = true;
+    private bool _menuLoading = true;
+    private string? _errorMessage;
+    private RestaurantDto? _restaurant;
+    private List<MenuItemDto> _menuItems = new();
+    private string _menuSearch = string.Empty;
+    private int _myRating;
+    private string _myReview = string.Empty;
+    private bool _hasExistingRating;
+    private bool _showRejectDialog;
+    private string? _rejectionReason;
+
+    private record CategoryGroup(string? Key, List<MenuItemDto> Items);
+
+    private List<CategoryGroup> MenuItemsByCategory =>
+        _menuItems
+            .Where(m => string.IsNullOrWhiteSpace(_menuSearch)
+                     || m.Name.Contains(_menuSearch, StringComparison.OrdinalIgnoreCase)
+                     || (m.Description?.Contains(_menuSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+            .GroupBy(m => m.Category)
+            .OrderBy(g => g.Key)
+            .Select(g => new CategoryGroup(g.Key, g.ToList()))
+            .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadRestaurantAsync(), LoadMenuAsync(), LoadMyRatingAsync());
+    }
+
+    private async Task LoadRestaurantAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _restaurant = await RestaurantClient.GetRestaurantAsync(Id);
+            if (_restaurant == null) _errorMessage = "Restaurant not found.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load restaurant: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task LoadMenuAsync()
+    {
+        _menuLoading = true;
+        try
+        {
+            var result = await MenuItemClient.SearchMenuItemsAsync(new MenuItemSearchRequest
+            {
+                RestaurantId = Id,
+                OnlyAvailable = null,
+                OnlyApproved = null,
+                PageSize = 200
+            });
+            _menuItems = result?.Items ?? new();
+        }
+        catch
+        {
+            _menuItems = new();
+        }
+        finally
+        {
+            _menuLoading = false;
+        }
+    }
+
+    private async Task LoadMyRatingAsync()
+    {
+        try
+        {
+            var rating = await RestaurantClient.GetMyRatingAsync(Id);
+            if (rating != null)
+            {
+                _myRating = rating.Rating;
+                _myReview = rating.Review ?? string.Empty;
+                _hasExistingRating = true;
+            }
+        }
+        catch { /* not rated yet */ }
+    }
+
+    private void SetRating(int star) => _myRating = _myRating == star ? 0 : star;
+
+    private async Task SubmitRating()
+    {
+        if (_myRating < 1) return;
+        await RestaurantClient.RateRestaurantAsync(Id, new RateRestaurantRequest
+        {
+            Rating = _myRating,
+            Review = string.IsNullOrWhiteSpace(_myReview) ? null : _myReview
+        });
+        _hasExistingRating = true;
+        await LoadRestaurantAsync();
+    }
+
+    private async Task DeleteRating()
+    {
+        await RestaurantClient.DeleteRatingAsync(Id);
+        _myRating = 0;
+        _myReview = string.Empty;
+        _hasExistingRating = false;
+        await LoadRestaurantAsync();
+    }
+
+    private void ShowRejectDialog() => _showRejectDialog = true;
+
+    private async Task ApproveAsync(bool approve)
+    {
+        _showRejectDialog = false;
+        await RestaurantClient.ApproveRestaurantAsync(Id, approve, approve ? null : _rejectionReason);
+        await LoadRestaurantAsync();
+    }
+
+    private async Task HandleMenuSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Task.CompletedTask;
+    }
+
+    private void AddMenuItem() => Nav.NavigateTo($"/restaurants/{Id}/menu-items/create");
+    private void GoBack() => Nav.NavigateTo("/restaurants");
+    private void NavigateToEdit() => Nav.NavigateTo($"/restaurants/{Id}/edit");
+}

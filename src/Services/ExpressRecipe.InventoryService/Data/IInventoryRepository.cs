@@ -125,6 +125,9 @@ public interface IInventoryRepository
 
     // Pantry discovery support
     Task<List<PantryIngredientItem>> GetPantryIngredientNamesAsync(Guid householdId, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class PantryIngredientItem

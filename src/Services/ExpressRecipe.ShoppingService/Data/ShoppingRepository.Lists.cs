@@ -28,7 +28,7 @@ public partial class ShoppingRepository
         return await ReadShoppingListsAsync(command);
     }
 
-    public async Task CompleteShoppingListAsync(Guid listId)
+    public async Task CompleteShoppingListAsync(Guid listId, Guid userId)
     {
         const string sql = @"
             UPDATE ShoppingList
@@ -42,10 +42,14 @@ public partial class ShoppingRepository
         command.Parameters.AddWithValue("@ListId", listId);
 
         await command.ExecuteNonQueryAsync();
+
+        if (_cache is not null)
+            await _cache.RemoveAsync($"shopping:list:{userId}:{listId}");
+
         _logger.LogInformation("Completed shopping list {ListId}", listId);
     }
 
-    public async Task ArchiveShoppingListAsync(Guid listId)
+    public async Task ArchiveShoppingListAsync(Guid listId, Guid userId)
     {
         const string sql = @"
             UPDATE ShoppingList
@@ -59,6 +63,10 @@ public partial class ShoppingRepository
         command.Parameters.AddWithValue("@ListId", listId);
 
         await command.ExecuteNonQueryAsync();
+
+        if (_cache is not null)
+            await _cache.RemoveAsync($"shopping:list:{userId}:{listId}");
+
         _logger.LogInformation("Archived shopping list {ListId}", listId);
     }
 

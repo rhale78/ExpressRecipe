@@ -87,11 +87,6 @@ builder.Services.AddHttpClient<ISubscriptionApiClient, SubscriptionApiClient>(cl
     client.BaseAddress = new Uri("http://userservice");
 });
 
-builder.Services.AddHttpClient<IAllergyApiClient, AllergyApiClient>(client =>
-{
-    client.BaseAddress = new Uri("http://userservice");
-});
-
 builder.Services.AddScoped<SubscriptionStateService>();
 
 // Ad service — disabled when ADS_DISABLED=true or AdSense:PublisherId is not set.
@@ -199,6 +194,26 @@ builder.Services.AddHttpClient<ISyncApiClient, SyncApiClient>(client =>
 builder.Services.AddHttpClient<ICookbookApiClient, CookbookApiClient>(client =>
 {
     client.BaseAddress = new Uri("http://cookbookservice");
+});
+
+builder.Services.AddHttpClient<IRestaurantApiClient, RestaurantApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://restaurantservice");
+});
+
+builder.Services.AddHttpClient<IMenuItemApiClient, MenuItemApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://menuitemservice");
+});
+
+builder.Services.AddHttpClient<IPreferencesApiClient, PreferencesApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://preferencesservice");
+});
+
+builder.Services.AddHttpClient<ISafeForkApiClient, SafeForkApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://safeforkservice");
 });
 
 // Register local storage services

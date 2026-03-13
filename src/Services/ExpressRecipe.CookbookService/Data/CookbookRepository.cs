@@ -883,4 +883,15 @@ public class CookbookRepository : SqlHelper, ICookbookRepository
         SectionCount = reader.GetInt32(reader.GetOrdinal("SectionCount")),
         IsUserFavorite = reader.GetBoolean(reader.GetOrdinal("IsUserFavorite"))
     };
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM CookbookRecipe   WHERE CookbookId IN (SELECT Id FROM Cookbook WHERE UserId = @UserId);
+DELETE FROM CookbookSection  WHERE CookbookId IN (SELECT Id FROM Cookbook WHERE UserId = @UserId);
+DELETE FROM CookbookShare    WHERE UserId = @UserId OR SharedWithUserId = @UserId;
+DELETE FROM Cookbook         WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
+    }
 }

@@ -1,0 +1,248 @@
+@page "/restaurants/create"
+@page "/restaurants/{Id:guid}/edit"
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Restaurant
+@inject IRestaurantApiClient RestaurantClient
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<PageTitle>@(_isEdit ? "Edit Restaurant" : "Add Restaurant") – ExpressRecipe</PageTitle>
+
+<div class="restaurants-header">
+    <h1>@(_isEdit ? "✏️ Edit Restaurant" : "🍽️ Add Restaurant")</h1>
+    <button class="btn btn-secondary" @onclick="GoBack">← Back</button>
+</div>
+
+@if (_isLoading)
+{
+    <div class="loading-spinner">⏳ Loading…</div>
+}
+else
+{
+    @if (_errorMessage != null)
+    {
+        <div class="error-message">@_errorMessage</div>
+    }
+
+    <!-- Basic info -->
+    <div class="form-section">
+        <h3 class="form-section-title">Basic Information</h3>
+        <div class="form-grid">
+            <div class="form-group span-full">
+                <label class="form-label">Name *</label>
+                <input class="form-control" type="text" placeholder="Restaurant name" @bind="_name" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Brand / Chain Name</label>
+                <input class="form-control" type="text" placeholder="e.g. McDonald's" @bind="_brand" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Cuisine Type</label>
+                <input class="form-control" type="text" placeholder="e.g. Italian, Mexican" @bind="_cuisineType" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Price Range</label>
+                <select class="form-control" @bind="_priceRange">
+                    <option value="">Select…</option>
+                    <option value="$">$ (Under $10)</option>
+                    <option value="$$">$$ ($10–$25)</option>
+                    <option value="$$$">$$$ ($25–$50)</option>
+                    <option value="$$$$">$$$$ (Over $50)</option>
+                </select>
+            </div>
+            <div class="form-group span-full">
+                <label class="form-label">Description</label>
+                <textarea class="form-control" placeholder="Brief description…" rows="3" @bind="_description"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Phone Number</label>
+                <input class="form-control" type="tel" placeholder="+1 (555) 000-0000" @bind="_phoneNumber" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Website</label>
+                <input class="form-control" type="url" placeholder="https://…" @bind="_website" />
+            </div>
+            <div class="form-group span-full">
+                <label class="form-label">Image URL</label>
+                <input class="form-control" type="url" placeholder="https://…" @bind="_imageUrl" />
+            </div>
+            <div class="form-group">
+                <label class="form-check">
+                    <input type="checkbox" @bind="_isChain" />
+                    Chain restaurant
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Address -->
+    <div class="form-section">
+        <h3 class="form-section-title">Address</h3>
+        <div class="form-grid">
+            <div class="form-group span-full">
+                <label class="form-label">Street Address</label>
+                <input class="form-control" type="text" placeholder="123 Main St" @bind="_address" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">City</label>
+                <input class="form-control" type="text" placeholder="City" @bind="_city" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">State / Province</label>
+                <input class="form-control" type="text" placeholder="State" @bind="_state" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">ZIP / Postal Code</label>
+                <input class="form-control" type="text" placeholder="ZIP" @bind="_zipCode" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Country</label>
+                <input class="form-control" type="text" placeholder="USA" @bind="_country" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+        <button class="btn btn-primary" disabled="@_isSaving" @onclick="Save">
+            @(_isSaving ? "Saving…" : (_isEdit ? "💾 Save Changes" : "🍽️ Add Restaurant"))
+        </button>
+        <button class="btn btn-secondary" @onclick="GoBack">Cancel</button>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private string? _errorMessage;
+
+    // Form fields
+    private string _name = string.Empty;
+    private string? _brand;
+    private string? _cuisineType;
+    private string? _priceRange;
+    private string? _description;
+    private string? _phoneNumber;
+    private string? _website;
+    private string? _imageUrl;
+    private bool _isChain;
+    private string? _address;
+    private string? _city;
+    private string? _state;
+    private string? _zipCode;
+    private string? _country;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_isEdit)
+        {
+            try
+            {
+                var restaurant = await RestaurantClient.GetRestaurantAsync(Id!.Value);
+                if (restaurant != null)
+                {
+                    _name = restaurant.Name;
+                    _brand = restaurant.Brand;
+                    _cuisineType = restaurant.CuisineType;
+                    _priceRange = restaurant.PriceRange;
+                    _description = restaurant.Description;
+                    _phoneNumber = restaurant.PhoneNumber;
+                    _website = restaurant.Website;
+                    _imageUrl = restaurant.ImageUrl;
+                    _isChain = restaurant.IsChain;
+                    _address = restaurant.Address;
+                    _city = restaurant.City;
+                    _state = restaurant.State;
+                    _zipCode = restaurant.ZipCode;
+                    _country = restaurant.Country;
+                }
+                else
+                {
+                    _errorMessage = "Restaurant not found.";
+                }
+            }
+            catch (Exception ex)
+            {
+                _errorMessage = $"Failed to load restaurant: {ex.Message}";
+            }
+        }
+        _isLoading = false;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _errorMessage = "Restaurant name is required.";
+            return;
+        }
+
+        _isSaving = true;
+        _errorMessage = null;
+
+        try
+        {
+            if (_isEdit)
+            {
+                var success = await RestaurantClient.UpdateRestaurantAsync(Id!.Value, new UpdateRestaurantRequest
+                {
+                    Name = _name.Trim(),
+                    Brand = _brand,
+                    CuisineType = _cuisineType,
+                    PriceRange = _priceRange,
+                    Description = _description,
+                    PhoneNumber = _phoneNumber,
+                    Website = _website,
+                    ImageUrl = _imageUrl,
+                    IsChain = _isChain,
+                    Address = _address,
+                    City = _city,
+                    State = _state,
+                    ZipCode = _zipCode,
+                    Country = _country
+                });
+                if (success) Nav.NavigateTo($"/restaurants/{Id!.Value}");
+                else _errorMessage = "Update failed. Please try again.";
+            }
+            else
+            {
+                var newId = await RestaurantClient.CreateRestaurantAsync(new CreateRestaurantRequest
+                {
+                    Name = _name.Trim(),
+                    Brand = _brand,
+                    CuisineType = _cuisineType,
+                    PriceRange = _priceRange,
+                    Description = _description,
+                    PhoneNumber = _phoneNumber,
+                    Website = _website,
+                    ImageUrl = _imageUrl,
+                    IsChain = _isChain,
+                    Address = _address,
+                    City = _city,
+                    State = _state,
+                    ZipCode = _zipCode,
+                    Country = _country
+                });
+                if (newId.HasValue) Nav.NavigateTo($"/restaurants/{newId.Value}");
+                else _errorMessage = "Failed to create restaurant. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        if (_isEdit) Nav.NavigateTo($"/restaurants/{Id!.Value}");
+        else Nav.NavigateTo("/restaurants");
+    }
+}

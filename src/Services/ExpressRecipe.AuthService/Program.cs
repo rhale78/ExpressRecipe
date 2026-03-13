@@ -1,7 +1,9 @@
 using ExpressRecipe.AuthService.Data;
 using ExpressRecipe.AuthService.Services;
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -28,7 +30,11 @@ var connectionString = builder.Configuration.GetConnectionString("authdb")
     ?? throw new InvalidOperationException("Database connection string 'authdb' not found");
 
 builder.Services.AddScoped<IAuthRepository>(sp =>
-    new AuthRepository(connectionString, sp.GetRequiredService<ILogger<AuthRepository>>()));
+    new AuthRepository(connectionString, sp.GetRequiredService<ILogger<AuthRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Register services
 builder.Services.AddScoped<TokenService>();
@@ -66,6 +72,18 @@ builder.Services.AddControllers()
 
 // Add CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
+
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user auth tokens on gdpr.user.delete events
+    builder.Services.AddHostedService<GdprEventSubscriber>();
+}
 
 var app = builder.Build();
 
@@ -108,6 +126,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -145,12 +145,10 @@ public class MealPlanningRepository : IMealPlanningRepository
         return (Guid)(await command.ExecuteScalarAsync(ct))!;
     }
 
-    private static readonly string EmptyGuidStr = Guid.Empty.ToString();
-
     public async Task<List<PlannedMealDto>> GetPlannedMealsAsync(Guid mealPlanId, DateTime? startDate, DateTime? endDate, CancellationToken ct = default)
     {
-        string sql = $@"
-            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
+        string sql = @"
+            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, @EmptyGuid), pm.RecipeId,
                    '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt,
                    ISNULL(pm.CookedStatus, 'Pending') AS CookedStatus, pm.CookedAt, pm.CookedByTimerId
             FROM PlannedMeal pm
@@ -168,6 +166,7 @@ public class MealPlanningRepository : IMealPlanningRepository
 
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@MealPlanId", mealPlanId);
+        command.Parameters.AddWithValue("@EmptyGuid", Guid.Empty);
         if (startDate.HasValue)
             command.Parameters.AddWithValue("@StartDate", startDate.Value);
         if (endDate.HasValue)
@@ -185,8 +184,8 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task<PlannedMealDto?> GetPlannedMealByIdAsync(Guid mealId, CancellationToken ct = default)
     {
-        string sql = $@"
-            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
+        const string sql = @"
+            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, @EmptyGuid), pm.RecipeId,
                    '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt,
                    ISNULL(pm.CookedStatus, 'Pending') AS CookedStatus, pm.CookedAt, pm.CookedByTimerId
             FROM PlannedMeal pm
@@ -197,6 +196,7 @@ public class MealPlanningRepository : IMealPlanningRepository
 
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@Id", mealId);
+        command.Parameters.AddWithValue("@EmptyGuid", Guid.Empty);
 
         await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
         if (await reader.ReadAsync(ct))
@@ -209,8 +209,8 @@ public class MealPlanningRepository : IMealPlanningRepository
 
     public async Task<List<PlannedMealDto>> GetMealsByDateAsync(Guid planId, DateOnly date, CancellationToken ct = default)
     {
-        string sql = $@"
-            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, '{EmptyGuidStr}'), pm.RecipeId,
+        const string sql = @"
+            SELECT pm.Id, pm.MealPlanId, ISNULL(pm.UserId, @EmptyGuid), pm.RecipeId,
                    '' AS RecipeName, pm.PlannedDate, pm.MealType, ISNULL(pm.Servings, 1), pm.IsCompleted, pm.CompletedAt,
                    ISNULL(pm.CookedStatus, 'Pending') AS CookedStatus, pm.CookedAt, pm.CookedByTimerId
             FROM PlannedMeal pm
@@ -223,6 +223,7 @@ public class MealPlanningRepository : IMealPlanningRepository
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@PlanId", planId);
         command.Parameters.AddWithValue("@Date", date.ToDateTime(TimeOnly.MinValue));
+        command.Parameters.AddWithValue("@EmptyGuid", Guid.Empty);
 
         List<PlannedMealDto> meals = new();
         await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
@@ -978,4 +979,18 @@ public class MealPlanningRepository : IMealPlanningRepository
             CreatedAt = reader.GetDateTime(7),
             TemplateJson = reader.IsDBNull(8) ? string.Empty : reader.GetString(8)
         };
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM CookingHistory WHERE UserId = @UserId;
+DELETE FROM PlannedMeal    WHERE UserId = @UserId;
+DELETE FROM MealPlan       WHERE UserId = @UserId;";
+
+        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using SqlCommand command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync(ct);
+    }
 }

@@ -106,7 +106,6 @@ builder.Services.AddHttpClient<PriceScraperService>();
 builder.Services.AddHttpClient<GoogleShoppingApiClient>();
 
 // Register new external price API clients (all disabled by default via config)
-builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<KrogerApiClient>();
 builder.Services.AddHttpClient<FlippApiClient>();
 builder.Services.AddHttpClient<FoodLionApiClient>();
@@ -171,6 +170,9 @@ if (messagingEnabled)
     // Subscribe to PriceDropEvents and forward work-queue items to MealPlanningService
     builder.Services.AddHostedService<PriceDropQueueSubscriber>();
 
+    // GDPR: hard-delete user price data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.PriceService.Services.GdprEventSubscriber>();
+
     // Register the price-processing saga workflow
     builder.Services.AddSqlSagaRepository<PriceProcessingSagaState>(connectionString, "PriceProcessingSagaState");
     builder.Services.AddSagaWorkflow(PriceProcessingWorkflow.Build());
@@ -224,6 +226,13 @@ app.MapDefaultEndpoints(); // Aspire health checks
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

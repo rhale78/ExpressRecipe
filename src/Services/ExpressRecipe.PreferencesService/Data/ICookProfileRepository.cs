@@ -15,4 +15,7 @@ public interface ICookProfileRepository
     Task<List<TechniqueComfortDto>> GetAllTechniqueComfortsAsync(Guid memberId, CancellationToken ct = default);
     Task InitializeCookProfileAsync(Guid memberId, CancellationToken ct = default);
     Task SoftDeleteCookProfileAsync(Guid memberId, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteMemberDataAsync(Guid memberId, CancellationToken ct = default);
 }

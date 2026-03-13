@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Services\ExpressRecipe.ProfileService\ExpressRecipe.ProfileService.csproj" />
+    <ProjectReference Include="..\..\Messaging\ExpressRecipe.Messaging.Core\ExpressRecipe.Messaging.Core.csproj" />
   </ItemGroup>
 
 </Project>

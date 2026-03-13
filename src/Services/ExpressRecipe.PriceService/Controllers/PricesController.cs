@@ -1,6 +1,7 @@
 using ExpressRecipe.PriceService.Data;
 using ExpressRecipe.PriceService.Services;
 using ExpressRecipe.PriceService.Workers;
+using ExpressRecipe.Shared.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -37,7 +38,7 @@ public class PricesController : ControllerBase
     {
         var prices = await _repository.SearchPricesAsync(request);
         var total = await _repository.GetSearchCountAsync(request);
-        return Ok(new { data = prices, total, page = request.Page, pageSize = request.PageSize });
+        return Ok(new PagedResult<ProductPriceDto>(prices, total, request.Page, request.PageSize));
     }
 
     /// <summary>POST /api/prices/search — Search prices with filters (body-based)</summary>
@@ -47,7 +48,7 @@ public class PricesController : ControllerBase
     {
         var prices = await _repository.SearchPricesAsync(request);
         var total = await _repository.GetSearchCountAsync(request);
-        return Ok(new { data = prices, total, page = request.Page, pageSize = request.PageSize });
+        return Ok(new PagedResult<ProductPriceDto>(prices, total, request.Page, request.PageSize));
     }
 
     /// <summary>GET /api/prices/product/{productId} — Get prices for a specific product</summary>

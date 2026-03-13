@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using ExpressRecipe.NotificationService.Data;
+using ExpressRecipe.Shared.Models;
 
 namespace ExpressRecipe.NotificationService.Controllers;
 

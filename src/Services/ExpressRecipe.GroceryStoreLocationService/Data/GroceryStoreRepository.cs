@@ -339,7 +339,7 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
         // 1. Match by GersId
         if (!string.IsNullOrWhiteSpace(request.GersId))
         {
-            const string sql = "SELECT Id FROM GroceryStore WHERE GersId = @GersId";
+            const string sql = "SELECT Id FROM GroceryStore WHERE GersId = @GersId AND IsActive = 1";
             var id = await ExecuteScalarAsync<Guid?>(sql, new SqlParameter("@GersId", request.GersId));
             if (id.HasValue) return id;
         }
@@ -347,7 +347,7 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
         // 2. Match by OsmId
         if (request.OsmId.HasValue)
         {
-            const string sql = "SELECT Id FROM GroceryStore WHERE OsmId = @OsmId";
+            const string sql = "SELECT Id FROM GroceryStore WHERE OsmId = @OsmId AND IsActive = 1";
             var id = await ExecuteScalarAsync<Guid?>(sql, new SqlParameter("@OsmId", request.OsmId.Value));
             if (id.HasValue) return id;
         }
@@ -355,7 +355,7 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
         // 3. Match by ExternalId + DataSource
         if (!string.IsNullOrWhiteSpace(request.ExternalId) && !string.IsNullOrWhiteSpace(request.DataSource))
         {
-            const string sql = "SELECT Id FROM GroceryStore WHERE ExternalId = @ExternalId AND DataSource = @DataSource";
+            const string sql = "SELECT Id FROM GroceryStore WHERE ExternalId = @ExternalId AND DataSource = @DataSource AND IsActive = 1";
             var id = await ExecuteScalarAsync<Guid?>(sql,
                 new SqlParameter("@ExternalId", request.ExternalId),
                 new SqlParameter("@DataSource", request.DataSource));
@@ -365,7 +365,7 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
         // 4. Match by Address + ZipCode (cross-source dedup)
         if (!string.IsNullOrWhiteSpace(request.Address) && !string.IsNullOrWhiteSpace(request.ZipCode))
         {
-            const string sql = "SELECT TOP 1 Id FROM GroceryStore WHERE Address = @Address AND ZipCode = @ZipCode";
+            const string sql = "SELECT TOP 1 Id FROM GroceryStore WHERE Address = @Address AND ZipCode = @ZipCode AND IsActive = 1";
             var id = await ExecuteScalarAsync<Guid?>(sql,
                 new SqlParameter("@Address", request.Address),
                 new SqlParameter("@ZipCode", request.ZipCode));
@@ -410,6 +410,9 @@ public class GroceryStoreRepository : SqlHelper, IGroceryStoreRepository
         var parameters = BuildUpsertParameters(request);
         parameters.Add(new SqlParameter("@Id", id));
         await ExecuteNonQueryAsync(sql, parameters.ToArray());
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
     }
 
     private async Task<Guid> InsertNewStoreAsync(UpsertGroceryStoreRequest request)

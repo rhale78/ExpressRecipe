@@ -1,4 +1,5 @@
 using ExpressRecipe.AuthService.Models;
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
 
 namespace ExpressRecipe.AuthService.Data;
@@ -14,17 +15,23 @@ public interface IAuthRepository
     Task RevokeRefreshTokenAsync(string token);
     Task RevokeAllUserTokensAsync(Guid userId);
     Task<bool> EnsureAdminUserExistsAsync();
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class AuthRepository : IAuthRepository
 {
     private readonly string _connectionString;
     private readonly ILogger<AuthRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "auth:user:";
 
-    public AuthRepository(string connectionString, ILogger<AuthRepository> logger)
+    public AuthRepository(string connectionString, ILogger<AuthRepository> logger, HybridCacheService? cache = null)
     {
         _connectionString = connectionString;
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateUserAsync(string email, string passwordHash, string firstName, string lastName)
@@ -84,18 +91,31 @@ public class AuthRepository : IAuthRepository
 
     public async Task<AuthUser?> GetUserByIdAsync(Guid userId)
     {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{userId}",
+                async (ct) => await GetUserByIdFromDbAsync(userId, ct),
+                expiration: TimeSpan.FromMinutes(5));
+        }
+
+        return await GetUserByIdFromDbAsync(userId);
+    }
+
+    private async Task<AuthUser?> GetUserByIdFromDbAsync(Guid userId, CancellationToken ct = default)
+    {
         const string sql = @"
             SELECT Id, Email, PasswordHash, FirstName, LastName, EmailVerified, IsActive, CreatedAt, LastLoginAt
             FROM [User]
             WHERE Id = @UserId AND IsDeleted = 0";
 
         await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(ct);
 
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.AddWithValue("@UserId", userId);
 
-        await using var reader = await command.ExecuteReaderAsync();
+        await using var reader = await command.ExecuteReaderAsync(ct);
         if (await reader.ReadAsync())
         {
             return new AuthUser
@@ -126,6 +146,9 @@ public class AuthRepository : IAuthRepository
         command.Parameters.AddWithValue("@UserId", userId);
 
         await command.ExecuteNonQueryAsync();
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{userId}");
     }
 
     public async Task<Guid> CreateRefreshTokenAsync(Guid userId, string token, DateTime expiresAt)
@@ -299,5 +322,22 @@ public class AuthRepository : IAuthRepository
 
         await freshInsertCommand.ExecuteNonQueryAsync();
         return true;
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM ExternalCalendarToken WHERE UserId = @UserId;
+DELETE FROM ExternalLogin          WHERE UserId = @UserId;
+DELETE FROM RefreshToken           WHERE UserId = @UserId;";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(ct);
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@UserId", userId);
+        await command.ExecuteNonQueryAsync(ct);
+
+        if (_cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{userId}");
     }
 }

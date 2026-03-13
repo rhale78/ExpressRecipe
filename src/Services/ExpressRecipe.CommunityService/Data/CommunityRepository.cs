@@ -1,17 +1,20 @@
-using Microsoft.Data.SqlClient;
+using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 using System.Text.Json;
 
 namespace ExpressRecipe.CommunityService.Data;
 
-public class CommunityRepository : ICommunityRepository
+public class CommunityRepository : SqlHelper, ICommunityRepository
 {
-    private readonly string _connectionString;
     private readonly ILogger<CommunityRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "community:";
 
-    public CommunityRepository(string connectionString, ILogger<CommunityRepository> logger)
+    public CommunityRepository(string connectionString, ILogger<CommunityRepository> logger, HybridCacheService? cache = null)
+        : base(connectionString)
     {
-        _connectionString = connectionString;
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateContributionAsync(Guid userId, string contributionType, Guid? recipeId, Guid? productId, string? content, int points)
@@ -21,18 +24,22 @@ public class CommunityRepository : ICommunityRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @ContributionType, @RecipeId, @ProductId, @Content, @Points, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        Guid result = (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@ContributionType", contributionType),
+            CreateParameter("@RecipeId", recipeId ?? (object)DBNull.Value),
+            CreateParameter("@ProductId", productId ?? (object)DBNull.Value),
+            CreateParameter("@Content", content ?? (object)DBNull.Value),
+            CreateParameter("@Points", points)))!;
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@ContributionType", contributionType);
-        command.Parameters.AddWithValue("@RecipeId", recipeId ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@ProductId", productId ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Content", content ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Points", points);
+        // Evict all leaderboard period variants since a new contribution changes rankings
+        if (_cache != null)
+        {
+            foreach (var period in new[] { "day", "week", "month", "year" })
+                await _cache.RemoveAsync($"{CachePrefix}leaderboard:{period}:100");
+        }
 
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return result;
     }
 
     public async Task<List<UserContributionDto>> GetUserContributionsAsync(Guid userId, int limit = 50)
@@ -43,34 +50,36 @@ public class CommunityRepository : ICommunityRepository
             WHERE UserId = @UserId
             ORDER BY CreatedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        var contributions = new List<UserContributionDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<UserContributionDto>(sql, reader => new UserContributionDto
         {
-            contributions.Add(new UserContributionDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                ContributionType = reader.GetString(2),
-                RecipeId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
-                ProductId = reader.IsDBNull(4) ? null : reader.GetGuid(4),
-                Content = reader.IsDBNull(5) ? null : reader.GetString(5),
-                Points = reader.GetInt32(6),
-                CreatedAt = reader.GetDateTime(7)
-            });
-        }
-
-        return contributions;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            ContributionType = GetString(reader, "ContributionType")!,
+            RecipeId = GetGuidNullable(reader, "RecipeId"),
+            ProductId = GetGuidNullable(reader, "ProductId"),
+            Content = GetString(reader, "Content"),
+            Points = GetInt32(reader, "Points"),
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        },
+        CreateParameter("@UserId", userId),
+        CreateParameter("@Limit", limit));
     }
 
     public async Task<LeaderboardDto> GetLeaderboardAsync(string period, int limit = 100)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}leaderboard:{period}:{limit}",
+                async (ct) => await GetLeaderboardFromDbAsync(period, limit),
+                expiration: TimeSpan.FromMinutes(5))
+                ?? new LeaderboardDto { Period = period, Entries = new() };
+        }
+
+        return await GetLeaderboardFromDbAsync(period, limit);
+    }
+
+    private async Task<LeaderboardDto> GetLeaderboardFromDbAsync(string period, int limit)
     {
         var startDate = period.ToLower() switch
         {
@@ -93,26 +102,16 @@ public class CommunityRepository : ICommunityRepository
             GROUP BY UserId
             ORDER BY TotalPoints DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-        command.Parameters.AddWithValue("@StartDate", startDate);
-
-        var entries = new List<LeaderboardEntry>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        var entries = await ExecuteReaderAsync<LeaderboardEntry>(sql, reader => new LeaderboardEntry
         {
-            entries.Add(new LeaderboardEntry
-            {
-                UserId = reader.GetGuid(0),
-                Username = reader.GetString(1),
-                TotalPoints = reader.GetInt32(2),
-                Contributions = reader.GetInt32(3),
-                Rank = (int)reader.GetInt64(4)
-            });
-        }
+            UserId = GetGuid(reader, "UserId"),
+            Username = GetString(reader, "Username")!,
+            TotalPoints = GetInt32(reader, "TotalPoints"),
+            Contributions = GetInt32(reader, "Contributions"),
+            Rank = (int)reader.GetInt64(reader.GetOrdinal("Rank"))
+        },
+        CreateParameter("@Limit", limit),
+        CreateParameter("@StartDate", startDate));
 
         return new LeaderboardDto { Period = period, Entries = entries };
     }
@@ -120,14 +119,7 @@ public class CommunityRepository : ICommunityRepository
     public async Task<int> GetUserPointsAsync(Guid userId)
     {
         const string sql = "SELECT ISNULL(SUM(Points), 0) FROM UserContribution WHERE UserId = @UserId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        return (int)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<int>(sql, CreateParameter("@UserId", userId)))!;
     }
 
     public async Task<Guid> SubmitProductAsync(Guid userId, string name, string? brand, string? barcode, string? category, byte[]? photo, string? ingredientsText)
@@ -137,19 +129,14 @@ public class CommunityRepository : ICommunityRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @Name, @Brand, @Barcode, @Category, @Photo, @IngredientsText, 'Pending', GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Name", name);
-        command.Parameters.AddWithValue("@Brand", brand ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Barcode", barcode ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Category", category ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Photo", photo ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@IngredientsText", ingredientsText ?? (object)DBNull.Value);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Name", name),
+            CreateParameter("@Brand", brand ?? (object)DBNull.Value),
+            CreateParameter("@Barcode", barcode ?? (object)DBNull.Value),
+            CreateParameter("@Category", category ?? (object)DBNull.Value),
+            CreateParameter("@Photo", photo ?? (object)DBNull.Value),
+            CreateParameter("@IngredientsText", ingredientsText ?? (object)DBNull.Value)))!;
     }
 
     public async Task<List<ProductSubmissionDto>> GetPendingSubmissionsAsync(int limit = 50)
@@ -160,13 +147,7 @@ public class CommunityRepository : ICommunityRepository
             WHERE Status = 'Pending'
             ORDER BY SubmittedAt ASC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        return await ReadProductSubmissions(command);
+        return await ReadProductSubmissionsAsync(sql, CreateParameter("@Limit", limit));
     }
 
     public async Task<List<ProductSubmissionDto>> GetUserSubmissionsAsync(Guid userId)
@@ -177,13 +158,7 @@ public class CommunityRepository : ICommunityRepository
             WHERE UserId = @UserId
             ORDER BY SubmittedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        return await ReadProductSubmissions(command);
+        return await ReadProductSubmissionsAsync(sql, CreateParameter("@UserId", userId));
     }
 
     public async Task ApproveSubmissionAsync(Guid submissionId, Guid approvedBy, Guid createdProductId)
@@ -193,15 +168,10 @@ public class CommunityRepository : ICommunityRepository
             SET Status = 'Approved', ApprovedBy = @ApprovedBy, CreatedProductId = @CreatedProductId, ProcessedAt = GETUTCDATE()
             WHERE Id = @SubmissionId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@SubmissionId", submissionId);
-        command.Parameters.AddWithValue("@ApprovedBy", approvedBy);
-        command.Parameters.AddWithValue("@CreatedProductId", createdProductId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@SubmissionId", submissionId),
+            CreateParameter("@ApprovedBy", approvedBy),
+            CreateParameter("@CreatedProductId", createdProductId));
     }
 
     public async Task RejectSubmissionAsync(Guid submissionId, Guid rejectedBy, string reason)
@@ -211,15 +181,10 @@ public class CommunityRepository : ICommunityRepository
             SET Status = 'Rejected', RejectedBy = @RejectedBy, RejectionReason = @Reason, ProcessedAt = GETUTCDATE()
             WHERE Id = @SubmissionId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@SubmissionId", submissionId);
-        command.Parameters.AddWithValue("@RejectedBy", rejectedBy);
-        command.Parameters.AddWithValue("@Reason", reason);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@SubmissionId", submissionId),
+            CreateParameter("@RejectedBy", rejectedBy),
+            CreateParameter("@Reason", reason));
     }
 
     public async Task<Guid> CreateReportAsync(Guid userId, string entityType, Guid entityId, string reportType, string reason, string? details)
@@ -229,18 +194,13 @@ public class CommunityRepository : ICommunityRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @EntityType, @EntityId, @ReportType, @Reason, @Details, 'Pending', GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-        command.Parameters.AddWithValue("@ReportType", reportType);
-        command.Parameters.AddWithValue("@Reason", reason);
-        command.Parameters.AddWithValue("@Details", details ?? (object)DBNull.Value);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId),
+            CreateParameter("@ReportType", reportType),
+            CreateParameter("@Reason", reason),
+            CreateParameter("@Details", details ?? (object)DBNull.Value)))!;
     }
 
     public async Task<List<UserReportDto>> GetPendingReportsAsync(int limit = 50)
@@ -251,13 +211,7 @@ public class CommunityRepository : ICommunityRepository
             WHERE Status = 'Pending'
             ORDER BY ReportedAt ASC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        return await ReadUserReports(command);
+        return await ReadUserReportsAsync(sql, CreateParameter("@Limit", limit));
     }
 
     public async Task<List<UserReportDto>> GetEntityReportsAsync(string entityType, Guid entityId)
@@ -268,14 +222,9 @@ public class CommunityRepository : ICommunityRepository
             WHERE EntityType = @EntityType AND EntityId = @EntityId
             ORDER BY ReportedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-
-        return await ReadUserReports(command);
+        return await ReadUserReportsAsync(sql,
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId));
     }
 
     public async Task ResolveReportAsync(Guid reportId, Guid resolvedBy, string resolution, string? notes)
@@ -285,16 +234,11 @@ public class CommunityRepository : ICommunityRepository
             SET Status = 'Resolved', ResolvedBy = @ResolvedBy, Resolution = @Resolution, Notes = @Notes, ResolvedAt = GETUTCDATE()
             WHERE Id = @ReportId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ReportId", reportId);
-        command.Parameters.AddWithValue("@ResolvedBy", resolvedBy);
-        command.Parameters.AddWithValue("@Resolution", resolution);
-        command.Parameters.AddWithValue("@Notes", notes ?? (object)DBNull.Value);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@ReportId", reportId),
+            CreateParameter("@ResolvedBy", resolvedBy),
+            CreateParameter("@Resolution", resolution),
+            CreateParameter("@Notes", notes ?? (object)DBNull.Value));
     }
 
     public async Task<Guid> CreateReviewAsync(Guid userId, string entityType, Guid entityId, int rating, string? comment, bool isVerifiedPurchase)
@@ -304,18 +248,13 @@ public class CommunityRepository : ICommunityRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @EntityType, @EntityId, @Rating, @Comment, @IsVerifiedPurchase, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-        command.Parameters.AddWithValue("@Rating", rating);
-        command.Parameters.AddWithValue("@Comment", comment ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@IsVerifiedPurchase", isVerifiedPurchase);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId),
+            CreateParameter("@Rating", rating),
+            CreateParameter("@Comment", comment ?? (object)DBNull.Value),
+            CreateParameter("@IsVerifiedPurchase", isVerifiedPurchase)))!;
     }
 
     public async Task<List<CommunityReviewDto>> GetEntityReviewsAsync(string entityType, Guid entityId, int limit = 50)
@@ -326,15 +265,10 @@ public class CommunityRepository : ICommunityRepository
             WHERE EntityType = @EntityType AND EntityId = @EntityId AND IsDeleted = 0
             ORDER BY HelpfulVotes DESC, CreatedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-
-        return await ReadCommunityReviews(command);
+        return await ReadCommunityReviewsAsync(sql,
+            CreateParameter("@Limit", limit),
+            CreateParameter("@EntityType", entityType),
+            CreateParameter("@EntityId", entityId));
     }
 
     public async Task<List<CommunityReviewDto>> GetUserReviewsAsync(Guid userId)
@@ -345,13 +279,7 @@ public class CommunityRepository : ICommunityRepository
             WHERE UserId = @UserId AND IsDeleted = 0
             ORDER BY CreatedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        return await ReadCommunityReviews(command);
+        return await ReadCommunityReviewsAsync(sql, CreateParameter("@UserId", userId));
     }
 
     public async Task<ReviewSummaryDto> GetReviewSummaryAsync(string entityType, Guid entityId)
@@ -368,52 +296,35 @@ public class CommunityRepository : ICommunityRepository
             FROM CommunityReview
             WHERE EntityType = @EntityType AND EntityId = @EntityId AND IsDeleted = 0";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@EntityType", entityType);
-        command.Parameters.AddWithValue("@EntityId", entityId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
+        var results = await ExecuteReaderAsync<ReviewSummaryDto>(sql, reader => new ReviewSummaryDto
         {
-            return new ReviewSummaryDto
+            EntityType = entityType,
+            EntityId = entityId,
+            TotalReviews = GetInt32(reader, "TotalReviews"),
+            AverageRating = GetNullableDecimal(reader, "AverageRating") ?? 0,
+            RatingDistribution = new Dictionary<int, int>
             {
-                EntityType = entityType,
-                EntityId = entityId,
-                TotalReviews = reader.GetInt32(0),
-                AverageRating = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1),
-                RatingDistribution = new Dictionary<int, int>
-                {
-                    [1] = reader.GetInt32(2),
-                    [2] = reader.GetInt32(3),
-                    [3] = reader.GetInt32(4),
-                    [4] = reader.GetInt32(5),
-                    [5] = reader.GetInt32(6)
-                }
-            };
-        }
+                [1] = GetInt32(reader, "Rating1"),
+                [2] = GetInt32(reader, "Rating2"),
+                [3] = GetInt32(reader, "Rating3"),
+                [4] = GetInt32(reader, "Rating4"),
+                [5] = GetInt32(reader, "Rating5")
+            }
+        },
+        CreateParameter("@EntityType", entityType),
+        CreateParameter("@EntityId", entityId));
 
-        return new ReviewSummaryDto { EntityType = entityType, EntityId = entityId };
+        return results.FirstOrDefault() ?? new ReviewSummaryDto { EntityType = entityType, EntityId = entityId };
     }
 
     public async Task DeleteReviewAsync(Guid reviewId)
     {
         const string sql = "UPDATE CommunityReview SET IsDeleted = 1 WHERE Id = @ReviewId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ReviewId", reviewId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@ReviewId", reviewId));
     }
 
     public async Task<bool> VoteReviewAsync(Guid reviewId, Guid userId, bool isHelpful)
     {
-        // Insert a per-user vote record. If the unique constraint fires, the user has already voted → no-op.
         const string insertVoteSql = @"
             INSERT INTO ReviewVote (Id, ReviewId, UserId, IsHelpful, VotedAt)
             SELECT NEWID(), @ReviewId, @UserId, @IsHelpful, GETUTCDATE()
@@ -421,30 +332,19 @@ public class CommunityRepository : ICommunityRepository
                 SELECT 1 FROM ReviewVote WHERE ReviewId = @ReviewId AND UserId = @UserId
             )";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var rowsInserted = await ExecuteNonQueryAsync(insertVoteSql,
+            CreateParameter("@ReviewId", reviewId),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@IsHelpful", isHelpful));
 
-        await using var insertCmd = new SqlCommand(insertVoteSql, connection);
-        insertCmd.Parameters.AddWithValue("@ReviewId", reviewId);
-        insertCmd.Parameters.AddWithValue("@UserId", userId);
-        insertCmd.Parameters.AddWithValue("@IsHelpful", isHelpful);
-
-        var rowsInserted = await insertCmd.ExecuteNonQueryAsync();
         if (rowsInserted == 0)
-        {
-            // User already voted — no-op
             return false;
-        }
 
-        // First vote: atomically increment the appropriate counter
         var incrementSql = isHelpful
             ? "UPDATE CommunityReview SET HelpfulVotes = HelpfulVotes + 1 WHERE Id = @ReviewId"
             : "UPDATE CommunityReview SET UnhelpfulVotes = UnhelpfulVotes + 1 WHERE Id = @ReviewId";
 
-        await using var updateCmd = new SqlCommand(incrementSql, connection);
-        updateCmd.Parameters.AddWithValue("@ReviewId", reviewId);
-        await updateCmd.ExecuteNonQueryAsync();
-
+        await ExecuteNonQueryAsync(incrementSql, CreateParameter("@ReviewId", reviewId));
         return true;
     }
 
@@ -455,14 +355,8 @@ public class CommunityRepository : ICommunityRepository
             FROM ProductSubmission
             WHERE Id = @SubmissionId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@SubmissionId", submissionId);
-
-        var result = await command.ExecuteScalarAsync();
-        return result is Guid g ? g : null;
+        var result = await ExecuteScalarAsync<Guid?>(sql, ct, CreateParameter("@SubmissionId", submissionId));
+        return result;
     }
 
     public async Task<(Guid ReviewOwnerId, int HelpfulCount)?> GetReviewHelpfulInfoAsync(Guid reviewId)
@@ -472,92 +366,83 @@ public class CommunityRepository : ICommunityRepository
             FROM CommunityReview
             WHERE Id = @ReviewId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
+        var results = await ExecuteReaderAsync<(Guid, int)>(sql,
+            reader => (GetGuid(reader, "UserId"), GetInt32(reader, "HelpfulVotes")),
+            CreateParameter("@ReviewId", reviewId));
 
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ReviewId", reviewId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            return (reader.GetGuid(0), reader.GetInt32(1));
-        }
-
-        return null;
+        if (results.Count == 0) return null;
+        return results[0];
     }
 
-    private async Task<List<ProductSubmissionDto>> ReadProductSubmissions(SqlCommand command)
+    private Task<List<ProductSubmissionDto>> ReadProductSubmissionsAsync(string sql, params System.Data.Common.DbParameter[] parameters)
     {
-        var submissions = new List<ProductSubmissionDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return ExecuteReaderAsync<ProductSubmissionDto>(sql, reader => new ProductSubmissionDto
         {
-            submissions.Add(new ProductSubmissionDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                Name = reader.GetString(2),
-                Brand = reader.IsDBNull(3) ? null : reader.GetString(3),
-                Barcode = reader.IsDBNull(4) ? null : reader.GetString(4),
-                Category = reader.IsDBNull(5) ? null : reader.GetString(5),
-                Photo = reader.IsDBNull(6) ? null : (byte[])reader[6],
-                IngredientsText = reader.IsDBNull(7) ? null : reader.GetString(7),
-                Status = reader.GetString(8),
-                ApprovedBy = reader.IsDBNull(9) ? null : reader.GetGuid(9),
-                CreatedProductId = reader.IsDBNull(10) ? null : reader.GetGuid(10),
-                RejectionReason = reader.IsDBNull(11) ? null : reader.GetString(11),
-                SubmittedAt = reader.GetDateTime(12)
-            });
-        }
-        return submissions;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            Name = GetString(reader, "Name")!,
+            Brand = GetString(reader, "Brand"),
+            Barcode = GetString(reader, "Barcode"),
+            Category = GetString(reader, "Category"),
+            Photo = reader.IsDBNull(reader.GetOrdinal("Photo")) ? null : (byte[])reader["Photo"],
+            IngredientsText = GetString(reader, "IngredientsText"),
+            Status = GetString(reader, "Status")!,
+            ApprovedBy = GetGuidNullable(reader, "ApprovedBy"),
+            CreatedProductId = GetGuidNullable(reader, "CreatedProductId"),
+            RejectionReason = GetString(reader, "RejectionReason"),
+            SubmittedAt = GetDateTime(reader, "SubmittedAt")
+        }, parameters);
     }
 
-    private async Task<List<UserReportDto>> ReadUserReports(SqlCommand command)
+    private Task<List<UserReportDto>> ReadUserReportsAsync(string sql, params System.Data.Common.DbParameter[] parameters)
     {
-        var reports = new List<UserReportDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return ExecuteReaderAsync<UserReportDto>(sql, reader => new UserReportDto
         {
-            reports.Add(new UserReportDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                EntityType = reader.GetString(2),
-                EntityId = reader.GetGuid(3),
-                ReportType = reader.GetString(4),
-                Reason = reader.GetString(5),
-                Details = reader.IsDBNull(6) ? null : reader.GetString(6),
-                Status = reader.GetString(7),
-                ResolvedBy = reader.IsDBNull(8) ? null : reader.GetGuid(8),
-                Resolution = reader.IsDBNull(9) ? null : reader.GetString(9),
-                ReportedAt = reader.GetDateTime(10),
-                ResolvedAt = reader.IsDBNull(11) ? null : reader.GetDateTime(11)
-            });
-        }
-        return reports;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            EntityType = GetString(reader, "EntityType")!,
+            EntityId = GetGuid(reader, "EntityId"),
+            ReportType = GetString(reader, "ReportType")!,
+            Reason = GetString(reader, "Reason")!,
+            Details = GetString(reader, "Details"),
+            Status = GetString(reader, "Status")!,
+            ResolvedBy = GetGuidNullable(reader, "ResolvedBy"),
+            Resolution = GetString(reader, "Resolution"),
+            ReportedAt = GetDateTime(reader, "ReportedAt"),
+            ResolvedAt = GetNullableDateTime(reader, "ResolvedAt")
+        }, parameters);
     }
 
-    private async Task<List<CommunityReviewDto>> ReadCommunityReviews(SqlCommand command)
+    private Task<List<CommunityReviewDto>> ReadCommunityReviewsAsync(string sql, params System.Data.Common.DbParameter[] parameters)
     {
-        var reviews = new List<CommunityReviewDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return ExecuteReaderAsync<CommunityReviewDto>(sql, reader => new CommunityReviewDto
         {
-            reviews.Add(new CommunityReviewDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                EntityType = reader.GetString(2),
-                EntityId = reader.GetGuid(3),
-                Rating = reader.GetInt32(4),
-                Comment = reader.IsDBNull(5) ? null : reader.GetString(5),
-                IsVerifiedPurchase = reader.GetBoolean(6),
-                HelpfulVotes = reader.GetInt32(7),
-                UnhelpfulVotes = reader.GetInt32(8),
-                CreatedAt = reader.GetDateTime(9)
-            });
-        }
-        return reviews;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            EntityType = GetString(reader, "EntityType")!,
+            EntityId = GetGuid(reader, "EntityId"),
+            Rating = GetInt32(reader, "Rating"),
+            Comment = GetString(reader, "Comment"),
+            IsVerifiedPurchase = GetBoolean(reader, "IsVerifiedPurchase"),
+            HelpfulVotes = GetInt32(reader, "HelpfulVotes"),
+            UnhelpfulVotes = GetInt32(reader, "UnhelpfulVotes"),
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        }, parameters);
+    }
+
+    /// <summary>
+    /// GDPR Right to be Forgotten: anonymises the user's identity in community records while
+    /// preserving contribution data for database integrity. UserId is zeroed to Guid.Empty,
+    /// product-submission photos are cleared, and review comment text is replaced.
+    /// </summary>
+    public async Task AnonymizeUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = @"
+UPDATE UserContribution  SET UserId = '00000000-0000-0000-0000-000000000000' WHERE UserId = @UserId;
+UPDATE ProductSubmission SET UserId = '00000000-0000-0000-0000-000000000000', Photo = NULL WHERE UserId = @UserId;
+UPDATE CommunityReview   SET UserId = '00000000-0000-0000-0000-000000000000', Comment = '[deleted]' WHERE UserId = @UserId;
+DELETE FROM UserReport   WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, CreateParameter("@UserId", userId));
     }
 }

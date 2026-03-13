@@ -3,6 +3,7 @@ using ExpressRecipe.RecipeService.Data;
 using ExpressRecipe.RecipeService.CQRS.Commands;
 using ExpressRecipe.RecipeService.CQRS.Queries;
 using ExpressRecipe.RecipeService.Services;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -51,6 +52,16 @@ public class RecipesController : ControllerBase
             return null;
         }
         return userId;
+    }
+
+    // Evict cached recipe-with-ingredients summary lists for the most common limit values.
+    // The cache key is recipes:with-ingredients:{limit}; since any recipe mutation can affect
+    // any cached list, we evict the limits callers are most likely to request.
+    private async Task EvictIngredientSummaryCacheAsync()
+    {
+        if (_cache is null) return;
+        foreach (var limit in new[] { 50, 100, 200, 500, 1000 })
+            await _cache.RemoveAsync($"recipes:with-ingredients:{limit}");
     }
 
     /// <summary>
@@ -354,6 +365,10 @@ public class RecipesController : ControllerBase
             await _events.PublishUpdatedAsync(id, request.Name, request.Category, request.Cuisine,
                 userId.Value, changedFields);
 
+            // Evict the with-ingredients summary cache for common limit values
+            if (_cache is not null)
+                await EvictIngredientSummaryCacheAsync();
+
             return NoContent();
         }
         catch (Exception ex)
@@ -394,6 +409,10 @@ public class RecipesController : ControllerBase
             _logger.LogInformation("Recipe {RecipeId} deleted by user {UserId}", id, userId.Value);
 
             await _events.PublishDeletedAsync(id, userId.Value);
+
+            // Evict the with-ingredients summary cache for common limit values
+            if (_cache is not null)
+                await EvictIngredientSummaryCacheAsync();
 
             return NoContent();
         }
@@ -817,14 +836,6 @@ public class RecipesController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while retrieving recipes" });
         }
     }
-}
-
-public class RecipeSearchResult
-{
-    public List<RecipeDto> Recipes { get; set; } = new();
-    public int TotalCount { get; set; }
-    public int Page { get; set; }
-    public int PageSize { get; set; }
 }
 
 /// <summary>

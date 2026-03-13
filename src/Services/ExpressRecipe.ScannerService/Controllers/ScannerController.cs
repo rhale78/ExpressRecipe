@@ -42,7 +42,9 @@ public class ScannerController : ControllerBase
         List<ScanAlertDto> alerts = new();
         if (request.WasRecognized && !string.IsNullOrEmpty(request.ProductId))
         {
-            alerts = await _repository.CheckAllergensAsync(userId.Value, Guid.Parse(request.ProductId));
+            if (!Guid.TryParse(request.ProductId, out var productGuid))
+                return BadRequest(new { message = "Invalid product ID format." });
+            alerts = await _repository.CheckAllergensAsync(userId.Value, productGuid);
         }
 
         return Ok(new { scanId, alerts });

@@ -49,15 +49,26 @@ public class HybridCacheService
     }
 
     /// <summary>
-    /// Gets a value from cache if it exists.
+    /// Gets a value from cache if it exists; returns <c>default(T)</c> on a miss.
+    /// <para>
+    /// .NET 9 <see cref="HybridCache"/> does not expose a standalone "get-without-create" API,
+    /// so this method calls <see cref="HybridCache.GetOrCreateAsync{T}"/> with a factory that
+    /// returns <c>default(T)</c> and a 1-second TTL so that a cache miss never poisons the cache
+    /// for longer than one second. For write-through scenarios prefer
+    /// <see cref="GetOrSetAsync{T}"/> which inlines the data-source call in the factory.
+    /// </para>
     /// </summary>
     public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
     {
-        // HybridCache.GetAsync might be missing in some preview versions, 
-        // we can use GetOrCreateAsync with a factory that returns default
+        // Short TTL so that a cache-miss null never blocks the real value for a full hour.
         return await _cache.GetOrCreateAsync<T>(
             key,
             ct => ValueTask.FromResult(default(T)!),
+            new HybridCacheEntryOptions
+            {
+                Expiration = TimeSpan.FromSeconds(1),
+                LocalCacheExpiration = TimeSpan.FromSeconds(1)
+            },
             cancellationToken: cancellationToken);
     }
 

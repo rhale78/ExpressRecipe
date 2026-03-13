@@ -3,6 +3,7 @@ using ExpressRecipe.ProductService.Data;
 using ExpressRecipe.ProductService.Logging;
 using ExpressRecipe.ProductService.Services;
 using ExpressRecipe.Shared.Messages;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

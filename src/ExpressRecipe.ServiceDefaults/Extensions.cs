@@ -3,9 +3,9 @@ using ExpressRecipe.Shared.Services.FeatureGates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http.Resilience;
@@ -151,18 +151,22 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Adds hybrid caching infrastructure with both in-memory (L1) and distributed/Redis (L2) cache.
-    /// Services should call AddRedisClient("cache") separately for distributed cache connection.
-    /// Then register HybridCacheService from ExpressRecipe.Shared.Services.
+    /// Adds .NET 9 <see cref="Microsoft.Extensions.Caching.Hybrid.HybridCache"/> (L1 in-memory
+    /// + optional L2 distributed/Redis) and the shared <see cref="ExpressRecipe.Shared.Services.HybridCacheService"/>
+    /// wrapper. Safe to call even after <see cref="AddServiceDefaults"/> — all registrations are
+    /// idempotent or guarded with <c>TryAdd</c>.
     /// </summary>
     public static IHostApplicationBuilder AddHybridCache(this IHostApplicationBuilder builder)
     {
-        // Add in-memory cache (L1)
-        builder.Services.AddMemoryCache();
+        // Register the .NET 9 HybridCache engine (L1 in-memory + optional L2 distributed).
+        // AddHybridCache() already calls AddMemoryCache() internally.
+#pragma warning disable EXTEXP0018
+        builder.Services.AddHybridCache();
+#pragma warning restore EXTEXP0018
 
-        // Note: Services should call builder.AddRedisClient("cache") separately
-        // Then add distributed cache interface
-        builder.Services.AddDistributedMemoryCache(); // Fallback if Redis not available
+        // Register the shared HybridCacheService wrapper only if not already present
+        // (AddServiceDefaults also registers it).
+        builder.Services.TryAddSingleton<ExpressRecipe.Shared.Services.HybridCacheService>();
 
         return builder;
     }
@@ -222,9 +226,6 @@ public static class Extensions
     public static IHostApplicationBuilder AddFeatureGateServices(
         this IHostApplicationBuilder builder)
     {
-        // In-process cache for flag results (shared across all IFeatureFlagService calls)
-        builder.Services.AddMemoryCache();
-
         // LocalModeConfig reads the "LocalMode" config key (default false)
         builder.Services.AddSingleton<ILocalModeConfig>(sp =>
             new LocalModeConfig(sp.GetRequiredService<IConfiguration>()));

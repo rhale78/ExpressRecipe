@@ -151,6 +151,9 @@ if (messagingEnabled)
     builder.Services.AddScoped<ProductQueryHandler>();
     builder.Services.AddHostedService<ProductQuerySubscriber>();
 
+    // GDPR: hard-delete user product data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.ProductService.Services.GdprEventSubscriber>();
+
     // Replace REST ingredient client with messaging-based client (last registration wins)
     builder.Services.AddScoped<IIngredientServiceClient>(sp =>
         new MessagingIngredientServiceClient(

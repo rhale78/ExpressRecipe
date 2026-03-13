@@ -1,6 +1,8 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.SearchService.Data;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,17 +21,26 @@ var connectionString = builder.Configuration.GetConnectionString("searchdb")
 
 // Register repositories
 builder.Services.AddScoped<ISearchRepository>(sp =>
-    new SearchRepository(connectionString, sp.GetRequiredService<ILogger<SearchRepository>>()));
+    new SearchRepository(connectionString, sp.GetRequiredService<ILogger<SearchRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Add controllers
 builder.Services.AddControllers();
 
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.SearchService API", Version = "v1" });
-// });
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user search data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.SearchService.Services.GdprEventSubscriber>();
+}
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -59,6 +70,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

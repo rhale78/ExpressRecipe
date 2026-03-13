@@ -9,8 +9,8 @@ public interface IShoppingRepository
     Task<ShoppingListDto?> GetShoppingListAsync(Guid listId, Guid userId);
     Task UpdateShoppingListAsync(Guid listId, string name, string? description, Guid? storeId = null);
     Task DeleteShoppingListAsync(Guid listId, Guid userId);
-    Task CompleteShoppingListAsync(Guid listId);
-    Task ArchiveShoppingListAsync(Guid listId);
+    Task CompleteShoppingListAsync(Guid listId, Guid userId);
+    Task ArchiveShoppingListAsync(Guid listId, Guid userId);
 
     // Shopping List Items
     Task<Guid> AddItemToListAsync(Guid listId, Guid userId, Guid? productId, string? customName, decimal quantity, string? unit, string? category, 
@@ -105,6 +105,9 @@ public interface IShoppingRepository
 
     // Complete shopping session + notify inventory service
     Task<ShoppingSessionSummaryDto> CompleteShoppingSessionAsync(Guid sessionId, Guid userId, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class ShoppingListDto

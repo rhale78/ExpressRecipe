@@ -252,7 +252,11 @@ public class FamilyMembersController : ControllerBase
             }
 
             var authResult = await authResponse.Content.ReadFromJsonAsync<JsonElement>();
-            var createdUserId = Guid.Parse(authResult.GetProperty("userId").GetString()!);
+            if (!Guid.TryParse(authResult.GetProperty("userId").GetString(), out var createdUserId))
+            {
+                _logger.LogError("AuthService returned an invalid or missing userId");
+                return StatusCode(500, new { message = "Failed to create user account" });
+            }
 
             // Create family member with account link
             var familyMemberId = await _repository.CreateWithAccountAsync(userId, request, createdUserId, userId);

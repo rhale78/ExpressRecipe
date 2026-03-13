@@ -49,6 +49,9 @@ public interface IMealPlanningRepository
     // Recipe Analytics (for suggestion engine)
     Task<Dictionary<Guid, decimal>> GetUserRecipeRatingsAsync(Guid userId, CancellationToken ct = default);
     Task<Dictionary<Guid, int>> GetUserRecipeCookCountsAsync(Guid userId, CancellationToken ct = default);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class MealPlanDto

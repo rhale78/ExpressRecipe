@@ -21,8 +21,9 @@ builder.AddExpressRecipeAuthentication();
 var connectionString = builder.Configuration.GetConnectionString("notificationdb")
     ?? throw new InvalidOperationException("Database connection string 'notificationdb' not found");
 
-// Add memory cache for rate limiting
-builder.Services.AddMemoryCache();
+// Register HybridCache for caching read (immutable) notifications
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Register SignalR for real-time notifications
 builder.Services.AddSignalR();
@@ -38,7 +39,8 @@ builder.Services.AddScoped<INotificationRepository>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<NotificationRepository>>();
     var broadcastService = sp.GetRequiredService<NotificationBroadcastService>();
-    return new NotificationRepository(connectionString, logger, broadcastService);
+    var cache = sp.GetRequiredService<HybridCacheService>();
+    return new NotificationRepository(connectionString, logger, broadcastService, cache);
 });
 
 // Conditionally register RabbitMQ for event subscription
@@ -73,6 +75,9 @@ if (rabbitEnabled)
 
     // Register event subscriber as background service
     builder.Services.AddHostedService<NotificationEventSubscriber>();
+
+    // GDPR: hard-delete user notifications on gdpr.user.delete events
+    builder.Services.AddHostedService<GdprEventSubscriber>();
 }
 
 // Add controllers

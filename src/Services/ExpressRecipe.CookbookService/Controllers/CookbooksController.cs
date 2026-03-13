@@ -1,5 +1,6 @@
 using ExpressRecipe.CookbookService.Data;
 using ExpressRecipe.CookbookService.Models;
+using ExpressRecipe.Shared.Models;
 using ExpressRecipe.Shared.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,7 +32,7 @@ public class CookbooksController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<CookbookSearchResult>> GetCookbooks(
+    public async Task<ActionResult<PagedResult<CookbookSummaryDto>>> GetCookbooks(
         [FromQuery] string? searchTerm,
         [FromQuery] string? visibility,
         [FromQuery] int page = 1,
@@ -52,7 +53,7 @@ public class CookbooksController : ControllerBase
                 items = await _repository.SearchCookbooksAsync(searchTerm, visibility ?? "Public", page, pageSize);
                 totalCount = await _repository.SearchCookbooksCountAsync(searchTerm, visibility ?? "Public");
             }
-            return Ok(new CookbookSearchResult { Items = items, Page = page, PageSize = pageSize, TotalCount = totalCount });
+            return Ok(new PagedResult<CookbookSummaryDto>(items, totalCount, page, pageSize));
         }
         catch (Exception ex)
         {

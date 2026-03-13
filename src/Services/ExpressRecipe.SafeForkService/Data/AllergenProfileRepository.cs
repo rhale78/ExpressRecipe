@@ -35,6 +35,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
                 HouseholdExclude = GetBoolean(reader, "HouseholdExclude"),
                 CreatedAt = GetDateTime(reader, "CreatedAt")
             },
+            ct,
             CreateParameter("@MemberId", memberId));
     }
 
@@ -50,6 +51,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", newId),
             CreateParameter("@MemberId", memberId),
             CreateParameter("@AllergenId", request.AllergenId),
@@ -72,6 +74,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", newId),
             CreateParameter("@MemberId", memberId),
             CreateParameter("@FreeFormName", freeFormText),
@@ -90,6 +93,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", entryId));
 
         return rowsAffected > 0;
@@ -104,6 +108,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", entryId),
             CreateParameter("@MemberId", memberId));
 
@@ -119,6 +124,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", entryId),
             CreateParameter("@Value", value));
 
@@ -136,6 +142,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         int rowsAffected = await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@Id", entryId),
             CreateParameter("@IsUnresolved", isUnresolved));
 
@@ -152,6 +159,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@AllergenProfileId", allergenProfileId),
             CreateParameter("@LinkType", linkType),
             CreateParameter("@LinkedId", linkedId),
@@ -171,6 +179,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         int? result = await ExecuteScalarAsync<int>(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId));
 
         return result ?? 0;
@@ -192,6 +201,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
         return await ExecuteReaderAsync(
             sql,
             reader => (GetGuid(reader, "LinkedId"), GetInt32(reader, "LinkCount")),
+            ct,
             CreateParameter("@MemberId", memberId),
             CreateParameter("@MinCount", minCount));
     }
@@ -239,6 +249,7 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
                 HouseholdExclude = GetBoolean(reader, "HouseholdExclude"),
                 CreatedAt = GetDateTime(reader, "CreatedAt")
             },
+            ct,
             parameters.ToArray());
     }
 
@@ -251,6 +262,19 @@ public class AllergenProfileRepository : SqlHelper, IAllergenProfileRepository
 
         await ExecuteNonQueryAsync(
             sql,
+            ct,
             CreateParameter("@MemberId", memberId));
+    }
+
+    public async Task DeleteMemberDataAsync(Guid memberId, CancellationToken ct = default)
+    {
+        const string sql = @"
+DELETE FROM AllergenProfileLink
+WHERE AllergenProfileId IN (
+    SELECT Id FROM AllergenProfile WHERE MemberId = @MemberId);
+DELETE FROM TemporarySchedule WHERE MemberId = @MemberId;
+DELETE FROM AllergenProfile    WHERE MemberId = @MemberId;";
+
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@MemberId", memberId));
     }
 }

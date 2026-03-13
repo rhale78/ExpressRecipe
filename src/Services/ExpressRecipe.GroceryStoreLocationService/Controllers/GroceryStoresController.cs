@@ -1,6 +1,7 @@
 using ExpressRecipe.GroceryStoreLocationService.Data;
 using ExpressRecipe.GroceryStoreLocationService.Services;
 using ExpressRecipe.GroceryStoreLocationService.Workers;
+using ExpressRecipe.Shared.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -61,14 +62,7 @@ public class GroceryStoresController : ControllerBase
         var stores = await _repository.SearchAsync(request);
         var total = await _repository.GetSearchCountAsync(request);
 
-        return Ok(new
-        {
-            Data = stores,
-            Total = total,
-            Page = page,
-            PageSize = pageSize,
-            TotalPages = (int)Math.Ceiling(total / (double)pageSize)
-        });
+        return Ok(new PagedResult<GroceryStoreDto>(stores, total, page, pageSize));
     }
 
     /// <summary>GET /api/grocerystores/{id} - Get store by ID</summary>

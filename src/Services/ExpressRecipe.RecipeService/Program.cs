@@ -92,6 +92,9 @@ if (messagingEnabled)
     builder.Services.AddScoped<RecipeNutritionQueryHandler>();
     builder.Services.AddHostedService<RecipeNutritionQuerySubscriber>();
 
+    // GDPR: hard-delete user recipe data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.RecipeService.Services.GdprEventSubscriber>();
+
     // Replace REST ingredient client with messaging-based client (last registration wins)
     builder.Services.AddScoped<IIngredientServiceClient>(sp =>
         new MessagingIngredientServiceClient(
@@ -122,10 +125,17 @@ builder.Services.AddQueryHandler<SearchRecipesQuery, SearchRecipesResult, Search
 // Register services
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.RecipeImportService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.NutritionExtractionService>();
-builder.Services.AddScoped<IAllergenRepository>(sp =>
-    new SqlAllergenRepository(
-        connectionString,
-        sp.GetRequiredService<ILogger<SqlAllergenRepository>>()));
+
+// Allergen lookups are delegated to UserService (which owns the Allergen master table).
+// The AllergenDetectionService falls back to keyword matching when UserService is unavailable.
+var userServiceUrl = builder.Configuration["Services:UserService:BaseUrl"]
+    ?? builder.Configuration["services__userservice__http__0"]
+    ?? "http://userservice";
+builder.Services.AddHttpClient("UserService", client =>
+{
+    client.BaseAddress = new Uri(userServiceUrl.TrimEnd('/') + "/");
+});
+builder.Services.AddScoped<IAllergenRepository, HttpAllergenRepository>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.AllergenDetectionService>();
 builder.Services.AddHttpClient<ExpressRecipe.RecipeService.Services.ImageDownloadService>();
 builder.Services.AddScoped<ExpressRecipe.RecipeService.Services.ServingSizeService>();

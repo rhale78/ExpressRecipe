@@ -7,7 +7,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
-using ControllerSearchResult = ExpressRecipe.RecipeService.Controllers.RecipeSearchResult;
+using ControllerSearchResult = ExpressRecipe.Shared.DTOs.Recipe.RecipeSearchResult;
 
 namespace ExpressRecipe.RecipeService.Tests.Controllers;
 

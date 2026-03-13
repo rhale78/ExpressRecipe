@@ -1,5 +1,6 @@
 using ExpressRecipe.Data.Common;
 using ExpressRecipe.Shared.DTOs.Product;
+using ExpressRecipe.Shared.Services;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
@@ -20,12 +21,20 @@ public interface IRestaurantRepository
     Task<UserRestaurantRatingDto?> GetUserRatingAsync(Guid restaurantId, Guid userId);
     Task<Guid> AddOrUpdateRatingAsync(Guid restaurantId, Guid userId, RateRestaurantRequest request);
     Task<bool> DeleteRatingAsync(Guid restaurantId, Guid userId);
+
+    // GDPR
+    Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default);
 }
 
 public class RestaurantRepository : SqlHelper, IRestaurantRepository
 {
-    public RestaurantRepository(string connectionString) : base(connectionString)
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "restaurant:";
+
+    public RestaurantRepository(string connectionString, HybridCacheService? cache = null)
+        : base(connectionString)
     {
+        _cache = cache;
     }
 
     public async Task<List<RestaurantDto>> SearchAsync(RestaurantSearchRequest request)
@@ -81,6 +90,19 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
     }
 
     public async Task<RestaurantDto?> GetByIdAsync(Guid id)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{id}",
+                async (ct) => await GetByIdFromDbAsync(id),
+                expiration: TimeSpan.FromHours(1));
+        }
+
+        return await GetByIdFromDbAsync(id);
+    }
+
+    private async Task<RestaurantDto?> GetByIdFromDbAsync(Guid id)
     {
         const string sql = @"
             SELECT Id, Name, Brand, Description, CuisineType, RestaurantType,
@@ -189,6 +211,9 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             CreateParameter("@IsChain", request.IsChain),
             CreateParameter("@UpdatedBy", updatedBy));
 
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
+
         return rowsAffected > 0;
     }
 
@@ -207,6 +232,9 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             sql,
             CreateParameter("@Id", id),
             CreateParameter("@DeletedBy", deletedBy));
+
+        if (rowsAffected > 0 && _cache != null)
+            await _cache.RemoveAsync($"{CachePrefix}id:{id}");
 
         return rowsAffected > 0;
     }
@@ -409,5 +437,11 @@ public class RestaurantRepository : SqlHelper, IRestaurantRepository
             CreatedAt = GetDateTime(reader, "CreatedAt"),
             UpdatedAt = GetNullableDateTime(reader, "UpdatedAt")
         };
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        const string sql = "DELETE FROM UserRestaurantRating WHERE UserId = @UserId;";
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

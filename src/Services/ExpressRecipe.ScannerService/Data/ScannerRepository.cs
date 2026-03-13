@@ -1,17 +1,20 @@
-using Microsoft.Data.SqlClient;
+using ExpressRecipe.Data.Common;
+using ExpressRecipe.Shared.Services;
 using System.Text.Json;
 
 namespace ExpressRecipe.ScannerService.Data;
 
-public class ScannerRepository : IScannerRepository
+public class ScannerRepository : SqlHelper, IScannerRepository
 {
-    private readonly string _connectionString;
     private readonly ILogger<ScannerRepository> _logger;
+    private readonly HybridCacheService? _cache;
+    private const string CachePrefix = "scan:";
 
-    public ScannerRepository(string connectionString, ILogger<ScannerRepository> logger)
+    public ScannerRepository(string connectionString, ILogger<ScannerRepository> logger, HybridCacheService? cache = null)
+        : base(connectionString)
     {
-        _connectionString = connectionString;
         _logger = logger;
+        _cache = cache;
     }
 
     public async Task<Guid> CreateScanAsync(Guid userId, string barcode, string? productId, bool wasRecognized, string scanType)
@@ -21,17 +24,12 @@ public class ScannerRepository : IScannerRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @Barcode, @ProductId, @WasRecognized, @ScanType, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Barcode", barcode);
-        command.Parameters.AddWithValue("@ProductId", string.IsNullOrEmpty(productId) ? DBNull.Value : Guid.Parse(productId));
-        command.Parameters.AddWithValue("@WasRecognized", wasRecognized);
-        command.Parameters.AddWithValue("@ScanType", scanType);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Barcode", barcode),
+            CreateParameter("@ProductId", string.IsNullOrEmpty(productId) ? (object)DBNull.Value : Guid.Parse(productId)),
+            CreateParameter("@WasRecognized", wasRecognized),
+            CreateParameter("@ScanType", scanType)))!;
     }
 
     public async Task<List<ScanHistoryDto>> GetUserScansAsync(Guid userId, int limit = 50)
@@ -42,61 +40,53 @@ public class ScannerRepository : IScannerRepository
             WHERE UserId = @UserId
             ORDER BY CreatedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        var scans = new List<ScanHistoryDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<ScanHistoryDto>(sql, reader => new ScanHistoryDto
         {
-            scans.Add(new ScanHistoryDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                Barcode = reader.GetString(2),
-                ProductId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
-                WasRecognized = reader.GetBoolean(4),
-                ScanType = reader.GetString(5),
-                CreatedAt = reader.GetDateTime(6)
-            });
-        }
-
-        return scans;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            Barcode = GetString(reader, "Barcode")!,
+            ProductId = GetGuidNullable(reader, "ProductId"),
+            WasRecognized = GetBoolean(reader, "WasRecognized"),
+            ScanType = GetString(reader, "ScanType")!,
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        },
+        CreateParameter("@UserId", userId),
+        CreateParameter("@Limit", limit));
     }
 
     public async Task<ScanHistoryDto?> GetScanAsync(Guid scanId)
+    {
+        if (_cache != null)
+        {
+            return await _cache.GetOrSetAsync(
+                $"{CachePrefix}id:{scanId}",
+                async (ct) => await GetScanFromDbAsync(scanId),
+                expiration: TimeSpan.FromHours(24));
+        }
+
+        return await GetScanFromDbAsync(scanId);
+    }
+
+    private async Task<ScanHistoryDto?> GetScanFromDbAsync(Guid scanId)
     {
         const string sql = @"
             SELECT Id, UserId, Barcode, ProductId, WasRecognized, ScanType, CreatedAt
             FROM ScanHistory
             WHERE Id = @ScanId";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ScanId", scanId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
+        var results = await ExecuteReaderAsync<ScanHistoryDto>(sql, reader => new ScanHistoryDto
         {
-            return new ScanHistoryDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                Barcode = reader.GetString(2),
-                ProductId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
-                WasRecognized = reader.GetBoolean(4),
-                ScanType = reader.GetString(5),
-                CreatedAt = reader.GetDateTime(6)
-            };
-        }
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            Barcode = GetString(reader, "Barcode")!,
+            ProductId = GetGuidNullable(reader, "ProductId"),
+            WasRecognized = GetBoolean(reader, "WasRecognized"),
+            ScanType = GetString(reader, "ScanType")!,
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        },
+        CreateParameter("@ScanId", scanId));
 
-        return null;
+        return results.FirstOrDefault();
     }
 
     public async Task<List<ScanAlertDto>> CheckAllergensAsync(Guid userId, Guid productId)
@@ -113,18 +103,13 @@ public class ScannerRepository : IScannerRepository
             OUTPUT INSERTED.Id
             VALUES (@ScanId, @UserId, @AlertType, @Severity, @Message, @Allergens, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ScanId", scanId);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@AlertType", alertType);
-        command.Parameters.AddWithValue("@Severity", severity);
-        command.Parameters.AddWithValue("@Message", message);
-        command.Parameters.AddWithValue("@Allergens", JsonSerializer.Serialize(allergens));
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@ScanId", scanId),
+            CreateParameter("@UserId", userId),
+            CreateParameter("@AlertType", alertType),
+            CreateParameter("@Severity", severity),
+            CreateParameter("@Message", message),
+            CreateParameter("@Allergens", JsonSerializer.Serialize(allergens))))!;
     }
 
     public async Task<List<ScanAlertDto>> GetUserAlertsAsync(Guid userId, bool unreadOnly = true)
@@ -139,44 +124,25 @@ public class ScannerRepository : IScannerRepository
 
         sql += " ORDER BY CreatedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-
-        var alerts = new List<ScanAlertDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<ScanAlertDto>(sql, reader => new ScanAlertDto
         {
-            alerts.Add(new ScanAlertDto
-            {
-                Id = reader.GetGuid(0),
-                ScanId = reader.GetGuid(1),
-                UserId = reader.GetGuid(2),
-                AlertType = reader.GetString(3),
-                Severity = reader.GetString(4),
-                Message = reader.GetString(5),
-                TriggeredAllergens = JsonSerializer.Deserialize<List<string>>(reader.GetString(6)) ?? new(),
-                IsRead = reader.GetBoolean(7),
-                CreatedAt = reader.GetDateTime(8)
-            });
-        }
-
-        return alerts;
+            Id = GetGuid(reader, "Id"),
+            ScanId = GetGuid(reader, "ScanId"),
+            UserId = GetGuid(reader, "UserId"),
+            AlertType = GetString(reader, "AlertType")!,
+            Severity = GetString(reader, "Severity")!,
+            Message = GetString(reader, "Message")!,
+            TriggeredAllergens = JsonSerializer.Deserialize<List<string>>(GetString(reader, "TriggeredAllergens")!) ?? new(),
+            IsRead = GetBoolean(reader, "IsRead"),
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        },
+        CreateParameter("@UserId", userId));
     }
 
     public async Task MarkAlertAsReadAsync(Guid alertId)
     {
         const string sql = "UPDATE ScanAlert SET IsRead = 1, ReadAt = GETUTCDATE() WHERE Id = @AlertId";
-
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@AlertId", alertId);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql, CreateParameter("@AlertId", alertId));
     }
 
     public async Task<Guid> ReportUnknownProductAsync(Guid userId, string barcode, string? productName, string? brand, byte[]? photo)
@@ -186,17 +152,12 @@ public class ScannerRepository : IScannerRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @Barcode, @ProductName, @Brand, @Photo, 'Pending', GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Barcode", barcode);
-        command.Parameters.AddWithValue("@ProductName", productName ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Brand", brand ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Photo", photo ?? (object)DBNull.Value);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Barcode", barcode),
+            CreateParameter("@ProductName", (object?)productName ?? DBNull.Value),
+            CreateParameter("@Brand", (object?)brand ?? DBNull.Value),
+            CreateParameter("@Photo", (object?)photo ?? DBNull.Value)))!;
     }
 
     public async Task<List<UnknownProductDto>> GetUnknownProductsAsync(int limit = 100)
@@ -207,31 +168,19 @@ public class ScannerRepository : IScannerRepository
             WHERE Status = 'Pending'
             ORDER BY CreatedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        var products = new List<UnknownProductDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<UnknownProductDto>(sql, reader => new UnknownProductDto
         {
-            products.Add(new UnknownProductDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                Barcode = reader.GetString(2),
-                ProductName = reader.IsDBNull(3) ? null : reader.GetString(3),
-                Brand = reader.IsDBNull(4) ? null : reader.GetString(4),
-                Photo = reader.IsDBNull(5) ? null : (byte[])reader[5],
-                Status = reader.GetString(6),
-                ResolvedProductId = reader.IsDBNull(7) ? null : reader.GetGuid(7),
-                CreatedAt = reader.GetDateTime(8)
-            });
-        }
-
-        return products;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            Barcode = GetString(reader, "Barcode")!,
+            ProductName = GetString(reader, "ProductName"),
+            Brand = GetString(reader, "Brand"),
+            Photo = reader.IsDBNull(reader.GetOrdinal("Photo")) ? null : (byte[])reader["Photo"],
+            Status = GetString(reader, "Status")!,
+            ResolvedProductId = GetGuidNullable(reader, "ResolvedProductId"),
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        },
+        CreateParameter("@Limit", limit));
     }
 
     public async Task UpdateUnknownProductStatusAsync(Guid unknownProductId, string status, Guid? resolvedProductId)
@@ -241,15 +190,10 @@ public class ScannerRepository : IScannerRepository
             SET Status = @Status, ResolvedProductId = @ResolvedProductId, ResolvedAt = GETUTCDATE()
             WHERE Id = @Id";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Id", unknownProductId);
-        command.Parameters.AddWithValue("@Status", status);
-        command.Parameters.AddWithValue("@ResolvedProductId", resolvedProductId.HasValue ? resolvedProductId.Value : DBNull.Value);
-
-        await command.ExecuteNonQueryAsync();
+        await ExecuteNonQueryAsync(sql,
+            CreateParameter("@Id", unknownProductId),
+            CreateParameter("@Status", status),
+            CreateParameter("@ResolvedProductId", resolvedProductId.HasValue ? (object)resolvedProductId.Value : DBNull.Value));
     }
 
     public async Task<Guid> SaveOCRResultAsync(Guid userId, byte[] image, string extractedText, decimal confidence, string? productMatch)
@@ -259,17 +203,12 @@ public class ScannerRepository : IScannerRepository
             OUTPUT INSERTED.Id
             VALUES (@UserId, @Image, @ExtractedText, @Confidence, @ProductMatch, GETUTCDATE())";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Image", image);
-        command.Parameters.AddWithValue("@ExtractedText", extractedText);
-        command.Parameters.AddWithValue("@Confidence", confidence);
-        command.Parameters.AddWithValue("@ProductMatch", productMatch ?? (object)DBNull.Value);
-
-        return (Guid)await command.ExecuteScalarAsync()!;
+        return (await ExecuteScalarAsync<Guid>(sql,
+            CreateParameter("@UserId", userId),
+            CreateParameter("@Image", image),
+            CreateParameter("@ExtractedText", extractedText),
+            CreateParameter("@Confidence", confidence),
+            CreateParameter("@ProductMatch", (object?)productMatch ?? DBNull.Value)))!;
     }
 
     public async Task<List<OCRResultDto>> GetUserOCRResultsAsync(Guid userId, int limit = 50)
@@ -280,29 +219,17 @@ public class ScannerRepository : IScannerRepository
             WHERE UserId = @UserId
             ORDER BY CreatedAt DESC";
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        await using var command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", userId);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        var results = new List<OCRResultDto>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        return await ExecuteReaderAsync<OCRResultDto>(sql, reader => new OCRResultDto
         {
-            results.Add(new OCRResultDto
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                ExtractedText = reader.GetString(2),
-                Confidence = reader.GetDecimal(3),
-                ProductMatch = reader.IsDBNull(4) ? null : reader.GetString(4),
-                CreatedAt = reader.GetDateTime(5)
-            });
-        }
-
-        return results;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            ExtractedText = GetString(reader, "ExtractedText")!,
+            Confidence = GetDecimal(reader, "Confidence"),
+            ProductMatch = GetString(reader, "ProductMatch"),
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        },
+        CreateParameter("@UserId", userId),
+        CreateParameter("@Limit", limit));
     }
 
     public async Task<Guid> SaveVisionCaptureAsync(VisionCaptureRecord capture, CancellationToken ct = default)
@@ -318,23 +245,23 @@ public class ScannerRepository : IScannerRepository
                  @DetectedBrand, @ProviderUsed, @Confidence, @ProductFoundInDb, @ResolvedProductId,
                  @IsTrainingData, GETUTCDATE())";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        var result = await ExecuteScalarAsync<Guid>(sql, ct,
+            CreateParameter("@UserId", capture.UserId),
+            CreateParameter("@ScanHistoryId", capture.ScanHistoryId.HasValue ? (object)capture.ScanHistoryId.Value : DBNull.Value),
+            CreateParameter("@CaptureImageJpeg", capture.CaptureImageJpeg),
+            CreateParameter("@DetectedBarcode", capture.DetectedBarcode ?? (object)DBNull.Value),
+            CreateParameter("@DetectedProductName", capture.DetectedProductName ?? (object)DBNull.Value),
+            CreateParameter("@DetectedBrand", capture.DetectedBrand ?? (object)DBNull.Value),
+            CreateParameter("@ProviderUsed", capture.ProviderUsed ?? (object)DBNull.Value),
+            CreateParameter("@Confidence", capture.Confidence.HasValue ? (object)capture.Confidence.Value : DBNull.Value),
+            CreateParameter("@ProductFoundInDb", capture.ProductFoundInDb),
+            CreateParameter("@ResolvedProductId", capture.ResolvedProductId.HasValue ? (object)capture.ResolvedProductId.Value : DBNull.Value),
+            CreateParameter("@IsTrainingData", capture.IsTrainingData));
 
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@UserId", capture.UserId);
-        command.Parameters.AddWithValue("@ScanHistoryId", capture.ScanHistoryId.HasValue ? capture.ScanHistoryId.Value : DBNull.Value);
-        command.Parameters.AddWithValue("@CaptureImageJpeg", capture.CaptureImageJpeg);
-        command.Parameters.AddWithValue("@DetectedBarcode", capture.DetectedBarcode ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@DetectedProductName", capture.DetectedProductName ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@DetectedBrand", capture.DetectedBrand ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@ProviderUsed", capture.ProviderUsed ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@Confidence", capture.Confidence.HasValue ? capture.Confidence.Value : DBNull.Value);
-        command.Parameters.AddWithValue("@ProductFoundInDb", capture.ProductFoundInDb);
-        command.Parameters.AddWithValue("@ResolvedProductId", capture.ResolvedProductId.HasValue ? capture.ResolvedProductId.Value : DBNull.Value);
-        command.Parameters.AddWithValue("@IsTrainingData", capture.IsTrainingData);
+        if (result == default)
+            throw new InvalidOperationException("Failed to insert VisionCapture record — no ID returned.");
 
-        return await ExecuteScalarGuidAsync(command, "VisionCapture", ct);
+        return result;
     }
 
     public async Task UpdateVisionCaptureProductAsync(Guid captureId, Guid productId, bool found, CancellationToken ct = default)
@@ -344,15 +271,10 @@ public class ScannerRepository : IScannerRepository
             SET ProductFoundInDb = @Found, ResolvedProductId = @ProductId
             WHERE Id = @CaptureId";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@CaptureId", captureId);
-        command.Parameters.AddWithValue("@ProductId", productId);
-        command.Parameters.AddWithValue("@Found", found);
-
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@CaptureId", captureId),
+            CreateParameter("@ProductId", productId),
+            CreateParameter("@Found", found));
     }
 
     public async Task<List<VisionCaptureRecord>> GetCapturePendingReviewAsync(int limit, CancellationToken ct = default)
@@ -366,35 +288,24 @@ public class ScannerRepository : IScannerRepository
             WHERE IsTrainingData = 0
             ORDER BY CapturedAt DESC";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        List<VisionCaptureRecord> captures = new List<VisionCaptureRecord>();
-        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
+        return await ExecuteReaderAsync<VisionCaptureRecord>(sql, reader => new VisionCaptureRecord
         {
-            captures.Add(new VisionCaptureRecord
-            {
-                Id = reader.GetGuid(0),
-                UserId = reader.GetGuid(1),
-                ScanHistoryId = reader.IsDBNull(2) ? null : reader.GetGuid(2),
-                CaptureImageJpeg = (byte[])reader[3],
-                DetectedBarcode = reader.IsDBNull(4) ? null : reader.GetString(4),
-                DetectedProductName = reader.IsDBNull(5) ? null : reader.GetString(5),
-                DetectedBrand = reader.IsDBNull(6) ? null : reader.GetString(6),
-                ProviderUsed = reader.IsDBNull(7) ? null : reader.GetString(7),
-                Confidence = reader.IsDBNull(8) ? null : reader.GetDecimal(8),
-                ProductFoundInDb = reader.GetBoolean(9),
-                ResolvedProductId = reader.IsDBNull(10) ? null : reader.GetGuid(10),
-                IsTrainingData = reader.GetBoolean(11),
-                CapturedAt = reader.GetDateTime(12)
-            });
-        }
-
-        return captures;
+            Id = GetGuid(reader, "Id"),
+            UserId = GetGuid(reader, "UserId"),
+            ScanHistoryId = GetGuidNullable(reader, "ScanHistoryId"),
+            CaptureImageJpeg = (byte[])reader["CaptureImageJpeg"],
+            DetectedBarcode = GetString(reader, "DetectedBarcode"),
+            DetectedProductName = GetString(reader, "DetectedProductName"),
+            DetectedBrand = GetString(reader, "DetectedBrand"),
+            ProviderUsed = GetString(reader, "ProviderUsed"),
+            Confidence = GetDecimalNullable(reader, "Confidence"),
+            ProductFoundInDb = GetBoolean(reader, "ProductFoundInDb"),
+            ResolvedProductId = GetGuidNullable(reader, "ResolvedProductId"),
+            IsTrainingData = GetBoolean(reader, "IsTrainingData"),
+            CapturedAt = GetDateTime(reader, "CapturedAt")
+        },
+        ct,
+        CreateParameter("@Limit", limit));
     }
 
     public async Task<Guid> CreateCorrectionReportAsync(CorrectionReportRecord report, CancellationToken ct = default)
@@ -406,17 +317,17 @@ public class ScannerRepository : IScannerRepository
             VALUES
                 (@VisionCaptureId, @UserId, @AiGuess, @UserCorrection, @UserNote, 'Pending', GETUTCDATE())";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        var result = await ExecuteScalarAsync<Guid>(sql, ct,
+            CreateParameter("@VisionCaptureId", report.VisionCaptureId),
+            CreateParameter("@UserId", report.UserId),
+            CreateParameter("@AiGuess", report.AiGuess ?? (object)DBNull.Value),
+            CreateParameter("@UserCorrection", report.UserCorrection ?? (object)DBNull.Value),
+            CreateParameter("@UserNote", report.UserNote ?? (object)DBNull.Value));
 
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@VisionCaptureId", report.VisionCaptureId);
-        command.Parameters.AddWithValue("@UserId", report.UserId);
-        command.Parameters.AddWithValue("@AiGuess", report.AiGuess ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@UserCorrection", report.UserCorrection ?? (object)DBNull.Value);
-        command.Parameters.AddWithValue("@UserNote", report.UserNote ?? (object)DBNull.Value);
+        if (result == default)
+            throw new InvalidOperationException("Failed to insert CorrectionReport record — no ID returned.");
 
-        return await ExecuteScalarGuidAsync(command, "CorrectionReport", ct);
+        return result;
     }
 
     public async Task<List<CorrectionReportRecord>> GetCorrectionReportsAsync(string? status, int limit, CancellationToken ct = default)
@@ -429,33 +340,22 @@ public class ScannerRepository : IScannerRepository
             WHERE (@Status IS NULL OR Status = @Status)
             ORDER BY CreatedAt DESC";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-        command.Parameters.AddWithValue("@Status", status ?? (object)DBNull.Value);
-
-        List<CorrectionReportRecord> reports = new List<CorrectionReportRecord>();
-        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
+        return await ExecuteReaderAsync<CorrectionReportRecord>(sql, reader => new CorrectionReportRecord
         {
-            reports.Add(new CorrectionReportRecord
-            {
-                Id = reader.GetGuid(0),
-                VisionCaptureId = reader.GetGuid(1),
-                UserId = reader.GetGuid(2),
-                AiGuess = reader.IsDBNull(3) ? null : reader.GetString(3),
-                UserCorrection = reader.IsDBNull(4) ? null : reader.GetString(4),
-                UserNote = reader.IsDBNull(5) ? null : reader.GetString(5),
-                Status = reader.GetString(6),
-                ReviewedBy = reader.IsDBNull(7) ? null : reader.GetGuid(7),
-                ReviewedAt = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
-                CreatedAt = reader.GetDateTime(9)
-            });
-        }
-
-        return reports;
+            Id = GetGuid(reader, "Id"),
+            VisionCaptureId = GetGuid(reader, "VisionCaptureId"),
+            UserId = GetGuid(reader, "UserId"),
+            AiGuess = GetString(reader, "AiGuess"),
+            UserCorrection = GetString(reader, "UserCorrection"),
+            UserNote = GetString(reader, "UserNote"),
+            Status = GetString(reader, "Status")!,
+            ReviewedBy = GetGuidNullable(reader, "ReviewedBy"),
+            ReviewedAt = GetNullableDateTime(reader, "ReviewedAt"),
+            CreatedAt = GetDateTime(reader, "CreatedAt")
+        },
+        ct,
+        CreateParameter("@Limit", limit),
+        CreateParameter("@Status", (object?)status ?? DBNull.Value));
     }
 
     public async Task UpdateCorrectionStatusAsync(Guid reportId, string status, Guid reviewedBy, CancellationToken ct = default)
@@ -465,15 +365,10 @@ public class ScannerRepository : IScannerRepository
             SET Status = @Status, ReviewedBy = @ReviewedBy, ReviewedAt = GETUTCDATE()
             WHERE Id = @ReportId";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@ReportId", reportId);
-        command.Parameters.AddWithValue("@Status", status);
-        command.Parameters.AddWithValue("@ReviewedBy", reviewedBy);
-
-        await command.ExecuteNonQueryAsync(ct);
+        await ExecuteNonQueryAsync(sql, ct,
+            CreateParameter("@ReportId", reportId),
+            CreateParameter("@Status", status),
+            CreateParameter("@ReviewedBy", reviewedBy));
     }
 
     public async Task<List<TrainingExportRow>> GetTrainingExportAsync(int limit, CancellationToken ct = default)
@@ -493,40 +388,30 @@ public class ScannerRepository : IScannerRepository
             WHERE vc.IsTrainingData = 1
             ORDER BY vc.CapturedAt DESC";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        await using SqlCommand command = new SqlCommand(sql, connection);
-        command.Parameters.AddWithValue("@Limit", limit);
-
-        List<TrainingExportRow> rows = new List<TrainingExportRow>();
-        await using SqlDataReader reader = await command.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
+        return await ExecuteReaderAsync<TrainingExportRow>(sql, reader => new TrainingExportRow
         {
-            rows.Add(new TrainingExportRow
-            {
-                CaptureId = reader.GetGuid(0),
-                DetectedBarcode = reader.IsDBNull(1) ? null : reader.GetString(1),
-                DetectedProductName = reader.IsDBNull(2) ? null : reader.GetString(2),
-                DetectedBrand = reader.IsDBNull(3) ? null : reader.GetString(3),
-                ProviderUsed = reader.IsDBNull(4) ? null : reader.GetString(4),
-                Confidence = reader.IsDBNull(5) ? null : reader.GetDecimal(5),
-                CorrectedProductName = reader.IsDBNull(6) ? null : reader.GetString(6),
-                CapturedAt = reader.GetDateTime(7)
-            });
-        }
-
-        return rows;
+            CaptureId = GetGuid(reader, "Id"),
+            DetectedBarcode = GetString(reader, "DetectedBarcode"),
+            DetectedProductName = GetString(reader, "DetectedProductName"),
+            DetectedBrand = GetString(reader, "DetectedBrand"),
+            ProviderUsed = GetString(reader, "ProviderUsed"),
+            Confidence = GetDecimalNullable(reader, "Confidence"),
+            CorrectedProductName = GetString(reader, "UserCorrection"),
+            CapturedAt = GetDateTime(reader, "CapturedAt")
+        },
+        ct,
+        CreateParameter("@Limit", limit));
     }
 
-    private static async Task<Guid> ExecuteScalarGuidAsync(SqlCommand command, string entityName, CancellationToken ct)
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
     {
-        object? result = await command.ExecuteScalarAsync(ct);
-        if (result == null || result == DBNull.Value)
-        {
-            throw new InvalidOperationException($"Failed to insert {entityName} record — no ID returned.");
-        }
+        const string sql = @"
+DELETE FROM VisionCapture   WHERE UserId = @UserId;
+DELETE FROM OCRResult       WHERE UserId = @UserId;
+DELETE FROM ScanAlert       WHERE UserId = @UserId;
+DELETE FROM ScanHistory     WHERE UserId = @UserId;
+DELETE FROM UnknownProduct  WHERE UserId = @UserId;";
 
-        return (Guid)result;
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

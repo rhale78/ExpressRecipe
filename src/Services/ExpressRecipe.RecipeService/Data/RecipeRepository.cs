@@ -995,7 +995,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 MaxViews = maxViews,
                 Recipe = recipe
             };
-        }, new SqlParameter("@Token", token));
+        }, ct, new SqlParameter("@Token", token));
 
         return results.FirstOrDefault();
     }
@@ -1103,7 +1103,7 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
                 UpdatedAt = reader.IsDBNull(updOrd) ? null : reader.GetDateTime(updOrd)
             };
-        }, new SqlParameter("@HouseholdId", householdId));
+        }, ct, new SqlParameter("@HouseholdId", householdId));
     }
 
     public async Task<List<RecipeIngredientSummary>> GetRecipesWithIngredientSummaryAsync(
@@ -1210,5 +1210,19 @@ public class RecipeRepository : SqlHelper, IRecipeRepository
         }
 
         return result;
+    }
+
+    public async Task DeleteUserDataAsync(Guid userId, CancellationToken ct = default)
+    {
+        // Hard-delete all user-owned recipe data (ratings, favourites, comments, likes, family data)
+        const string sql = @"
+DELETE FROM UserRecipeFamilyRating WHERE UserId = @UserId;
+DELETE FROM FamilyMember           WHERE UserId = @UserId;
+DELETE FROM CommentLike            WHERE UserId = @UserId;
+DELETE FROM RecipeComment          WHERE UserId = @UserId;
+DELETE FROM UserFavoriteRecipe     WHERE UserId = @UserId;
+DELETE FROM UserRecipeRating       WHERE UserId = @UserId;";
+
+        await ExecuteNonQueryAsync(sql, ct, CreateParameter("@UserId", userId));
     }
 }

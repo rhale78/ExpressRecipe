@@ -141,8 +141,11 @@ public class ApprovalQueueService : IApprovalQueueService
         }
         else if (entityType == "Product")
         {
+            if (!Guid.TryParse(approvedBy, out var approverGuid))
+                throw new ArgumentException($"approvedBy must be a valid GUID, got '{approvedBy}'.", nameof(approvedBy));
+
             var submitterUserId = await _communityRepository.GetSubmissionUserIdAsync(entityId, ct);
-            await _communityRepository.ApproveSubmissionAsync(entityId, Guid.Parse(approvedBy), Guid.Empty);
+            await _communityRepository.ApproveSubmissionAsync(entityId, approverGuid, Guid.Empty);
 
             if (_eventPublisher != null && submitterUserId.HasValue)
             {
@@ -171,7 +174,10 @@ public class ApprovalQueueService : IApprovalQueueService
         }
         else if (entityType == "Product")
         {
-            await _communityRepository.RejectSubmissionAsync(entityId, Guid.Parse(rejectedBy), reason);
+            if (!Guid.TryParse(rejectedBy, out var rejectorGuid))
+                throw new ArgumentException($"rejectedBy must be a valid GUID, got '{rejectedBy}'.", nameof(rejectedBy));
+
+            await _communityRepository.RejectSubmissionAsync(entityId, rejectorGuid, reason);
         }
     }
 

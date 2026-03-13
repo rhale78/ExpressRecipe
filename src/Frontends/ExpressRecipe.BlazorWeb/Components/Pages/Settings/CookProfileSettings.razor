@@ -2,7 +2,10 @@
 @page "/setup/cookprofile/{MemberId:guid}"
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Preferences
 @inject NavigationManager Navigation
+@inject IPreferencesApiClient PreferencesClient
 
 <PageTitle>Cook Profile - ExpressRecipe</PageTitle>
 
@@ -25,6 +28,10 @@
             }
             else
             {
+                @if (_errorMessage != null)
+                {
+                    <div class="alert alert-danger">@_errorMessage</div>
+                }
                 <div class="settings-section">
                     <div class="section-header">
                         <h2>Skill &amp; Frequency</h2>
@@ -98,6 +105,7 @@
     private bool _isLoading = true;
     private bool _isEditing;
     private bool _isSaving;
+    private string? _errorMessage;
     private string _skillLevel = "HomeCook";
     private string _frequency = "Regular";
     private bool _eatingDisorderRecovery;
@@ -107,9 +115,24 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Load cook profile via PreferencesService HTTP client
-        await Task.Delay(10);
-        _isLoading = false;
+        try
+        {
+            var profile = await PreferencesClient.GetCookProfileAsync(MemberId);
+            if (profile != null)
+            {
+                _skillLevel = profile.OverallSkillLevel;
+                _frequency = profile.CookingFrequency;
+                _eatingDisorderRecovery = profile.EatingDisorderRecovery;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load cook profile: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
     private void StartEditing()
@@ -128,12 +151,35 @@
     private async Task SaveAsync()
     {
         _isSaving = true;
-        // TODO: PUT to PreferencesService
-        await Task.Delay(100);
-        _skillLevel = _editSkillLevel;
-        _frequency = _editFrequency;
-        _eatingDisorderRecovery = _editEatingDisorderRecovery;
-        _isSaving = false;
-        _isEditing = false;
+        _errorMessage = null;
+        try
+        {
+            var success = await PreferencesClient.UpsertCookProfileAsync(MemberId, new UpsertCookProfileRequest
+            {
+                OverallSkillLevel = _editSkillLevel,
+                CookingFrequency = _editFrequency,
+                EatingDisorderRecovery = _editEatingDisorderRecovery,
+                CooksForHousehold = true
+            });
+            if (success)
+            {
+                _skillLevel = _editSkillLevel;
+                _frequency = _editFrequency;
+                _eatingDisorderRecovery = _editEatingDisorderRecovery;
+                _isEditing = false;
+            }
+            else
+            {
+                _errorMessage = "Failed to save. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Save failed: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
     }
 }

@@ -189,6 +189,8 @@ builder.Services.AddHostedService<WorkQueueCleanupWorker>();
 if (messagingEnabled)
 {
     builder.Services.AddHostedService<RecipeCookedEventSubscriber>();
+    // GDPR: hard-delete user meal planning data on gdpr.user.delete events
+    builder.Services.AddHostedService<ExpressRecipe.MealPlanningService.Services.GdprEventSubscriber>();
 }
 
 // Add controllers

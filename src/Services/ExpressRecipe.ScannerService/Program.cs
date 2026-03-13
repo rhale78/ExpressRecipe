@@ -1,7 +1,9 @@
 using ExpressRecipe.Data.Common;
+using ExpressRecipe.Messaging.RabbitMQ.Extensions;
 using ExpressRecipe.ScannerService.Data;
 using ExpressRecipe.ScannerService.Services;
 using ExpressRecipe.Shared.Middleware;
+using ExpressRecipe.Shared.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,7 +22,11 @@ var connectionString = builder.Configuration.GetConnectionString("scandb")
 
 // Register repositories
 builder.Services.AddScoped<IScannerRepository>(sp =>
-    new ScannerRepository(connectionString, sp.GetRequiredService<ILogger<ScannerRepository>>()));
+    new ScannerRepository(connectionString, sp.GetRequiredService<ILogger<ScannerRepository>>(), sp.GetService<HybridCacheService>()));
+
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+builder.Services.AddSingleton<HybridCacheService>();
 
 // Register external API clients
 builder.Services.AddHttpClient<OpenFoodFactsApiClient>();
@@ -32,12 +38,17 @@ builder.Services.AddScoped<BarcodeScannerService>();
 // Add controllers
 builder.Services.AddControllers();
 
-// Add Swagger
-// builder.Services.AddEndpointsApiExplorer();
-// builder.Services.AddSwaggerGen(c =>
-// {
-//     c.SwaggerDoc("v1", new() { Title = "ExpressRecipe.ScannerService API", Version = "v1" });
-// });
+// Register RabbitMQ messaging (IMessageBus) – conditional based on Aspire connection string
+var messagingRequested = builder.Configuration.GetValue<bool>("Messaging:Enabled", true);
+var messagingConnectionString = builder.Configuration.GetConnectionString("messaging");
+var messagingEnabled = messagingRequested && !string.IsNullOrWhiteSpace(messagingConnectionString);
+
+if (messagingEnabled)
+{
+    builder.AddRabbitMqMessaging("messaging");
+    // GDPR: hard-delete user scanner data on gdpr.user.delete events
+    builder.Services.AddHostedService<GdprEventSubscriber>();
+}
 
 // CORS
 builder.Services.AddServiceCors(builder.Environment, builder.Configuration);
@@ -67,6 +78,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

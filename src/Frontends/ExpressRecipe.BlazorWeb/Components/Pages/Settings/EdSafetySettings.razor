@@ -1,7 +1,10 @@
 @page "/settings/edsafety/{MemberId:guid}"
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
+@using ExpressRecipe.Client.Shared.Models.Preferences
 @inject NavigationManager Navigation
+@inject IPreferencesApiClient PreferencesClient
 
 <PageTitle>Eating Disorder Safety - ExpressRecipe</PageTitle>
 
@@ -50,18 +53,46 @@
 
     private bool _enabled;
     private bool _isSaving;
+    private string? _errorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Load cook profile to get EatingDisorderRecovery flag
-        await Task.Delay(10);
+        try
+        {
+            var profile = await PreferencesClient.GetCookProfileAsync(MemberId);
+            if (profile != null)
+                _enabled = profile.EatingDisorderRecovery;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load settings: {ex.Message}";
+        }
     }
 
     private async Task SaveAsync()
     {
         _isSaving = true;
-        // TODO: PUT to PreferencesService with EatingDisorderRecovery flag
-        await Task.Delay(100);
-        _isSaving = false;
+        _errorMessage = null;
+        try
+        {
+            // Load current profile to preserve other fields, then patch the flag
+            var profile = await PreferencesClient.GetCookProfileAsync(MemberId);
+            await PreferencesClient.UpsertCookProfileAsync(MemberId, new UpsertCookProfileRequest
+            {
+                OverallSkillLevel = profile?.OverallSkillLevel ?? "HomeCook",
+                CookingFrequency = profile?.CookingFrequency ?? "Regular",
+                CookRole = profile?.CookRole ?? "PrimaryHomeChef",
+                CooksForHousehold = profile?.CooksForHousehold ?? true,
+                EatingDisorderRecovery = _enabled
+            });
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Save failed: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
     }
 }

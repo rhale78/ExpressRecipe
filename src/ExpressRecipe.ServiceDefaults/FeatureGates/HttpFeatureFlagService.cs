@@ -1,5 +1,5 @@
 using ExpressRecipe.Shared.Services.FeatureGates;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using System.Net.Http.Json;
 
@@ -17,12 +17,12 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
     private const string HttpClientName = "UserService";
 
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IMemoryCache _cache;
+    private readonly HybridCache _cache;
     private readonly ILogger<HttpFeatureFlagService> _logger;
 
     public HttpFeatureFlagService(
         IHttpClientFactory httpClientFactory,
-        IMemoryCache cache,
+        HybridCache cache,
         ILogger<HttpFeatureFlagService> logger)
     {
         _httpClientFactory = httpClientFactory;
@@ -35,41 +35,43 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
         string userTier, CancellationToken ct = default)
     {
         string cacheKey = $"ff:enabled:{featureKey}:{userId}:{userTier}";
-        if (_cache.TryGetValue(cacheKey, out FeatureCheckResult? cached) && cached != null)
-            return cached;
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient(HttpClientName);
-            var response = await client.GetAsync(
-                $"/api/featureflags/check?featureKey={Uri.EscapeDataString(featureKey)}" +
-                $"&userId={userId}&userTier={Uri.EscapeDataString(userTier)}",
-                ct);
-
-            if (response.IsSuccessStatusCode)
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async innerCt =>
             {
-                var dto = await response.Content.ReadFromJsonAsync<FeatureFlagCheckDto>(
-                    cancellationToken: ct);
-                if (dto != null)
+                try
                 {
-                    var result = new FeatureCheckResult(
-                        dto.IsEnabled,
-                        Enum.TryParse<FeatureCheckReason>(dto.Reason, out var reason)
-                            ? reason
-                            : (dto.IsEnabled ? FeatureCheckReason.Enabled : FeatureCheckReason.GloballyDisabled));
-                    _cache.Set(cacheKey, result, CacheTtl);
-                    return result;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Feature flag check failed for {FeatureKey}; defaulting to enabled (fail-open)",
-                featureKey);
-        }
+                    var client = _httpClientFactory.CreateClient(HttpClientName);
+                    var response = await client.GetAsync(
+                        $"/api/featureflags/check?featureKey={Uri.EscapeDataString(featureKey)}" +
+                        $"&userId={userId}&userTier={Uri.EscapeDataString(userTier)}",
+                        innerCt);
 
-        return new FeatureCheckResult(true, FeatureCheckReason.Enabled); // fail-open
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var dto = await response.Content.ReadFromJsonAsync<FeatureFlagCheckDto>(
+                            cancellationToken: innerCt);
+                        if (dto != null)
+                        {
+                            return new FeatureCheckResult(
+                                dto.IsEnabled,
+                                Enum.TryParse<FeatureCheckReason>(dto.Reason, out var reason)
+                                    ? reason
+                                    : (dto.IsEnabled ? FeatureCheckReason.Enabled : FeatureCheckReason.GloballyDisabled));
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Feature flag check failed for {FeatureKey}; defaulting to enabled (fail-open)",
+                        featureKey);
+                }
+
+                return new FeatureCheckResult(true, FeatureCheckReason.Enabled); // fail-open
+            },
+            new HybridCacheEntryOptions { Expiration = CacheTtl, LocalCacheExpiration = CacheTtl },
+            cancellationToken: ct);
     }
 
     /// <inheritdoc/>
@@ -77,32 +79,35 @@ public sealed class HttpFeatureFlagService : IFeatureFlagService
         CancellationToken ct = default)
     {
         string cacheKey = $"ff:global:{featureKey}";
-        if (_cache.TryGetValue(cacheKey, out bool cached)) return cached;
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient(HttpClientName);
-            var response = await client.GetAsync(
-                $"/api/featureflags/{Uri.EscapeDataString(featureKey)}/isglobal",
-                ct);
-
-            if (response.IsSuccessStatusCode)
+        return await _cache.GetOrCreateAsync(
+            cacheKey,
+            async innerCt =>
             {
-                var dto = await response.Content.ReadFromJsonAsync<FeatureFlagCheckDto>(
-                    cancellationToken: ct);
-                bool enabled = dto?.IsEnabled ?? true;
-                _cache.Set(cacheKey, enabled, CacheTtl);
-                return enabled;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Global feature flag check failed for {FeatureKey}; defaulting to enabled (fail-open)",
-                featureKey);
-        }
+                try
+                {
+                    var client = _httpClientFactory.CreateClient(HttpClientName);
+                    var response = await client.GetAsync(
+                        $"/api/featureflags/{Uri.EscapeDataString(featureKey)}/isglobal",
+                        innerCt);
 
-        return true; // fail-open
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var dto = await response.Content.ReadFromJsonAsync<FeatureFlagCheckDto>(
+                            cancellationToken: innerCt);
+                        return dto?.IsEnabled ?? true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Global feature flag check failed for {FeatureKey}; defaulting to enabled (fail-open)",
+                        featureKey);
+                }
+
+                return true; // fail-open
+            },
+            new HybridCacheEntryOptions { Expiration = CacheTtl, LocalCacheExpiration = CacheTtl },
+            cancellationToken: ct);
     }
 
     private sealed class FeatureFlagCheckDto

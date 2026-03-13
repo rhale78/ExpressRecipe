@@ -1,16 +1,12 @@
+using ExpressRecipe.Data.Common;
 using Microsoft.Data.SqlClient;
 using System.Data;
 
 namespace ExpressRecipe.InventoryService.Data;
 
-public sealed class EquipmentRepository : IEquipmentRepository
+public sealed class EquipmentRepository : SqlHelper, IEquipmentRepository
 {
-    private readonly string _connectionString;
-
-    public EquipmentRepository(string connectionString)
-    {
-        _connectionString = connectionString;
-    }
+    public EquipmentRepository(string connectionString) : base(connectionString) { }
 
     public async Task<List<EquipmentTemplateDto>> GetTemplatesAsync(CancellationToken ct = default)
     {
@@ -22,7 +18,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
             WHERE t.IsActive = 1
             ORDER BY t.Category, t.Name, c.CapabilityName";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -61,7 +57,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
             WHERE t.Id = @Id AND t.IsActive = 1
             ORDER BY c.CapabilityName";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -95,7 +91,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
         decimal? sizeValue, string? sizeUnit, string? notes,
         IEnumerable<string> capabilities, CancellationToken ct = default)
     {
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlTransaction tx = connection.BeginTransaction();
 
@@ -157,7 +153,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
             WHERE i.HouseholdId = @HouseholdId AND i.IsActive = 1
             ORDER BY i.CreatedAt, c.CapabilityName";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -172,7 +168,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
             UPDATE EquipmentInstance SET IsActive = 0, UpdatedAt = GETUTCDATE()
             WHERE Id = @Id";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -195,7 +191,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
                   WHERE ec.InstanceId = i.Id AND ec.CapabilityName = @Capability)
             ORDER BY i.CreatedAt, c.CapabilityName";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -225,7 +221,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
                   INNER JOIN EquipmentInstanceCapability ec ON ec.InstanceId = src.Id
                   WHERE st.Name = @EquipmentName AND src.HouseholdId = @HouseholdId AND src.IsActive = 1)";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
 
         await using SqlCommand command = new SqlCommand(sql, connection);
@@ -264,7 +260,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
             WHERE i.HouseholdId = @HouseholdId{whereExtra}
             ORDER BY i.CreatedAt DESC, c.CapabilityName";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
@@ -284,7 +280,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
             LEFT JOIN EquipmentInstanceCapability c ON c.InstanceId = i.Id
             WHERE i.Id = @Id";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand command = new SqlCommand(sql, connection);
         command.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = instanceId });
@@ -311,7 +307,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
                 (@HouseholdId, @AddressId, @TemplateId, @CustomName, @Brand, @ModelNumber,
                  @SizeValue, @SizeUnit, @Notes, 1, GETUTCDATE())";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand cmd = new SqlCommand(sql, connection);
         cmd.Parameters.Add(new SqlParameter("@HouseholdId", SqlDbType.UniqueIdentifier) { Value = householdId });
@@ -332,7 +328,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
         const string deleteSql = "DELETE FROM EquipmentInstanceCapability WHERE InstanceId = @InstanceId";
         const string insertSql = "INSERT INTO EquipmentInstanceCapability (InstanceId, CapabilityName) VALUES (@InstanceId, @Cap)";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlTransaction tx = (SqlTransaction)await connection.BeginTransactionAsync(ct);
         try
@@ -364,7 +360,7 @@ public sealed class EquipmentRepository : IEquipmentRepository
                 IsActive = @IsActive, UpdatedAt = GETUTCDATE()
             WHERE Id = @Id";
 
-        await using SqlConnection connection = new SqlConnection(_connectionString);
+        await using SqlConnection connection = new SqlConnection(ConnectionString);
         await connection.OpenAsync(ct);
         await using SqlCommand cmd = new SqlCommand(sql, connection);
         cmd.Parameters.Add(new SqlParameter("@Id", SqlDbType.UniqueIdentifier) { Value = instanceId });

@@ -33,6 +33,9 @@ builder.Services.AddScoped<IIngredientMatchingService>(sp =>
         sp.GetRequiredService<ExpressRecipe.Shared.Services.HybridCacheService>(),
         sp.GetRequiredService<ILogger<IngredientMatchingService>>()));
 
+// HybridCache (L1 in-memory + optional L2 Redis)
+builder.AddHybridCache();
+
 // Parsing Services
 builder.Services.AddSingleton<IIngredientListParser, AdvancedIngredientParser>();
 builder.Services.AddScoped<IIngredientParser, IngredientParser>();
@@ -115,6 +118,13 @@ else
 {
     app.Logger.LogWarning("Migrations directory not found at {Path}", migrationsPath);
 }
+
+app.UseRateLimiting(new RateLimitOptions
+{
+    Enabled = true,
+    MaxRequestsPerWindow = 100,
+    WindowSeconds = 60
+});
 
 app.UseAuthentication();
 app.UseAuthorization();

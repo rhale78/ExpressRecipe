@@ -45,7 +45,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
                    c.Name AS CuisineName, c.Description AS CuisineDescription
             FROM UserPreferredCuisine upc
             INNER JOIN Cuisine c ON upc.CuisineId = c.Id
-            WHERE upc.UserId = @UserId
+            WHERE upc.UserId = @UserId AND upc.IsDeleted = 0
             ORDER BY upc.PreferenceLevel DESC, c.Name";
 
         return await ExecuteReaderAsync(
@@ -119,7 +119,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
                    hg.Name AS GoalName, hg.Description AS GoalDescription, hg.Category AS GoalCategory
             FROM UserHealthGoal uhg
             INNER JOIN HealthGoal hg ON uhg.HealthGoalId = hg.Id
-            WHERE uhg.UserId = @UserId
+            WHERE uhg.UserId = @UserId AND uhg.IsDeleted = 0
             ORDER BY uhg.Priority DESC, hg.Name";
 
         return await ExecuteReaderAsync(
@@ -196,7 +196,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
         const string sql = @"
             SELECT UserId, IngredientId, Rating, Notes
             FROM UserFavoriteIngredient
-            WHERE UserId = @UserId
+            WHERE UserId = @UserId AND IsDeleted = 0
             ORDER BY Rating DESC, IngredientId";
 
         return await ExecuteReaderAsync(
@@ -271,7 +271,7 @@ public class UserPreferenceRepository : SqlHelper, IUserPreferenceRepository
         const string sql = @"
             SELECT UserId, IngredientId, Reason
             FROM UserDislikedIngredient
-            WHERE UserId = @UserId
+            WHERE UserId = @UserId AND IsDeleted = 0
             ORDER BY IngredientId";
 
         return await ExecuteReaderAsync(

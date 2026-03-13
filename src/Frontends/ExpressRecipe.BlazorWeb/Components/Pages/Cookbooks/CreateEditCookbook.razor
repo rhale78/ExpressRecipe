@@ -1,0 +1,261 @@
+@page "/cookbooks/create"
+@page "/cookbooks/{Id:guid}/edit"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Models.Cookbook
+@using ExpressRecipe.Client.Shared.Services
+@inject ICookbookApiClient CookbookApi
+@inject IToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_isEdit ? "Edit Cookbook" : "Create Cookbook") - ExpressRecipe</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="cookbooks-container">
+            <div class="cookbooks-header">
+                <button class="btn btn-secondary btn-sm" @onclick="GoBack">← Back</button>
+                <h1>@(_isEdit ? "✏️ Edit Cookbook" : "📚 Create Cookbook")</h1>
+            </div>
+
+            @if (_isLoading)
+            {
+                <div class="loading-state">
+                    <div class="spinner"></div>
+                    <p>Loading…</p>
+                </div>
+            }
+            else
+            {
+                <div class="cookbook-form-card">
+                    <div class="form-group">
+                        <label class="form-label">Title <span class="required">*</span></label>
+                        <input class="form-control" type="text" @bind="_title" placeholder="My Amazing Cookbook" maxlength="200" />
+                        @if (_showValidation && string.IsNullOrWhiteSpace(_title))
+                        {
+                            <span class="field-error">Title is required.</span>
+                        }
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Subtitle</label>
+                        <input class="form-control" type="text" @bind="_subtitle" placeholder="A collection of family favourites" maxlength="300" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Author Name</label>
+                        <input class="form-control" type="text" @bind="_authorName" placeholder="Your name or family name" maxlength="200" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="3" @bind="_description" placeholder="Tell readers what this cookbook is about…" maxlength="2000"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Cover Image URL</label>
+                        <input class="form-control" type="url" @bind="_coverImageUrl" placeholder="https://example.com/cover.jpg" />
+                        @if (!string.IsNullOrEmpty(_coverImageUrl))
+                        {
+                            <img src="@_coverImageUrl" alt="Cover preview" class="cover-preview" />
+                        }
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Tags</label>
+                        <input class="form-control" type="text" @bind="_tags" placeholder="family, vegetarian, quick (comma-separated)" maxlength="500" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Visibility</label>
+                        <select class="form-control" @bind="_visibility">
+                            <option value="Private">🔒 Private – only you can see it</option>
+                            <option value="Shared">🔗 Shared – people with a link can see it</option>
+                            <option value="Public">🌐 Public – discoverable by everyone</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Introduction (optional)</label>
+                        <textarea class="form-control" rows="4" @bind="_introduction"
+                                  placeholder="Write an introduction for your cookbook…" maxlength="5000"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Notes (optional)</label>
+                        <textarea class="form-control" rows="3" @bind="_notes"
+                                  placeholder="Any final notes or acknowledgements…" maxlength="2000"></textarea>
+                    </div>
+
+                    @if (_isEdit)
+                    {
+                        <div class="form-group">
+                            <label class="form-label">Web Slug (URL identifier)</label>
+                            <input class="form-control" type="text" @bind="_webSlug" placeholder="my-amazing-cookbook" maxlength="100" />
+                            <small class="form-hint">Used in the shareable web URL. Leave blank to auto-generate.</small>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="alert alert-error">@_errorMessage</div>
+                    }
+
+                    <div class="form-actions">
+                        <button class="btn btn-secondary" @onclick="GoBack" disabled="@_isSaving">Cancel</button>
+                        <button class="btn btn-primary" @onclick="Save" disabled="@_isSaving">
+                            @if (_isSaving)
+                            {
+                                <span>Saving…</span>
+                            }
+                            else
+                            {
+                                <span>@(_isEdit ? "💾 Save Changes" : "📚 Create Cookbook")</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="auth-prompt">
+            <p>Please <a href="/login">log in</a> to manage cookbooks.</p>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [Parameter] public Guid? Id { get; set; }
+
+    private bool _isEdit => Id.HasValue;
+    private bool _isLoading;
+    private bool _isSaving;
+    private bool _showValidation;
+    private string? _errorMessage;
+
+    // Form fields
+    private string _title = string.Empty;
+    private string _subtitle = string.Empty;
+    private string _authorName = string.Empty;
+    private string _description = string.Empty;
+    private string _coverImageUrl = string.Empty;
+    private string _tags = string.Empty;
+    private string _visibility = "Private";
+    private string _introduction = string.Empty;
+    private string _notes = string.Empty;
+    private string _webSlug = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_isEdit && Id.HasValue)
+            await LoadForEdit(Id.Value);
+    }
+
+    private async Task LoadForEdit(Guid id)
+    {
+        _isLoading = true;
+        try
+        {
+            var cb = await CookbookApi.GetCookbookAsync(id);
+            if (cb != null)
+            {
+                _title = cb.Title;
+                _subtitle = cb.Subtitle ?? string.Empty;
+                _authorName = cb.AuthorName ?? string.Empty;
+                _description = cb.Description ?? string.Empty;
+                _coverImageUrl = cb.CoverImageUrl ?? string.Empty;
+                _tags = cb.Tags ?? string.Empty;
+                _visibility = cb.Visibility;
+                _introduction = cb.IntroductionContent ?? string.Empty;
+                _notes = cb.NotesContent ?? string.Empty;
+                _webSlug = cb.WebSlug ?? string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to load cookbook: {ex.Message}");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task Save()
+    {
+        _showValidation = true;
+        if (string.IsNullOrWhiteSpace(_title)) return;
+
+        _isSaving = true;
+        _errorMessage = null;
+        try
+        {
+            if (_isEdit && Id.HasValue)
+            {
+                var ok = await CookbookApi.UpdateCookbookAsync(Id.Value, new UpdateCookbookRequest
+                {
+                    Title = _title,
+                    Subtitle = string.IsNullOrWhiteSpace(_subtitle) ? null : _subtitle,
+                    AuthorName = string.IsNullOrWhiteSpace(_authorName) ? null : _authorName,
+                    Description = string.IsNullOrWhiteSpace(_description) ? null : _description,
+                    CoverImageUrl = string.IsNullOrWhiteSpace(_coverImageUrl) ? null : _coverImageUrl,
+                    Tags = string.IsNullOrWhiteSpace(_tags) ? null : _tags,
+                    Visibility = _visibility,
+                    IntroductionContent = string.IsNullOrWhiteSpace(_introduction) ? null : _introduction,
+                    NotesContent = string.IsNullOrWhiteSpace(_notes) ? null : _notes,
+                    WebSlug = string.IsNullOrWhiteSpace(_webSlug) ? null : _webSlug
+                });
+                if (ok)
+                {
+                    ToastService.ShowSuccess("Cookbook updated.");
+                    Navigation.NavigateTo($"/cookbooks/{Id.Value}");
+                }
+                else
+                {
+                    _errorMessage = "Failed to update cookbook. Please try again.";
+                }
+            }
+            else
+            {
+                var newId = await CookbookApi.CreateCookbookAsync(new CreateCookbookRequest
+                {
+                    Title = _title,
+                    Subtitle = string.IsNullOrWhiteSpace(_subtitle) ? null : _subtitle,
+                    AuthorName = string.IsNullOrWhiteSpace(_authorName) ? null : _authorName,
+                    Description = string.IsNullOrWhiteSpace(_description) ? null : _description,
+                    CoverImageUrl = string.IsNullOrWhiteSpace(_coverImageUrl) ? null : _coverImageUrl,
+                    Tags = string.IsNullOrWhiteSpace(_tags) ? null : _tags,
+                    Visibility = _visibility,
+                    TitlePageContent = null,
+                    IntroductionContent = string.IsNullOrWhiteSpace(_introduction) ? null : _introduction
+                });
+                if (newId.HasValue)
+                {
+                    ToastService.ShowSuccess("Cookbook created!");
+                    Navigation.NavigateTo($"/cookbooks/{newId.Value}");
+                }
+                else
+                {
+                    _errorMessage = "Failed to create cookbook. Please try again.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        if (_isEdit && Id.HasValue)
+            Navigation.NavigateTo($"/cookbooks/{Id.Value}");
+        else
+            Navigation.NavigateTo("/cookbooks");
+    }
+}
