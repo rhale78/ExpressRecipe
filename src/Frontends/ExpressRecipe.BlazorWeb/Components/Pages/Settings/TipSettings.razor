@@ -2,7 +2,9 @@
 @page "/setup/tips/{MemberId:guid}"
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
 @inject NavigationManager Navigation
+@inject IPreferencesApiClient PreferencesClient
 
 <PageTitle>Cooking Tips - ExpressRecipe</PageTitle>
 
@@ -63,19 +65,43 @@
 
     private bool _isLoading = true;
     private List<DismissedTipItem> _dismissedTips = new();
+    private string? _errorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Load dismissed tips via PreferencesService HTTP client
-        await Task.Delay(10);
-        _isLoading = false;
+        try
+        {
+            var tips = await PreferencesClient.GetDismissedTipsAsync(MemberId);
+            if (tips != null)
+            {
+                _dismissedTips = tips.Select(t => new DismissedTipItem
+                {
+                    TipId = t.TipId,
+                    DismissedAt = t.DismissedAt
+                }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load dismissed tips: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
     private async Task RestoreTipAsync(Guid tipId)
     {
-        // TODO: DELETE via PreferencesService
-        await Task.CompletedTask;
-        _dismissedTips.RemoveAll(t => t.TipId == tipId);
+        try
+        {
+            await PreferencesClient.RestoreTipAsync(MemberId, tipId);
+            _dismissedTips.RemoveAll(t => t.TipId == tipId);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Restore failed: {ex.Message}";
+        }
     }
 
     private class DismissedTipItem

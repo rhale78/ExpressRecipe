@@ -2,8 +2,10 @@
 @page "/setup/allergens/{MemberId:guid}"
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
+@using ExpressRecipe.Client.Shared.Services
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
+@inject ISafeForkApiClient SafeForkClient
 
 <PageTitle>Allergen Profile - ExpressRecipe</PageTitle>
 
@@ -76,19 +78,45 @@
 
     private bool _isLoading = true;
     private List<AllergenEntryItem> _entries = new();
+    private string? _errorMessage;
 
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Load allergen profile via SafeForkService HTTP client
-        await Task.Delay(10);
-        _isLoading = false;
+        try
+        {
+            var profile = await SafeForkClient.GetEffectiveProfileAsync(MemberId, includeSchedules: false);
+            if (profile != null)
+            {
+                _entries = profile.Entries.Select(e => new AllergenEntryItem
+                {
+                    Id = e.Id,
+                    FreeFormName = e.FreeFormName,
+                    Severity = e.Severity,
+                    IsUnresolved = e.IsUnresolved
+                }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Failed to load allergen profile: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
     private async Task RemoveEntryAsync(Guid entryId)
     {
-        // TODO: Call SafeForkService DELETE endpoint
-        await Task.CompletedTask;
-        _entries.RemoveAll(e => e.Id == entryId);
+        try
+        {
+            await SafeForkClient.DeleteAllergenEntryAsync(MemberId, entryId);
+            _entries.RemoveAll(e => e.Id == entryId);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Remove failed: {ex.Message}";
+        }
     }
 
     private void OnFreeformEntryAdded(FreeformAllergenInput.FreeformEntryModel entry)
